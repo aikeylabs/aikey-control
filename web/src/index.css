@@ -1,0 +1,667 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── AiKey Control – Industrial Vault Theme (aligned with theme_2.css) ── */
+:root {
+  /* Exact values from theme_2.css */
+  --background: #18181b;       /* zinc-900 */
+  --foreground: #f4f4f5;       /* zinc-50 */
+  --card: #27272a;             /* zinc-800 */
+  --card-foreground: #f4f4f5;
+  --popover: #27272a;
+  --popover-foreground: #f4f4f5;
+  --primary: #facc15;          /* yellow-400 */
+  --primary-foreground: #18181b;
+  --secondary: #3f3f46;        /* zinc-700 */
+  --secondary-foreground: #f4f4f5;
+  --muted: #3f3f46;
+  --muted-foreground: #a1a1aa; /* zinc-400 */
+  --accent: #3f3f46;
+  --accent-foreground: #f4f4f5;
+  --destructive: #ef4444;      /* red-500 */
+  --destructive-foreground: #f8fafc;
+  --warning: #f97316;          /* orange-500 */
+  --warning-foreground: #f8fafc;
+  --border: #3f3f46;
+  --input: #3f3f46;
+  --ring: #facc15;
+  --sidebar: #18181b;
+  --sidebar-foreground: #a1a1aa;
+  --sidebar-border: #27272a;
+  --sidebar-accent: #27272a;
+  --sidebar-accent-foreground: #f4f4f5;
+  --success: #4ade80;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Space Mono', ui-monospace, monospace;
+  --radius: 0.375rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --glow-primary: 0 0 15px rgba(250, 204, 21, 0.15);
+  --glow-primary-hover: 0 0 25px rgba(250, 204, 21, 0.3);
+  --glow-destructive: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+/* /user pages share the global --primary (bright yellow-400 #facc15)
+   with master — 2026-04-24 reversal of the earlier .user-pages darker
+   override. Master's only darker-yellow is in chart fills (#ca8a04
+   hardcoded), not buttons / menu-active / focus rings. To mirror that
+   pattern, /user keeps bright --primary for interactive chrome and
+   uses #ca8a04 literally only in chart code (already applied by the
+   page-level sed pass across user pages).
+
+   The .user-pages selector stays on the UserShell root for future
+   user-scoped overrides but currently carries no color redefinitions. */
+
+/* Base */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans) !important;
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* ── Vault Header ── */
+.vault-header {
+  background: linear-gradient(180deg, var(--card) 0%, var(--background) 100%);
+  border-bottom: 1px solid var(--primary);
+  box-shadow: 0 1px 10px rgba(202, 138, 4, 0.1);
+}
+
+/* ── Sidebar nav (shared base — AppShell / master side) ──
+   Base styles retained for AppShell's master-console sidebar, which
+   also uses `.nav-item` + `.nav-group-title`. The user-side rail
+   (`.user-sidebar`) overrides these below to implement the refreshed
+   2026-04-24 design (no horizontal dividers, left accent bar active
+   state, rounded user card). Scoping the new rules keeps the master
+   sidebar visually unchanged. */
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  transition: all 150ms ease;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  text-decoration: none;
+  cursor: pointer;
+}
+.nav-item:hover {
+  background-color: var(--sidebar-accent);
+  color: var(--foreground);
+}
+.nav-item.active {
+  background-color: var(--sidebar-accent);
+  color: var(--primary);
+  border-color: rgba(250, 204, 21, 0.2);
+  box-shadow: inset 2px 0 0 0 var(--primary);
+}
+.nav-group-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground);
+  margin: 1.5rem 0 0.5rem 0.75rem;
+  font-family: var(--font-mono);
+}
+
+/* ── User-side sidebar overrides ──
+   Aligned 2026-04-24 with .superdesign/design_iterations/user_vault_3_1_1.html.
+   Design intent: zero horizontal divider lines anywhere inside the
+   rail. Sections are separated by whitespace + uppercase mono group
+   titles, the active item is a left accent bar + soft yellow tint
+   (no bordered pill), and the bottom user chip sits inside a rounded
+   surface card instead of a bordered strip. */
+
+/* Top padding gives the first nav item breathing room below the
+   AIKEY VAULT brand row. Spacing between sections and between items
+   within a section is intentionally generous (22px / 5px) so rows
+   don't feel crammed. */
+.user-sidebar nav { padding: 18px 10px 8px 10px; }
+
+.user-sidebar .nav-section + .nav-section { margin-top: 22px; }
+.user-sidebar .nav-section > .nav-item + .nav-item { margin-top: 5px; }
+
+.user-sidebar .nav-item {
+  position: relative;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 7px;
+  /* 2026-04-24: font-size 13.5 → 14.5 + weight 500 → 550 (via
+     `medium`). Master's base .nav-item is 14px/500; the slight bump
+     here gives the user sidebar a more generous feel without
+     drifting from master's tone. */
+  font-size: 14.5px;
+  font-weight: 500;
+  border: none;
+  margin-bottom: 0;
+  transition: background 120ms ease, color 120ms ease;
+}
+.user-sidebar .nav-item svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.user-sidebar .nav-item:hover {
+  /* Same yellow gradient as the .active state — tells the user
+     "this is where a click lands" before they commit. Paired with a
+     plain 1px yellow border (no outer glow halo) per user request
+     2026-04-24. Background gradient kept identical to .active so the
+     hover-then-click transition feels continuous. */
+  background: linear-gradient(
+    90deg,
+    rgba(250, 204, 21, 0.11) 0,
+    rgba(250, 204, 21, 0.05) 45%,
+    transparent 100%
+  );
+  color: var(--foreground);
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.45);
+}
+.user-sidebar .nav-item:hover svg { opacity: 1; }
+
+.user-sidebar .nav-item.active {
+  background: linear-gradient(
+    90deg,
+    rgba(250, 204, 21, 0.11) 0,
+    rgba(250, 204, 21, 0.05) 45%,
+    transparent 100%
+  );
+  color: var(--primary);
+  border-color: transparent;
+  box-shadow: none;
+}
+.user-sidebar .nav-item.active svg { color: var(--primary); opacity: 1; }
+.user-sidebar .nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 9px;
+  bottom: 9px;
+  width: 2.5px;
+  border-radius: 0 2px 2px 0;
+  background: var(--primary);
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.55);
+}
+.user-sidebar .nav-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.32);
+}
+
+.user-sidebar .nav-group-title {
+  /* 2026-04-24 bump: 10 → 11px, opacity 0.45 → 0.55 — keeps the
+     uppercase mono label subordinate to the nav items but more
+     legible at typical display DPR. */
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  opacity: 0.55;
+  padding: 0 14px;
+  margin: 0 0 6px 0;
+  user-select: none;
+}
+
+/* Bottom user chip — rounded surface card, no top border. */
+.user-sidebar .nav-user {
+  margin: 4px 10px 10px 10px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035),
+    rgba(255, 255, 255, 0.015)
+  );
+  border-radius: 10px;
+  transition: background 120ms ease;
+}
+.user-sidebar .nav-user:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.02)
+  );
+}
+.user-sidebar .nav-user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgba(202, 138, 4, 0.12), rgba(202, 138, 4, 0.02)),
+    var(--secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.user-sidebar .nav-user-name {
+  font-size: 13.5px;
+  color: var(--foreground);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-sidebar .nav-user-role {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  line-height: 1.3;
+}
+.user-sidebar .nav-user-signout {
+  color: var(--muted-foreground);
+  opacity: 0.55;
+  transition: opacity 120ms ease, color 120ms ease;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+}
+.user-sidebar .nav-user:hover .nav-user-signout { opacity: 1; }
+.user-sidebar .nav-user-signout:hover { color: var(--foreground); }
+
+/* ── Sidebar: collapse / rail mode ──
+   Ported from .superdesign/design_iterations/user_vault_3_1.html.
+   The aside carries `.user-sidebar` as the stable hook (`.sidebar`
+   would collide with master-side naming) + `.collapsed` toggles width
+   and hides labels. Labels fade before the width animation so the
+   text doesn't squash on the way out. */
+
+.user-sidebar {
+  transition: width 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Vertical sheen at the top of the rail — gives a tiny sense of
+     depth without needing any horizontal strokes. */
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.015) 0,
+      transparent 40%,
+      transparent 100%
+    ),
+    var(--sidebar);
+}
+
+/* Nav overflow rules — `overflow-y: auto` with no explicit `overflow-x`
+   makes Chromium promote the other axis to `auto` too, so a tooltip
+   pseudo-element (`left: calc(100% + 12px)`) that extends beyond the
+   sidebar's right edge triggers a phantom horizontal scrollbar in
+   collapsed mode. Rules below split the two modes:
+     - expanded: keep vertical scroll; clip horizontal explicitly
+     - collapsed: let tooltips escape via `overflow: visible` (the
+       handful of items we have fit vertically at 64px width, so no
+       scroll is needed anyway) */
+.user-sidebar:not(.collapsed) nav { overflow-x: hidden; }
+.user-sidebar.collapsed nav { overflow: visible; }
+
+.user-sidebar .nav-label,
+.user-sidebar .nav-brand-text,
+.user-sidebar .nav-user-who,
+.user-sidebar .sidebar-toggle-label {
+  transition: opacity 140ms ease;
+}
+
+/* Brand row — center the icon when collapsed, hide the text. */
+.user-sidebar.collapsed .nav-brand {
+  padding: 0;
+  justify-content: center;
+}
+.user-sidebar.collapsed .nav-brand-text {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Nav items — icon-only, centered. Labels collapse to width:0 so they
+   don't eat horizontal space while fading. */
+.user-sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 8px 0;
+  gap: 0;
+  position: relative;
+}
+.user-sidebar.collapsed .nav-item .nav-label {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  margin-left: 0 !important;
+}
+/* Active accent bar — in rail mode it moves to a short horizontal
+   stroke centered below the icon so "selected" still reads at a
+   glance without a left edge the user can't see next to the icon. */
+.user-sidebar.collapsed .nav-item.active::before {
+  top: auto;
+  left: 50%;
+  bottom: 2px;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+}
+
+/* Group headers disappear; keep section spacing via a tighter rule. */
+.user-sidebar.collapsed .nav-group-title { display: none; }
+.user-sidebar.collapsed .nav-section + .nav-section { margin-top: 12px; }
+
+/* User chip — avatar only when collapsed. */
+.user-sidebar.collapsed .nav-user {
+  justify-content: center;
+  padding: 10px 6px;
+}
+.user-sidebar.collapsed .nav-user-who,
+.user-sidebar.collapsed .nav-user-signout {
+  display: none;
+}
+
+/* Tooltip — rendered via CSS pseudo-elements, ONLY active when
+   collapsed. Uses `data-tooltip` attribute on the trigger element. */
+.user-sidebar .nav-item[data-tooltip],
+.user-sidebar .sidebar-toggle[data-tooltip] { overflow: visible; }
+
+.user-sidebar .nav-item[data-tooltip]::after,
+.user-sidebar .sidebar-toggle[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  background: var(--card);
+  color: var(--foreground);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease 60ms, transform 160ms ease 60ms;
+  z-index: 1000;
+}
+.user-sidebar .nav-item[data-tooltip]::before,
+.user-sidebar .sidebar-toggle[data-tooltip]::before {
+  content: "";
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  width: 8px; height: 8px;
+  background: var(--card);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease 60ms;
+  z-index: 999;
+}
+.user-sidebar.collapsed .nav-item[data-tooltip]:hover::after,
+.user-sidebar.collapsed .nav-item[data-tooltip]:focus-visible::after,
+.user-sidebar.collapsed .sidebar-toggle[data-tooltip]:hover::after,
+.user-sidebar.collapsed .sidebar-toggle[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+.user-sidebar.collapsed .nav-item[data-tooltip]:hover::before,
+.user-sidebar.collapsed .nav-item[data-tooltip]:focus-visible::before,
+.user-sidebar.collapsed .sidebar-toggle[data-tooltip]:hover::before,
+.user-sidebar.collapsed .sidebar-toggle[data-tooltip]:focus-visible::before {
+  opacity: 1;
+}
+
+/* Collapse / expand toggle — sits above the user chip. Chevron
+   rotates 180° in collapsed state (same glyph, opposite direction). */
+.user-sidebar .sidebar-toggle {
+  display: flex; align-items: center; gap: 10px;
+  margin: 4px 8px 6px 8px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  position: relative;
+}
+.user-sidebar .sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--foreground);
+}
+.user-sidebar .sidebar-toggle:focus-visible {
+  outline: none;
+  border-color: rgba(202, 138, 4, 0.55);
+  box-shadow: 0 0 0 2px rgba(202, 138, 4, 0.12);
+}
+.user-sidebar .sidebar-toggle svg {
+  flex-shrink: 0;
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.user-sidebar.collapsed .sidebar-toggle {
+  justify-content: center;
+  padding: 8px 0;
+  gap: 0;
+}
+.user-sidebar.collapsed .sidebar-toggle .sidebar-toggle-label {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.user-sidebar.collapsed .sidebar-toggle svg { transform: rotate(180deg); }
+
+/* Respect reduced-motion: cut all the transitions on the sidebar so
+   keyboard-driven toggle doesn't flash at users with motion sensitivity. */
+@media (prefers-reduced-motion: reduce) {
+  .user-sidebar,
+  .user-sidebar .nav-label,
+  .user-sidebar .nav-brand-text,
+  .user-sidebar .nav-user-who,
+  .user-sidebar .sidebar-toggle-label,
+  .user-sidebar .sidebar-toggle svg {
+    transition: none !important;
+  }
+}
+
+/* ── Badge ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 2px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-family: var(--font-mono);
+}
+.badge-active {
+  background-color: rgba(34, 197, 94, 0.1);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.badge-suspended {
+  background-color: rgba(249, 115, 22, 0.1);
+  color: #fb923c;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+.badge-revoked {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.badge-neutral {
+  background-color: var(--muted);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  transition: all 200ms ease;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  font-family: var(--font-mono);
+  border: none;
+  outline: none;
+}
+.btn-primary {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--glow-primary);
+  border: 1px solid rgba(250, 204, 21, 0.5);
+}
+.btn-primary:hover {
+  background-color: #fde047;
+  box-shadow: var(--glow-primary-hover);
+  transform: translateY(-1px);
+}
+/* Dim-yellow variant of .btn-primary — used on bulk / heavyweight
+   actions (Import N credentials, Apply to all, Parse locally, Add
+   key) to quiet them relative to lightweight primary CTAs. Hue is
+   the same dark amber-600 family used by in-use indicators, charts,
+   and the vault-page accent stripe (#ca8a04). 2026-04-25. */
+.btn-primary-dim {
+  background-color: #ca8a04 !important;
+  color: #0b0b0b !important;
+  border-color: rgba(202, 138, 4, 0.7) !important;
+  box-shadow: 0 0 0 1px rgba(202, 138, 4, 0.18), 0 6px 20px -10px rgba(202, 138, 4, 0.55) !important;
+}
+.btn-primary-dim:hover:not(:disabled) {
+  background-color: #eab308 !important;
+}
+.btn-primary-dim:disabled {
+  background-color: var(--muted) !important;
+  color: var(--muted-foreground) !important;
+  box-shadow: none !important;
+  border-color: var(--border) !important;
+  cursor: not-allowed;
+  transform: none;
+  opacity: 0.7;
+}
+.btn-outline {
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--foreground);
+}
+.btn-outline:hover {
+  background-color: var(--muted);
+  border-color: var(--muted-foreground);
+}
+.btn-ghost {
+  background-color: transparent;
+  color: var(--muted-foreground);
+}
+.btn-ghost:hover {
+  background-color: var(--muted);
+  color: var(--foreground);
+}
+
+/* ── Glow dots ── */
+.dot-glow-red {
+  box-shadow: var(--glow-destructive);
+  background-color: var(--destructive);
+}
+.dot-glow-green {
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+  background-color: #4ade80;
+}
+
+/* ── Table ── */
+table th {
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  background-color: rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+}
+table td {
+  font-size: 0.875rem;
+  border-bottom: 1px solid var(--border);
+}
+table tr:last-child td {
+  border-bottom: none;
+}
+table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* ── Form inputs ── */
+input,
+select,
+textarea {
+  font-family: var(--font-sans) !important;
+  background-color: var(--muted) !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.2) !important;
+}
+input::placeholder {
+  color: var(--muted-foreground) !important;
+}

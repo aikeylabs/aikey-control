@@ -1,0 +1,40 @@
+{
+  "name": "aikey-control-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:user": "cross-env VITE_AUTH_MODE=local_bypass tsc && cross-env VITE_AUTH_MODE=local_bypass vite build",
+    "build:user-nocheck": "cross-env VITE_AUTH_MODE=local_bypass vite build",
+    "build:full": "cross-env VITE_AUTH_MODE=jwt tsc && cross-env VITE_AUTH_MODE=jwt vite build",
+    "build:full-nocheck": "cross-env VITE_AUTH_MODE=jwt vite build",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "preview": "vite preview",
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.56.2",
+    "axios": "^1.7.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.53.0",
+    "react-router-dom": "^6.26.2",
+    "recharts": "^3.8.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "cross-env": "^7.0.3",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.12",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.9"
+  }
+}

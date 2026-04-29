@@ -1,0 +1,135 @@
+/* v4.2 shared ProviderMultiSelect — 从 user/import 页面 `.protocol-*` CSS 抽取,
+   vault Add Key / import Provider 字段复用。
+   保留原 chip-gold 风格 + 下拉视觉,portal-based dropdown 解决弹窗内裁剪问题。 */
+
+.provider-ms {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.provider-ms-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(250, 204, 21, 0.08);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  border-radius: 3px;
+  padding: 2px 4px 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.provider-ms-chip-x {
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 0 3px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+  font-family: inherit;
+}
+
+.provider-ms-chip-x:hover {
+  opacity: 1;
+  color: #f87171;
+}
+
+.provider-ms-search {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--primary);
+  border-radius: 3px;
+  padding: 0.25rem 0.5rem;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  flex: 1;
+  min-width: 140px;
+}
+
+.provider-ms-add-btn {
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 3px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 3px 10px;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+}
+
+.provider-ms-add-btn:hover {
+  color: var(--foreground);
+  border-color: var(--primary);
+  border-style: solid;
+}
+
+.provider-ms-add-btn-warn {
+  border-color: #f87171;
+  color: #f87171;
+}
+
+/* Portal dropdown: position=fixed (由 JS 按 trigger rect 计算 top/left/width),
+   z-index 拉到 10000+ 确保在 modal overlay 之上 —— 解决弹窗内裁剪问题 */
+.provider-ms-dropdown {
+  background: var(--card, #27272a);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.provider-ms-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 0.375rem 0.625rem;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.provider-ms-option:hover {
+  background: rgba(250, 204, 21, 0.08);
+  color: var(--primary);
+}
+
+.provider-ms-option:last-child {
+  border-bottom: none;
+}
+
+.provider-ms-option-custom {
+  color: #86efac;
+  font-style: italic;
+}
+
+.provider-ms-option-custom:hover {
+  background: rgba(134, 239, 172, 0.1);
+  color: #86efac;
+}
+
+.provider-ms-empty {
+  padding: 0.5rem 0.625rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-style: italic;
+}
