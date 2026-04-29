@@ -1,6 +1,6 @@
 package user
 
-import "github.com/AiKeyLabs/aikey-control-service/internal/api/user/importpkg"
+import "github.com/AiKeyLabs/aikey-control/service/pkg/userapi/importpkg"
 
 // Handlers groups all user-domain HTTP handlers.
 //

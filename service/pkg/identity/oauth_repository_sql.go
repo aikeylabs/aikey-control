@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AiKeyLabs/aikey-control-service/pkg/shared"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 )
 
 // ---- loginSessionRepo ----

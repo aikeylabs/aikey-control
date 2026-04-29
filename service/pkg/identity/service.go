@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/AiKeyLabs/aikey-control-service/pkg/shared"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 	"golang.org/x/crypto/bcrypt"
 )
 

@@ -3,7 +3,7 @@ package referral
 import (
 	"context"
 
-	"github.com/AiKeyLabs/aikey-control-service/pkg/shared"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 )
 
 // Recorder implements identity.ReferralRecorder using the referral Repository.

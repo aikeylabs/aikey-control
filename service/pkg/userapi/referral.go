@@ -3,8 +3,8 @@ package user
 import (
 	"net/http"
 
-	"github.com/AiKeyLabs/aikey-control-service/internal/referral"
-	"github.com/AiKeyLabs/aikey-control-service/pkg/shared"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/referral"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 )
 
 // ReferralHandler exposes referral endpoints.

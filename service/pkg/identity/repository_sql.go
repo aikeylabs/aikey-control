@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AiKeyLabs/aikey-control-service/pkg/shared"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 )
 
 // sqlRepo implements Repository against PostgreSQL or SQLite —

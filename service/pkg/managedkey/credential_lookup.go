@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/AiKeyLabs/aikey-control-service/pkg/shared"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 )
 
 // postgresCredentialLookup implements CredentialLookup using a direct DB query.

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AiKeyLabs/aikey-control-service/pkg/shared"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 )
 
 // SeatReconciler links pending OrgSeats to a newly-activated account.
