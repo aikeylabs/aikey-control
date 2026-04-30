@@ -67,6 +67,17 @@ type Config struct {
 	SessionTTL time.Duration
 	VKCacheTTL time.Duration
 	CliTimeout time.Duration
+
+	// UsageFacade is the in-proc query-service handler that owns
+	// `/v1/usage/*`. Personal local-server runs the same single-port
+	// pattern as cmd/full: trial-server's serve.Run constructs an
+	// in-proc querykit.Handler against the local SQLite DB and threads
+	// it through ControlConfig.UsageFacade, and we mount it here at
+	// `/v1/usage/`. Nil-safe: when the facade isn't supplied, the five
+	// `/v1/usage/personal/*` routes the SPA queries 404 (the FE's
+	// `useQuery` defensively defaults to empty arrays — charts show
+	// empty, no crash).
+	UsageFacade http.Handler
 }
 
 // NewHandler returns the HTTP handler for the Personal local-server.
@@ -111,19 +122,18 @@ func NewHandler(cfg Config) http.Handler {
 	mux.HandleFunc("GET /accounts/me", localAccountsMe)
 	// Bare array matches FE accountsApi.mySeats: `httpClient.get<SeatSummaryDTO[]>`.
 	mux.HandleFunc("GET /accounts/me/seats", emptyJSONArray)
-	// /v1/usage/personal/* stubs — Personal mode has no query-service bundled.
-	// Path A refactor (2026-04-30) split user-local off from the master appkit
-	// where /v1/usage/* was a facade forwarding to query-service. Personal
-	// users have local usage data (collected by aikey-proxy → trial WAL → DB)
-	// but no HTTP query layer ships with cmd/local. Returning bare `[]` (the
-	// query-service's "no rows" response shape) keeps the SPA charts rendering
-	// empty without 404 console noise. Real data requires bundling query-service
-	// or implementing a slim local reader — tracked as a follow-up.
-	mux.HandleFunc("GET /v1/usage/personal/timeline", emptyJSONArray)
-	mux.HandleFunc("GET /v1/usage/personal/hourly", emptyJSONArray)
-	mux.HandleFunc("GET /v1/usage/personal/by-protocol/timeline", emptyJSONArray)
-	mux.HandleFunc("GET /v1/usage/personal/by-protocol/total", emptyJSONArray)
-	mux.HandleFunc("GET /v1/usage/personal/by-key/total", emptyJSONArray)
+	// /v1/usage/* — mount the in-proc query-service facade if the caller
+	// supplied one. Same pattern as cmd/full's master controlkit (the trial
+	// server's serve.Run constructs querykit.NewHandler on the local SQLite
+	// DB and passes it through ControlConfig.UsageFacade). Personal users
+	// thereby read their own collector→DWD usage data without any extra
+	// process or HTTP hop. The query-service path is master-free: it lives
+	// in aikey-data and only needs the data-component schema, both of which
+	// are public. When the facade isn't supplied the SPA charts simply
+	// 404 → useQuery falls back to empty arrays (non-fatal).
+	if cfg.UsageFacade != nil {
+		mux.Handle("/v1/usage/", cfg.UsageFacade)
+	}
 	// Envelope matches FE deliveryApi.allKeys: `httpClient.get<{keys: UserKeyDTO[]}>`
 	// then `res.data.keys ?? []`. Returning bare `[]` here is a footgun because
 	// `[].keys` resolves to `Array.prototype.keys` (the iterator factory function),
