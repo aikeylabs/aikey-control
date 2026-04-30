@@ -1616,8 +1616,20 @@ function GroupHeaderRow(props: {
           >
             <ChevronDownIcon className="w-3 h-3" />
           </button>
-          <span className="gr-dot" style={{ background: color }} aria-hidden="true" />
-          <span className="gr-name">{provider}</span>
+          {/* Replaced 2026-04-30: was a 8px gr-dot color circle, but it
+              visually collided with the per-row green active-dot (also a
+              circle) under in-use rows. Now render the provider name as a
+              colored chip so the group identifier and the per-row active
+              indicator stay visually distinct. The chip's background uses
+              the same provider brand color, foreground is white for
+              contrast. */}
+          <span
+            className="gr-chip"
+            style={{ background: color }}
+            aria-hidden="false"
+          >
+            {provider}
+          </span>
           <span className="gr-meta">
             · {totalCount} {entryWord}
             {parts.length > 0 && (
@@ -3748,17 +3760,40 @@ const VAULT_CSS = `
 }
 .vault-page .gr-toggle svg { transition: transform 160ms ease; }
 .vault-page tr.group-row[data-collapsed="true"] .gr-toggle svg { transform: rotate(-90deg); }
-.vault-page .gr-dot {
-  width: 8px; height: 8px; border-radius: 999px;
+/* .gr-dot removed 2026-04-30 — the 8px color circle collided visually
+   with the per-row active-dot (same shape, different meaning). Replaced
+   by .gr-chip below: provider name on a colored background pill. */
+.vault-page .gr-dot { display: none !important; }
+
+.vault-page .gr-chip {
+  /* Compact pill that combines the brand color (background) with the
+     provider name (label). Replaces the deprecated gr-dot+gr-name pair.
+     Foreground stays white because the brand colors are mid-saturation
+     (good contrast for white text). The chip's height ties to the
+     containing .gr-inner row height (28px) so the row doesn't grow. */
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color: #ffffff;
   flex-shrink: 0;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.03);
+  /* Subtle shadow so the chip reads as a tactile element rather than
+     sitting flat on the row background. */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
+
+/* .gr-name kept as a dead rule for any remaining references (none in
+   tree as of 2026-04-30). The chip now carries both color + name. */
 .vault-page .gr-name {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
-  /* Muted color matching the table <th> so the group divider row
-     reads as "part of the header chrome" rather than a data row. */
   color: var(--muted-foreground);
   letter-spacing: 0.005em;
   text-transform: lowercase;
