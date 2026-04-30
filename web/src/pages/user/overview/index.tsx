@@ -180,12 +180,24 @@ export default function UserOverviewPage() {
     queryFn: () => usageApi.personalHourly(usageIdentity!, todayDate),
     enabled: !!usageIdentity,
   });
-  // Per-key today breakdown drives "Usage by key today" below the main
-  // chart. Independent query key + 60s refetch so the card behaves like
-  // a live scoreboard. Reuses personal/by-key/total with start=end=today.
-  const byKeyToday = useQuery({
-    queryKey: ['user-overview-by-key-today', usageIdentityKey, todayDate],
-    queryFn: () => usageApi.personalByKeyTotal(usageIdentity!, todayDate, todayDate),
+  // Per-key recent breakdown drives "Recent usage by key" below the main
+  // chart. Auto-falls-through to the most recent active day when today
+  // has no usage yet (e.g., early morning, fresh install) instead of
+  // showing an empty card. Derived from usageTimeline so we don't need
+  // a second per-day query — when today is empty we walk the timeline
+  // backwards to find the latest day with non-zero usage. Independent
+  // query key + 60s refetch keeps the card live.
+  const activeDate = useMemo(() => {
+    const tl = usageTimeline.data ?? [];
+    for (let i = tl.length - 1; i >= 0; i--) {
+      if (tl[i].total_tokens > 0) return tl[i].date;
+    }
+    return todayDate;
+  }, [usageTimeline.data, todayDate]);
+  const isShowingToday = activeDate === todayDate;
+  const byKeyRecent = useQuery({
+    queryKey: ['user-overview-by-key-recent', usageIdentityKey, activeDate],
+    queryFn: () => usageApi.personalByKeyTotal(usageIdentity!, activeDate, activeDate),
     enabled: !!usageIdentity,
     refetchInterval: 60_000,
   });
@@ -260,7 +272,7 @@ export default function UserOverviewPage() {
   //   uncached = input - cached - creation
   //   total    = uncached + creation + cached + output  (= input + output)
   const todayKeyRows = useMemo(() => {
-    const data = (byKeyToday.data ?? []).map((k) => ({ ...k, label: deriveKeyLabel(k) }));
+    const data = (byKeyRecent.data ?? []).map((k) => ({ ...k, label: deriveKeyLabel(k) }));
     const nonZero = data.filter((k) => k.total_tokens > 0);
     const sorted = [...nonZero].sort((a, b) => b.total_tokens - a.total_tokens);
     const top = sorted[0]?.total_tokens ?? 1;
@@ -300,7 +312,7 @@ export default function UserOverviewPage() {
       grandReqs,
       keyCount: sorted.length,
     };
-  }, [byKeyToday.data]);
+  }, [byKeyRecent.data]);
 
   const uniqueOrgs = useMemo(() => {
     const s = new Set(activeSeats.map((x) => x.org_id));
@@ -600,11 +612,16 @@ export default function UserOverviewPage() {
             {/* Area chart — tokens only (requests intentionally omitted per
                 2026-04-23 UX ask: Overview's hero chart stays focused on
                 volume; the dual-axis breakdown lives on the Usage page).
-                Outer flex-1 wrapper grows to fill the card; inner 80%-tall
-                box centers the chart with 10% breathing room on top and
-                bottom. min-h floor keeps it usable on short cards. */}
-            <div className="w-full flex-1 flex items-center justify-center min-h-[180px]">
-              <div className="w-full h-[80%] min-h-[160px]">
+                Outer flex-1 wrapper grows to fill any extra height the
+                grid grants the card; inner box has a *definite pixel*
+                height so Recharts' ResponsiveContainer can measure on
+                first render (percentage heights against a flex-1 parent
+                whose own height isn't yet resolved by grid auto-rows
+                emit a "width(-1) and height(-1)" warning). 200px ≈ 80%
+                of typical card heights, with the flex centering giving
+                ~10% breathing room top/bottom on stretched cards. */}
+            <div className="w-full flex-1 flex items-center justify-center min-h-[220px]">
+              <div className="w-full h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={timelinePoints} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
                   <defs>
@@ -818,31 +835,24 @@ export default function UserOverviewPage() {
           </div>
         </section>
 
-        {/* ── Usage by key today (live, per-account input/cache/output split) ── */}
+        {/* ── Usage by key today (live, per-account input/cache/output split) ──
+            Layout aligned to Token usage / Top providers pattern:
+              header (title + minimal subtitle, mb-3) → body → footer
+              divider (mt-4 pt-3 border-top) carrying the aggregate
+              metrics. Avoids the cramped header that was packing date +
+              4 aggregate numbers on one line. */}
         <section className="card p-4" data-origin-name="Usage by key today">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div className="min-w-0">
               <h3 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
-                <span className="ov-live-dot" aria-hidden /> Usage by key today
+                {/* Live dot only when actually showing today — when we
+                    fell through to an earlier day, the data is no
+                    longer "live", so the pulsing indicator is dropped. */}
+                {isShowingToday && <span className="ov-live-dot" aria-hidden />}
+                {isShowingToday ? ' Usage by key today' : ' Recent usage by key'}
               </h3>
-              <p className="text-[12px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}>
-                {todayDate}
-                {todayKeyRows.keyCount > 0 ? (
-                  <>
-                    {' · '}<span style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandTotal)}</span> total
-                    {todayKeyRows.grandCreation > 0 && (
-                      <>
-                        {' · '}<span style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandCreation)}</span> creation
-                      </>
-                    )}
-                    {todayKeyRows.grandCached > 0 && (
-                      <>
-                        {' · '}<span style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandCached)}</span> cached
-                      </>
-                    )}
-                    {' · '}<span style={{ color: 'var(--foreground)' }}>{todayKeyRows.grandReqs.toLocaleString()}</span> req
-                  </>
-                ) : null}
+              <p className="text-[12px]" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
+                {activeDate}{isShowingToday ? '' : ' · no usage today yet'}
               </p>
             </div>
             {todayKeyRows.keyCount > 0 && (
@@ -867,16 +877,16 @@ export default function UserOverviewPage() {
             )}
           </div>
 
-          {byKeyToday.isLoading ? (
+          {byKeyRecent.isLoading ? (
             <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
               Loading...
             </div>
           ) : todayKeyRows.rows.length === 0 ? (
             <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              No usage today yet
+              No usage recorded yet
             </div>
           ) : (
-            <ul className="space-y-2.5">
+            <ul className="space-y-3">
               {todayKeyRows.rows.map((k) => (
                 <li key={k.virtual_key_id} className="ov-key-row">
                   <span
@@ -936,6 +946,37 @@ export default function UserOverviewPage() {
                 </li>
               ))}
             </ul>
+          )}
+
+          {todayKeyRows.keyCount > 0 && (
+            <div
+              className="mt-4 pt-3 flex items-center justify-between text-[12px] font-mono flex-wrap gap-2"
+              style={{ borderTop: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
+            >
+              <span>
+                {todayKeyRows.keyCount} key{todayKeyRows.keyCount === 1 ? '' : 's'}
+                {' · '}
+                <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandTotal)}</span>
+                {' total'}
+                {todayKeyRows.grandCreation > 0 && (
+                  <>
+                    {' · '}
+                    <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandCreation)}</span>
+                    {' creation'}
+                  </>
+                )}
+                {todayKeyRows.grandCached > 0 && (
+                  <>
+                    {' · '}
+                    <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandCached)}</span>
+                    {' cached'}
+                  </>
+                )}
+                {' · '}
+                <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{todayKeyRows.grandReqs.toLocaleString()}</span>
+                {' req'}
+              </span>
+            </div>
           )}
         </section>
 
