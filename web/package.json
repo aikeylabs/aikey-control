@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./pages/*": "./src/pages/user/*/index.tsx",
+    "./shared/*": "./src/shared/*",
+    "./store": "./src/store/index.ts",
+    "./app/config/runtime": "./src/app/config/runtime.ts"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
