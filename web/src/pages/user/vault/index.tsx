@@ -50,6 +50,38 @@ function rowKey(r: VaultRecord): string {
   return `${r.target}:${r.id}`;
 }
 
+/**
+ * Per-group in-use derivation. Reads server-emitted `in_use_for` (the list
+ * of providers this record is the active binding for) and tests it against
+ * the current group's provider. Falls back to the legacy global `in_use`
+ * boolean for back-compat when the CLI is too old to populate `in_use_for`.
+ *
+ * Why this exists (regression record 2026-04-30):
+ *   `in_use` is a single bool per record; it's true if the record is
+ *   bound for ANY provider it supports. Web groups records by their
+ *   supported providers, so a multi-provider key (or a key whose alias
+ *   collides with another active key's alias) showed `in_use=true` under
+ *   groups it wasn't actually active for. Bug surfaced as user reporting
+ *   "two inuse under anthropic" — the OAuth account that's actually
+ *   anthropic-active + an openai-personal-key whose alias appeared in
+ *   the active personal set. CLI's interactive picker was correct
+ *   because it reads bindings per-provider.
+ *
+ *   `in_use_for: string[]` carries the per-(record, provider) info; new
+ *   bundles render the badge ONLY when this group's provider is in the
+ *   list. `in_use` stays as a derivative (`in_use_for.length > 0`) for
+ *   forward-compat with older Web bundles still on flat semantics.
+ */
+function recordInUseForGroup(r: VaultRecord, groupProvider: string): boolean {
+  if (Array.isArray(r.in_use_for)) {
+    return r.in_use_for.includes(groupProvider);
+  }
+  // Back-compat: older CLI emits only the boolean. Render based on the flat
+  // value — strictly speaking this still over-fires for multi-provider
+  // collisions, but it's the best we can do without per-provider info.
+  return r.in_use === true;
+}
+
 /** True when an alias looks like an ID (snake_case, kebab-case, no @).
  *  Controls whether we render it in Inter (friendly) or JetBrains Mono
  *  (code-identity). See user_vault_3_1.html §.alias-main.mono. */
@@ -442,8 +474,12 @@ export default function UserVaultPage() {
   // Single entry point for "route all of provider X through this key". Used
   // by both the inline row Use button AND the popover pick. Guarded against
   // re-entrant clicks via `switchingIds`.
-  function switchTo(target: VaultRecord) {
-    if (target.in_use === true) return;
+  // groupProvider scopes the "already active?" early-return to the group
+  // the user clicked under. Without it, clicking Use on a multi-provider
+  // record that's active in some OTHER group would no-op silently because
+  // the legacy flat `in_use === true` check fired (regression 2026-04-30).
+  function switchTo(target: VaultRecord, groupProvider: string) {
+    if (recordInUseForGroup(target, groupProvider)) return;
     if (!unlocked) {
       pushToast({
         kind: 'error',
@@ -492,7 +528,10 @@ export default function UserVaultPage() {
             title: providerTag + ' now routes through ' + aliasLabel,
             sub: (previousForUndo ? 'was ' + (previousForUndo.alias ?? '(unnamed)') + ' · ' : '') + cli,
             cliHint: cli,
-            undo: previousForUndo ? () => switchTo(previousForUndo!) : undefined,
+            // Undo routes the same group context — the previous holder was
+            // active for THIS group before we replaced it, so re-applying it
+            // means switching back under the same group.
+            undo: previousForUndo ? () => switchTo(previousForUndo!, groupProvider) : undefined,
           });
         },
         onError: (err: unknown) => {
@@ -507,23 +546,63 @@ export default function UserVaultPage() {
     );
   }
 
-  // Group filtered records by the CLI-supplied `protocol_family` field,
-  // preserving the sort order of the filtered list (first-seen family pins
-  // the group position). claude OAuths + anthropic API keys land in one
-  // group; codex OAuths + openai API keys land in another. The canonical
-  // mapping lives in Rust (`oauth_provider_to_canonical`) so it stays in
-  // sync with proxy routing and `aikey use` selection — the frontend just
-  // honors whatever family the CLI assigned.
+  // Group filtered records by every protocol family they support, preserving
+  // the sort order of the filtered list (first-seen family pins the group
+  // position).
+  //
+  // Multi-provider expansion (regression record 2026-04-30):
+  //   A personal key with `supported_providers: ["anthropic", "openai"]`
+  //   (e.g. an OpenRouter / 0011 aggregator key) MUST appear under BOTH
+  //   the `anthropic` group AND the `openai` group — that's how the CLI
+  //   `aikey use` picker shows it, and the Web should match. The previous
+  //   implementation grouped only by the single `protocol_family` string,
+  //   so multi-provider keys ended up in just one group and the user
+  //   couldn't see / pick / use them under the other family. The fix
+  //   iterates `supported_providers` for personal records (which the
+  //   CLI populates from `entries.supported_providers`); OAuth records
+  //   fall back to single-family grouping because OAuth credentials are
+  //   inherently single-provider.
+  //
+  //   `recordInUseForGroup` then ensures the in-use badge fires only
+  //   under the group whose provider is in `in_use_for` — so a key bound
+  //   only to openai shows in BOTH groups but with the badge ONLY under
+  //   openai. That's exactly the user's mental model from the CLI picker.
   const grouped = useMemo(() => {
     const order: string[] = [];
     const map = new Map<string, VaultRecord[]>();
-    for (const r of filtered) {
-      const fam = r.protocol_family ?? 'unknown';
+    const addToGroup = (fam: string, r: VaultRecord) => {
       if (!map.has(fam)) {
         map.set(fam, []);
         order.push(fam);
       }
       map.get(fam)!.push(r);
+    };
+    for (const r of filtered) {
+      // For personal keys with multi-provider support_providers, expand into
+      // every family the key supports. OAuth records are inherently
+      // single-provider — the credential is bound to one external account.
+      const families: string[] = (() => {
+        if (r.target === 'personal') {
+          const sp = (r as PersonalVaultRecord).supported_providers;
+          if (Array.isArray(sp) && sp.length > 0) {
+            // Canonical-map each entry, dedup, preserve order. Treat empty
+            // values defensively so corrupt rows don't take down the page.
+            const seen = new Set<string>();
+            const fams: string[] = [];
+            for (const p of sp) {
+              const fam = (p ?? '').toString().trim().toLowerCase();
+              if (!fam) continue;
+              if (!seen.has(fam)) {
+                seen.add(fam);
+                fams.push(fam);
+              }
+            }
+            if (fams.length > 0) return fams;
+          }
+        }
+        return [r.protocol_family ?? 'unknown'];
+      })();
+      for (const fam of families) addToGroup(fam, r);
     }
     return order.map((provider) => ({
       provider,
@@ -844,6 +923,7 @@ export default function UserVaultPage() {
                               <Row
                                 key={k}
                                 record={r}
+                                groupProvider={g.provider}
                                 locked={!unlocked}
                                 isEditing={editingId === k}
                                 editDraft={editDraft}
@@ -865,7 +945,7 @@ export default function UserVaultPage() {
                                 isGroupCollapsed={collapsed}
                                 switchPending={switchingIds.has(k)}
                                 justSwitched={justSwitchedIds.has(k)}
-                                onSwitch={() => switchTo(r)}
+                                onSwitch={() => switchTo(r, g.provider)}
                               />
                             );
                           })}
@@ -1589,8 +1669,15 @@ const Row = React.memo(function Row(props: {
    *  after a successful switch (600ms). Parent sets then clears this prop. */
   justSwitched?: boolean;
   onSwitch?: () => void;
+  /** The provider code of the group this row is rendered under. Drives
+   *  per-(record, provider) `in_use` derivation via recordInUseForGroup —
+   *  see the helper's doc-comment for the regression history. Required so
+   *  multi-provider keys / alias-collisions don't show in_use badge under
+   *  groups they're not actually bound to. */
+  groupProvider: string;
 }) {
   const r = props.record;
+  const inUse = recordInUseForGroup(r, props.groupProvider);
   const lockedTitle = props.locked ? 'Unlock vault to use this action' : undefined;
   const providerName = providerDisplayName(r);
   const isOAuth = r.target === 'oauth';
@@ -1633,7 +1720,7 @@ const Row = React.memo(function Row(props: {
     'row-clickable',
     props.isLastInGroup ? 'last-in-group' : '',
     props.isGroupCollapsed ? 'group-hidden' : '',
-    r.in_use === true ? 'in-use' : '',
+    inUse ? 'in-use' : '',
     props.justSwitched ? 'just-switched' : '',
   ].filter(Boolean).join(' ');
 
@@ -1688,11 +1775,12 @@ const Row = React.memo(function Row(props: {
               className={`alias-main${aliasMono ? ' mono' : ''}`}
               style={r.alias ? undefined : { color: 'var(--muted-foreground)', fontStyle: 'italic' }}
             >
-              {r.in_use === true && (
+              {inUse && (
                 /* CLI-style "active" dot — mirrors the green ● aikey
                    route prints next to the currently-routing row so
                    web and terminal read as one visual system. Placed
-                   before the alias text, sibling to the IN USE chip. */
+                   before the alias text, sibling to the IN USE chip.
+                   Per-(record, provider) — see recordInUseForGroup. */
                 <span
                   className="active-dot"
                   aria-hidden="true"
@@ -1815,7 +1903,7 @@ const Row = React.memo(function Row(props: {
                 eye scans one column for "is this routing? can I make
                 it route?" rather than hunting across alias + actions
                 cells. */}
-            {props.onSwitch && r.in_use !== true && (
+            {props.onSwitch && !inUse && (
               <button
                 type="button"
                 className="row-use-btn"
@@ -1832,7 +1920,7 @@ const Row = React.memo(function Row(props: {
                 Use
               </button>
             )}
-            {r.in_use === true && (
+            {inUse && (
               <button
                 type="button"
                 className="in-use-chip"

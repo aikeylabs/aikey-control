@@ -93,14 +93,27 @@ export interface PersonalVaultRecord {
    */
   use_count: number;
   /**
-   * True when this alias is the current `aikey use` selection for its
-   * provider (i.e. appears in `user_profile_provider_bindings` for the
-   * default profile). Orthogonal to `status` — a key with `status:'active'`
-   * but `in_use:false` is simply "available but not selected". Optional on
-   * the wire for forward-compat with older CLI versions that predate the
-   * field; missing/false both render as "not in use" (no green dot).
+   * True when this alias is bound for AT LEAST ONE provider in
+   * `user_profile_provider_bindings`. Orthogonal to `status` — a key with
+   * `status:'active'` but `in_use:false` is simply "available but not
+   * selected". Kept for back-compat with older Web bundles; new code
+   * SHOULD prefer `in_use_for` so the in-use badge is rendered only in
+   * the group whose provider this alias is actually bound to (regression
+   * 2026-04-30: a key bound only to openai showed `in_use=true` under
+   * the anthropic group too because the flag was provider-agnostic).
    */
   in_use?: boolean;
+  /**
+   * Per-provider list: which providers this alias is the active binding
+   * for. Empty array = not in use anywhere. The Web UI renders the
+   * in-use badge for a record under group `G` ONLY when `G ∈ in_use_for`.
+   * That removes the false "two inuse" appearance that flat `in_use`
+   * caused for multi-provider keys.
+   *
+   * Optional for forward-compat with CLI versions that predate the
+   * field — fall back to `in_use` (legacy global semantics) when missing.
+   */
+  in_use_for?: string[];
   /**
    * Secret shape fields. **Null when the response is locked** (the cli
    * path is `list_metadata_locked`, which reads only plaintext metadata
@@ -150,12 +163,14 @@ export interface OAuthVaultRecord {
    */
   token_expires_at: number | null;
   /**
-   * True when this OAuth account is the current `aikey use` selection
-   * for its provider (matched by provider_account_id in
-   * user_profile_provider_bindings). See PersonalVaultRecord.in_use
-   * for the full rationale.
+   * True when this OAuth account is bound for AT LEAST ONE provider.
+   * See PersonalVaultRecord.in_use for the full rationale + history.
    */
   in_use?: boolean;
+  /**
+   * Per-provider list. See PersonalVaultRecord.in_use_for for semantics.
+   */
+  in_use_for?: string[];
 }
 
 export type VaultRecord = PersonalVaultRecord | OAuthVaultRecord;
