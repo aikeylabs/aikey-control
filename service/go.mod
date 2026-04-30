@@ -3,7 +3,7 @@ module github.com/AiKeyLabs/aikey-control/service
 go 1.26.1
 
 require (
-	github.com/AiKeyLabs/pkg/aikeytime v0.0.0
+	github.com/AiKeyLabs/pkg/aikeytime v0.1.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.12.3
@@ -11,8 +11,3 @@ require (
 )
 
 require golang.org/x/sys v0.42.0 // indirect
-
-
-// Vendored aikeytime — pkg/aikeytime/ in repo root. Allows external
-// contributors to 'go build' without GOPRIVATE access to private aikeylabs/pkg repo.
-replace github.com/AiKeyLabs/pkg/aikeytime => ../pkg/aikeytime
