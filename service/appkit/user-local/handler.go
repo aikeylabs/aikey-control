@@ -109,9 +109,34 @@ func NewHandler(cfg Config) http.Handler {
 	//   - they exist solely because Personal has no managedkey / seat / org
 	//     domain at all; in SaaS they are served by master Delivery handlers
 	mux.HandleFunc("GET /accounts/me", localAccountsMe)
+	// Bare array matches FE accountsApi.mySeats: `httpClient.get<SeatSummaryDTO[]>`.
 	mux.HandleFunc("GET /accounts/me/seats", emptyJSONArray)
-	mux.HandleFunc("GET /accounts/me/all-keys", emptyJSONArray)
-	mux.HandleFunc("GET /accounts/me/pending-keys", emptyJSONArray)
+	// /v1/usage/personal/* stubs — Personal mode has no query-service bundled.
+	// Path A refactor (2026-04-30) split user-local off from the master appkit
+	// where /v1/usage/* was a facade forwarding to query-service. Personal
+	// users have local usage data (collected by aikey-proxy → trial WAL → DB)
+	// but no HTTP query layer ships with cmd/local. Returning bare `[]` (the
+	// query-service's "no rows" response shape) keeps the SPA charts rendering
+	// empty without 404 console noise. Real data requires bundling query-service
+	// or implementing a slim local reader — tracked as a follow-up.
+	mux.HandleFunc("GET /v1/usage/personal/timeline", emptyJSONArray)
+	mux.HandleFunc("GET /v1/usage/personal/hourly", emptyJSONArray)
+	mux.HandleFunc("GET /v1/usage/personal/by-protocol/timeline", emptyJSONArray)
+	mux.HandleFunc("GET /v1/usage/personal/by-protocol/total", emptyJSONArray)
+	mux.HandleFunc("GET /v1/usage/personal/by-key/total", emptyJSONArray)
+	// Envelope matches FE deliveryApi.allKeys: `httpClient.get<{keys: UserKeyDTO[]}>`
+	// then `res.data.keys ?? []`. Returning bare `[]` here is a footgun because
+	// `[].keys` resolves to `Array.prototype.keys` (the iterator factory function),
+	// which is truthy → bypasses the `?? []` fallback → caller iterates a function
+	// → "TypeError: t is not iterable" at the first `for (const k of allKeys)`
+	// callsite (e.g. user/overview's buildProviderRows). Caught by chrome MCP on
+	// 2026-04-30 against v1.0.0-rc.1; bugfix log follows.
+	mux.HandleFunc("GET /accounts/me/all-keys", emptyKeysEnvelope)
+	// Envelope matches FE deliveryApi.pendingKeys: `httpClient.get<{pending_keys: ...}>`.
+	// `[].pending_keys` happens to be undefined so the `?? []` fallback saves
+	// the day, but mirroring master's exact wire format is the correct fix
+	// rather than relying on the absence of a JS prototype property.
+	mux.HandleFunc("GET /accounts/me/pending-keys", emptyPendingKeysEnvelope)
 	mux.HandleFunc("GET /accounts/me/sync-version", localSyncVersion)
 	mux.HandleFunc("GET /accounts/me/managed-keys-snapshot", localKeysSnapshot)
 
@@ -142,6 +167,23 @@ func emptyJSONArray(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("[]"))
+}
+
+// emptyKeysEnvelope serves `{"keys":[]}` to mirror the SaaS Delivery
+// handler's exact wire shape. See the call-site comment for why the bare
+// `[]` form crashes the SPA at iteration time.
+func emptyKeysEnvelope(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"keys":[]}`))
+}
+
+// emptyPendingKeysEnvelope serves `{"pending_keys":[]}` to mirror the SaaS
+// Delivery handler's wire shape.
+func emptyPendingKeysEnvelope(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"pending_keys":[]}`))
 }
 
 // localSyncVersion mirrors the SaaS Delivery.SyncVersion shape with version=0.

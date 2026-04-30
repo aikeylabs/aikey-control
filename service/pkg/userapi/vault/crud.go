@@ -100,6 +100,25 @@ func (h *CRUDHandlers) ListHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if res.Status != "ok" {
+			// First-run case: vault DB doesn't exist yet, so the cli reports
+			// I_VAULT_NOT_INITIALIZED. The /user/vault page must still render
+			// (it's the "set master password" empty state) — surfacing this as
+			// a 500 makes the FE show "Failed to load: 500" instead of the
+			// first-run UI. Treat as success with empty records; the FE
+			// already polls /api/user/vault/status separately to decide the
+			// "set master password" affordance.
+			if res.ErrorCode == "I_VAULT_NOT_INITIALIZED" {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"status": "ok",
+					"data": map[string]any{
+						"records": []json.RawMessage{},
+						"counts":  map[string]int{"personal": 0, "oauth": 0, "team": 0, "total": 0},
+						"locked":  true,
+					},
+				})
+				return
+			}
 			cli.WriteCliError(w, res)
 			return
 		}
