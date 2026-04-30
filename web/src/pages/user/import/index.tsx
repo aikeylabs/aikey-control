@@ -547,6 +547,15 @@ export default function UserBulkImportPage() {
   const [confirmResp, setConfirmResp] = useState<ConfirmResponse | null>(() => hydrate?.confirmResp ?? null);
   const [unlockPassword, setUnlockPassword] = useState('');
   const [unlockExpanded, setUnlockExpanded] = useState(false);
+  // First-run "Set Master Password" inline form state. Mirrors /user/vault's
+  // UnlockBanner first-run branch (per 20260430-个人vault-Web首次设置-方案A.md).
+  // Web-only users who land on /user/import before /user/vault still need a
+  // way to initialise the vault — without this branch they'd see a "VAULT
+  // LOCKED + UNLOCK" CTA that can never succeed because no master password
+  // exists yet.
+  const [initPassword, setInitPassword] = useState('');
+  const [initConfirm, setInitConfirm] = useState('');
+  const [initExpanded, setInitExpanded] = useState(false);
   // v4.1 Stage 13+: SOURCE 面板"点击进入编辑"模式。working 态下默认显示高亮 pre,
   // 点文本切 textarea,失焦切回 pre。empty/done 态不受此 flag 影响。
   const [sourceEditMode, setSourceEditMode] = useState(false);
@@ -731,6 +740,7 @@ export default function UserBulkImportPage() {
   const [hoveredDraft, setHoveredDraft] = useState<number | null>(() => hydrate?.hoveredDraft ?? null);
   const [pinnedDraft, setPinnedDraft] = useState<number | null>(() => hydrate?.pinnedDraft ?? null);
   const [unlockError, setUnlockError] = useState<string | null>(null);
+  const [initError, setInitError] = useState<string | null>(null);
   // Parse/Confirm page-level error (P0 review fix F-1, 2026-04-23):
   //   mutations 之前静默失败 → UI 按钮回到 idle,用户只看到 "点了没反应"。
   //   新增一条 banner 消费 parseMut/confirmMut 的 onError,把 error_code 映射成
@@ -821,6 +831,45 @@ export default function UserBulkImportPage() {
     mutationFn: importApi.vaultLock,
     onSuccess: () => refetchVault(),
   });
+
+  // First-run init: same payload + minted-session contract as /user/vault.
+  // Backend creates vault.db, derives the key, and mints an unlocked
+  // session in one round-trip — so success transitions us straight to the
+  // unlocked banner without a separate UNLOCK step.
+  const initMut = useMutation({
+    mutationFn: importApi.vaultInit,
+    onSuccess: (res) => {
+      if (res.status === 'ok' && res.unlocked) {
+        setInitPassword('');
+        setInitConfirm('');
+        setInitExpanded(false);
+        setInitError(null);
+        refetchVault();
+      } else if (res.error_code === 'I_VAULT_ALREADY_INITIALIZED') {
+        // Race or stale UI: vault was initialised between our last poll
+        // and submit (e.g. the user opened the vault tab in another
+        // browser tab and finished setup there). Refetch silently — the
+        // next render will show the regular unlock banner.
+        setInitError(null);
+        refetchVault();
+      } else {
+        setInitError(res.error_message || 'failed to set master password');
+      }
+    },
+    onError: (e: Error) => setInitError(e.message),
+  });
+
+  const submitInit = () => {
+    // No minimum length: stays consistent with the CLI first-run prompt
+    // (aikey-cli/src/main.rs:3384-3391), which only requires that the two
+    // entries match. Argon2id + AES-GCM handle any non-empty password.
+    if (initPassword !== initConfirm) {
+      setInitError('Passwords do not match');
+      return;
+    }
+    setInitError(null);
+    initMut.mutate({ password: initPassword });
+  };
 
   // F-6 P0 review fix (2026-04-23): AbortController refs for in-flight
   // parse/confirm requests. On each new mutate, abort the previous request
@@ -1068,6 +1117,9 @@ export default function UserBulkImportPage() {
   }
 
   const unlocked = Boolean(vault?.unlocked);
+  // `initialized` defaults to true on legacy local-server builds that don't
+  // return the field (see VaultStatus type in shared/api/user/import.ts).
+  const initialized = vault?.initialized ?? true;
 
   return (
     // `import-page` wrapper (2026-04-22): scopes IMPORT_CSS rules that
@@ -1095,8 +1147,62 @@ export default function UserBulkImportPage() {
         <HookReadinessBanner />
       </div>
 
-      {/* ── Unlock banner ─────────────────────────────────────────────────── */}
-      {!unlocked && (
+      {/* ── Vault state banner ──────────────────────────────────────────────
+          Three states under `!unlocked`:
+            1. !initialized → "Vault Not Set Up" + SET MASTER PASSWORD CTA
+               (web-only first-run path; mirrors /user/vault's UnlockBanner
+               first-run branch — see 20260430-个人vault-Web首次设置-方案A.md)
+            2. initialized && !unlockExpanded → "Vault Locked" + UNLOCK CTA
+            3. initialized && unlockExpanded → password form
+          The unlocked banner sits below this block (look for `{unlocked && …`).
+       */}
+      {!unlocked && !initialized && (
+        <div className="unlock-banner px-6 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3 pl-3">
+            <LockIcon />
+            <span className="font-mono text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--foreground)' }}>Vault Not Set Up</span>
+            <span className="text-xs font-sans" style={{ color: 'var(--muted-foreground)' }}>— Set a master password to start importing credentials</span>
+          </div>
+          <div className="flex items-center gap-3">
+            {!initExpanded ? (
+              <button className="btn btn-primary px-4 py-1.5 text-[11px]" onClick={() => setInitExpanded(true)}>SET MASTER PASSWORD</button>
+            ) : (
+              <div className="flex flex-col items-end gap-1.5">
+                <form
+                  className="flex items-center gap-2"
+                  onSubmit={(e) => { e.preventDefault(); submitInit(); }}
+                >
+                  <input
+                    autoFocus
+                    type="password"
+                    placeholder="Master password"
+                    className="field-input"
+                    style={{ width: 180 }}
+                    value={initPassword}
+                    onChange={(e) => setInitPassword(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Confirm"
+                    className="field-input"
+                    style={{ width: 140 }}
+                    value={initConfirm}
+                    onChange={(e) => setInitConfirm(e.target.value)}
+                  />
+                  <button type="submit" className="btn btn-primary px-3 py-1.5 text-[11px]" disabled={initMut.isPending || !initPassword || !initConfirm}>
+                    {initMut.isPending ? 'SETTING…' : 'SET'}
+                  </button>
+                  <button type="button" className="btn btn-ghost text-[11px] px-2 py-1.5" onClick={() => { setInitExpanded(false); setInitPassword(''); setInitConfirm(''); setInitError(null); }}>Cancel</button>
+                </form>
+                {initError && (
+                  <span className="text-[11px] font-mono text-red-400">{initError}</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {!unlocked && initialized && (
         <div className="unlock-banner px-6 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 pl-3">
             <LockIcon />

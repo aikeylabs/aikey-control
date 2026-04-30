@@ -208,10 +208,12 @@ export default function UserVaultPage() {
   });
 
   const submitInit = () => {
-    if (initPassword.length < 8) {
-      setInitError('Master password must be at least 8 characters');
-      return;
-    }
+    // Match the CLI's first-run policy (main.rs:3384-3391): only require
+    // that the two prompts agree. CLI does not enforce a minimum length —
+    // Argon2id + AES-GCM handle any non-empty password, and adding a web
+    // floor would be a UX inconsistency between the two entry points.
+    // Empty-string is already blocked by the SET button's `disabled` guard
+    // on `!initPassword || !initConfirm`.
     if (initPassword !== initConfirm) {
       setInitError('Passwords do not match');
       return;

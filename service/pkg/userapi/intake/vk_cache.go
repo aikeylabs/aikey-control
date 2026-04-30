@@ -1,4 +1,4 @@
-package importpkg
+package intake
 
 import (
 	"sync"
