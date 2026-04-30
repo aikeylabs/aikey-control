@@ -6,11 +6,10 @@ import { runtimeConfig } from '@/app/config/runtime';
 
 function getToken(): string | null {
   try {
-    // Master and user sessions use separate localStorage keys.
-    const key = window.location.pathname.startsWith('/user')
-      ? 'aikey-auth-user'
-      : 'aikey-auth-master';
-    const raw = localStorage.getItem(key);
+    // User session lives in its own localStorage key (`aikey-auth-user`).
+    // The master-edition console (private repo) uses a separate store; the
+    // two coexist in the same browser without bleeding into each other.
+    const raw = localStorage.getItem('aikey-auth-user');
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { state?: { token?: string } };
     return parsed?.state?.token ?? null;
@@ -19,7 +18,7 @@ function getToken(): string | null {
   }
 }
 
-/** Whether the current page is under /user (as opposed to /master). */
+/** Whether the current page is a user-side route. Always true in this build. */
 function isUserPath(): boolean {
   return window.location.pathname.startsWith('/user');
 }
@@ -27,7 +26,7 @@ function isUserPath(): boolean {
 function redirectToLogin() {
   // User console: session comes from CLI (`aikey web`), not password login.
   // Redirect to a session-expired page instead of a login form.
-  window.location.href = isUserPath() ? '/user/session-expired' : '/master/login';
+  window.location.href = '/user/session-expired';
 }
 
 function createHttpClient(config?: AxiosRequestConfig): AxiosInstance {
