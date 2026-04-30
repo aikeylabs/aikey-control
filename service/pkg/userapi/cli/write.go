@@ -47,8 +47,23 @@ func WriteErr(w http.ResponseWriter, code, msg string) {
 	switch code {
 	case ErrVaultNoSession:
 		status = http.StatusUnauthorized
-	case ErrVaultLocked, "I_VAULT_KEY_INVALID", ErrVaultUnlockFailed:
+	case ErrVaultLocked,
+		"I_VAULT_KEY_INVALID",
+		"I_VAULT_KEY_MALFORMED",
+		"I_VAULT_NOT_INITIALIZED", // precondition: vault doesn't exist yet
+		ErrVaultUnlockFailed:
+		// 422 Unprocessable Entity is the right family for "request well-
+		// formed but the vault state can't satisfy it". Handlers that want
+		// to render a normal empty-state UI for I_VAULT_NOT_INITIALIZED
+		// (e.g. vault/list on first-run) special-case it BEFORE calling
+		// WriteErr — see crud.go ListHandler. The 422 here is the safe
+		// default for any other endpoint that hits the same code.
 		status = http.StatusUnprocessableEntity
+	case "I_VAULT_ALREADY_INITIALIZED":
+		// 409 Conflict: vault.db exists; second init request collides
+		// with current state. FE renders "vault already set up — unlock
+		// instead" affordance.
+		status = http.StatusConflict
 	case ErrBadRequest, ErrCliMalformedReply, "I_STDIN_INVALID_JSON", "I_CREDENTIAL_CONFLICT":
 		status = http.StatusBadRequest
 	case ErrOAuthAddViaCLI:
