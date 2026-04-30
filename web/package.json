@@ -6,6 +6,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./pages/*": "./src/pages/user/*/index.tsx",
+    "./layouts/UserShell": "./src/layouts/UserShell.tsx",
+    "./layouts/AuthLayout": "./src/layouts/AuthLayout.tsx",
+    "./guards/AuthGuard": "./src/app/guards/AuthGuard.tsx",
     "./shared/*": "./src/shared/*",
     "./store": "./src/store/index.ts",
     "./app/config/runtime": "./src/app/config/runtime.ts"

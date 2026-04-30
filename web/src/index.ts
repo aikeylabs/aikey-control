@@ -11,6 +11,15 @@
 // (mapped via package.json `exports` field). The barrel below is for callers
 // that want to consume multiple pages in one import.
 
+// Layouts + guards (consumed by trial-server/web composer)
+export { UserShell } from './layouts/UserShell';
+export { AuthLayout } from './layouts/AuthLayout';
+export { AuthGuard } from './app/guards/AuthGuard';
+
+// Composable route table — trial-server/web spreads this into its own router
+export { buildUserRoutes } from './app/routes/user';
+
+// User pages
 export { default as UserLoginPage } from './pages/user/login';
 export { default as SessionExpiredPage } from './pages/user/session-expired';
 export { default as UserOverviewPage } from './pages/user/overview';
