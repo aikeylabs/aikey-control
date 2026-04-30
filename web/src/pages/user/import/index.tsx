@@ -37,6 +37,7 @@ import {
   type ParseResponse,
   type ConfirmItem,
   type ConfirmResponse,
+  type ProviderRoute,
 } from '@/shared/api/user/import';
 import { pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
@@ -233,79 +234,6 @@ function applyTitleAliasUnification(records: DraftRecord[]): DraftRecord[] {
 }
 
 /**
- * Frontend-only host aliases for brand domains that aren't reachable via
- * either YAML map (`family_base_urls` + `family_login_urls`) but are still
- * commonly pasted by users. Kept narrow — every entry here is something
- * the YAML can't supply (apex / alternate brand domains, or sub-brands
- * that don't suffix-cover via the YAML hosts).
- *
- * Most "platform / console / chat / aistudio" subdomains are NOT here —
- * they come from `family_login_urls` via the rules endpoint. Adding to
- * this table is a sign the YAML should grow instead.
- *
- * Keys are pre-normalized hosts (lowercase, no `www.`). Matching is
- * label-boundary aware (`lookupFamilyByHost`): exact match wins, otherwise
- * the incoming host must end with `.${key}` so `platform.claude.com`
- * resolves to `claude.com` but `evilclaude.com` does not.
- */
-const OFFICIAL_HOST_ALIASES: Record<string, string> = {
-  // anthropic — apex / brand domains; YAML covers api.anthropic.com + claude.ai
-  'anthropic.com': 'anthropic',
-  'claude.com':    'anthropic',
-  // openai — apex; YAML covers api.openai.com + chatgpt.com
-  'openai.com':    'openai',
-  // kimi / moonshot — apex / alternate brand; YAML covers api.moonshot.cn + www.kimi.com
-  'moonshot.cn':   'kimi',
-  'moonshot.ai':   'kimi',
-  // deepseek — apex; YAML covers api.deepseek.com + platform.deepseek.com
-  'deepseek.com':  'deepseek',
-  // gemini — Gemini-branded chat domain not in YAML; aistudio.google.com is
-  // already there via family_login_urls. Aliasing google.com would bleed
-  // into unrelated Google products, so keep this Gemini-specific.
-  'gemini.google.com': 'google_gemini',
-  // groq — apex; YAML covers api.groq.com + console.groq.com
-  'groq.com':      'groq',
-  // xai_grok — apex; YAML covers api.x.ai + console.x.ai
-  'x.ai':          'xai_grok',
-  // zhipu — alternate brand spelling; YAML covers open.bigmodel.cn + bigmodel.cn
-  'zhipuai.cn':    'zhipu',
-  'zhipuai.com':   'zhipu',
-  // doubao / volcengine ark — neither apex is in YAML
-  'volces.com':       'doubao',
-  'volcengine.com':   'doubao',
-  // siliconflow — apex; YAML covers api.siliconflow.cn + cloud.siliconflow.cn
-  'siliconflow.cn':   'siliconflow',
-  // zeroeleven — bare 2233.ai brand; YAML covers aicoding.2233.ai + 0011.ai
-  '2233.ai':       'zeroeleven',
-};
-
-/**
- * Resolve an incoming host against the official host map.
- *
- * Exact match wins; otherwise the host must end with `.${key}` so
- * subdomains resolve correctly (`platform.claude.com` → `claude.com`)
- * without false-positives on coincidental string suffixes
- * (`evilclaude.com` → no match because there is no preceding dot).
- *
- * If the map has multiple suffix matches (e.g. `api.openai.com` from
- * family_base_urls + `openai.com` from aliases), the more specific
- * (longer) key wins.
- */
-function lookupFamilyByHost(host: string, hostToFamily: Map<string, string>): string | null {
-  const exact = hostToFamily.get(host);
-  if (exact) return exact;
-  let bestKey = '';
-  let bestFamily: string | null = null;
-  for (const [key, family] of hostToFamily) {
-    if (host.endsWith('.' + key) && key.length > bestKey.length) {
-      bestKey = key;
-      bestFamily = family;
-    }
-  }
-  return bestFamily;
-}
-
-/**
  * Parse a host out of a user-entered URL fragment, normalize for matching.
  * Returns null on anything we can't confidently extract a host from.
  *
@@ -331,33 +259,66 @@ function normalizeHost(rawUrl: string): string | null {
 }
 
 /**
- * Build a host → family lookup from both YAML maps (`family_base_urls`
- * + `family_login_urls`) plus the static frontend alias table.
+ * v4.3 (2026-05-01): build a host → ProviderRoute lookup from the
+ * single-source-of-truth provider_routes table, plus an apex-alias chain
+ * (HOST_TO_CANONICAL) that resolves brand domains like `moonshot.cn` to
+ * the canonical API host (`api.moonshot.cn`) so the lookup can hit a row.
  *
- * Insertion order matters only for collisions, which shouldn't happen
- * within a single family but may across families if YAML hosts overlap
- * with aliases. Aliases write last so they win (they're hand-curated
- * for our specific UX needs).
+ * Was previously layered (family_base_urls + family_login_urls + aliases);
+ * now there is one declarative table with every host's full route.
  */
-function buildOfficialHostToFamily(
-  familyBaseUrls: Record<string, string> | undefined,
-  familyLoginUrls: Record<string, string> | undefined,
-): Map<string, string> {
-  const map = new Map<string, string>();
-  const ingest = (m: Record<string, string> | undefined) => {
-    if (!m) return;
-    for (const [family, url] of Object.entries(m)) {
-      const host = normalizeHost(url);
-      if (host) map.set(host, family);
+function buildHostToRoute(
+  routes: ProviderRoute[] | undefined,
+): Map<string, ProviderRoute> {
+  const map = new Map<string, ProviderRoute>();
+  if (!routes) return map;
+  for (const r of routes) {
+    const h = r.host.toLowerCase();
+    map.set(h, r);
+    // also bind the www. variant if not already in table
+    if (!h.startsWith('www.')) {
+      const wwwH = `www.${h}`;
+      if (!map.has(wwwH)) map.set(wwwH, r);
     }
-  };
-  ingest(familyBaseUrls);
-  ingest(familyLoginUrls);
-  for (const [host, family] of Object.entries(OFFICIAL_HOST_ALIASES)) {
-    map.set(host, family);
+  }
+  // Apex / brand-name aliases that aren't themselves API endpoints but
+  // commonly appear in user-pasted login pages. Each maps to a canonical
+  // host that already has a row in provider_routes.
+  for (const [alias, canonical] of Object.entries(HOST_TO_CANONICAL)) {
+    const target = map.get(canonical);
+    if (target && !map.has(alias)) map.set(alias, target);
   }
   return map;
 }
+
+/**
+ * Apex / brand-name → canonical API host. Frontend-only convenience for
+ * the import auto-fill UX (user might paste a brand domain instead of the
+ * actual API host). Both source and target should be lowercased hosts.
+ */
+const HOST_TO_CANONICAL: Record<string, string> = {
+  'anthropic.com':     'api.anthropic.com',
+  'claude.com':        'api.anthropic.com',
+  'claude.ai':         'api.anthropic.com',
+  'openai.com':        'api.openai.com',
+  'platform.openai.com': 'api.openai.com',
+  'chatgpt.com':       'api.openai.com',
+  'kimi.com':          'api.kimi.com',
+  'moonshot.cn':       'api.moonshot.cn',
+  'moonshot.ai':       'api.moonshot.cn',
+  'deepseek.com':      'api.deepseek.com',
+  'platform.deepseek.com': 'api.deepseek.com',
+  'groq.com':          'api.groq.com',
+  'console.groq.com':  'api.groq.com',
+  'x.ai':              'api.x.ai',
+  'console.x.ai':      'api.x.ai',
+  'siliconflow.cn':    'api.siliconflow.cn',
+  'cloud.siliconflow.cn': 'api.siliconflow.cn',
+  'huggingface.co':    'api-inference.huggingface.co',
+  'perplexity.ai':     'api.perplexity.ai',
+  'www.perplexity.ai': 'api.perplexity.ai',
+  '0011.ai':           'aicoding.2233.ai',
+};
 
 /**
  * Auto-fill draft.fields.base_url according to the Use-Official defaulting
@@ -380,15 +341,26 @@ function buildOfficialHostToFamily(
  * user-supplied URL with the official one and need to remember the old
  * value for revert).
  */
+/**
+ * v4.3 (2026-05-01): single host→route lookup replaces the previous
+ * layered family_base_urls + host_to_base_url chain. The matched route
+ * yields `base_url + version` as the official URL. Multi-host providers
+ * (kimi covers both api.kimi.com and api.moonshot.cn) get the right
+ * upstream endpoint without provider_code split.
+ */
+function officialUrlFromRoute(route: ProviderRoute): string {
+  return route.version ? `${route.base_url}${route.version}` : route.base_url;
+}
+
 function applyOfficialDefaults(
   record: DraftRecord,
-  familyBaseUrls: Record<string, string> | undefined,
-  hostToFamily: Map<string, string>,
-  hostToBaseUrl: Record<string, string> | undefined,
+  hostToRoute: Map<string, ProviderRoute>,
 ): { record: DraftRecord; prevBaseUrl: string | null } {
   const current = (record.fields.base_url ?? '').trim();
 
   // Rule 1: empty + inferred-provider has official → fill with inferred's URL.
+  // (CLI parse stage has already set record.official_base_url using
+  // provider_routes; this branch just commits it into the editable field.)
   if (!current) {
     if (record.official_base_url) {
       return {
@@ -402,27 +374,14 @@ function applyOfficialDefaults(
     return { record, prevBaseUrl: null };
   }
 
-  // Rule 2: non-empty, host matches an official family → replace with that
-  //         family's official URL. `prevBaseUrl` retains the original so
-  //         the existing revert button can restore it.
-  //
-  // v4.2.1 (2026-05-01): host_to_base_url override consulted BEFORE
-  // family_base_urls. Same-family hosts can dispatch to different
-  // endpoints — kimi family is the motivating case (api.kimi.com →
-  // Kimi Coding, api.moonshot.cn → Moonshot platform). Without this,
-  // pasted moonshot URLs got rewritten to kimi.com (or vice versa).
+  // Rule 2: non-empty + host has a provider_routes row → replace with that
+  // row's official URL (base_url + version). prevBaseUrl retains the
+  // original so the revert button can restore it.
   const host = normalizeHost(current);
   if (!host) return { record, prevBaseUrl: null };
-  const hostSpecific = hostToBaseUrl?.[host];
-  let matchedUrl: string | undefined;
-  if (hostSpecific) {
-    matchedUrl = hostSpecific;
-  } else {
-    const matchedFamily = lookupFamilyByHost(host, hostToFamily);
-    if (!matchedFamily) return { record, prevBaseUrl: null };
-    matchedUrl = familyBaseUrls?.[matchedFamily];
-  }
-  if (!matchedUrl) return { record, prevBaseUrl: null };
+  const route = hostToRoute.get(host);
+  if (!route) return { record, prevBaseUrl: null };
+  const matchedUrl = officialUrlFromRoute(route);
   if (matchedUrl === current) return { record, prevBaseUrl: null };
 
   return {
@@ -784,8 +743,8 @@ export default function UserBulkImportPage() {
     refetchOnWindowFocus: false,
   });
 
-  // Static rules feed (layer versions + family_base_urls map). Used to drive
-  // the Use-Official auto-fill rules in parseMut.onSuccess and changeProtocols.
+  // Static rules feed (layer versions + provider_routes table). Drives the
+  // Use-Official auto-fill rules in parseMut.onSuccess and changeProtocols.
   // Cached aggressively — the YAML behind it does not change between refreshes.
   const { data: rules } = useQuery({
     queryKey: ['import-rules'],
@@ -793,17 +752,27 @@ export default function UserBulkImportPage() {
     refetchOnWindowFocus: false,
     staleTime: Infinity,
   });
-  const familyBaseUrls = rules?.family_base_urls;
-  const familyLoginUrls = rules?.family_login_urls;
-  // v4.2.1 (2026-05-01): per-host base_url override (kimi.com vs moonshot.cn
-  // dispatched to different endpoints despite sharing protocol family kimi).
-  // applyOfficialDefaults Rule 2 consults this BEFORE family_base_urls.
-  const hostToBaseUrl = rules?.host_to_base_url;
-  // host → family lookup, rebuilt only when the rules payload changes (rare).
-  const officialHostToFamily = useMemo(
-    () => buildOfficialHostToFamily(familyBaseUrls, familyLoginUrls),
-    [familyBaseUrls, familyLoginUrls],
+  // v4.3 (2026-05-01): single host → ProviderRoute lookup table replaces the
+  // previous family_base_urls + host_to_base_url + officialHostToFamily chain.
+  // Multi-host providers (kimi covers api.kimi.com and api.moonshot.cn) get
+  // their own row each, so the UI dispatches to the correct upstream without
+  // any provider_code split.
+  const providerRoutes = rules?.provider_routes;
+  const hostToRoute = useMemo(
+    () => buildHostToRoute(providerRoutes),
+    [providerRoutes],
   );
+  // provider_code → first matching route, used by changeProtocols Rule 3
+  // (user picks a provider chip with empty base_url; we pick the family's
+  // canonical row as the default fill).
+  const providerToRoute = useMemo(() => {
+    const m = new Map<string, ProviderRoute>();
+    if (!providerRoutes) return m;
+    for (const r of providerRoutes) {
+      if (!m.has(r.provider)) m.set(r.provider, r);
+    }
+    return m;
+  }, [providerRoutes]);
 
   // Live TTL countdown. Anchors to the moment the vault query returned
   // (`vaultFetchedAt` + `ttl_seconds`) so the display actually ticks, not
@@ -929,12 +898,7 @@ export default function UserBulkImportPage() {
         // host matches official family). prevBaseUrl is seeded only by Rule 2
         // so the user can revert via the existing baseurl-row toggle.
         const rows = unified.map((rec) => {
-          const { record, prevBaseUrl } = applyOfficialDefaults(
-            rec,
-            familyBaseUrls,
-            officialHostToFamily,
-            hostToBaseUrl,
-          );
+          const { record, prevBaseUrl } = applyOfficialDefaults(rec, hostToRoute);
           return draftToRow(record, prevBaseUrl);
         });
         const firstSelectedIdx = rows.findIndex((r) => r.selected);
@@ -1496,7 +1460,7 @@ export default function UserBulkImportPage() {
               flashDraftId={flashDraftId}
               setFlashDraftId={setFlashDraftId}
               scrollRef={draftsScrollRef}
-              familyBaseUrls={familyBaseUrls}
+              providerToRoute={providerToRoute}
             />
           )}
           {state === 'done' && confirmResp && (
@@ -1738,7 +1702,7 @@ function WorkingDrafts({
   flashDraftId,
   setFlashDraftId,
   scrollRef,
-  familyBaseUrls,
+  providerToRoute,
 }: {
   drafts: DraftRow[];
   setDrafts: React.Dispatch<React.SetStateAction<DraftRow[]>>;
@@ -1768,9 +1732,10 @@ function WorkingDrafts({
    *  parent listens on this to detect manual scrolling on the right
    *  pane, programmatically scrolls the source pane in step. */
   scrollRef?: React.RefObject<HTMLDivElement>;
-  /** family id → official base URL map (Use-Official Rule 3). undefined while
-   *  the rules query is loading or if the backend omitted the field. */
-  familyBaseUrls?: Record<string, string>;
+  /** v4.3: provider_code → first matching ProviderRoute (Use-Official Rule 3).
+   *  changeProtocols pulls from this when user picks a provider chip with
+   *  empty base_url; resolved URL = base_url + version. */
+  providerToRoute: Map<string, ProviderRoute>;
 }) {
   function toggle(idx: number) {
     setDrafts((prev) => prev.map((d, i) => i === idx ? { ...d, selected: !d.selected } : d));
@@ -1822,7 +1787,8 @@ function WorkingDrafts({
         if (i !== idx) return d;
         const currentBase = (d.record.fields.base_url ?? '').trim();
         const onlyFamily = next.length === 1 ? next[0] : null;
-        const officialUrl = onlyFamily ? familyBaseUrls?.[onlyFamily] : undefined;
+        const route = onlyFamily ? providerToRoute.get(onlyFamily) : undefined;
+        const officialUrl = route ? officialUrlFromRoute(route) : undefined;
         if (!currentBase && officialUrl) {
           return {
             ...d,

@@ -376,17 +376,28 @@ export interface RulesResponse {
    */
   family_login_urls?: Record<string, string>;
   /**
-   * v4.2.1 (2026-05-01): per-host base_url override.
+   * v4.3 (2026-05-01): per-host upstream routing table — single source of
+   * truth replacing family_base_urls + host_to_base_url + proxy
+   * applyBaseURL dedup algorithm.
    *
-   * Queried BEFORE family_base_urls in `applyOfficialDefaults` Rule 2.
-   * Lets same-family hosts route to different endpoints — kimi family
-   * is the motivating case (api.kimi.com → Kimi Coding endpoint
-   * `https://api.kimi.com/coding/v1`, api.moonshot.cn → Moonshot
-   * platform endpoint `https://api.moonshot.cn/v1`).
+   * Each row declares the full route for one upstream host. Multi-host
+   * providers (kimi family covers both kimi.com Kimi Coding and
+   * moonshot.cn Moonshot platform) appear as multiple rows sharing the
+   * same `provider` field but with different `base_url`.
    *
-   * Mirrors aikey-cli/data/provider_fingerprint.yaml `host_to_base_url`.
+   * Frontend `applyOfficialDefaults` looks up by host: if pasted URL's
+   * host matches a row, use `base_url + version` as the official URL.
+   * Mirrors aikey-cli/data/provider_fingerprint.yaml `provider_routes`.
    */
-  host_to_base_url?: Record<string, string>;
+  provider_routes?: ProviderRoute[];
+}
+
+export interface ProviderRoute {
+  host: string;
+  protocol: string;
+  provider: string;
+  base_url: string;
+  version: string;
 }
 
 // ── Envelope helpers ─────────────────────────────────────────────────────

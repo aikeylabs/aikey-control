@@ -72,8 +72,12 @@ func (h *ImportHandlers) ConfirmHandler(w http.ResponseWriter, r *http.Request) 
 //	{
 //	  "layer_versions":    {"rules":"...", "crf":"...", "fingerprint":"..."},
 //	  "sample_providers":  [...],
-//	  "family_base_urls":  {"anthropic":"https://api.anthropic.com", ...},
-//	  "family_login_urls": {"anthropic":"https://claude.ai/login", ...}
+//	  "family_login_urls": {"anthropic":"https://claude.ai/login", ...},
+//	  "provider_routes":   [
+//	    {"host":"api.anthropic.com","protocol":"anthropic","provider":"anthropic",
+//	     "base_url":"https://api.anthropic.com","version":"/v1"},
+//	    ...
+//	  ]
 //	}
 //
 // FALLBACK: if the cli is missing or fails, we serve a hardcoded snapshot so
@@ -120,39 +124,32 @@ func rulesFallback() map[string]any {
 			"openrouter", "anthropic_oauth", "generic_jwt", "pem_block",
 			"generic_sk", "short_hex_raw", "uuid",
 		},
-		"family_base_urls": map[string]string{
-			"anthropic":     "https://api.anthropic.com",
-			"openai":        "https://api.openai.com/v1",
-			// 2026-05-01 (v4.2.1): kimi family fallback when no URL host parsed.
-			// Was "api.moonshot.cn/v1" — wrong product (Moonshot platform vs
-			// Kimi Coding api.kimi.com/coding/v1). For per-host precision (so
-			// pasted moonshot.cn URLs route to moonshot, kimi.com URLs route
-			// to kimi-coding) see host_to_base_url below.
-			"kimi":          "https://api.kimi.com/coding/v1",
-			"deepseek":      "https://api.deepseek.com/v1",
-			"google_gemini": "https://generativelanguage.googleapis.com",
-			"groq":          "https://api.groq.com/openai/v1",
-			"xai_grok":      "https://api.x.ai/v1",
-			"zhipu":         "https://open.bigmodel.cn/api/paas",
-			"doubao":        "https://ark.cn-beijing.volces.com/api/v3",
-			"qwen":          "https://dashscope.aliyuncs.com/compatible-mode/v1",
-			"siliconflow":   "https://api.siliconflow.cn/v1",
-			"huggingface":   "https://api-inference.huggingface.co/v1",
-			"perplexity":    "https://api.perplexity.ai/v1",
-			"openrouter":    "https://openrouter.ai/api/v1",
-			"yunwu":         "https://yunwu.ai/v1",
-			"zeroeleven":    "https://aicoding.2233.ai",
-		},
-		// v4.2.1 (2026-05-01): per-host base_url override. Queried before
-		// family_base_urls fallback. Lets same-family hosts route to
-		// different endpoints (kimi.com Kimi Coding vs moonshot.cn platform).
-		// Keep in sync with aikey-cli/data/provider_fingerprint.yaml's
-		// host_to_base_url map.
-		"host_to_base_url": map[string]string{
-			"api.kimi.com":         "https://api.kimi.com/coding/v1",
-			"www.kimi.com":         "https://api.kimi.com/coding/v1",
-			"api.moonshot.cn":      "https://api.moonshot.cn/v1",
-			"platform.moonshot.cn": "https://api.moonshot.cn/v1",
+		// v4.3 (2026-05-01): per-host upstream routing table. Single source
+		// of truth — replaces former family_base_urls + host_to_base_url +
+		// proxy applyBaseURL dedup algorithm. Every row declares one host's
+		// full route (protocol + canonical provider_code + base_url root +
+		// API version path). Keep in sync with
+		// aikey-cli/data/provider_fingerprint.yaml's `provider_routes`.
+		"provider_routes": []map[string]string{
+			{"host": "api.anthropic.com", "protocol": "anthropic", "provider": "anthropic", "base_url": "https://api.anthropic.com", "version": "/v1"},
+			{"host": "api.openai.com", "protocol": "openai_compatible", "provider": "openai", "base_url": "https://api.openai.com", "version": "/v1"},
+			{"host": "api.kimi.com", "protocol": "openai_compatible", "provider": "kimi", "base_url": "https://api.kimi.com/coding", "version": "/v1"},
+			{"host": "www.kimi.com", "protocol": "openai_compatible", "provider": "kimi", "base_url": "https://api.kimi.com/coding", "version": "/v1"},
+			{"host": "api.moonshot.cn", "protocol": "openai_compatible", "provider": "kimi", "base_url": "https://api.moonshot.cn", "version": "/v1"},
+			{"host": "platform.moonshot.cn", "protocol": "openai_compatible", "provider": "kimi", "base_url": "https://api.moonshot.cn", "version": "/v1"},
+			{"host": "api.deepseek.com", "protocol": "openai_compatible", "provider": "deepseek", "base_url": "https://api.deepseek.com", "version": "/v1"},
+			{"host": "api.groq.com", "protocol": "openai_compatible", "provider": "groq", "base_url": "https://api.groq.com/openai", "version": "/v1"},
+			{"host": "api.x.ai", "protocol": "openai_compatible", "provider": "xai_grok", "base_url": "https://api.x.ai", "version": "/v1"},
+			{"host": "openrouter.ai", "protocol": "openai_compatible", "provider": "openrouter", "base_url": "https://openrouter.ai/api", "version": "/v1"},
+			{"host": "api.perplexity.ai", "protocol": "openai_compatible", "provider": "perplexity", "base_url": "https://api.perplexity.ai", "version": ""},
+			{"host": "generativelanguage.googleapis.com", "protocol": "gemini", "provider": "google_gemini", "base_url": "https://generativelanguage.googleapis.com", "version": "/v1beta"},
+			{"host": "open.bigmodel.cn", "protocol": "openai_compatible", "provider": "zhipu", "base_url": "https://open.bigmodel.cn/api/paas", "version": ""},
+			{"host": "ark.cn-beijing.volces.com", "protocol": "openai_compatible", "provider": "doubao", "base_url": "https://ark.cn-beijing.volces.com/api", "version": "/v3"},
+			{"host": "dashscope.aliyuncs.com", "protocol": "openai_compatible", "provider": "qwen", "base_url": "https://dashscope.aliyuncs.com/compatible-mode", "version": "/v1"},
+			{"host": "api.siliconflow.cn", "protocol": "openai_compatible", "provider": "siliconflow", "base_url": "https://api.siliconflow.cn", "version": "/v1"},
+			{"host": "api-inference.huggingface.co", "protocol": "openai_compatible", "provider": "huggingface", "base_url": "https://api-inference.huggingface.co", "version": "/v1"},
+			{"host": "yunwu.ai", "protocol": "openai_compatible", "provider": "yunwu", "base_url": "https://yunwu.ai", "version": "/v1"},
+			{"host": "aicoding.2233.ai", "protocol": "openai_compatible", "provider": "zeroeleven", "base_url": "https://aicoding.2233.ai", "version": "/v1"},
 		},
 		"family_login_urls": map[string]string{
 			"anthropic":     "https://claude.ai/login",
