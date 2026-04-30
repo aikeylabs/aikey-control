@@ -12,10 +12,18 @@ import (
 // TestSMTPMailer_SendActivationEmail_Real sends a real activation email
 // via Alibaba Enterprise Mail SMTP. Skip in CI — run manually:
 //
-//	go test -v -run TestSMTPMailer_SendActivationEmail_Real ./pkg/identity/
+//	SMTP_LIVE_TEST=1 SMTP_LIVE_TEST_PASSWORD=... \
+//	    go test -v -run TestSMTPMailer_SendActivationEmail_Real ./pkg/identity/
+//
+// Why password from env: this is a public repository; the credential must
+// not live in source. Operators provide it ad-hoc when running the test.
 func TestSMTPMailer_SendActivationEmail_Real(t *testing.T) {
 	if os.Getenv("SMTP_LIVE_TEST") == "" {
 		t.Skip("set SMTP_LIVE_TEST=1 to run live SMTP test")
+	}
+	password := os.Getenv("SMTP_LIVE_TEST_PASSWORD")
+	if password == "" {
+		t.Skip("set SMTP_LIVE_TEST_PASSWORD to run live SMTP test")
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -24,7 +32,7 @@ func TestSMTPMailer_SendActivationEmail_Real(t *testing.T) {
 		"smtp.qiye.aliyun.com",
 		465,
 		"invite@aikeylabs.com",
-		"idQkZg4DBt4d7iMn",
+		password,
 		`"AiKey Labs" <invite@aikeylabs.com>`,
 		logger,
 	)
