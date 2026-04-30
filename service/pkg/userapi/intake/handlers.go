@@ -7,6 +7,7 @@ import (
 
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/cli"
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/vault"
+	"github.com/AiKeyLabs/pkg/providerroutes"
 )
 
 // ParseHandler: POST /api/user/import/parse
@@ -124,33 +125,17 @@ func rulesFallback() map[string]any {
 			"openrouter", "anthropic_oauth", "generic_jwt", "pem_block",
 			"generic_sk", "short_hex_raw", "uuid",
 		},
-		// v4.3 (2026-05-01): per-host upstream routing table. Single source
-		// of truth — replaces former family_base_urls + host_to_base_url +
-		// proxy applyBaseURL dedup algorithm. Every row declares one host's
-		// full route (protocol + canonical provider_code + base_url root +
-		// API version path). Keep in sync with
-		// aikey-cli/data/provider_fingerprint.yaml's `provider_routes`.
-		"provider_routes": []map[string]string{
-			{"host": "api.anthropic.com", "protocol": "anthropic", "provider": "anthropic", "base_url": "https://api.anthropic.com", "version": "/v1"},
-			{"host": "api.openai.com", "protocol": "openai_compatible", "provider": "openai", "base_url": "https://api.openai.com", "version": "/v1"},
-			{"host": "api.kimi.com", "protocol": "openai_compatible", "provider": "kimi", "base_url": "https://api.kimi.com/coding", "version": "/v1"},
-			{"host": "www.kimi.com", "protocol": "openai_compatible", "provider": "kimi", "base_url": "https://api.kimi.com/coding", "version": "/v1"},
-			{"host": "api.moonshot.cn", "protocol": "openai_compatible", "provider": "kimi", "base_url": "https://api.moonshot.cn", "version": "/v1"},
-			{"host": "platform.moonshot.cn", "protocol": "openai_compatible", "provider": "kimi", "base_url": "https://api.moonshot.cn", "version": "/v1"},
-			{"host": "api.deepseek.com", "protocol": "openai_compatible", "provider": "deepseek", "base_url": "https://api.deepseek.com", "version": "/v1"},
-			{"host": "api.groq.com", "protocol": "openai_compatible", "provider": "groq", "base_url": "https://api.groq.com/openai", "version": "/v1"},
-			{"host": "api.x.ai", "protocol": "openai_compatible", "provider": "xai_grok", "base_url": "https://api.x.ai", "version": "/v1"},
-			{"host": "openrouter.ai", "protocol": "openai_compatible", "provider": "openrouter", "base_url": "https://openrouter.ai/api", "version": "/v1"},
-			{"host": "api.perplexity.ai", "protocol": "openai_compatible", "provider": "perplexity", "base_url": "https://api.perplexity.ai", "version": ""},
-			{"host": "generativelanguage.googleapis.com", "protocol": "gemini", "provider": "google_gemini", "base_url": "https://generativelanguage.googleapis.com", "version": "/v1beta"},
-			{"host": "open.bigmodel.cn", "protocol": "openai_compatible", "provider": "zhipu", "base_url": "https://open.bigmodel.cn/api/paas", "version": ""},
-			{"host": "ark.cn-beijing.volces.com", "protocol": "openai_compatible", "provider": "doubao", "base_url": "https://ark.cn-beijing.volces.com/api", "version": "/v3"},
-			{"host": "dashscope.aliyuncs.com", "protocol": "openai_compatible", "provider": "qwen", "base_url": "https://dashscope.aliyuncs.com/compatible-mode", "version": "/v1"},
-			{"host": "api.siliconflow.cn", "protocol": "openai_compatible", "provider": "siliconflow", "base_url": "https://api.siliconflow.cn", "version": "/v1"},
-			{"host": "api-inference.huggingface.co", "protocol": "openai_compatible", "provider": "huggingface", "base_url": "https://api-inference.huggingface.co", "version": "/v1"},
-			{"host": "yunwu.ai", "protocol": "openai_compatible", "provider": "yunwu", "base_url": "https://yunwu.ai", "version": "/v1"},
-			{"host": "aicoding.2233.ai", "protocol": "openai_compatible", "provider": "zeroeleven", "base_url": "https://aicoding.2233.ai", "version": "/v1"},
-		},
+		// v4.3 (2026-05-01): per-host upstream routing table from the shared
+		// pkg/providerroutes package. Single source of truth across cli +
+		// proxy + this fallback. The yaml is embedded in pkg/providerroutes
+		// at build time (synced from aikey-cli/data/provider_fingerprint.yaml
+		// by `make sync-fingerprint` / release.sh Step 0.5).
+		//
+		// This fallback runs only when the cli subprocess is unreachable;
+		// the primary `Bridge.Invoke("rules", ...)` path returns the cli's
+		// own parse output (which itself reads the same yaml). Either way
+		// the returned `provider_routes` array is the same data shape.
+		"provider_routes": providerroutes.Default().All(),
 		"family_login_urls": map[string]string{
 			"anthropic":     "https://claude.ai/login",
 			"openai":        "https://chatgpt.com",

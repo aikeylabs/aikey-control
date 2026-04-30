@@ -25,7 +25,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { importApi } from '@/shared/api/user/import';
+import { importApi, type ProviderRoute } from '@/shared/api/user/import';
 import { formatRelativeTime } from '@/shared/utils/datetime-intl';
 import {
   vaultApi,
@@ -284,6 +284,36 @@ export default function UserVaultPage() {
 
   const records = listData?.records ?? [];
   const counts = listData?.counts ?? { personal: 0, oauth: 0, team: 0, total: 0 };
+
+  // v4.3 (2026-05-01): provider_routes table — the authoritative declaration
+  // of "for this host, the proxy will route to base_url + version". Drawer
+  // uses it to display the EFFECTIVE upstream URL for each key, so users
+  // can tell apart kimi-coding vs moonshot entries (which both belong to
+  // provider_code=kimi but route to different hosts/endpoints) without
+  // having to read the raw stored base_url and second-guess what the
+  // proxy will do with it. Same logic as aikey-proxy applyBaseURL stitch
+  // (via pkg/providerroutes.Stitch). Cached aggressively.
+  const { data: rules } = useQuery({
+    queryKey: ['import-rules'],
+    queryFn: importApi.rules,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
+  const providerRoutes = rules?.provider_routes;
+  const hostToRoute = useMemo(() => {
+    const m = new Map<string, ProviderRoute>();
+    if (!providerRoutes) return m;
+    for (const r of providerRoutes) m.set(r.host.toLowerCase(), r);
+    return m;
+  }, [providerRoutes]);
+  const providerToRoute = useMemo(() => {
+    const m = new Map<string, ProviderRoute>();
+    if (!providerRoutes) return m;
+    for (const r of providerRoutes) {
+      if (!m.has(r.provider)) m.set(r.provider, r);
+    }
+    return m;
+  }, [providerRoutes]);
 
   // Filters + sort. Status filter removed 2026-04-24 — in practice
   // 99% of keys are `status:'active'`, errored keys are rare and when
@@ -996,6 +1026,8 @@ export default function UserVaultPage() {
             setDeletingId(rowKey(drawerRecord));
             setDrawerRecord(null);
           }}
+          hostToRoute={hostToRoute}
+          providerToRoute={providerToRoute}
         />
       )}
 
@@ -2196,8 +2228,18 @@ function DetailDrawer(props: {
   onClose: () => void;
   onBeginRename: () => void;
   onDelete: () => void;
+  /** v4.3 (2026-05-01): host → ProviderRoute map for resolving the EFFECTIVE
+   *  upstream URL the proxy will route to (matches pkg/providerroutes.Stitch
+   *  semantics). Empty map while rules query is loading — drawer falls back
+   *  to stored / official_base_url. */
+  hostToRoute: Map<string, ProviderRoute>;
+  /** v4.3: provider_code → first-matching ProviderRoute, used as the family-
+   *  level fallback when the stored base_url's host isn't in the table. */
+  providerToRoute: Map<string, ProviderRoute>;
 }) {
   const r = props.record;
+  const hostToRoute = props.hostToRoute;
+  const providerToRoute = props.providerToRoute;
   // `copiedField` drives the check-icon flash on any drawer copy button
   // (base_url, route token, CLI reveal command). A single slot is enough
   // because the buttons are mutually exclusive — clicking a second one
@@ -2388,16 +2430,58 @@ function DetailDrawer(props: {
                   );
                 })()}
                 {(() => {
-                  // base_url: show the user-supplied URL when present, otherwise
-                  // fall back to the provider's recommended default URL sourced
-                  // from the CLI's PROVIDER_DEFAULTS registry (`official_base_url`).
-                  // Layout: .v.stack (column) + .inline-copy + .hint — lifted
-                  // wholesale from user_vault_3_1_1.html template so the "URL
-                  // + small ghost copy + lowercase mono hint" rhythm matches
-                  // the new drawer design exactly.
-                  const effectiveUrl =
-                    personal.base_url ?? personal.official_base_url ?? null;
-                  const isDefault = !personal.base_url;
+                  // v4.3 (2026-05-01): show the EFFECTIVE upstream URL — what
+                  // the proxy will actually route to — computed via the same
+                  // host→provider_routes lookup as aikey-proxy's stitch step
+                  // (pkg/providerroutes.Stitch). This unblocks debugging
+                  // when several keys share the same provider_code (e.g.
+                  // 5 kimi entries) but route to different upstream hosts:
+                  // before the change, raw `base_url` reads identically
+                  // (kimi.com/coding/v1) for entries that actually go to
+                  // moonshot vs kimi-coding; the effective URL exposes
+                  // the real destination.
+                  //
+                  // Resolution order (matches proxy stitch):
+                  //   1. user-supplied base_url's host hits hostToRoute →
+                  //      base_url + version (table-canonical)
+                  //   2. provider_code hits providerToRoute → first row's
+                  //      base_url + version (yaml-first canonical)
+                  //   3. fall back to user-supplied base_url verbatim, or
+                  //      official_base_url, then "unknown provider"
+                  const stored = personal.base_url ?? null;
+                  let effectiveUrl: string | null = null;
+                  let source: 'table-host' | 'table-provider' | 'stored' | 'official' | 'unknown' = 'unknown';
+
+                  if (stored) {
+                    try {
+                      const host = new URL(stored).hostname.toLowerCase();
+                      const route = hostToRoute.get(host);
+                      if (route) {
+                        effectiveUrl = route.version
+                          ? `${route.base_url}${route.version}`
+                          : route.base_url;
+                        source = 'table-host';
+                      }
+                    } catch { /* invalid URL — fall through */ }
+                  }
+                  if (!effectiveUrl && personal.provider_code) {
+                    const route = providerToRoute.get(personal.provider_code);
+                    if (route) {
+                      effectiveUrl = route.version
+                        ? `${route.base_url}${route.version}`
+                        : route.base_url;
+                      source = 'table-provider';
+                    }
+                  }
+                  if (!effectiveUrl && stored) {
+                    effectiveUrl = stored;
+                    source = 'stored';
+                  }
+                  if (!effectiveUrl && personal.official_base_url) {
+                    effectiveUrl = personal.official_base_url;
+                    source = 'official';
+                  }
+
                   if (!effectiveUrl) {
                     return (
                       <div className="drawer-field">
@@ -2408,27 +2492,33 @@ function DetailDrawer(props: {
                       </div>
                     );
                   }
+
+                  // Hint = where the value came from. Keeps the user oriented
+                  // when 5 same-provider keys all show the same effective URL
+                  // (because the table maps them all the same way) — the hint
+                  // tells them whether the proxy is using their stored value
+                  // or filling in a default.
+                  const hintLabel: Record<typeof source, string> = {
+                    'table-host':     'effective upstream (host match)',
+                    'table-provider': 'effective upstream (provider default)',
+                    'stored':         'stored as-is (host not in routes table)',
+                    'official':       'provider default (legacy)',
+                    'unknown':        '',
+                  };
+
                   return (
                     <div className="drawer-field">
                       <span className="k">base_url</span>
-                      {/* Compacted 2026-04-24: URL sits alone on line 1
-                          (so long custom URLs still have the full row to
-                          wrap), and the hint + copy icon pair up on
-                          line 2 — the icon reads as an inline action
-                          attached to the hint rather than a floating
-                          button next to the URL value. */}
                       <span className="v stack">
                         <span className="mono">{effectiveUrl}</span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <span className="hint">
-                            {isDefault ? 'provider default' : 'custom override'}
-                          </span>
+                          <span className="hint">{hintLabel[source]}</span>
                           <button
                             type="button"
                             className="inline-copy"
-                            title={isDefault ? 'Copy provider default URL' : 'Copy base_url'}
+                            title="Copy effective upstream URL"
                             aria-label="Copy base_url"
-                            onClick={() => copyField('base_url', effectiveUrl)}
+                            onClick={() => copyField('base_url', effectiveUrl!)}
                           >
                             {copiedField === 'base_url' ? (
                               <CheckIcon className="w-3.5 h-3.5" />
