@@ -254,10 +254,27 @@ func (h *VaultHandlers) LockHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // StatusHandler: GET /api/user/vault/status (unauthenticated probe; used by
-// the Web UI to render the locked vs unlocked banner).
+// the Web UI to render the locked vs unlocked banner; also gates the
+// SetMasterPassword first-run CTA).
+//
+// Per 20260430-个人vault-Web首次设置-方案A.md §1: the response carries an
+// `initialized` field so a web-only user (who hasn't run any CLI command)
+// can see "vault not yet set up — set master password" instead of being
+// silently dumped on the unlock screen with no way forward.
+//
+// Initialization is probed by calling `_internal vault-op metadata` with a
+// placeholder vault key: the action returns `I_VAULT_NOT_INITIALIZED` when
+// vault.db is missing or has no master_salt row, otherwise returns ok with
+// salt/KDF parameters (no secrets revealed). Avoids needing a Go-side
+// SQLite driver to peek at vault.db.
 func (h *VaultHandlers) StatusHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	resp := map[string]any{"status": "ok", "unlocked": false}
+
+	resp := map[string]any{
+		"status":      "ok",
+		"unlocked":    false,
+		"initialized": h.probeInitialized(r.Context()),
+	}
 	if c, err := r.Cookie(sessionCookie); err == nil {
 		if _, ttl, ok := h.Store.get(c.Value); ok {
 			resp["unlocked"] = true
@@ -265,6 +282,131 @@ func (h *VaultHandlers) StatusHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// probeInitialized asks the CLI whether vault.db has a master_salt row.
+// Returns false on cli spawn / parse failure (graceful degrade — UI shows
+// "set master password" CTA, which is the safer wrong-answer than gating
+// the unlock-only screen behind a vault that is actually present).
+func (h *VaultHandlers) probeInitialized(ctx context.Context) bool {
+	if h.Bridge == nil {
+		return false
+	}
+	res, err := h.Bridge.Invoke(ctx, "vault-op", "metadata", placeholderHex, "", struct{}{})
+	if err != nil {
+		return false
+	}
+	return res.Status == "ok"
+}
+
+// InitHandler: POST /api/user/vault/init  (web-driven first-run vault
+// initialization, per 20260430-个人vault-Web首次设置-方案A.md).
+//
+// Body: {"password": "..."}
+//
+// Behaviour:
+//  1. If vault is already initialized, return 422 I_VAULT_ALREADY_INITIALIZED;
+//     the web layer refreshes /status and falls into the regular unlock flow.
+//  2. Spawn `aikey _internal init` with the password (stdin JSON).
+//  3. On success, immediately derive the vault_key (Argon2id) and mint a
+//     session cookie — the user is now in the unlocked state without a
+//     redundant unlock prompt. Mirrors the UnlockHandler post-derive flow.
+//
+// Distinct from UnlockHandler because there is no existing vault to verify
+// against — initialization writes salt/KDF/password_hash, then we derive
+// the same Argon2id key the cli just wrote.
+func (h *VaultHandlers) InitHandler(w http.ResponseWriter, r *http.Request) {
+	if !h.allowUnlock(unlockRateLimitKey(r)) {
+		writeErr(w, ErrUnlockRateLimited, "too many init attempts — wait a minute and try again")
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Password == "" {
+		writeErr(w, ErrBadRequest, "body must be {password: string} with non-empty password")
+		return
+	}
+
+	pwdBytes := []byte(req.Password)
+	defer func() {
+		for i := range pwdBytes {
+			pwdBytes[i] = 0
+		}
+	}()
+
+	ctx := r.Context()
+
+	// 1. Spawn cli init.
+	res, err := h.Bridge.InvokeInit(ctx, req.Password, "")
+	req.Password = ""
+	if err != nil {
+		writeInvokeError(w, err)
+		return
+	}
+	if res.Status != "ok" {
+		// I_VAULT_ALREADY_INITIALIZED maps to 422 via writeErr's code table.
+		writeCliError(w, res)
+		return
+	}
+
+	// 2. Re-fetch metadata so we can derive the vault key with the salt the
+	// cli just wrote. Avoids stuffing salt/KDF in the init response (keeps
+	// init.rs minimal) and keeps a single source of truth (the cli).
+	meta, err := h.Bridge.Invoke(ctx, "vault-op", "metadata", placeholderHex, "", struct{}{})
+	if err != nil {
+		writeInvokeError(w, err)
+		return
+	}
+	if meta.Status != "ok" {
+		writeCliError(w, meta)
+		return
+	}
+	var m struct {
+		SaltHex string `json:"salt_hex"`
+		KDF     struct {
+			Algorithm string `json:"algorithm"`
+			MCost     uint32 `json:"m_cost"`
+			TCost     uint32 `json:"t_cost"`
+			PCost     uint32 `json:"p_cost"`
+			KeyLen    uint32 `json:"key_len"`
+		} `json:"kdf"`
+	}
+	if err := json.Unmarshal(meta.Data, &m); err != nil {
+		writeErr(w, ErrCliMalformedReply, err.Error())
+		return
+	}
+	if m.KDF.Algorithm != "argon2id" {
+		writeErr(w, ErrCliMalformedReply, "unsupported KDF algorithm: "+m.KDF.Algorithm)
+		return
+	}
+	salt, err := hex.DecodeString(m.SaltHex)
+	if err != nil {
+		writeErr(w, ErrCliMalformedReply, "salt_hex: "+err.Error())
+		return
+	}
+
+	// 3. Derive Argon2id(password, salt) -> vault_key, mint session.
+	derived := argon2.IDKey(pwdBytes, salt, m.KDF.TCost, m.KDF.MCost, uint8(m.KDF.PCost), m.KDF.KeyLen)
+	vaultKeyHex := hex.EncodeToString(derived)
+
+	id, expiresAt := h.Store.put(vaultKeyHex)
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    id,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  expiresAt,
+	})
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":      "ok",
+		"initialized": true,
+		"unlocked":    true,
+		"ttl_seconds": int(h.Store.ttl.Seconds()),
+	})
 }
 
 // sessionKey is the request-context key under which the middleware stores

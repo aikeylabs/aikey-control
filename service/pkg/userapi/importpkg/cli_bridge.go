@@ -264,6 +264,78 @@ func (b *CliBridge) Invoke(
 	return &result, nil
 }
 
+// initEnvelope matches aikey-cli/src/commands_internal/init.rs::InitEnvelope.
+// Distinct from stdinEnvelope because the init action precedes vault
+// existence — there is no vault_key_hex to derive.
+type initEnvelope struct {
+	Password  string `json:"password"`
+	RequestID string `json:"request_id,omitempty"`
+}
+
+// InvokeInit spawns `aikey _internal init --stdin-json` with `{password,
+// request_id}` and returns the parsed ResultEnvelope. Used by the
+// web-driven first-run flow (POST /api/user/vault/init) per
+// 20260430-个人vault-Web首次设置-方案A.md.
+//
+// Why a separate method rather than reusing Invoke: init.rs reads its own
+// envelope shape (no vault_key_hex; vault doesn't exist yet) so the
+// standard envelope wrapper would just add fields the cli ignores.
+func (b *CliBridge) InvokeInit(
+	ctx context.Context,
+	password string,
+	requestID string,
+) (*resultEnvelope, error) {
+	if err := b.resolveBinary(); err != nil {
+		return nil, &InvokeError{Code: ErrCliNotFound, Msg: err.Error()}
+	}
+
+	envJSON, err := json.Marshal(initEnvelope{Password: password, RequestID: requestID})
+	if err != nil {
+		return nil, &InvokeError{Code: ErrBadRequest, Msg: "marshal init envelope: " + err.Error()}
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, b.Timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(callCtx, b.BinaryPath, "_internal", "init", "--stdin-json")
+	cmd.Stdin = bytes.NewReader(envJSON)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
+			return nil, &InvokeError{
+				Code: ErrCliTimeout,
+				Msg:  fmt.Sprintf("cli did not respond within %s", b.Timeout),
+			}
+		}
+		if b.Logger != nil {
+			b.Logger.Warn("cli init spawn failed",
+				slog.String("stderr", sanitizeForLog(strings.TrimSpace(stderr.String()))),
+				slog.Any("err", err))
+		}
+		return nil, &InvokeError{
+			Code: ErrCliSpawnFailed,
+			Msg:  "cli invocation failed (see server logs for details)",
+		}
+	}
+
+	var result resultEnvelope
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &result); err != nil {
+		if b.Logger != nil {
+			b.Logger.Warn("cli init reply unparseable",
+				slog.String("stdout", sanitizeForLog(stdout.String())),
+				slog.Any("err", err))
+		}
+		return nil, &InvokeError{
+			Code: ErrCliMalformedReply,
+			Msg:  "cli reply was not valid JSON (see server logs for details)",
+		}
+	}
+	return &result, nil
+}
+
 // writeInvokeError maps the CliBridge.Invoke error to an HTTP response with
 // the correct status code. Uses the InvokeError.Code when available and
 // falls back to ErrCliSpawnFailed (500) for anything else.

@@ -92,6 +92,16 @@ func (h *Handlers) Register(mux *http.ServeMux, authMW func(http.Handler) http.H
 	mux.Handle("POST /api/user/vault/lock", authMW(http.HandlerFunc(h.Vault.LockHandler)))
 	mux.HandleFunc("GET /api/user/vault/status", h.Vault.StatusHandler)
 
+	// Vault first-run init (web-driven path) — per
+	// 20260430-个人vault-Web首次设置-方案A.md, only mounted on local-user /
+	// trial-full editions. Production is multi-tenant and vault-init runs
+	// through the master flow there, so we leave it unmounted to avoid
+	// surfacing a personal-vault concept on team deployments. The route
+	// registration is unconditional here because importpkg.Register is
+	// already gated by the same edition check that mounts user-side routes
+	// at the higher serve.Run / RouterDeps level (D4 in the vault-page doc).
+	mux.HandleFunc("POST /api/user/vault/init", h.Vault.InitHandler)
+
 	// Vault CRUD endpoints (User Vault Web page). Mutations + reveal require
 	// an unlocked session; list intentionally does NOT — it serves a safe
 	// metadata-only view when locked (2026-04-23 user decision A). See

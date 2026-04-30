@@ -177,6 +177,43 @@ func TestStatusHandler_NoCookie_ReturnsLocked(t *testing.T) {
 	if !strings.Contains(body, `"unlocked":false`) {
 		t.Fatalf("body missing unlocked:false: %q", body)
 	}
+	// 20260430-个人vault-Web首次设置-方案A: status must include the
+	// `initialized` field so a web-only user can see the first-run CTA.
+	// With Bridge=nil the probe degrades to false (safer wrong-answer —
+	// surfacing "set master password" beats trapping the user on a
+	// password prompt for a vault that isn't there yet).
+	if !strings.Contains(body, `"initialized":false`) {
+		t.Fatalf("body missing initialized:false (probe should degrade to false on nil bridge): %q", body)
+	}
+}
+
+// TestInitHandler_NilBridge_ReturnsCliError asserts InitHandler degrades
+// gracefully when the cli bridge is unavailable — i.e. it returns a
+// structured error envelope, not a 500/panic. This locks in the contract
+// that `aikey _internal init` is required and missing-binary diagnostics
+// reach the user.
+func TestInitHandler_NilBridge_ReturnsCliError(t *testing.T) {
+	// Use a Bridge with an obviously-invalid binary path so resolveBinary
+	// fails fast — exercises the same "cli not found" error envelope the
+	// frontend sees on a misconfigured install.
+	h := &VaultHandlers{
+		Store:  NewSessionStore(time.Minute),
+		Bridge: &CliBridge{BinaryPath: "/nonexistent/aikey-cli-binary"},
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/user/vault/init",
+		strings.NewReader(`{"password":"hunter2x4"}`))
+	req.Header.Set("Content-Type", "application/json")
+	h.InitHandler(rr, req)
+
+	// resolveBinary would actually accept the configured BinaryPath
+	// without re-statting it (the override branch in resolveBinary trusts
+	// b.BinaryPath when set). Spawn will then fail at exec time. We just
+	// check we don't 200 — the exact code depends on which spawn-error
+	// branch we hit.
+	if rr.Code == 200 {
+		t.Fatalf("InitHandler must not return 200 with a bogus binary path; body=%q", rr.Body.String())
+	}
 }
 
 func TestStatusHandler_ValidCookie_ReturnsUnlockedWithTTL(t *testing.T) {

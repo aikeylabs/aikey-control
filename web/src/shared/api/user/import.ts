@@ -60,6 +60,18 @@ function throwFriendlyUnlockError(err: unknown): never {
 export interface VaultStatus {
   unlocked: boolean;
   ttl_seconds?: number;
+  /**
+   * True when the local vault.db has a master_salt row (i.e. a master
+   * password has been set). Per 20260430-个人vault-Web首次设置-方案A.md:
+   * web-only users — who haven't run any CLI command — see
+   * `initialized=false` on first visit and are routed to the
+   * SetMasterPassword flow rather than the unlock screen.
+   *
+   * Older local-server builds did not return this field; treat
+   * `undefined` as `true` (assume initialised) to avoid forcing legacy
+   * users through an init flow they don't need.
+   */
+  initialized?: boolean;
 }
 
 export interface UnlockRequest {
@@ -68,6 +80,19 @@ export interface UnlockRequest {
 
 export interface UnlockResponse {
   status: 'ok' | 'error';
+  unlocked?: boolean;
+  ttl_seconds?: number;
+  error_code?: string;
+  error_message?: string;
+}
+
+export interface InitRequest {
+  password: string;
+}
+
+export interface InitResponse {
+  status: 'ok' | 'error';
+  initialized?: boolean;
   unlocked?: boolean;
   ttl_seconds?: number;
   error_code?: string;
@@ -381,8 +406,20 @@ function unwrap<T>(env: OkEnvelope<T> | ErrEnvelope): T {
 export const importApi = {
   vaultStatus: async (): Promise<VaultStatus> => {
     const res = await httpClient.get<OkEnvelope<VaultStatus> & VaultStatus>('/api/user/vault/status');
-    // StatusHandler returns {status, unlocked, ttl_seconds} directly (not wrapped).
-    return { unlocked: Boolean(res.data.unlocked), ttl_seconds: res.data.ttl_seconds };
+    // StatusHandler returns {status, unlocked, ttl_seconds, initialized}
+    // directly (not wrapped). `initialized` is undefined on legacy
+    // local-server builds — treat as true so existing users aren't
+    // forced into a first-run flow they don't need.
+    return {
+      unlocked: Boolean(res.data.unlocked),
+      ttl_seconds: res.data.ttl_seconds,
+      initialized: res.data.initialized ?? true,
+    };
+  },
+
+  vaultInit: async (req: InitRequest): Promise<InitResponse> => {
+    const res = await httpClient.post<InitResponse>('/api/user/vault/init', req);
+    return res.data;
   },
 
   vaultUnlock: async (req: UnlockRequest): Promise<UnlockResponse> => {

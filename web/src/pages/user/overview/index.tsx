@@ -15,9 +15,10 @@
  *  - Recent team keys table enlarged with provider swatch + last-used.
  *  - STATUS dot uses success green (decoupled from brand yellow).
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { importApi } from '@/shared/api/user/import';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Label,
@@ -125,6 +126,24 @@ export default function UserOverviewPage() {
   const queryClient = useQueryClient();
   const [range, setRange] = useState<RangeKey>('14D');
   const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // First-run guard: redirect web-only users to /user/vault when the
+  // local vault has not been initialised yet. Per
+  // 20260430-个人版user-service演进-方案A对齐.md §1.2 — overview is the
+  // post-login landing page; if vault.db lacks a master_salt row, no
+  // user-side data can be loaded, so we route to the SetMasterPassword
+  // flow instead of letting the page render an "endless loading" state.
+  // `initialized` is undefined on legacy local-server builds; the api
+  // client coerces that to true so existing users aren't redirected.
+  const { data: vaultStatus } = useQuery({
+    queryKey: ['vault-status'],
+    queryFn: importApi.vaultStatus,
+  });
+  useEffect(() => {
+    if (vaultStatus && vaultStatus.initialized === false) {
+      navigate('/user/vault', { replace: true });
+    }
+  }, [vaultStatus, navigate]);
 
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   const { data: rawSeats } = useQuery({ queryKey: ['my-seats'], queryFn: userAccountsApi.mySeats });

@@ -154,10 +154,21 @@ export default function UserVaultPage() {
     staleTime: 0,
   });
   const unlocked = Boolean(vault?.unlocked);
+  // `initialized` defaults to true on legacy local-server builds; see
+  // VaultStatus.initialized doc comment in api/user/import.ts.
+  const initialized = vault?.initialized ?? true;
 
   // Unlock banner state.
   const [unlockPassword, setUnlockPassword] = useState('');
   const [unlockError, setUnlockError] = useState<string | null>(null);
+
+  // First-run "Set Master Password" state (shown only when initialized=false).
+  // Per 20260430-个人vault-Web首次设置-方案A.md §1.1 — two password fields,
+  // both client-side; backend only receives `password` (confirm is a UI
+  // guard, not a payload field).
+  const [initPassword, setInitPassword] = useState('');
+  const [initConfirm, setInitConfirm] = useState('');
+  const [initError, setInitError] = useState<string | null>(null);
 
   const unlockMut = useMutation({
     mutationFn: importApi.vaultUnlock,
@@ -172,6 +183,42 @@ export default function UserVaultPage() {
     },
     onError: (e: Error) => setUnlockError(e.message),
   });
+
+  const initMut = useMutation({
+    mutationFn: importApi.vaultInit,
+    onSuccess: (res) => {
+      if (res.status === 'ok' && res.unlocked) {
+        // Init succeeded → the backend already minted a session, so we
+        // are unlocked in one step (no separate unlock prompt needed).
+        setInitPassword('');
+        setInitConfirm('');
+        setInitError(null);
+        refetchVault();
+      } else if (res.error_code === 'I_VAULT_ALREADY_INITIALIZED') {
+        // Race or stale UI: someone else (CLI or another tab) initialised
+        // the vault between our last status poll and this submit. Just
+        // refresh — the next render will show the regular unlock card.
+        setInitError(null);
+        refetchVault();
+      } else {
+        setInitError(res.error_message || 'failed to set master password');
+      }
+    },
+    onError: (e: Error) => setInitError(e.message),
+  });
+
+  const submitInit = () => {
+    if (initPassword.length < 8) {
+      setInitError('Master password must be at least 8 characters');
+      return;
+    }
+    if (initPassword !== initConfirm) {
+      setInitError('Passwords do not match');
+      return;
+    }
+    setInitError(null);
+    initMut.mutate({ password: initPassword });
+  };
 
   const lockMut = useMutation({
     mutationFn: importApi.vaultLock,
@@ -682,6 +729,7 @@ export default function UserVaultPage() {
 
           <UnlockBanner
             unlocked={unlocked}
+            initialized={initialized}
             ttlSeconds={vault?.ttl_seconds ?? null}
             password={unlockPassword}
             onPasswordChange={setUnlockPassword}
@@ -689,6 +737,13 @@ export default function UserVaultPage() {
             unlockPending={unlockMut.isPending}
             unlockError={unlockError}
             onLock={() => lockMut.mutate()}
+            initPassword={initPassword}
+            onInitPasswordChange={setInitPassword}
+            initConfirm={initConfirm}
+            onInitConfirmChange={setInitConfirm}
+            onInitSubmit={submitInit}
+            initPending={initMut.isPending}
+            initError={initError}
           />
 
           {/* Hero metric row (Total keys / Health / Activity · 7D) was
@@ -930,6 +985,12 @@ function IdentityStrip({
 
 function UnlockBanner(props: {
   unlocked: boolean;
+  /** When false the vault has not been initialised (no master_salt row
+   *  in vault.db). Per 20260430-个人vault-Web首次设置-方案A.md §1.1 the
+   *  banner switches into "Set Master Password" mode in this state —
+   *  same card, different CTA — instead of dumping the user on a
+   *  password prompt for a vault that doesn't exist. */
+  initialized: boolean;
   /** Raw TTL seconds from the latest `/vault/status` response. The
    *  banner owns the per-second countdown internally so the page
    *  doesn't re-render every tick — that change fixes a scroll-jank
@@ -941,6 +1002,14 @@ function UnlockBanner(props: {
   unlockPending: boolean;
   unlockError: string | null;
   onLock: () => void;
+  // First-run set-master-password fields (only used when initialized=false).
+  initPassword: string;
+  onInitPasswordChange: (s: string) => void;
+  initConfirm: string;
+  onInitConfirmChange: (s: string) => void;
+  onInitSubmit: () => void;
+  initPending: boolean;
+  initError: string | null;
 }) {
   // Local tick state — isolated here so only this component re-renders
   // each second. Starts fresh whenever the parent hands us a new
@@ -962,11 +1031,105 @@ function UnlockBanner(props: {
   // layout so the two pages feel like siblings. Clicking UNLOCK expands
   // the inline password form; Cancel collapses it back.
   const [expanded, setExpanded] = useState(false);
+  const [initExpanded, setInitExpanded] = useState(false);
   // Auto-collapse whenever the caller transitions to unlocked so the
   // next lock cycle starts from the collapsed state.
   useEffect(() => {
-    if (props.unlocked) setExpanded(false);
+    if (props.unlocked) {
+      setExpanded(false);
+      setInitExpanded(false);
+    }
   }, [props.unlocked]);
+
+  // First-run state: vault has never been initialised. Render the
+  // "Set Master Password" branch — same card structure as the locked
+  // branch but with a SET-MASTER-PASSWORD CTA and a confirm field.
+  if (!props.initialized) {
+    return (
+      <div className="unlock-banner locked">
+        <LockIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--primary)' }} />
+        <span className="flex-1 flex items-center gap-2 min-w-0">
+          <span
+            className="font-mono text-sm font-bold uppercase tracking-wider"
+            style={{ color: 'var(--foreground)' }}
+          >
+            Vault Not Set Up
+          </span>
+          <span
+            className="text-xs font-mono truncate"
+            style={{ color: 'var(--muted-foreground)' }}
+          >
+            — Set a master password to start storing keys
+          </span>
+        </span>
+        {!initExpanded ? (
+          <button
+            className="btn btn-primary px-4 py-1.5 text-[11px]"
+            onClick={() => setInitExpanded(true)}
+          >
+            SET MASTER PASSWORD
+          </button>
+        ) : (
+          <div className="flex flex-col items-end gap-1.5">
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                props.onInitSubmit();
+              }}
+            >
+              <input
+                type="password"
+                className="field-input"
+                placeholder="Master password"
+                style={{ width: 180 }}
+                value={props.initPassword}
+                onChange={(e) => props.onInitPasswordChange(e.target.value)}
+                autoFocus
+                disabled={props.initPending}
+              />
+              <input
+                type="password"
+                className="field-input"
+                placeholder="Confirm"
+                style={{ width: 140 }}
+                value={props.initConfirm}
+                onChange={(e) => props.onInitConfirmChange(e.target.value)}
+                disabled={props.initPending}
+              />
+              <button
+                type="submit"
+                className="btn btn-primary px-3 py-1.5 text-[11px]"
+                disabled={props.initPending || !props.initPassword || !props.initConfirm}
+              >
+                {props.initPending ? 'SETTING…' : 'SET'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost text-[11px] px-2 py-1.5"
+                onClick={() => {
+                  setInitExpanded(false);
+                  props.onInitPasswordChange('');
+                  props.onInitConfirmChange('');
+                }}
+                disabled={props.initPending}
+              >
+                Cancel
+              </button>
+            </form>
+            {props.initError && (
+              <span
+                className="text-[11px] font-mono"
+                style={{ color: '#fca5a5' }}
+              >
+                {props.initError}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (props.unlocked) {
     return (
