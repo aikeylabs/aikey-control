@@ -12,3 +12,7 @@ require (
 
 require golang.org/x/sys v0.42.0 // indirect
 
+
+// Vendored aikeytime — pkg/aikeytime/ in repo root. Allows external
+// contributors to 'go build' without GOPRIVATE access to private aikeylabs/pkg repo.
+replace github.com/AiKeyLabs/pkg/aikeytime => ../pkg/aikeytime
