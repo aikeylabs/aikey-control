@@ -12,6 +12,3 @@ require (
 
 require golang.org/x/sys v0.42.0 // indirect
 
-// During development, point aikeytime to local sibling.
-// Replace will be removed once aikeytime is published as a public Go module.
-replace github.com/AiKeyLabs/pkg/aikeytime => ../pkg/aikeytime
