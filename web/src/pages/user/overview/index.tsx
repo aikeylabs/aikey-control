@@ -15,7 +15,7 @@
  *  - Recent team keys table enlarged with provider swatch + last-used.
  *  - STATUS dot uses success green (decoupled from brand yellow).
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { importApi } from '@/shared/api/user/import';
@@ -127,23 +127,20 @@ export default function UserOverviewPage() {
   const [range, setRange] = useState<RangeKey>('14D');
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  // First-run guard: redirect web-only users to /user/vault when the
-  // local vault has not been initialised yet. Per
-  // 20260430-个人版user-service演进-方案A对齐.md §1.2 — overview is the
-  // post-login landing page; if vault.db lacks a master_salt row, no
-  // user-side data can be loaded, so we route to the SetMasterPassword
-  // flow instead of letting the page render an "endless loading" state.
-  // `initialized` is undefined on legacy local-server builds; the api
-  // client coerces that to true so existing users aren't redirected.
+  // Vault initialisation status — drives the "Accessible Keys" card and the
+  // first-run banner. Pre-2026-04-30 this hook also auto-redirected to
+  // /user/vault when initialized=false, but that punted users away from the
+  // overview before they could see anything; almost everything on this page
+  // (usage charts, seats, auto-claim banner) does not depend on the vault.
+  // Now we render the empty state inline and surface a non-blocking banner
+  // pointing at /user/vault for users who haven't set a master password yet.
+  // `initialized` is undefined on legacy local-server builds; the api client
+  // coerces that to true so existing users see no banner.
   const { data: vaultStatus } = useQuery({
     queryKey: ['vault-status'],
     queryFn: importApi.vaultStatus,
   });
-  useEffect(() => {
-    if (vaultStatus && vaultStatus.initialized === false) {
-      navigate('/user/vault', { replace: true });
-    }
-  }, [vaultStatus, navigate]);
+  const vaultUninitialized = !!vaultStatus && vaultStatus.initialized === false;
 
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   const { data: rawSeats } = useQuery({ queryKey: ['my-seats'], queryFn: userAccountsApi.mySeats });
@@ -359,6 +356,41 @@ export default function UserOverviewPage() {
       {/* Full-width layout matches usage-ledger / my-keys / pending-keys.
           Only reading-focused pages (account, referrals) cap width. */}
       <div className="space-y-5">
+        {/* First-run banner: vault not yet initialised. Replaces the earlier
+            unconditional redirect to /user/vault — most of this page (usage
+            charts, seats, auto-claim) doesn't depend on the vault, so push
+            the user to /user/vault as a click affordance instead of forcing
+            them through it. */}
+        {vaultUninitialized && (
+          <section
+            className="flex items-center justify-between gap-3 px-4 py-3 rounded border"
+            style={{
+              borderColor: 'rgba(250,204,21,0.35)',
+              background: 'rgba(250,204,21,0.06)',
+              color: 'var(--foreground)',
+            }}
+          >
+            <div className="text-sm">
+              <span className="font-mono font-bold mr-2" style={{ color: 'var(--primary)' }}>
+                VAULT NOT SET UP
+              </span>
+              <span style={{ color: 'var(--muted-foreground)' }}>
+                — Set a master password to start storing keys.
+              </span>
+            </div>
+            <button
+              className="text-xs font-mono px-3 py-1 rounded border whitespace-nowrap"
+              style={{
+                borderColor: 'rgba(250,204,21,0.4)',
+                color: 'var(--primary)',
+                background: 'transparent',
+              }}
+              onClick={() => navigate('/user/vault')}
+            >
+              Set Up Now →
+            </button>
+          </section>
+        )}
         {/* ── Identity strip ── */}
         <section className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3 min-w-0">
