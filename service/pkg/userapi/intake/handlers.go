@@ -123,7 +123,12 @@ func rulesFallback() map[string]any {
 		"family_base_urls": map[string]string{
 			"anthropic":     "https://api.anthropic.com",
 			"openai":        "https://api.openai.com/v1",
-			"kimi":          "https://api.moonshot.cn/v1",
+			// 2026-05-01 (v4.2.1): kimi family fallback when no URL host parsed.
+			// Was "api.moonshot.cn/v1" — wrong product (Moonshot platform vs
+			// Kimi Coding api.kimi.com/coding/v1). For per-host precision (so
+			// pasted moonshot.cn URLs route to moonshot, kimi.com URLs route
+			// to kimi-coding) see host_to_base_url below.
+			"kimi":          "https://api.kimi.com/coding/v1",
 			"deepseek":      "https://api.deepseek.com/v1",
 			"google_gemini": "https://generativelanguage.googleapis.com",
 			"groq":          "https://api.groq.com/openai/v1",
@@ -137,6 +142,17 @@ func rulesFallback() map[string]any {
 			"openrouter":    "https://openrouter.ai/api/v1",
 			"yunwu":         "https://yunwu.ai/v1",
 			"zeroeleven":    "https://aicoding.2233.ai",
+		},
+		// v4.2.1 (2026-05-01): per-host base_url override. Queried before
+		// family_base_urls fallback. Lets same-family hosts route to
+		// different endpoints (kimi.com Kimi Coding vs moonshot.cn platform).
+		// Keep in sync with aikey-cli/data/provider_fingerprint.yaml's
+		// host_to_base_url map.
+		"host_to_base_url": map[string]string{
+			"api.kimi.com":         "https://api.kimi.com/coding/v1",
+			"www.kimi.com":         "https://api.kimi.com/coding/v1",
+			"api.moonshot.cn":      "https://api.moonshot.cn/v1",
+			"platform.moonshot.cn": "https://api.moonshot.cn/v1",
 		},
 		"family_login_urls": map[string]string{
 			"anthropic":     "https://claude.ai/login",

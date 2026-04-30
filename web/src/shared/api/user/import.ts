@@ -375,6 +375,18 @@ export interface RulesResponse {
    * and YAML remains the single source of truth.
    */
   family_login_urls?: Record<string, string>;
+  /**
+   * v4.2.1 (2026-05-01): per-host base_url override.
+   *
+   * Queried BEFORE family_base_urls in `applyOfficialDefaults` Rule 2.
+   * Lets same-family hosts route to different endpoints — kimi family
+   * is the motivating case (api.kimi.com → Kimi Coding endpoint
+   * `https://api.kimi.com/coding/v1`, api.moonshot.cn → Moonshot
+   * platform endpoint `https://api.moonshot.cn/v1`).
+   *
+   * Mirrors aikey-cli/data/provider_fingerprint.yaml `host_to_base_url`.
+   */
+  host_to_base_url?: Record<string, string>;
 }
 
 // ── Envelope helpers ─────────────────────────────────────────────────────

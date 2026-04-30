@@ -384,6 +384,7 @@ function applyOfficialDefaults(
   record: DraftRecord,
   familyBaseUrls: Record<string, string> | undefined,
   hostToFamily: Map<string, string>,
+  hostToBaseUrl: Record<string, string> | undefined,
 ): { record: DraftRecord; prevBaseUrl: string | null } {
   const current = (record.fields.base_url ?? '').trim();
 
@@ -404,11 +405,23 @@ function applyOfficialDefaults(
   // Rule 2: non-empty, host matches an official family → replace with that
   //         family's official URL. `prevBaseUrl` retains the original so
   //         the existing revert button can restore it.
+  //
+  // v4.2.1 (2026-05-01): host_to_base_url override consulted BEFORE
+  // family_base_urls. Same-family hosts can dispatch to different
+  // endpoints — kimi family is the motivating case (api.kimi.com →
+  // Kimi Coding, api.moonshot.cn → Moonshot platform). Without this,
+  // pasted moonshot URLs got rewritten to kimi.com (or vice versa).
   const host = normalizeHost(current);
   if (!host) return { record, prevBaseUrl: null };
-  const matchedFamily = lookupFamilyByHost(host, hostToFamily);
-  if (!matchedFamily) return { record, prevBaseUrl: null };
-  const matchedUrl = familyBaseUrls?.[matchedFamily];
+  const hostSpecific = hostToBaseUrl?.[host];
+  let matchedUrl: string | undefined;
+  if (hostSpecific) {
+    matchedUrl = hostSpecific;
+  } else {
+    const matchedFamily = lookupFamilyByHost(host, hostToFamily);
+    if (!matchedFamily) return { record, prevBaseUrl: null };
+    matchedUrl = familyBaseUrls?.[matchedFamily];
+  }
   if (!matchedUrl) return { record, prevBaseUrl: null };
   if (matchedUrl === current) return { record, prevBaseUrl: null };
 
@@ -782,6 +795,10 @@ export default function UserBulkImportPage() {
   });
   const familyBaseUrls = rules?.family_base_urls;
   const familyLoginUrls = rules?.family_login_urls;
+  // v4.2.1 (2026-05-01): per-host base_url override (kimi.com vs moonshot.cn
+  // dispatched to different endpoints despite sharing protocol family kimi).
+  // applyOfficialDefaults Rule 2 consults this BEFORE family_base_urls.
+  const hostToBaseUrl = rules?.host_to_base_url;
   // host → family lookup, rebuilt only when the rules payload changes (rare).
   const officialHostToFamily = useMemo(
     () => buildOfficialHostToFamily(familyBaseUrls, familyLoginUrls),
@@ -916,6 +933,7 @@ export default function UserBulkImportPage() {
             rec,
             familyBaseUrls,
             officialHostToFamily,
+            hostToBaseUrl,
           );
           return draftToRow(record, prevBaseUrl);
         });
