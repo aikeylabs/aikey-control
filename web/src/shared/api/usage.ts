@@ -56,13 +56,6 @@ export interface KeyTotal {
   request_count: number;
 }
 
-export interface UserRanking {
-  account_id: string;
-  seat_id: string;
-  total_tokens: number;
-  request_count: number;
-}
-
 // --- Query params ---
 
 /** YYYY-MM-DD **in the user's local timezone** — what "today" means to them.
@@ -160,29 +153,6 @@ export const usageApi = {
     return res.data;
   },
 
-  // ── Master page ──
-
-  masterTimeline: async (orgId: string, startDate?: string, endDate?: string): Promise<TimelinePoint[]> => {
-    const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const res = await httpClient.get<TimelinePoint[]>('/v1/usage/master/timeline', {
-      params: { org_id: orgId, ...range, tz: browserTZ() },
-    });
-    return res.data;
-  },
-
-  masterByProtocolTotal: async (orgId: string, startDate?: string, endDate?: string): Promise<ProtocolTotal[]> => {
-    const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const res = await httpClient.get<ProtocolTotal[]>('/v1/usage/master/by-protocol/total', {
-      params: { org_id: orgId, ...range, tz: browserTZ() },
-    });
-    return res.data;
-  },
-
-  masterUserRanking: async (orgId: string, startDate?: string, endDate?: string, limit = 20): Promise<UserRanking[]> => {
-    const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const res = await httpClient.get<UserRanking[]>('/v1/usage/master/ranking', {
-      params: { org_id: orgId, ...range, limit, tz: browserTZ() },
-    });
-    return res.data;
-  },
+  // ── Master page methods (masterTimeline, masterByProtocolTotal,
+  //    masterUserRanking) live in master/web; user/web is user-only. ──
 };
