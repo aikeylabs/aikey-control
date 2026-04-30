@@ -1,9 +1,9 @@
 /**
  * View model adapters – map raw DTOs to UI-friendly shapes.
  */
-import type { VirtualKeyDTO } from '../master/managed-keys';
-import type { SeatDTO } from '../master/orgs';
-import type { ProviderDTO, CredentialDTO } from '../master/providers';
+import type { VirtualKeyDTO } from '../types/managed-keys';
+import type { SeatDTO } from '../types/orgs';
+import type { ProviderDTO, CredentialDTO } from '../types/providers';
 import type {
   SeatListItemVM,
   VirtualKeyListItemVM,
