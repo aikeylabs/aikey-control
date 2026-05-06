@@ -23,7 +23,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { importApi, type ProviderRoute } from '@/shared/api/user/import';
 import { formatRelativeTime } from '@/shared/utils/datetime-intl';
@@ -209,6 +209,13 @@ export default function UserVaultPage() {
         setUnlockPassword('');
         setUnlockError(null);
         refetchVault();
+        // Force a re-fetch of vault-list under the new (unlocked) queryKey.
+        // Without this invalidation, a stale 'locked'-keyed cache entry can
+        // keep `route_token: null` in records — and any open drawer (the
+        // user pre-clicked a row before unlocking) would keep displaying
+        // the masked value until manual refresh. See the live-record effect
+        // below for the matching front-end half of this fix.
+        qc.invalidateQueries({ queryKey: ['vault-list'] });
       } else {
         setUnlockError(res.error_message || 'unlock failed');
       }
@@ -280,6 +287,14 @@ export default function UserVaultPage() {
     queryKey: ['vault-list', unlocked ? 'unlocked' : 'locked'],
     queryFn: vaultApi.list,
     staleTime: 30_000,
+    // Why keepPreviousData: when `unlocked` flips (lock → unlock or back), the
+    // queryKey changes and React Query would otherwise return undefined while
+    // the new query loads. That transient empty array tripped the live-record
+    // useEffect into closing any open drawer (records.find → undefined → close).
+    // Keeping the previous data spans the gap so the drawer survives the
+    // transition; once the new fetch resolves the effect swaps in the live
+    // record naturally.
+    placeholderData: keepPreviousData,
   });
 
   const records = listData?.records ?? [];
@@ -674,10 +689,23 @@ export default function UserVaultPage() {
     });
   }
 
+  // Keep the open drawer in sync with the live records list. Two cases:
+  //   - record removed (delete / sync churn) → close the drawer.
+  //   - record updated (unlock revealed `route_token`, key renamed, etc.)
+  //     → swap in the latest version so the drawer shows live values
+  //     without forcing the user to close + reopen. The previous version
+  //     of this effect only handled removal, so unlocking the vault while
+  //     a drawer was open left it stuck on the locked snapshot
+  //     (route_token=null). The reference-equality check guards against
+  //     re-rendering when nothing actually changed.
   useEffect(() => {
     if (!drawerRecord) return;
-    const still = (records as VaultRecord[]).some((r) => rowKey(r) === rowKey(drawerRecord));
-    if (!still) setDrawerRecord(null);
+    const live = (records as VaultRecord[]).find((r) => rowKey(r) === rowKey(drawerRecord));
+    if (!live) {
+      setDrawerRecord(null);
+    } else if (live !== drawerRecord) {
+      setDrawerRecord(live);
+    }
   }, [records, drawerRecord]);
 
   // Peek-mode drawer auto-dismissal + wheel forwarding.
@@ -2342,6 +2370,18 @@ function DetailDrawer(props: {
             <div className="drawer-field">
               <span className="k">Alias</span>
               <span className="v">
+                {/* OAuth: render the email icon on the alias row only when
+                    alias and display_identity coincide (the user hasn't
+                    renamed). After v1.0.1-alpha.1 this is signalled by
+                    `local_alias === null`; renamed accounts move the icon
+                    to the Identity row below so the alias-as-label reads
+                    cleanly without the misleading email visual. */}
+                {oauth
+                  && oauth.display_identity
+                  && oauth.local_alias == null
+                  && oauth.alias === oauth.display_identity && (
+                  <MailIcon className="w-3 h-3" />
+                )}
                 {alias}
                 <span className="ro-pill">EDITABLE</span>
               </span>
@@ -2360,75 +2400,9 @@ function DetailDrawer(props: {
                     (The wrapping `{isPersonal && personal && (<>...</>)}`
                     stays — Secret / base_url / route_url etc. below
                     still depend on `personal` being non-null.) */}
-                <div className="drawer-field">
-                  <span className="k">Secret</span>
-                  <span className="v" style={{ width: '100%' }}>
-                    {/* Masked-only display. The Web UI no longer reveals
-                        plaintext — plaintext never crosses the HTTP surface
-                        (2026-04-24 security review round 2). See the "Get
-                        via CLI" row below for the one path to plaintext. */}
-                    <div className="secret-view masked" style={{ width: '100%' }}>
-                      <div className="plain">
-                        {personal.secret_prefix === null ? (
-                          <span className="mid">{'•'.repeat(24)}</span>
-                        ) : (
-                          <>
-                            <span className="prefix">{personal.secret_prefix}</span>
-                            <span className="mid">
-                              {'•'.repeat(
-                                Math.max(
-                                  8,
-                                  Math.min(
-                                    24,
-                                    (personal.secret_len ?? 16) -
-                                      personal.secret_prefix.length -
-                                      (personal.secret_suffix?.length ?? 0),
-                                  ),
-                                ),
-                              )}
-                            </span>
-                            <span className="suffix">{personal.secret_suffix}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </span>
-                </div>
-                {/* Get-via-CLI: the only remaining path to plaintext. Users
-                    click Copy here, paste the command in a terminal, enter
-                    their vault password, and `aikey get` places the secret
-                    on their clipboard (auto-clears after 30s). Plaintext
-                    never crosses the browser. */}
-                {(() => {
-                  const cliCmd = `aikey get ${r.alias}`;
-                  const copied = copiedField === 'cli_get';
-                  return (
-                    <div className="drawer-field">
-                      <span className="k">Get via CLI</span>
-                      <span className="v stack">
-                        <div className="drawer-tokenbox" tabIndex={0} aria-label="Reveal command">
-                          <span className="mono">{cliCmd}</span>
-                          <button
-                            type="button"
-                            className="copy-btn"
-                            title="Copy command"
-                            aria-label="Copy command"
-                            onClick={() => copyField('cli_get', cliCmd)}
-                          >
-                            {copied ? (
-                              <CheckIcon className="w-3.5 h-3.5" />
-                            ) : (
-                              <ClipboardIcon className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </div>
-                        <span className="hint mono dim">
-                          Run in terminal · clipboard auto-clears in 30s
-                        </span>
-                      </span>
-                    </div>
-                  );
-                })()}
+                {/* base_url shown BEFORE Secret (2026-05-06): users typically
+                    glance at the upstream URL first to confirm which provider
+                    endpoint a key targets, then deal with the secret. */}
                 {(() => {
                   // v4.3 (2026-05-01): show the EFFECTIVE upstream URL — what
                   // the proxy will actually route to — computed via the same
@@ -2531,6 +2505,68 @@ function DetailDrawer(props: {
                     </div>
                   );
                 })()}
+                {/* Secret + reveal command merged into a single row
+                    (2026-05-06 cleanup). Top: masked preview (the only
+                    plaintext-adjacent thing the browser ever sees — full
+                    plaintext never crosses the HTTP surface, 2026-04-24
+                    security review round 2). Middle: the `aikey get`
+                    reveal command in the same lightweight mono+inline-copy
+                    style as base_url / route_url — no boxed text-area,
+                    keeps short single-line commands visually quiet.
+                    Bottom: terse hint. */}
+                {(() => {
+                  const cliCmd = `aikey get ${r.alias}`;
+                  const copied = copiedField === 'cli_get';
+                  return (
+                    <div className="drawer-field">
+                      <span className="k">API Key</span>
+                      <span className="v stack" style={{ width: '100%' }}>
+                        <div className="secret-view masked" style={{ width: '100%' }}>
+                          <div className="plain">
+                            {personal.secret_prefix === null ? (
+                              <span className="mid">{'•'.repeat(24)}</span>
+                            ) : (
+                              <>
+                                <span className="prefix">{personal.secret_prefix}</span>
+                                <span className="mid">
+                                  {'•'.repeat(
+                                    Math.max(
+                                      8,
+                                      Math.min(
+                                        24,
+                                        (personal.secret_len ?? 16) -
+                                          personal.secret_prefix.length -
+                                          (personal.secret_suffix?.length ?? 0),
+                                      ),
+                                    ),
+                                  )}
+                                </span>
+                                <span className="suffix">{personal.secret_suffix}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span className="mono">{cliCmd}</span>
+                          <button
+                            type="button"
+                            className="inline-copy"
+                            title="Copy reveal command"
+                            aria-label="Copy reveal command"
+                            onClick={() => copyField('cli_get', cliCmd)}
+                          >
+                            {copied ? (
+                              <CheckIcon className="w-3.5 h-3.5" />
+                            ) : (
+                              <ClipboardIcon className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </span>
+                        <span className="hint">reveal in terminal</span>
+                      </span>
+                    </div>
+                  );
+                })()}
                 {/* route_url — the aikey-proxy URL clients should actually
                     point at. Mirrors `aikey route` output so users can
                     copy the same value from the drawer without switching
@@ -2599,13 +2635,29 @@ function DetailDrawer(props: {
                 {/* Provider + Type moved to Meta section (2026-04-24) —
                     see the sibling personal-branch comment for
                     rationale. Header meta-row already carries both. */}
-                <div className="drawer-field">
-                  <span className="k">Identity</span>
-                  <span className="v">
-                    <MailIcon className="w-3 h-3" />
-                    {oauth.display_identity ?? oauth.external_id ?? '(anonymous)'}
-                  </span>
-                </div>
+                {/* Identity row appears when the user has renamed the
+                    account (local_alias is set) — that's when alias and
+                    underlying identity diverge and showing both carries
+                    real information. v1.0.1-alpha.1 made the rename path
+                    write `local_alias` instead of overwriting
+                    `display_identity`, so this condition is the
+                    structural signal: pre-split vaults always have
+                    local_alias === null and the row stays merged. */}
+                {(() => {
+                  const identity = oauth.display_identity ?? oauth.external_id;
+                  if (!identity) return null;
+                  const renamed = oauth.local_alias != null;
+                  if (!renamed) return null;
+                  return (
+                    <div className="drawer-field">
+                      <span className="k">Identity</span>
+                      <span className="v">
+                        <MailIcon className="w-3 h-3" />
+                        {identity}
+                      </span>
+                    </div>
+                  );
+                })()}
                 {/* Session row removed 2026-04-24 — it was a pure
                     placeholder ("Token never shown in browser") and
                     carried no actionable info for the user; any future
@@ -2621,6 +2673,59 @@ function DetailDrawer(props: {
                   <div className="drawer-field">
                     <span className="k">Tier</span>
                     <span className="v">{oauth.account_tier}</span>
+                  </div>
+                )}
+                {/* route_url + route_token (2026-05-06): same pair shown for
+                    personal keys above. The CLI computes both via
+                    `provider_info(code).proxy_path` + the per-account token
+                    the proxy registers, so values match `aikey route` 1:1.
+                    Both rows hidden when their field is missing (older CLI
+                    bundles or pre-route-token vaults). */}
+                {oauth.route_url && (
+                  <div className="drawer-field">
+                    <span className="k">route_url</span>
+                    <span className="v stack">
+                      <span className="mono">{oauth.route_url}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span className="hint">SDK base URL (via aikey-proxy)</span>
+                        <button
+                          type="button"
+                          className="inline-copy"
+                          title="Copy route URL (aikey-proxy endpoint)"
+                          aria-label="Copy route_url"
+                          onClick={() => copyField('route_url', oauth.route_url!)}
+                        >
+                          {copiedField === 'route_url' ? (
+                            <CheckIcon className="w-3.5 h-3.5" />
+                          ) : (
+                            <ClipboardIcon className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </span>
+                    </span>
+                  </div>
+                )}
+                {oauth.route_token && (
+                  <div className="drawer-field">
+                    <span className="k">Route token</span>
+                    <span className="v stack">
+                      <div className="drawer-tokenbox" tabIndex={0} aria-label="Route token">
+                        {oauth.route_token}
+                        <button
+                          type="button"
+                          className="copy-btn"
+                          title="Copy route token"
+                          aria-label="Copy route token"
+                          onClick={() => copyField('route_token', oauth.route_token!)}
+                        >
+                          {copiedField === 'route_token' ? (
+                            <CheckIcon className="w-3.5 h-3.5" />
+                          ) : (
+                            <ClipboardIcon className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </span>
                   </div>
                 )}
               </>
@@ -2647,7 +2752,7 @@ function DetailDrawer(props: {
                   className={`action-btn primary-route${r.in_use === true ? ' routing' : ''}`}
                   title={
                     r.in_use === true
-                      ? `This key is already routing — command: aikey activate ${r.alias}`
+                      ? `This key is active in your global shell — command: aikey activate ${r.alias}`
                       : `Copy CLI command: aikey activate ${r.alias}`
                   }
                   onClick={() => copyField('route_cmd', `aikey activate ${r.alias}`)}
@@ -2660,7 +2765,12 @@ function DetailDrawer(props: {
                   ) : (
                     <>
                       <ZapIcon className="w-3.5 h-3.5" />
-                      {r.in_use === true ? 'Routing via this key' : 'Route via this key'}
+                      {/* "Activate in terminal" mirrors the underlying CLI
+                          verb (`aikey activate`) and disambiguates this
+                          shell-context action from route_url + route_token
+                          above (which are static config artifacts users paste
+                          into a third-party AI client). 2026-05-06 cleanup. */}
+                      {r.in_use === true ? 'Active in terminal' : 'Activate in terminal'}
                     </>
                   )}
                 </button>
@@ -2675,46 +2785,51 @@ function DetailDrawer(props: {
                     - after click: shows the exact command the user just
                       copied, so they can verify before pasting */}
               {r.alias && (() => {
-                // Two hint lines for in-use keys (shell shortcut is the
-                // main thing the user cares about — the Route button is
-                // secondary in that case). One hint line for not-in-use
-                // keys (primary action is Route itself).
+                // In-use keys collapse to a single hint pointing the user
+                // straight at the provider CLI ("Run `claude` directly in
+                // any terminal") — the Activate command and "to re-apply"
+                // were redundant when the key is already active in shell
+                // (2026-05-06 user request). Not-in-use keys keep the
+                // single Activate-command hint as the primary action.
                 const shellCmd = providerShellCommand(r.protocol_family ?? null);
                 const justCopied = copiedField === 'route_cmd';
                 const isInUse = r.in_use === true;
-                return (
-                  <>
-                    {isInUse && shellCmd && (
-                      <div className="drawer-actions-hint" role="note">
-                        <PlayIcon className="w-3 h-3" />
-                        <span>
-                          Run <code className="font-mono">{shellCmd}</code> in a terminal — routes via this key.
-                        </span>
-                      </div>
-                    )}
+                if (isInUse) {
+                  if (!justCopied && !shellCmd) return null;
+                  return (
                     <div className="drawer-actions-hint" role="note">
                       {justCopied ? (
                         <>
                           <CheckIcon className="w-3 h-3" />
                           <span>Copied — paste in a terminal.</span>
                         </>
-                      ) : isInUse ? (
-                        <>
-                          <ZapIcon className="w-3 h-3" />
-                          <span>
-                            Or copy <code className="font-mono">aikey activate {r.alias}</code> to re-apply.
-                          </span>
-                        </>
                       ) : (
                         <>
-                          <ZapIcon className="w-3 h-3" />
+                          <PlayIcon className="w-3 h-3" />
                           <span>
-                            Copy <code className="font-mono">aikey activate {r.alias}</code>, run in a terminal.
+                            Run <code className="font-mono">{shellCmd}</code> directly in any terminal.
                           </span>
                         </>
                       )}
                     </div>
-                  </>
+                  );
+                }
+                return (
+                  <div className="drawer-actions-hint" role="note">
+                    {justCopied ? (
+                      <>
+                        <CheckIcon className="w-3 h-3" />
+                        <span>Copied — paste in a terminal.</span>
+                      </>
+                    ) : (
+                      <>
+                        <ZapIcon className="w-3 h-3" />
+                        <span>
+                          Copy <code className="font-mono">aikey activate {r.alias}</code>, run in a terminal.
+                        </span>
+                      </>
+                    )}
+                  </div>
                 );
               })()}
               {/* Secondary actions wrapper — 80% centered row (2026-04-24
@@ -4433,6 +4548,7 @@ const VAULT_CSS = `
   color: var(--foreground);
 }
 
+
 /* Actions row — inline (not a sticky footer). Route is the primary CTA
    and spans the full first row; secondary actions share the second. */
 .vault-page .drawer-actions {
@@ -4526,24 +4642,23 @@ const VAULT_CSS = `
 /* Primary — Route via this key. Warm-yellow glow theme.
    Sizing (width, flex, align-self) handled by the structural rule
    higher up (search for ".action-btn.primary-route { flex: 0 0 auto"). */
+/* Both Activate (clickable) and Active (already in-shell) use the same
+   muted yellow background — keeps the button tone consistent across states
+   so the user reads the LABEL for state, not the color (2026-05-06).
+   Only hover differs: clickable state lights up, in-use state stays flat. */
 .vault-page .drawer-actions .action-btn.primary-route {
-  background:
-    linear-gradient(180deg, rgba(250, 204, 21,0.14), rgba(250, 204, 21,0.08));
-  border-color: rgba(250, 204, 21, 0.42);
+  background: rgba(250, 204, 21, 0.06);
+  border-color: rgba(250, 204, 21, 0.35);
   color: var(--primary);
   font-weight: 600;
-  box-shadow: 0 0 18px -8px rgba(250, 204, 21, 0.45);
+  box-shadow: none;
 }
-.vault-page .drawer-actions .action-btn.primary-route:hover:not(:disabled) {
-  background:
-    linear-gradient(180deg, rgba(250, 204, 21,0.22), rgba(250, 204, 21,0.12));
-  border-color: rgba(250, 204, 21, 0.6);
+.vault-page .drawer-actions .action-btn.primary-route:hover:not(:disabled):not(.routing) {
+  background: rgba(250, 204, 21, 0.12);
+  border-color: rgba(250, 204, 21, 0.5);
 }
 .vault-page .drawer-actions .action-btn.primary-route.routing {
   cursor: default;
-  background: rgba(250, 204, 21, 0.06);
-  border-color: rgba(250, 204, 21, 0.35);
-  box-shadow: none;
 }
 .vault-page .drawer-actions .action-btn.primary-route.routing:hover {
   background: rgba(250, 204, 21, 0.06);

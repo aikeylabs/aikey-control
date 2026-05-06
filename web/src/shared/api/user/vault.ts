@@ -139,8 +139,26 @@ export interface OAuthVaultRecord {
   protocol_family: string;
   auth_type: string;
   credential_type: string;
-  display_identity: string | null;  // email / username
-  alias: string | null;             // mirror of display_identity for uniform UI access
+  /**
+   * Original/immutable upstream identity (typically email, falls back to
+   * a user_id when the OAuth flow doesn't return an email). NEVER touched
+   * by rename — see `local_alias` for the user-set label.
+   */
+  display_identity: string | null;
+  /**
+   * Effective user-facing label: `local_alias ?? display_identity`. Renamed
+   * accounts surface their new label here while keeping `display_identity`
+   * pointing at the upstream email. Pre-v1.0.1-alpha.1 vaults always have
+   * `alias === display_identity`.
+   */
+  alias: string | null;
+  /**
+   * User-set local label written by the OAuth rename action. NULL means
+   * "never renamed" (in which case `alias === display_identity`). Used by
+   * the drawer to decide whether to render the alias and Identity rows
+   * separately (renamed) or merge them (unchanged). Added v1.0.1-alpha.1.
+   */
+  local_alias: string | null;
   external_id: string | null;
   org_uuid: string | null;
   account_tier: string | null;
@@ -171,6 +189,22 @@ export interface OAuthVaultRecord {
    * Per-provider list. See PersonalVaultRecord.in_use_for for semantics.
    */
   in_use_for?: string[];
+  /**
+   * Local proxy URL the SDK should target for THIS OAuth account
+   * (e.g. `http://127.0.0.1:27200/anthropic`). Computed CLI-side via the
+   * same `provider_info(code).proxy_path` lookup `aikey route` uses, so
+   * the value matches the route table 1:1. Optional for forward-compat
+   * with older CLI bundles that didn't emit this field; the drawer hides
+   * the row when missing.
+   */
+  route_url?: string | null;
+  /**
+   * Opaque per-account routing token that maps to this OAuth credential
+   * at the proxy. Stable identifier — safe to display. Mirrors the
+   * `route_token` field on PersonalVaultRecord for uniform drawer code.
+   * Null on pre-route-token vaults; drawer omits the row in that case.
+   */
+  route_token?: string | null;
 }
 
 export type VaultRecord = PersonalVaultRecord | OAuthVaultRecord;
@@ -206,7 +240,14 @@ export interface RenameResponse {
   target: VaultTarget;
   id: string;                       // post-rename value (may include auto -2/-3 suffix)
   old_id?: string;
-  display_identity?: string;        // for oauth
+  /**
+   * The new label written by rename. For oauth + team this is the
+   * `local_alias` column on `provider_accounts` / `managed_virtual_keys_cache`
+   * respectively — display_identity (oauth) and the server alias (team) stay
+   * immutable. Personal renames don't populate this field; the new alias is
+   * `id` itself.
+   */
+  local_alias?: string;
   action_taken: 'renamed';
   audit_logged?: boolean;
 }
