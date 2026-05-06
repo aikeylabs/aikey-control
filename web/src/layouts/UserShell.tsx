@@ -60,6 +60,13 @@ const ICON_USER =
 const ICON_RECEIPT =
   'M3 3v18h18M7 16v-4M12 16V8M17 16v-6';
 
+// lucide "circle-dollar-sign" (outline) — Cost / token-spend page glyph.
+// Picked over a generic dollar sign because the bounded circle reads as
+// "individual transaction unit" rather than monetary total, matching
+// the page's "per-key cost breakdown" content.
+const ICON_DOLLAR =
+  'M12 2a10 10 0 100 20 10 10 0 000-20zM8 14.5c.5 1.5 2 2.5 4 2.5s4-1 4-2.5-1-2-3-2.5l-2-.5c-2-.5-3-1-3-2.5s2-2.5 4-2.5 3.5 1 4 2.5M12 6v12';
+
 // lucide "download" (outline) — matches template. Previously was
 // heroicons "arrow-down-tray" (very similar glyph) but we align on
 // lucide's version so stroke terminations match the other lucide
@@ -88,6 +95,7 @@ function KeyIcon({ className }: { className?: string } = {}) {
 function OverviewIcon()    { return <NavIcon d={ICON_OVERVIEW} />; }
 function UserIcon()        { return <NavIcon d={ICON_USER} />; }
 function ReceiptIcon()     { return <NavIcon d={ICON_RECEIPT} />; }
+function DollarIcon()      { return <NavIcon d={ICON_DOLLAR} />; }
 function UploadCloudIcon() { return <NavIcon d={ICON_UPLOAD_CLOUD} />; }
 function UserPlusIcon()    { return <NavIcon d={ICON_USER_PLUS} />; }
 function ShieldIcon()      { return <NavIcon d={ICON_SHIELD} />; }
@@ -237,6 +245,7 @@ export function UserShell() {
       title: 'Insights',
       items: [
         { path: '/user/usage-ledger', icon: <ReceiptIcon />, label: 'Usage', originName: 'Usage Ledger' },
+        { path: '/user/cost',         icon: <DollarIcon />,  label: 'Cost' },
       ],
     },
     {
@@ -286,8 +295,8 @@ export function UserShell() {
               boxShadow: '0 0 10px rgba(250,204,21,0.5)',
             }}
           />
-          <div className="flex items-center gap-2 font-mono font-bold tracking-widest text-lg" style={{ color: 'var(--foreground)' }}>
-            <KeyIcon className="w-5 h-5" />
+          <div className="flex items-center gap-2 font-mono font-bold tracking-widest text-xl" style={{ color: 'var(--foreground)' }}>
+            <KeyIcon className="w-6 h-6" />
             <span className="nav-brand-text">{logoText}</span>
           </div>
         </div>

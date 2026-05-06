@@ -2663,18 +2663,13 @@ function DetailDrawer(props: {
                     carried no actionable info for the user; any future
                     session-state detail (expiry, rotation) belongs in
                     the Meta section below next to Expires. */}
-                {oauth.org_uuid && (
-                  <div className="drawer-field">
-                    <span className="k">Org UUID</span>
-                    <span className="v mono dim">{oauth.org_uuid}</span>
-                  </div>
-                )}
-                {oauth.account_tier && (
-                  <div className="drawer-field">
-                    <span className="k">Tier</span>
-                    <span className="v">{oauth.account_tier}</span>
-                  </div>
-                )}
+                {/* Org UUID + Tier moved to Meta (2026-05-06) — they
+                    describe the upstream account ("which organization /
+                    plan tier") rather than the credential itself, so
+                    they belong with Protocol / Type / Status. Keeps the
+                    Credential section focused on what the user can copy
+                    or route through (alias / identity / route_url /
+                    route_token). */}
                 {/* route_url + route_token (2026-05-06): same pair shown for
                     personal keys above. The CLI computes both via
                     `provider_info(code).proxy_path` + the per-account token
@@ -2897,6 +2892,22 @@ function DetailDrawer(props: {
                 <span className="ro-pill">RO</span>
               </span>
             </div>
+            {/* Org UUID + Tier (OAuth-only, moved here 2026-05-06 from
+                the Credential section). Conditional on the field being
+                non-null so personal-key drawers and OAuth accounts
+                missing the data both stay clean. */}
+            {oauth?.org_uuid && (
+              <div className="drawer-field">
+                <span className="k">Org UUID</span>
+                <span className="v mono dim">{oauth.org_uuid}</span>
+              </div>
+            )}
+            {oauth?.account_tier && (
+              <div className="drawer-field">
+                <span className="k">Tier</span>
+                <span className="v">{oauth.account_tier}</span>
+              </div>
+            )}
             <div className="drawer-field">
               <span className="k">Status</span>
               <span className="v">

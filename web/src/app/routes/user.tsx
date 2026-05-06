@@ -15,6 +15,7 @@ import UserOverviewPage from '../../pages/user/overview';
 import MyAccountPage from '../../pages/user/account';
 import UserVirtualKeysPage from '../../pages/user/virtual-keys';
 import UserUsageLedgerPage from '../../pages/user/usage-ledger';
+import UserCostPage from '../../pages/user/cost';
 import UserBulkImportPage from '../../pages/user/import';
 import UserVaultPage from '../../pages/user/vault';
 import UserReferralsPage from '../../pages/user/referrals';
@@ -51,6 +52,7 @@ export function buildUserRoutes(): RouteObject[] {
         { path: 'vault', element: <UserVaultPage /> },
         { path: 'import', element: <UserBulkImportPage /> },
         { path: 'usage-ledger', element: <UserUsageLedgerPage /> },
+        { path: 'cost', element: <UserCostPage /> },
         { path: 'referrals', element: <UserReferralsPage /> },
         // Legacy routes → redirect to canonical names.
         { path: 'my-keys', element: <Navigate to="/user/virtual-keys" replace /> },

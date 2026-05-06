@@ -157,7 +157,11 @@ body {
    AIKEY VAULT brand row. Spacing between sections and between items
    within a section is intentionally generous (22px / 5px) so rows
    don't feel crammed. */
-.user-sidebar nav { padding: 18px 10px 8px 10px; }
+/* 2026-05-06 (用户反馈): icons too close to sidebar left edge — bump
+   horizontal padding. nav 10→14px + item 14→18px → total 32px gutter from
+   sidebar edge to icon (was 24px). Gives菜单项明显的"呼吸空间",和右侧
+   主内容的 px-6 (24px) 两侧节奏对齐。 */
+.user-sidebar nav { padding: 18px 14px 8px 14px; }
 
 .user-sidebar .nav-section + .nav-section { margin-top: 22px; }
 .user-sidebar .nav-section > .nav-item + .nav-item { margin-top: 5px; }
@@ -165,7 +169,7 @@ body {
 .user-sidebar .nav-item {
   position: relative;
   gap: 12px;
-  padding: 11px 14px;
+  padding: 11px 18px;
   border-radius: 7px;
   /* 2026-04-24: font-size 13.5 → 14.5 + weight 500 → 550 (via
      `medium`). Master's base .nav-item is 14px/500; the slight bump
@@ -237,7 +241,12 @@ body {
   text-transform: uppercase;
   color: var(--muted-foreground);
   opacity: 0.55;
-  padding: 0 14px;
+  /* 2026-05-06 (用户反馈): group title 比 nav-item 的 icon 起点靠左 ——
+     padding 18→8px,group title 在 nav 容器 (padding 14px) 内,加上自身 8px
+     得到 22px from sidebar 边,而 nav-item icon 仍在 14+18=32px,留出 ~10px
+     视觉差,让 INSIGHTS / KEYS / ACCOUNT 这类小标题独立"飘在外面",层级感更
+     清晰。nav-item 的 padding 不变,菜单项保持原有左边距。 */
+  padding: 0 8px;
   margin: 0 0 6px 0;
   user-select: none;
 }

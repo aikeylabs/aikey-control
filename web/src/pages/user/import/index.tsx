@@ -548,8 +548,24 @@ export default function UserBulkImportPage() {
   // emits many events over ~300ms and the timeout could clear before
   // the animation ended, causing a bounce-back when the trailing
   // animation events fired into the freshly-unlocked listener.
-  const srcSkipRef = useRef(0);
-  const dstSkipRef = useRef(0);
+  // 2026-05-06 v9 (系统性重写): leader/follower 模型替代脆弱的 counter / 双侧 block
+  //
+  // 旧模型缺陷:
+  //   v1-v7 counter:   计数器假设 scrollTo 必发 1 次 scroll event,浏览器在 target ≈ 当前
+  //                    scrollTop 时可能发 0/多次 → 漂移 → sync 在错误时机 fire 反算对侧
+  //   v8 时间戳 block: 双侧都可能 block 对方 → deadlock
+  //
+  // 新模型:
+  //   - 监听 user gesture (wheel / pointerdown / keydown) 在每一侧;触发的一侧自动成为
+  //     "leader",另一侧成为 "follower" (200ms inertia 期内)
+  //   - scroll handler 只在自己不是 follower 时跑 sync
+  //   - sync 是单向的 (leader → follower),没有 follower→leader 反弹路径
+  //   - 不需要计数事件,不需要双侧 block,不会 deadlock
+  //
+  // 边界:用户切换到另一侧拖动 → 新 gesture 把旧 leader 转为 follower,新侧自己解禁。
+  const followerUntilRef = useRef({ src: 0, dst: 0 });
+  // 点击 jump 单独的更长 cooldown,允许左右两侧各自 click-jump 完成不互抢。
+  const clickJumpUntilRef = useRef(0);
   // v4.1 Stage 14+: swap SourcePane ↔ textarea 时保留滚动位置
   // textarea 自带 scrollTop;SourcePane 由外层 .source-pane-scroll 容器 overflow-auto 驱动
   const sourceScrollRef = useRef<HTMLDivElement | null>(null);
@@ -596,24 +612,147 @@ export default function UserBulkImportPage() {
   // 2026-04-25: bidirectional scroll-sync — when scrollSync is on and
   // the user manually drags either pane's scrollbar, programmatically
   // move the OTHER pane to keep the same logical position visible.
-  // Logical mapping = source line ↔ first draft whose line_range
-  // contains that line. syncLockRef + rAF prevent feedback loops.
-  // Picks the [data-line] index closest to the vertical center of the
-  // source scroll viewport. Returns -1 if none found.
-  function pickCenteredLine(scrollHost: HTMLElement): number {
-    const center = scrollHost.scrollTop + scrollHost.clientHeight / 2;
-    const lines = scrollHost.querySelectorAll<HTMLElement>('[data-line]');
-    let best = -1;
-    let bestDist = Infinity;
-    lines.forEach((el) => {
-      const elCenter = el.offsetTop + el.offsetHeight / 2;
-      const dist = Math.abs(elCenter - center);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = parseInt(el.getAttribute('data-line') ?? '-1', 10);
+  //
+  // 2026-05-06 v11 (用户方案 A,中心对齐): anchor 改用"元素居中时的 scrollTop"。
+  //
+  // 核心规则: 哪个元素在自己 viewport 中心 → 对侧哪个元素也应该在 viewport 中心。
+  //
+  // anchor 含义: 当 dstY 是某 card 居中所需 scrollTop,srcY 是对应 line 居中所需
+  // scrollTop。因此:
+  //   centered_dstY = cardEl.offsetTop + cardEl.offsetHeight/2 - dst.clientHeight/2
+  //   centered_srcY = lineEl.offsetTop + lineEl.offsetHeight/2 - src.clientHeight/2
+  //
+  // 边界 fallback (方案 A): 早期/晚期元素无法精确居中 (dst 撑不开半个 viewport),
+  // 其 anchor 经 clamp 到 [0, scrollMax],配合首 (0,0) / 尾 (dstMax, srcMax) 端点,
+  // 让 src 在 dst 端点过渡区段平滑跟随到端点位置。
+  type Anchor = [number, number]; // [dstY, srcY]
+  function buildSyncAnchors(src: HTMLElement, dst: HTMLElement, draftRows: DraftRow[]): Anchor[] {
+    const dstMax = Math.max(0, dst.scrollHeight - dst.clientHeight);
+    const srcMax = Math.max(0, src.scrollHeight - src.clientHeight);
+    const dstCenter = dst.clientHeight / 2;
+    const srcCenter = src.clientHeight / 2;
+    const raw: Anchor[] = [[0, 0]];
+    for (const d of draftRows) {
+      const cardEl = dst.querySelector<HTMLElement>(`[data-draft-id="${d.record.id}"]`);
+      const lineEl = src.querySelector<HTMLElement>(`[data-line="${d.record.line_range[0]}"]`);
+      if (!cardEl || !lineEl) continue;
+      let dstY = cardEl.offsetTop + cardEl.offsetHeight / 2 - dstCenter;
+      let srcY = lineEl.offsetTop + lineEl.offsetHeight / 2 - srcCenter;
+      // Clamp 到合法 scroll 范围 (元素离顶/底太近无法精确居中时退化为对应端点)。
+      dstY = Math.max(0, Math.min(dstY, dstMax));
+      srcY = Math.max(0, Math.min(srcY, srcMax));
+      raw.push([dstY, srcY]);
+    }
+    raw.push([dstMax, srcMax]);
+    // 按 dstY 升序排序,严格去重 (相同 dstY 只保留最前的那个)。早期 clamp 到 (0,0) 的多张
+    // anchor 会自然合并;晚期 clamp 到 (dstMax,srcMax) 同理。中段 anchor 各自独立。
+    raw.sort((a, b) => a[0] - b[0]);
+    const anchors: Anchor[] = [];
+    for (const a of raw) {
+      if (anchors.length === 0 || a[0] > anchors[anchors.length - 1][0]) {
+        anchors.push(a);
       }
-    });
-    return best;
+    }
+    // 2026-05-06 v12 (用户反馈根因修复): 强制 srcY 也单调不降。drafts 数组的渲染顺序
+    // (决定 cardEl.offsetTop) 和 line_range 的源顺序 (决定 lineEl.offsetTop) 偶尔
+    // 不一致 (URL-only 辅助 draft / 后端按置信度排序),导致 anchor 排好 dstY 后 srcY
+    // 列出现 200→80 这种反向 → 线性插值期间 dst 增 src 反降 → 用户感知"右下拉左上拉"。
+    // 把 srcY 钳到前一个 anchor 的 srcY 之上,反向片段就退化成 src 不动的 deadband,
+    // 不影响正常 source-order 的 drafts。
+    for (let i = 1; i < anchors.length; i++) {
+      if (anchors[i][1] < anchors[i - 1][1]) {
+        anchors[i][1] = anchors[i - 1][1];
+      }
+    }
+    return anchors;
+  }
+  // 2026-05-06 v14 (用户反馈丝滑感): piecewise linear → monotone cubic spline (Fritsch-Carlson)
+  //
+  // piecewise linear 的位置 (C0) 连续但速度 (C1) 不连续: 每个 anchor 节点处斜率突变,
+  // dst 匀速时 src 在节点处加速度无穷大 → 用户感觉"加速/减速/顿挫"。
+  // monotone cubic 在节点处斜率(切线)也连续,保留单调性,数学上能给出丝滑的 follow。
+  //
+  // 算法 (Fritsch-Carlson 1980):
+  //   1. 计算每段斜率 d[i] = (y[i+1]-y[i]) / (x[i+1]-x[i])
+  //   2. 节点切线 m[i]: 端点 = 邻段斜率;中间 = 邻段斜率均值,但相邻段反号(局部极值) → 0
+  //   3. 单调性约束: 若 (m[i]/d[i])² + (m[i+1]/d[i])² > 9,缩放 m[i],m[i+1] 让 √sum = 3
+  //   4. cubic Hermite 公式插值
+  //
+  // 输入输出契约不变: dir=0 输入 dstY 求 srcY, dir=1 反向。
+  function interpolateAnchor(value: number, anchors: Anchor[], fromCol: 0 | 1): number {
+    const toCol = (1 - fromCol) as 0 | 1;
+    const n = anchors.length;
+    if (n === 0) return 0;
+    if (n === 1) return anchors[0][toCol];
+    // 边界 clamp: 落在首尾外直接返回端点 y。
+    if (value <= anchors[0][fromCol]) return anchors[0][toCol];
+    if (value >= anchors[n - 1][fromCol]) return anchors[n - 1][toCol];
+    // n=2 退化为线性 (cubic 需至少 3 个点保持非平凡)。
+    if (n === 2) {
+      const a = anchors[0], b = anchors[1];
+      const range = b[fromCol] - a[fromCol];
+      if (range === 0) return a[toCol];
+      const f = (value - a[fromCol]) / range;
+      return a[toCol] + f * (b[toCol] - a[toCol]);
+    }
+
+    // Step 1: 段斜率 d[i] for i in [0, n-1)
+    const d: number[] = new Array(n - 1);
+    for (let i = 0; i < n - 1; i++) {
+      const dx = anchors[i + 1][fromCol] - anchors[i][fromCol];
+      const dy = anchors[i + 1][toCol] - anchors[i][toCol];
+      d[i] = dx === 0 ? 0 : dy / dx;
+    }
+    // Step 2: 节点切线 m[i] for i in [0, n)
+    const m: number[] = new Array(n);
+    m[0] = d[0];
+    m[n - 1] = d[n - 2];
+    for (let i = 1; i < n - 1; i++) {
+      if (d[i - 1] * d[i] <= 0) {
+        m[i] = 0; // 反号 (or 任一为 0) → 局部极值,切线置 0 防过冲
+      } else {
+        m[i] = (d[i - 1] + d[i]) / 2;
+      }
+    }
+    // Step 3: Fritsch-Carlson 单调性约束
+    for (let i = 0; i < n - 1; i++) {
+      if (d[i] === 0) {
+        m[i] = 0;
+        m[i + 1] = 0;
+        continue;
+      }
+      const a = m[i] / d[i];
+      const b = m[i + 1] / d[i];
+      const sum = a * a + b * b;
+      if (sum > 9) {
+        const t = 3 / Math.sqrt(sum);
+        m[i] = t * a * d[i];
+        m[i + 1] = t * b * d[i];
+      }
+    }
+    // Step 4: 找 segment k (anchors[k][fromCol] ≤ value ≤ anchors[k+1][fromCol])
+    let k = 0;
+    for (let i = 0; i < n - 1; i++) {
+      if (value >= anchors[i][fromCol] && value <= anchors[i + 1][fromCol]) {
+        k = i;
+        break;
+      }
+    }
+    // Cubic Hermite: y(t) = h00*y0 + h10*h*m0 + h01*y1 + h11*h*m1
+    const x0 = anchors[k][fromCol];
+    const x1 = anchors[k + 1][fromCol];
+    const y0 = anchors[k][toCol];
+    const y1 = anchors[k + 1][toCol];
+    const h = x1 - x0;
+    if (h === 0) return y0;
+    const t = (value - x0) / h;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const h00 = 2 * t3 - 3 * t2 + 1;
+    const h10 = t3 - 2 * t2 + t;
+    const h01 = -2 * t3 + 3 * t2;
+    const h11 = t3 - t2;
+    return h00 * y0 + h10 * h * m[k] + h01 * y1 + h11 * h * m[k + 1];
   }
 
   useEffect(() => {
@@ -622,59 +761,44 @@ export default function UserBulkImportPage() {
     const dst = draftsScrollRef.current;
     if (!src || !dst) return;
 
-    // Source → Drafts: user-driven src scroll triggers an instant
-    // programmatic dst scroll. dstSkipRef++ before the write, dst's
-    // listener decrements and bails on the synthetic event. Counter
-    // > timeout because instant scroll emits exactly 1 event so the
-    // count is exact regardless of speed / pause / interrupt.
+    // 2026-05-06 v9 (系统性重写): leader/follower 模型
+    //
+    //   1. 监听 user gesture (wheel / pointerdown / keydown) 确定主导侧
+    //   2. 主导侧的 scroll 事件触发 sync 写入对侧
+    //   3. 对侧此时是 follower → 它收到的 scroll 事件 (无论由 sync 还是 momentum 引发) 全部 bail
+    //   4. 没有 follower → leader 的反弹路径,所以不会有 ping-pong / counter drift
+    //
+    // 200ms inertia 让 momentum scroll / 浏览器异步 layout 期间 follower 状态保持。
+    const INERTIA_MS = 200;
+    function markUserGesture(side: 'src' | 'dst') {
+      const f = followerUntilRef.current;
+      const now = Date.now();
+      f[side === 'src' ? 'dst' : 'src'] = now + INERTIA_MS;
+      f[side] = 0; // 主导侧绝不是自己的 follower
+    }
+    function isFollower(side: 'src' | 'dst'): boolean {
+      return Date.now() < followerUntilRef.current[side];
+    }
+
     function syncFromSource() {
       if (!src || !dst) return;
-      // The synthetic event from drafts→source's earlier write — bail.
-      if (srcSkipRef.current > 0) { srcSkipRef.current--; return; }
-      const targetLineIdx = pickCenteredLine(src);
-      if (targetLineIdx < 0) return;
-      const draftIdx = drafts.findIndex((d) => {
-        const [s, e] = d.record.line_range;
-        return targetLineIdx >= s && targetLineIdx <= e;
-      });
-      if (draftIdx < 0) return;
-      const cardEl = dst.querySelector<HTMLDivElement>(
-        `[data-draft-id="${drafts[draftIdx].record.id}"]`,
-      );
-      if (!cardEl) return;
-      const target =
-        cardEl.offsetTop - dst.clientHeight / 2 + cardEl.clientHeight / 2;
-      // Skip the write if dst is already (close to) where we want it
-      // — prevents emitting a no-op scroll event that would still
-      // round-trip through dst's listener.
+      if (isFollower('src')) return;     // src 当前是从动,scroll 事件由 sync/momentum 引发,bail
+      if (Date.now() < clickJumpUntilRef.current) return;
+      // v10: 分段线性插值,无需 pickCenteredDraft + center 公式 + clamp。
+      const anchors = buildSyncAnchors(src, dst, drafts);
+      const target = interpolateAnchor(src.scrollTop, anchors, 1); // 1=src,求 dst
       if (Math.abs(dst.scrollTop - target) < 2) return;
-      dstSkipRef.current++;
       dst.scrollTo({ top: target, behavior: 'auto' });
     }
 
     function syncFromDrafts() {
       if (!src || !dst) return;
-      if (dstSkipRef.current > 0) { dstSkipRef.current--; return; }
-      const center = dst.scrollTop + dst.clientHeight / 2;
-      const cards = dst.querySelectorAll<HTMLDivElement>('[data-draft-id]');
-      let best: HTMLDivElement | null = null;
-      let bestDist = Infinity;
-      cards.forEach((c) => {
-        const cardCenter = c.offsetTop + c.clientHeight / 2;
-        const dist = Math.abs(cardCenter - center);
-        if (dist < bestDist) { bestDist = dist; best = c; }
-      });
-      if (!best) return;
-      const draftId = (best as HTMLDivElement).getAttribute('data-draft-id');
-      const draft = drafts.find((d) => d.record.id === draftId);
-      if (!draft) return;
-      const lineIdx = draft.record.line_range[0];
-      const lineEl = src.querySelector<HTMLElement>(`[data-line="${lineIdx}"]`);
-      if (!lineEl) return;
-      const target =
-        lineEl.offsetTop - src.clientHeight / 2 + lineEl.clientHeight / 2;
+      if (isFollower('dst')) return;
+      if (Date.now() < clickJumpUntilRef.current) return;
+      // v10: 同上,反向插值。
+      const anchors = buildSyncAnchors(src, dst, drafts);
+      const target = interpolateAnchor(dst.scrollTop, anchors, 0); // 0=dst,求 src
       if (Math.abs(src.scrollTop - target) < 2) return;
-      srcSkipRef.current++;
       src.scrollTo({ top: target, behavior: 'auto' });
     }
 
@@ -690,13 +814,29 @@ export default function UserBulkImportPage() {
       cancelAnimationFrame(rafDst);
       rafDst = requestAnimationFrame(syncFromDrafts);
     };
+    // User gesture detectors —— wheel / pointerdown / keydown (arrow keys)
+    // 都标记当前主导侧。每次新 gesture 重新刷新 inertia 窗口。
+    const onSrcGesture = () => markUserGesture('src');
+    const onDstGesture = () => markUserGesture('dst');
     src.addEventListener('scroll', onSrcScroll, { passive: true });
     dst.addEventListener('scroll', onDstScroll, { passive: true });
+    src.addEventListener('wheel', onSrcGesture, { passive: true });
+    src.addEventListener('pointerdown', onSrcGesture, { passive: true });
+    src.addEventListener('keydown', onSrcGesture, { passive: true });
+    dst.addEventListener('wheel', onDstGesture, { passive: true });
+    dst.addEventListener('pointerdown', onDstGesture, { passive: true });
+    dst.addEventListener('keydown', onDstGesture, { passive: true });
     return () => {
       cancelAnimationFrame(rafSrc);
       cancelAnimationFrame(rafDst);
       src.removeEventListener('scroll', onSrcScroll);
       dst.removeEventListener('scroll', onDstScroll);
+      src.removeEventListener('wheel', onSrcGesture);
+      src.removeEventListener('pointerdown', onSrcGesture);
+      src.removeEventListener('keydown', onSrcGesture);
+      dst.removeEventListener('wheel', onDstGesture);
+      dst.removeEventListener('pointerdown', onDstGesture);
+      dst.removeEventListener('keydown', onDstGesture);
     };
   }, [scrollSync, state, drafts]);
   // v4.1 Stage 13+: Clear / Re-PARSE 的确认弹窗
@@ -1103,6 +1243,73 @@ export default function UserBulkImportPage() {
   // return the field (see VaultStatus type in shared/api/user/import.ts).
   const initialized = vault?.initialized ?? true;
 
+  // ── Provider-suggestion banner (lifted to page level 2026-05-06) ─────
+  // Banner used to live inside WorkingDrafts (right pane only), so it was
+  // visually constrained to the right pane width. User asked to span the
+  // banner across LEFT + RIGHT panes — easiest is to render it above the
+  // body flex container. Logic stays identical, only location changes.
+  const providerGroupsTop = (() => {
+    const m = new Map<string, number>();
+    drafts.forEach((d) => {
+      const p = d.record.inferred_provider;
+      if (p) m.set(p, (m.get(p) ?? 0) + 1);
+    });
+    return m;
+  })();
+  const suggestEntryTop = Array.from(providerGroupsTop.entries())
+    .sort((a, b) => b[1] - a[1])
+    .find(([, count]) => count >= 2 && count / drafts.length >= 0.25);
+  const suggestPctTop = suggestEntryTop
+    ? Math.round((suggestEntryTop[1] / drafts.length) * 100)
+    : 0;
+  const suggestKeyTop = suggestEntryTop?.[0] ?? null;
+  const [dismissedSuggestKeyTop, setDismissedSuggestKeyTop] = useState<string | null>(null);
+  useEffect(() => {
+    if (suggestKeyTop !== dismissedSuggestKeyTop) setDismissedSuggestKeyTop(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestKeyTop]);
+  const applyTargetsTop = suggestKeyTop
+    ? drafts.filter((d) => {
+        const inferredEmpty = !d.record.inferred_provider;
+        const protosEmpty = (d.record.protocol_types?.length ?? 0) === 0;
+        return inferredEmpty || protosEmpty;
+      })
+    : [];
+  const showSuggestTop = Boolean(suggestEntryTop)
+    && applyTargetsTop.length > 0
+    && dismissedSuggestKeyTop !== suggestKeyTop
+    && state === 'working';
+
+  function applyProviderToAllTop(family: string) {
+    let firstAffectedId: string | null = null;
+    setDrafts((prev) =>
+      prev.map((d) => {
+        const inferredEmpty = !d.record.inferred_provider;
+        const protosEmpty = (d.record.protocol_types?.length ?? 0) === 0;
+        if (!inferredEmpty && !protosEmpty) return d;
+        if (firstAffectedId === null) firstAffectedId = d.record.id;
+        return {
+          ...d,
+          record: {
+            ...d.record,
+            inferred_provider: inferredEmpty ? family : d.record.inferred_provider,
+            protocol_types: protosEmpty ? [family] : d.record.protocol_types,
+          },
+        };
+      }),
+    );
+    setDismissedSuggestKeyTop(family);
+    if (firstAffectedId) {
+      const id = firstAffectedId;
+      requestAnimationFrame(() => {
+        const el = document.querySelector<HTMLDivElement>(`[data-draft-id="${id}"]`);
+        if (el) el.scrollIntoView({ behavior: 'auto', block: 'center' });
+        setFlashDraftId(id);
+        setTimeout(() => setFlashDraftId(null), 2000);
+      });
+    }
+  }
+
   return (
     // `import-page` wrapper (2026-04-22): scopes IMPORT_CSS rules that
     // use generic class names (`.btn`, `.btn-primary`, etc.) so they
@@ -1301,13 +1508,54 @@ export default function UserBulkImportPage() {
         </div>
       )}
 
+      {/* ── Provider suggestion banner (full width, above body) ─────────────
+          2026-05-06: 从 WorkingDrafts 提到这里,用户要求横跨左右两栏整页宽。 */}
+      {showSuggestTop && suggestEntryTop && (
+        <div className="suggest-bar px-5 py-2.5 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0 text-[13px]">
+            <button
+              type="button"
+              className="suggest-close"
+              onClick={() => setDismissedSuggestKeyTop(suggestKeyTop)}
+              title="Dismiss this suggestion"
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+            <span className="font-mono" style={{ color: 'var(--primary)', fontWeight: 700 }}>{suggestPctTop}%</span>
+            <span style={{ color: 'var(--foreground)' }}>of drafts look like</span>
+            <span className={`chip ${providerChipClassFromId(suggestEntryTop[0])}`}>
+              {suggestEntryTop[0].toUpperCase()}
+            </span>
+            <span style={{ color: 'var(--muted-foreground)' }}>— apply as protocol?</span>
+          </div>
+          <button
+            className="apply-btn"
+            onClick={() => applyProviderToAllTop(suggestEntryTop[0])}
+            title={`Fill protocol=${suggestEntryTop[0].toUpperCase()} on ${applyTargetsTop.length} draft(s) that don't already have one`}
+          >
+            APPLY TO {applyTargetsTop.length}
+          </button>
+        </div>
+      )}
+
       {/* ── Body ────────────────────────────────────────────────────────── */}
-      {/* Body min-height: 80vh on tall windows, collapses to whatever the
-          flex parent provides on short windows. Uses CSS min() so the
-          floor never exceeds the available height and pushes the action
-          bar off-screen. Without this floor the panes shrink to textarea
-          content height on the empty state, which looked cramped. */}
-      <div className="flex-1 flex min-h-0 overflow-hidden" style={{ minHeight: 'min(80vh, 100%)' }}>
+      {/* flex-1 + min-h-0 lets the body fill the remaining height inside
+          import-page (after the banners) without growing taller than its
+          parent. The earlier `min-height: min(80vh, 100%)` floor caused
+          the bottom action row (LEFT pane's "OFFLINE / PARSE LOCALLY"
+          bar) to be clipped on short windows: the 80vh floor doesn't
+          subtract banner heights, so on a viewport ~600px tall the body
+          was forced to 80vh = 480px while only ~500px was actually
+          available after banners — pushing the bar past import-page's
+          overflow-hidden edge (2026-05-06 user report).
+
+          pl-6: 24px left gutter so the SOURCE pane doesn't sit flush
+          against the sidebar — matches the px-6 convention on the
+          banners above (HookReadinessBanner, unlock-banner, action-bar).
+          Right pane stays edge-to-edge to keep the panes-fill-width feel
+          (2026-05-06 user request). */}
+      <div className="flex-1 flex min-h-0 overflow-hidden pl-6">
         {/* LEFT pane: textarea (empty) or readonly source (working/done) */}
         <section className="w-[42%] flex flex-col" style={{ background: 'rgba(0,0,0,0.15)' }}>
           <div className="h-10 px-5 flex items-center justify-between flex-shrink-0" style={{ background: 'rgba(0,0,0,0.25)', borderBottom: '1px solid var(--border)' }}>
@@ -1383,6 +1631,7 @@ export default function UserBulkImportPage() {
                   drafts={drafts}
                   hoveredDraft={hoveredDraft}
                   pinnedDraft={pinnedDraft}
+                  onLineHover={state === 'working' ? setHoveredDraft : undefined}
                   onLineClick={state === 'working' ? (idx) => {
                     // v4.2: 点击 source 行 → 双向联动 (always-on click jump):
                     //   - 该行属于某 draft → toggle pin (同卡片再点取消 pin)
@@ -1395,48 +1644,19 @@ export default function UserBulkImportPage() {
                     if (!target) return;
                     // 展开卡片让用户看到详情(和 onJumpToSource 行为对齐)
                     setDrafts((prev) => prev.map((d, i) => (i === idx ? { ...d, expanded: true } : d)));
+                    // 2026-05-06: click-jump 冷却,sync handlers 在该窗口期内 bail,
+                    // 避免它们用 top-anchor mapping 把刚刚 center 的对侧重新拉走。
+                    clickJumpUntilRef.current = Date.now() + 250;
                     requestAnimationFrame(() => {
                       const el = document.querySelector<HTMLDivElement>(`[data-draft-id="${target.record.id}"]`);
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      // 'auto' 即时跳转,不用 'smooth' 平滑滚动 (smooth 会跨多帧触发多次
+                      // scroll event,sync 反复修正容易闪)。
+                      if (el) el.scrollIntoView({ behavior: 'auto', block: 'center' });
                     });
                   } : undefined}
                 />
               </div>
             )}
-          </div>
-          <div className="h-14 px-5 flex items-center justify-between flex-shrink-0" style={{ background: 'rgba(0,0,0,0.25)', borderTop: '1px solid var(--border)' }}>
-            <span className="offline-pill"><WifiOffIcon />OFFLINE · NOTHING LEAVES</span>
-            <div className="flex items-center gap-2">
-              {/* Stage 13+: Clear 按钮 — empty 态若有文本、working 态始终可点;点击弹确认框 */}
-              {((state === 'empty' && input.trim()) || state === 'working') && (
-                <button
-                  className="btn btn-ghost text-[11px] px-3 py-1.5"
-                  onClick={() => setConfirmAction('clear')}
-                  title="Clear all source text and parsed drafts"
-                >
-                  Clear
-                </button>
-              )}
-              {state === 'empty' && (
-                <button
-                  className="btn btn-primary btn-primary-dim text-[11px] px-4 py-1.5"
-                  disabled={!unlocked || !input.trim() || parseMut.isPending}
-                  onClick={() => parseMut.mutate({ text: input, source_type: 'paste' })}
-                >
-                  {parseMut.isPending ? 'PARSING…' : 'PARSE LOCALLY'}
-                </button>
-              )}
-              {state === 'working' && (
-                <button
-                  className="btn btn-outline text-[11px] px-3 py-1.5"
-                  /* Stage 13+: Re-PARSE 先弹确认(右侧编辑会被重置) */
-                  onClick={() => setConfirmAction('reparse')}
-                >
-                  <RefreshIcon />
-                  RE-PARSE
-                </button>
-              )}
-            </div>
           </div>
         </section>
 
@@ -1453,9 +1673,26 @@ export default function UserBulkImportPage() {
               readyCount={readyCount}
               weakCount={weakCount}
               oauthCount={oauthCount}
+              missingProviderCount={missingProviderCount}
               orphans={parseResp?.orphans ?? []}
               onHoverDraft={setHoveredDraft}
-              onJumpToSource={(idx) => setPinnedDraft((prev) => (prev === idx ? null : idx))}
+              hoveredDraft={hoveredDraft}
+              pinnedDraft={pinnedDraft}
+              onJumpToSource={(idx) => {
+                // 2026-05-06: click-jump 冷却同 onLineClick 处的注释。
+                clickJumpUntilRef.current = Date.now() + 250;
+                setPinnedDraft((prev) => (prev === idx ? null : idx));
+              }}
+              onJumpStat={(kind) => {
+                if (kind === 'weak') {
+                  scrollToFirstDraft((d) => d.isWeak);
+                } else {
+                  scrollToFirstDraft(
+                    (d) =>
+                      d.selected && !d.isOAuth && !d.isWeak && (d.record.protocol_types?.length ?? 0) === 0,
+                  );
+                }
+              }}
               showRequiredFields={showRequiredFields}
               flashDraftId={flashDraftId}
               setFlashDraftId={setFlashDraftId}
@@ -1474,118 +1711,123 @@ export default function UserBulkImportPage() {
       </div>
 
       {/* ── Action bar ──────────────────────────────────────────────────── */}
-      {state === 'working' && (
+      {/* 2026-05-06: bar 现在覆盖 empty + working 两态 (done 态保留旧的隐藏行为)。
+          原 LEFT pane 底部的 OFFLINE pill / Clear / Re-parse / Parse-locally 全部
+          融入这里;原 stats (ready/OAuth/needs-review/missing-protocol) 已挪到右上
+          WorkingDrafts toolbar (合并显示)。 */}
+      {state !== 'done' && (
         <div className="action-bar px-6 py-3 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-4 text-[12px] font-mono">
-            <span className="flex items-center gap-1.5"><span className="tier-dot tier-confirmed" /><span className="font-bold" style={{ color: 'var(--foreground)' }}>{readyCount}</span><span style={{ color: 'var(--muted-foreground)' }}>ready</span></span>
-            <span style={{ color: 'var(--muted-foreground)' }}>·</span>
-            <span className="flex items-center gap-1.5"><span className="tier-dot tier-suggested" /><span className="font-bold" style={{ color: 'var(--foreground)' }}>{oauthCount}</span><span style={{ color: 'var(--muted-foreground)' }}>OAuth handoff</span></span>
-            <span style={{ color: 'var(--muted-foreground)' }}>·</span>
-            {/* Stage 14+: needs review / missing provider stat 可点击 → 滚到首个问题 draft */}
-            <button
-              type="button"
-              className="stat-clickable flex items-center gap-1.5"
-              onClick={() => scrollToFirstDraft((d) => d.isWeak)}
-              disabled={weakCount === 0}
-              title={weakCount === 0 ? undefined : 'Jump to first needs-review draft'}
-            >
-              <span className="tier-dot tier-warn" />
-              <span className="font-bold" style={{ color: 'var(--foreground)' }}>{weakCount}</span>
-              <span style={{ color: 'var(--muted-foreground)' }}>needs review</span>
-            </button>
-            {missingProviderCount > 0 && (
+          <div className="flex items-center gap-3 text-[12px] font-mono">
+            <span className="offline-pill"><WifiOffIcon />OFFLINE · NOTHING LEAVES</span>
+            {state === 'working' && (
+              <button
+                className="btn btn-outline text-[11px] px-3 py-1.5"
+                /* Stage 13+: Re-PARSE 先弹确认(右侧编辑会被重置) */
+                onClick={() => setConfirmAction('reparse')}
+                title="Re-parse the source text (drafts will be reset)"
+              >
+                <RefreshIcon />
+                RE-PARSE
+              </button>
+            )}
+            {state === 'working' && (
               <>
-                <span style={{ color: 'var(--muted-foreground)' }}>·</span>
+                <span style={{ color: 'var(--muted-foreground)' }} className="mx-1">|</span>
                 <button
                   type="button"
-                  className="stat-clickable flex items-center gap-1.5"
-                  onClick={() =>
-                    scrollToFirstDraft(
-                      (d) =>
-                        d.selected && !d.isOAuth && !d.isWeak && (d.record.protocol_types?.length ?? 0) === 0
-                    )
-                  }
-                  title="Jump to first missing-protocol draft"
+                  className="btn btn-ghost text-[11px] px-3 py-1.5 select-all-btn"
+                  onClick={() => setScrollSync((v) => !v)}
+                  title="When on, dragging either pane's scrollbar moves the other pane to keep the matching draft / source line visible."
                 >
-                  <span className="tier-dot" style={{ background: '#f87171' }} />
-                  <span className="font-bold" style={{ color: '#fca5a5' }}>{missingProviderCount}</span>
-                  <span style={{ color: '#fca5a5' }}>missing protocol</span>
+                  <span
+                    className={`check check-inline${scrollSync ? ' checked' : ''}`}
+                    aria-hidden
+                  >
+                    {scrollSync && <span className="text-[10px]">✓</span>}
+                  </span>
+                  <span>Sync scroll</span>
                 </button>
               </>
             )}
-            {/* 2026-04-25: source-hash readout replaced with the
-                scroll-sync toggle. Styled identically to the Select-all
-                button (.check check-inline indicator + label inside a
-                btn-ghost) so both checkboxes in the action bar share
-                one visual language. */}
-            <span style={{ color: 'var(--muted-foreground)' }} className="mx-2">|</span>
-            <button
-              type="button"
-              className="btn btn-ghost text-[11px] px-3 py-1.5 select-all-btn"
-              onClick={() => setScrollSync((v) => !v)}
-              title="When on, dragging either pane's scrollbar moves the other pane to keep the matching draft / source line visible."
-            >
-              <span
-                className={`check check-inline${scrollSync ? ' checked' : ''}`}
-                aria-hidden
-              >
-                {scrollSync && <span className="text-[10px]">✓</span>}
-              </span>
-              <span>Sync scroll</span>
-            </button>
           </div>
           <div className="flex items-center gap-2">
-            {/* Stage 12+/13+: 全选 / 取消全选 toggle(带 checkbox 视觉,支持 indeterminate 半选态) */}
-            {(() => {
-              const total = drafts.length;
-              const selectedCount = drafts.filter((d) => d.selected).length;
-              const allSelected = total > 0 && selectedCount === total;
-              const someSelected = selectedCount > 0 && !allSelected;
-              return (
-                <button
-                  className="btn btn-ghost text-[11px] px-3 py-1.5 select-all-btn"
-                  onClick={toggleSelectAll}
-                  disabled={total === 0}
-                  title={total === 0 ? 'No drafts' : undefined}
-                >
-                  <span
-                    className={`check check-inline${allSelected ? ' checked' : ''}${someSelected ? ' indeterminate' : ''}`}
-                    aria-hidden
+            {/* Empty 态:Clear (only if input has text) + PARSE LOCALLY (primary action) */}
+            {state === 'empty' && (
+              <>
+                {input.trim() && (
+                  <button
+                    className="btn btn-ghost text-[11px] px-3 py-1.5"
+                    onClick={() => setConfirmAction('clear')}
+                    title="Clear source text"
                   >
-                    {allSelected && <span className="text-[10px]">✓</span>}
-                    {someSelected && <span className="text-[10px] leading-none">−</span>}
-                  </span>
-                  <span>{allSelected ? 'Deselect all' : 'Select all'}</span>
+                    Clear
+                  </button>
+                )}
+                <button
+                  className="btn btn-primary btn-primary-dim text-[12px] px-5 py-2"
+                  disabled={!unlocked || !input.trim() || parseMut.isPending}
+                  onClick={() => parseMut.mutate({ text: input, source_type: 'paste' })}
+                >
+                  {parseMut.isPending ? 'PARSING…' : 'PARSE LOCALLY'}
                 </button>
-              );
-            })()}
-            {/* Stage 13+: Clear all 也走确认弹窗(和 SOURCE 的 Clear 共用 clear 弹窗) */}
-            <button
-              className="btn btn-ghost text-[11px] px-3 py-1.5"
-              onClick={() => setConfirmAction('clear')}
-              title="Clear all source text and parsed drafts"
-            >
-              Clear all
-            </button>
-            <button
-              className="btn btn-primary btn-primary-dim px-5 py-2 text-[12px]"
-              /* Stage 7/12+: vault 锁住时禁用 Import;readyCount+selectedOauthCount 都 0 时禁用
-                 (OAuth-only 选中也允许 proceed 到 Done 页看 handoff 卡片) */
-              disabled={!unlocked || (readyCount === 0 && selectedOauthCount === 0) || confirmMut.isPending}
-              onClick={runImport}
-              title={
-                !unlocked
-                  ? 'Unlock vault to import'
-                  : (readyCount === 0 && selectedOauthCount === 0 ? 'Select at least one draft' : undefined)
-              }
-            >
-              {confirmMut.isPending
-                ? 'IMPORTING…'
-                : readyCount > 0
-                  ? `IMPORT ${readyCount}${selectedOauthCount > 0 ? ` + ${selectedOauthCount} OAUTH` : ''}`
-                  : `PROCEED · ${selectedOauthCount} OAUTH`}
-              {!confirmMut.isPending && <ArrowRightIcon />}
-            </button>
+              </>
+            )}
+            {/* Working 态:Select all + Clear all + IMPORT (primary action) */}
+            {state === 'working' && (
+              <>
+                {/* Stage 12+/13+: 全选 / 取消全选 toggle(带 checkbox 视觉,支持 indeterminate 半选态) */}
+                {(() => {
+                  const total = drafts.length;
+                  const selectedCount = drafts.filter((d) => d.selected).length;
+                  const allSelected = total > 0 && selectedCount === total;
+                  const someSelected = selectedCount > 0 && !allSelected;
+                  return (
+                    <button
+                      className="btn btn-ghost text-[11px] px-3 py-1.5 select-all-btn"
+                      onClick={toggleSelectAll}
+                      disabled={total === 0}
+                      title={total === 0 ? 'No drafts' : undefined}
+                    >
+                      <span
+                        className={`check check-inline${allSelected ? ' checked' : ''}${someSelected ? ' indeterminate' : ''}`}
+                        aria-hidden
+                      >
+                        {allSelected && <span className="text-[10px]">✓</span>}
+                        {someSelected && <span className="text-[10px] leading-none">−</span>}
+                      </span>
+                      <span>{allSelected ? 'Deselect all' : 'Select all'}</span>
+                    </button>
+                  );
+                })()}
+                {/* Stage 13+: Clear (统一为单一 Clear,LEFT pane 旧 Clear + 旧 Clear all 融合) */}
+                <button
+                  className="btn btn-ghost text-[11px] px-3 py-1.5"
+                  onClick={() => setConfirmAction('clear')}
+                  title="Clear all source text and parsed drafts"
+                >
+                  Clear
+                </button>
+                <button
+                  className="btn btn-primary btn-primary-dim px-5 py-2 text-[12px]"
+                  /* Stage 7/12+: vault 锁住时禁用 Import;readyCount+selectedOauthCount 都 0 时禁用
+                     (OAuth-only 选中也允许 proceed 到 Done 页看 handoff 卡片) */
+                  disabled={!unlocked || (readyCount === 0 && selectedOauthCount === 0) || confirmMut.isPending}
+                  onClick={runImport}
+                  title={
+                    !unlocked
+                      ? 'Unlock vault to import'
+                      : (readyCount === 0 && selectedOauthCount === 0 ? 'Select at least one draft' : undefined)
+                  }
+                >
+                  {confirmMut.isPending
+                    ? 'IMPORTING…'
+                    : readyCount > 0
+                      ? `IMPORT ${readyCount}${selectedOauthCount > 0 ? ` + ${selectedOauthCount} OAUTH` : ''}`
+                      : `PROCEED · ${selectedOauthCount} OAUTH`}
+                  {!confirmMut.isPending && <ArrowRightIcon />}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1695,14 +1937,18 @@ function WorkingDrafts({
   readyCount,
   weakCount,
   oauthCount,
+  missingProviderCount,
   orphans,
   onHoverDraft,
   onJumpToSource,
+  onJumpStat,
   showRequiredFields,
   flashDraftId,
   setFlashDraftId,
   scrollRef,
   providerToRoute,
+  hoveredDraft,
+  pinnedDraft,
 }: {
   drafts: DraftRow[];
   setDrafts: React.Dispatch<React.SetStateAction<DraftRow[]>>;
@@ -1711,6 +1957,9 @@ function WorkingDrafts({
   readyCount: number;
   weakCount: number;
   oauthCount: number;
+  /** 2026-05-06: needs-review 和 missing-protocol stats 从底部 action-bar 迁到右上 toolbar
+   *  后,WorkingDrafts 也需要这两个值。父组件传入,避免组件内重复计算。 */
+  missingProviderCount: number;
   /**
    * v4.1 Stage 3 Phase D: backend 的 orphans 字段现支持两种形态:
    *   - string (老 schema,单纯 candidate id)
@@ -1722,6 +1971,9 @@ function WorkingDrafts({
   onHoverDraft: (idx: number | null) => void;
   /** 点击 draft "jump to source" → 持久高亮并 scroll into view (同 idx 切换关) */
   onJumpToSource: (idx: number) => void;
+  /** 2026-05-06: 右上 toolbar 的 stat (needs review / missing protocol) 点击跳转;
+   *  实际的 scroll-to-first 逻辑由父组件实现 (复用 scrollToFirstDraft)。 */
+  onJumpStat?: (kind: 'weak' | 'missing-provider') => void;
   /** v4.1 Stage 13.1+: IMPORT 拦截后,缺 provider 的 selected draft 显示 Required 提示 */
   showRequiredFields: boolean;
   /** IMPORT 拦截后闪烁的 draft id(2s 动画) */
@@ -1736,6 +1988,9 @@ function WorkingDrafts({
    *  changeProtocols pulls from this when user picks a provider chip with
    *  empty base_url; resolved URL = base_url + version. */
   providerToRoute: Map<string, ProviderRoute>;
+  /** 2026-05-06: 双向联动 state — pass through 给 DraftRowCard (isHovered/isPinned class) */
+  hoveredDraft: number | null;
+  pinnedDraft: number | null;
 }) {
   function toggle(idx: number) {
     setDrafts((prev) => prev.map((d, i) => i === idx ? { ...d, selected: !d.selected } : d));
@@ -1920,44 +2175,47 @@ function WorkingDrafts({
 
   return (
     <>
-      {/* Provider suggestion banner — Stage 14+: 左侧加 X 可关闭 */}
-      {showSuggest && suggestEntry && (
-        <div className="suggest-bar px-5 py-2.5 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-2 min-w-0 text-[13px]">
-            <button
-              type="button"
-              className="suggest-close"
-              onClick={() => setDismissedSuggestKey(suggestKey)}
-              title="Dismiss this suggestion"
-              aria-label="Dismiss"
-            >
-              ×
-            </button>
-            <span className="font-mono" style={{ color: 'var(--primary)', fontWeight: 700 }}>{suggestPct}%</span>
-            <span style={{ color: 'var(--foreground)' }}>of drafts look like</span>
-            <span className={`chip ${providerChipClassFromId(suggestEntry[0])}`}>
-              {suggestEntry[0].toUpperCase()}
-            </span>
-            <span style={{ color: 'var(--muted-foreground)' }}>— apply as protocol?</span>
-          </div>
-          <button
-            className="apply-btn"
-            onClick={() => applyProviderToAll(suggestEntry[0])}
-            title={`Fill protocol=${suggestEntry[0].toUpperCase()} on ${applyTargets.length} draft(s) that don't already have one`}
-          >
-            APPLY TO {applyTargets.length}
-          </button>
-        </div>
-      )}
+      {/* Provider suggestion banner — moved to UserImportPage 2026-05-06
+          (用户反馈: 需横跨左右两栏整页宽,故从右 pane 内提到 page-level)。
+          见 UserImportPage 内 showSuggestTop / applyProviderToAllTop。 */}
 
-      {/* Toolbar */}
+      {/* Toolbar — 2026-05-06: 合并旧右上 stats (ready/weak/OAuth) 与旧底部 stats
+          (ready / OAuth handoff / needs review / missing protocol),输出合并后的 4 项:
+          ready / OAuth / needs review / missing protocol。后两项可点击跳到首个匹配 draft
+          (从底部 action-bar 迁移过来的行为,见 onJumpStat prop)。
+          weak 维度并入 needs review (需复核) 一项。 */}
       <div className="toolbar px-5 py-2 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3 text-[12px] font-mono">
-          <span style={{ color: 'var(--muted-foreground)' }}><span className="font-bold" style={{ color: 'var(--foreground)' }}>{readyCount}</span> ready</span>
+          <span className="flex items-center gap-1"><span className="tier-dot tier-confirmed" /><span className="font-bold" style={{ color: 'var(--foreground)' }}>{readyCount}</span><span style={{ color: 'var(--muted-foreground)' }}>ready</span></span>
           <span style={{ color: 'var(--muted-foreground)' }}>·</span>
-          <span style={{ color: 'var(--muted-foreground)' }}><span className="font-bold" style={{ color: '#ca8a04' }}>{weakCount}</span> weak</span>
+          <span className="flex items-center gap-1"><span className="tier-dot tier-suggested" /><span className="font-bold" style={{ color: 'var(--foreground)' }}>{oauthCount}</span><span style={{ color: 'var(--muted-foreground)' }}>OAuth</span></span>
           <span style={{ color: 'var(--muted-foreground)' }}>·</span>
-          <span style={{ color: 'var(--muted-foreground)' }}><span className="font-bold" style={{ color: '#38bdf8' }}>{oauthCount}</span> OAuth</span>
+          <button
+            type="button"
+            className="stat-clickable flex items-center gap-1"
+            onClick={() => onJumpStat?.('weak')}
+            disabled={weakCount === 0}
+            title={weakCount === 0 ? undefined : 'Jump to first needs-review draft'}
+          >
+            <span className="tier-dot tier-warn" />
+            <span className="font-bold" style={{ color: 'var(--foreground)' }}>{weakCount}</span>
+            <span style={{ color: 'var(--muted-foreground)' }}>needs review</span>
+          </button>
+          {missingProviderCount > 0 && (
+            <>
+              <span style={{ color: 'var(--muted-foreground)' }}>·</span>
+              <button
+                type="button"
+                className="stat-clickable flex items-center gap-1"
+                onClick={() => onJumpStat?.('missing-provider')}
+                title="Jump to first missing-protocol draft"
+              >
+                <span className="tier-dot" style={{ background: '#f87171' }} />
+                <span className="font-bold" style={{ color: '#fca5a5' }}>{missingProviderCount}</span>
+                <span style={{ color: '#fca5a5' }}>missing protocol</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -1977,6 +2235,8 @@ function WorkingDrafts({
           onJumpToSource,
           showRequiredFields,
           flashDraftId,
+          hoveredDraft,
+          pinnedDraft,
         })}
         {drafts.length === 0 && (
           <div className="text-[12px] font-mono text-center py-6" style={{ color: 'var(--muted-foreground)' }}>
@@ -2026,6 +2286,8 @@ function renderGroupedDrafts({
   onJumpToSource,
   showRequiredFields,
   flashDraftId,
+  hoveredDraft,
+  pinnedDraft,
 }: {
   drafts: DraftRow[];
   groups: EndpointGroup[];
@@ -2040,6 +2302,9 @@ function renderGroupedDrafts({
   onJumpToSource: (idx: number) => void;
   showRequiredFields: boolean;
   flashDraftId: string | null;
+  /** 2026-05-06: 联动 state — 用于决定 DraftRowCard 的 isHovered/isPinned class */
+  hoveredDraft: number | null;
+  pinnedDraft: number | null;
 }) {
   // 若 group 为空或只剩 1 group 且只 1 draft,flat 渲染更紧凑 (避免冗余 header)
   const useGrouped = groups.length >= 2 || (groups.length === 1 && groups[0].member_draft_ids.length >= 2);
@@ -2065,6 +2330,8 @@ function renderGroupedDrafts({
         onJumpToSource={() => onJumpToSource(idx)}
         showRequiredFields={showRequiredFields}
         flash={flashDraftId === d.record.id}
+        isHovered={hoveredDraft === idx}
+        isPinned={pinnedDraft === idx}
       />
     );
   };
@@ -2073,35 +2340,46 @@ function renderGroupedDrafts({
     return <div className="space-y-1.5">{drafts.map(renderDraft)}</div>;
   }
 
-  // 计算哪些 draft 已被 group 覆盖,剩下的(理论上应为空,但兜底)归"其他"
+  // 2026-05-06 v13 (用户反馈): groups + orphans 按 source line_range[0] 升序交错渲染,
+  // 不再把 orphans (含 UNKNOWN draft) 统一甩到最末。原来"groups 全在前 + Ungrouped 全
+  // 在后"破坏了 source-line 顺序,导致 sync 的 anchor 表非单调,中段会出现"右下拉左上拉"。
+  // 改为按起始行号合并排序后,左右两侧顺序天然一致,sync 不需 monotonic-clamp 兜底。
   const coveredIds = new Set<string>();
   for (const g of groups) for (const id of g.member_draft_ids) coveredIds.add(id);
   const orphanDrafts = drafts.filter((d) => !coveredIds.has(d.record.id));
 
+  type Unit =
+    | { kind: 'group'; key: string; group: EndpointGroup; members: DraftRow[]; anchorLine: number }
+    | { kind: 'orphan'; key: string; draft: DraftRow; anchorLine: number };
+  const units: Unit[] = [];
+  for (const g of groups) {
+    const members = g.member_draft_ids
+      .map((id) => drafts.find((d) => d.record.id === id))
+      .filter((d): d is DraftRow => Boolean(d));
+    if (members.length === 0) continue;
+    const anchorLine = Math.min(...members.map((m) => m.record.line_range[0]));
+    units.push({ kind: 'group', key: `g-${g.id}`, group: g, members, anchorLine });
+  }
+  for (const d of orphanDrafts) {
+    units.push({ kind: 'orphan', key: `o-${d.record.id}`, draft: d, anchorLine: d.record.line_range[0] });
+  }
+  units.sort((a, b) => a.anchorLine - b.anchorLine);
+
   return (
     <div className="space-y-3">
-      {groups.map((g) => {
-        const members = g.member_draft_ids
-          .map((id) => drafts.find((d) => d.record.id === id))
-          .filter((d): d is DraftRow => Boolean(d));
-        if (members.length === 0) return null;
-        return (
-          <div key={g.id} className="endpoint-group">
-            <EndpointGroupHeader group={g} />
-            <div className="space-y-1.5 pl-3 border-l border-dashed" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-              {members.map(renderDraft)}
+      {units.map((u) => {
+        if (u.kind === 'group') {
+          return (
+            <div key={u.key} className="endpoint-group">
+              <EndpointGroupHeader group={u.group} />
+              <div className="space-y-1.5 pl-3 border-l border-dashed" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                {u.members.map(renderDraft)}
+              </div>
             </div>
-          </div>
-        );
+          );
+        }
+        return <div key={u.key} className="space-y-1.5">{renderDraft(u.draft)}</div>;
       })}
-      {orphanDrafts.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="text-[10px] font-mono uppercase tracking-widest px-1" style={{ color: 'var(--muted-foreground)' }}>
-            Ungrouped
-          </div>
-          {orphanDrafts.map(renderDraft)}
-        </div>
-      )}
     </div>
   );
 }
@@ -2140,6 +2418,8 @@ function DraftRowCard({
   onJumpToSource,
   showRequiredFields,
   flash,
+  isHovered,
+  isPinned,
 }: {
   row: DraftRow;
   idx: number;
@@ -2162,6 +2442,12 @@ function DraftRowCard({
   showRequiredFields: boolean;
   /** 当前 draft 被 flash 动画提醒(IMPORT 拦截后 scroll 到首个时触发) */
   flash: boolean;
+  /** 2026-05-06: hoveredDraft === idx 时为 true。无论从右侧鼠标还是左侧源行 hover
+   *  触发,卡片都加 .draft-row-soft-hover 显示外发光,与左侧 box glow 同步联动。 */
+  isHovered: boolean;
+  /** 2026-05-06: pinnedDraft === idx 时为 true。卡片加 .draft-row-pinned 把 border 加粗,
+   *  与左侧的 boxed (无 glow) 视觉同源。 */
+  isPinned: boolean;
 }) {
   const { record: r } = row;
   const effectiveType = computeEffectiveType(row);
@@ -2187,6 +2473,8 @@ function DraftRowCard({
     row.isOAuth && 'oauth',
     hasRequiredIssue && 'missing-provider',
     flash && 'flash-warn',
+    isHovered && 'draft-row-soft-hover',  // 2026-05-06: 无论左右触发都 glow
+    isPinned && 'draft-row-pinned',        // 2026-05-06: pin 时 border 加粗
   ].filter(Boolean).join(' ');
 
   // UI-03: provider_hint 可能是 "unknown oauth" 多词,chip 只取首 token 避免视觉拥挤
@@ -2234,18 +2522,17 @@ function DraftRowCard({
         <span
           className="text-[14px] font-mono font-bold truncate flex-1 cursor-pointer self-stretch -my-[0.625rem] py-[0.625rem] flex items-center min-w-0"
           style={{ color: 'var(--muted-foreground)' }}
-          onClick={() => {
-            onJumpToSource();
-            onToggleExpand();
-          }}
-          title={row.expanded ? 'Collapse & jump to source' : 'Expand & jump to source'}
+          /* 2026-05-06 (用户反馈): 标题点击只做 jump to source,不再 toggle 展开/折叠。
+             展开/折叠改用右侧 chevron 按钮专属触发,避免误操作 (用户反馈"想跳源行结果意外
+             折叠了卡片")。 */
+          onClick={onJumpToSource}
+          title="Jump to source"
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               onJumpToSource();
-              onToggleExpand();
             }
           }}
         >
@@ -2664,12 +2951,21 @@ function statusHlClass(d: DraftRow): string {
 }
 
 /**
- * 2026-04-23 用户反馈第五轮:背景色和色条解耦,各自独立由不同动作触发。
- *   - **勾选 (selected)** → 显示背景色 bg-{state}(标记"会被导入")
- *   - **点击 (pinned)**   → 显示 3px 色条 hl-{state}(标记"用户当前关注")
- *   - 两者独立,同时勾+点 → bg + bar 双显
- * state(KEY/OAUTH/WEAK/FAILED)按 statusHlClass(draft) 决定,RGB+α 与右侧
- * .draft-row.{state} 1:1 对齐。
+ * 2026-05-06 重构 v3 (wrapper 模型):
+ *   左侧源行的 pin / hover 反馈不再是 per-line box-shadow,改为 wrapper 元素 (.src-line-group)
+ *   包整个 draft range,wrapper 上加 border (pin) / glow (hover) / 两者 (pin+hover)。
+ *   per-line box-shadow 的"内行 glow 渗漏"问题在 wrapper 模型下根本不存在。
+ *
+ *   computeLineClass 现在只决定 src-line 自身的 hl-{state} 单 3px 竖线 (基底,
+ *   非 pin/hover 状态显示)。pin/hover 触发的视觉由 SourcePane 的 wrapper 元素负责,
+ *   见下方 SourcePane 渲染逻辑。
+ *
+ * 规则 (与右侧 .draft-row 一致):
+ *   - hover only        → glow,无 border
+ *   - pin only          → border,无 glow
+ *   - pin + hover       → border + glow (叠加)
+ *
+ * state (KEY/OAUTH/WEAK/FAILED) 仍由 statusHlClass(draft) 决定。
  */
 function computeLineClass(
   lineIdx: number,
@@ -2679,33 +2975,29 @@ function computeLineClass(
 ): string {
   const classes: string[] = ['src-line'];
 
-  // 背景色:只在被勾选的 draft 覆盖本行时显示。
-  // 多个 selected drafts 可能 overlap,取第一个的状态决定 bg(实际场景里 overlap 罕见)
-  const coveringSelected = drafts.find((d) => {
-    if (!d.selected) return false;
-    const [s, e] = d.record.line_range;
-    return lineIdx >= s && lineIdx <= e;
-  });
-  if (coveringSelected) {
-    // bg-key / bg-oauth / bg-weak / bg-failed
-    classes.push(`bg-${statusHlClass(coveringSelected).slice(3)}`);
+  // 单竖线 state owner:优先 pinned > hovered > 第一个覆盖 (overlap 罕见)。
+  // 注意:这里只决定本行单线的 state 色;pin/hover 触发的 wrapper 视觉由 SourcePane 处理。
+  let stateOwner: DraftRow | null = null;
+  if (pinnedIdx !== null && pinnedIdx < drafts.length) {
+    const p = drafts[pinnedIdx];
+    const [s, e] = p.record.line_range;
+    if (lineIdx >= s && lineIdx <= e) stateOwner = p;
+  }
+  if (!stateOwner && hoveredIdx !== null && hoveredIdx < drafts.length) {
+    const h = drafts[hoveredIdx];
+    const [s, e] = h.record.line_range;
+    if (lineIdx >= s && lineIdx <= e) stateOwner = h;
+  }
+  if (!stateOwner) {
+    stateOwner = drafts.find((d) => {
+      const [s, e] = d.record.line_range;
+      return lineIdx >= s && lineIdx <= e;
+    }) ?? null;
+  }
+  if (stateOwner) {
+    classes.push(statusHlClass(stateOwner)); // hl-key / hl-oauth / hl-weak / hl-failed
   }
 
-  // 色条:只在用户点击 pinned 的 draft 覆盖本行时显示
-  if (pinnedIdx !== null && pinnedIdx < drafts.length) {
-    const pinned = drafts[pinnedIdx];
-    const [s, e] = pinned.record.line_range;
-    if (lineIdx >= s && lineIdx <= e) {
-      classes.push(statusHlClass(pinned)); // hl-key / hl-oauth / hl-weak / hl-failed
-    }
-  }
-  // hover overlay(中性白,临时,任一时刻最高优先级)
-  if (hoveredIdx !== null && hoveredIdx !== pinnedIdx && hoveredIdx < drafts.length) {
-    const [s, e] = drafts[hoveredIdx].record.line_range;
-    if (lineIdx >= s && lineIdx <= e) {
-      classes.push('src-line-hover');
-    }
-  }
   return classes.join(' ');
 }
 
@@ -2715,6 +3007,7 @@ function SourcePane({
   hoveredDraft,
   pinnedDraft,
   onLineClick,
+  onLineHover,
 }: {
   text: string;
   drafts: DraftRow[];
@@ -2722,14 +3015,19 @@ function SourcePane({
   pinnedDraft: number | null;
   /** v4.2: 点击一行 → 查该行所属 draft 索引 (未找到传 null),parent 决定 toggle pin 还是清空 */
   onLineClick?: (draftIdx: number | null) => void;
+  /** 2026-05-06: 鼠标 hover 一行 → 找出该行所属 draft idx,parent 用它 setHoveredDraft,
+   *  从而联动右侧卡片的外发光 (左→右联动方向)。null = 离开/不属于任何 draft。 */
+  onLineHover?: (draftIdx: number | null) => void;
 }) {
   const lines = text.split('\n');
   const pinnedRef = useRef<HTMLSpanElement | null>(null);
 
   // 当 pinnedDraft 变化时,scroll 到对应首行 (click-jump always-on)
+  // 2026-05-06 (用户反馈): 'auto' 即时滚动,不用 'smooth';原因同 SourcePane onLineClick
+  // 处的注释 —— smooth 会通过 scroll-sync 反弹回另一侧,造成视觉闪烁。
   useEffect(() => {
     if (pinnedDraft !== null && pinnedRef.current) {
-      pinnedRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      pinnedRef.current.scrollIntoView({ behavior: 'auto', block: 'center' });
     }
   }, [pinnedDraft]);
 
@@ -2750,26 +3048,92 @@ function SourcePane({
     onLineClick(hit >= 0 ? hit : null);
   }
 
-  return (
-    <pre className="source-pre">
-      {lines.map((line, i) => {
-        const cls = computeLineClass(i, drafts, hoveredDraft, pinnedDraft);
-        const isPinnedStart = i === pinnedStartLine;
-        return (
-          <span
-            key={i}
-            ref={isPinnedStart ? pinnedRef : undefined}
-            className={cls}
-            data-line={i}
-            onClick={onLineClick ? (e) => handleLineClick(e, i) : undefined}
-          >
-            {line || ' '}
-            {'\n'}
-          </span>
-        );
-      })}
-    </pre>
-  );
+  function findDraftIdx(lineIdx: number): number | null {
+    const hit = drafts.findIndex((d) => {
+      const [s, ee] = d.record.line_range;
+      return lineIdx >= s && lineIdx <= ee;
+    });
+    return hit >= 0 ? hit : null;
+  }
+
+  // 2026-05-06 wrapper 模型: 任何 draft 处于 pinned 或 hovered 状态时,把它的 line_range
+  // 内所有 line 包在一个 .src-line-group <span> 内。group 上挂 border (pin) / glow (hover)
+  // / 两者 (pin+hover)。包内 src-line 干净 (无 hl-{state} bar,避免框 + 内行单线的双重视觉)。
+  // 非 pin 非 hover 的 draft 行依然走 bare span + computeLineClass 的单线模式。
+  const items: React.ReactNode[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const draftIdx = findDraftIdx(i);
+    const isInWrapper =
+      draftIdx !== null && (draftIdx === pinnedDraft || draftIdx === hoveredDraft);
+
+    if (!isInWrapper) {
+      const cls = computeLineClass(i, drafts, hoveredDraft, pinnedDraft);
+      const isPinnedStart = i === pinnedStartLine;
+      items.push(
+        <span
+          key={i}
+          ref={isPinnedStart ? pinnedRef : undefined}
+          className={cls}
+          data-line={i}
+          onClick={onLineClick ? (e) => handleLineClick(e, i) : undefined}
+          onMouseEnter={onLineHover ? () => onLineHover(draftIdx) : undefined}
+          onMouseLeave={onLineHover ? () => onLineHover(null) : undefined}
+        >
+          {lines[i] || ' '}
+          {'\n'}
+        </span>,
+      );
+      i++;
+      continue;
+    }
+
+    // wrapper case
+    const draft = drafts[draftIdx!];
+    const stateClass = statusHlClass(draft); // hl-key / hl-oauth / hl-weak / hl-failed
+    const [s, e] = draft.record.line_range;
+    const groupEnd = Math.min(e, lines.length - 1);
+    const isPinned = draftIdx === pinnedDraft;
+    const isHovered = draftIdx === hoveredDraft;
+    const groupCls = [
+      'src-line-group',
+      stateClass, // 驱动 --state-color
+      isPinned && 'src-line-group-pinned',
+      isHovered && 'src-line-group-hover',
+    ].filter(Boolean).join(' ');
+    const groupStartIdx = i;
+    const innerLines: React.ReactNode[] = [];
+    for (let j = i; j <= groupEnd; j++) {
+      // 2026-05-06 (用户反馈): pin/hover 时,行内的 hl-{state} 单 3px 竖线也要保留
+      // (与未 pin/hover 状态视觉一致,wrapper 的 border/glow 是"额外"反馈,不替代基底 bar)。
+      innerLines.push(
+        <span
+          key={j}
+          className={`src-line ${stateClass}`}
+          data-line={j}
+          onClick={onLineClick ? (ev) => handleLineClick(ev, j) : undefined}
+        >
+          {lines[j] || ' '}
+          {'\n'}
+        </span>,
+      );
+    }
+    items.push(
+      <span
+        key={`g${groupStartIdx}`}
+        ref={groupStartIdx === pinnedStartLine ? pinnedRef : undefined}
+        className={groupCls}
+        data-draft-idx={draftIdx}
+        onMouseEnter={onLineHover ? () => onLineHover(draftIdx) : undefined}
+        onMouseLeave={onLineHover ? () => onLineHover(null) : undefined}
+      >
+        {innerLines}
+      </span>,
+    );
+    i = groupEnd + 1;
+  }
+
+  return <pre className="source-pre">{items}</pre>;
 }
 
 // ── Confirm modal (reusable) ─────────────────────────────────────────────
@@ -3326,7 +3690,7 @@ const IMPORT_CSS = `
    feature, not a decoration (ref: .claude/CLAUDE.md "UI 改版不得丢失既有功能"). */
 /* Stage 14+: 用 inset box-shadow 代替 border-left 实现左侧色条,零 layout 影响
    (border-left:2px 透明也占 2px 宽度,会让 pre 里的文字比 textarea 右移 2px) */
-.src-line{display:block;padding:0 0.5rem;margin-left:-0.5rem;transition:background-color 120ms ease,box-shadow 120ms ease}
+.src-line{display:block;padding:0 0.5rem;margin-left:-0.5rem;position:relative;transition:background-color 120ms ease,box-shadow 120ms ease}
 .src-line-hover{background:rgba(255,255,255,0.06);box-shadow:inset 2px 0 0 rgba(255,255,255,0.3)}
 /* 2026-04-23 用户反馈第五轮:bg(背景色)和 bar(色条)解耦,各自由不同动作触发:
      - 勾选 (selected) → bg-{state}  : 仅显示**背景色**,RGB+α 完全等于 .draft-row.{state} 的 bg
@@ -3340,18 +3704,56 @@ const IMPORT_CSS = `
    - 左侧 src-line bg 加深(蓝/红 0.10、黄 0.06、金 0.06),让源文本里被勾选的行
      一眼可见,作为选中范围的"明确标识"
    色相(RGB tuple)仍跟右侧卡片状态色同源,只是 α 各自调到适合自己角色的强度。 */
-.src-line.bg-key   {background:rgba(250, 204, 21,0.06)}
-.src-line.bg-weak  {background:rgba(234,179,8,0.06)}
-.src-line.bg-oauth {background:rgba(96,165,250,0.10)}
-.src-line.bg-failed{background:rgba(248,113,113,0.10)}
+/* === 3px 单竖线 (任意 draft-linked 行的默认基底) ===
+   2026-05-06 v2: 同时定义 --state-color CSS var,供 .src-line-boxed 的框边复用。
+   未 pin/未 hover 时,行只有这条单线 (基底常驻);pin/hover 时被 .src-line-boxed
+   的高优先级规则覆盖为框边。 */
+.src-line.hl-key   {--state-color:rgba(250, 204, 21,0.65); box-shadow:inset 3px 0 0 rgba(250, 204, 21,0.55)}
+.src-line.hl-weak  {--state-color:#fde047;                  box-shadow:inset 3px 0 0 #fde047}
+.src-line.hl-oauth {--state-color:rgba(96,165,250,0.65);    box-shadow:inset 3px 0 0 rgba(96,165,250,0.55)}
+.src-line.hl-failed{--state-color:rgba(248,113,113,0.7);    box-shadow:inset 3px 0 0 rgba(248,113,113,0.65)}
 
-/* === 3px 色条(仅在点击时) === */
-.src-line.hl-key   {box-shadow:inset 3px 0 0 rgba(250, 204, 21,0.55)}
-.src-line.hl-weak  {box-shadow:inset 3px 0 0 #fde047}
-.src-line.hl-oauth {box-shadow:inset 3px 0 0 rgba(96,165,250,0.55)}
-.src-line.hl-failed{box-shadow:inset 3px 0 0 rgba(248,113,113,0.65)}
+/* === src-line-group (wrapper 模型 v3, 2026-05-06) ===
+   多行属于同一 pinned/hovered draft → 包在一个 .src-line-group <span> 里,
+   border (pin) / glow (hover) 加在 wrapper 上而非每个 src-line,从根源上避免
+   per-line box-shadow 朝中间行渗漏。包内 src-line 不再带 hl-{state} 单线
+   (wrapper 的 border/glow 已经表达 state),保持视觉简洁。
 
-/* === hover overlay(中性白色,临时,所有状态之上) === */
+   规则 (与右侧 .draft-row 一致):
+     - hover only:    glow,无 border
+     - pin only:      border (2px inset),无 glow
+     - pin + hover:   border + glow (叠加,自然多 box-shadow 共存)
+
+   state 色由 .src-line-group.hl-{state} 定义 --state-color CSS var,
+   pin/hover 类的 box-shadow 引用 var,做到一处定色多处复用。 */
+.src-line-group {
+  display: block;
+  border-radius: 6px;
+  position: relative;
+}
+.src-line-group.hl-key   {--state-color:rgba(250, 204, 21,0.65)}
+.src-line-group.hl-weak  {--state-color:#fde047}
+.src-line-group.hl-oauth {--state-color:rgba(96,165,250,0.65)}
+.src-line-group.hl-failed{--state-color:rgba(248,113,113,0.7)}
+
+/* pin only: 2px inset border (state 色),无 glow */
+.src-line-group.src-line-group-pinned:not(.src-line-group-hover){
+  box-shadow: inset 0 0 0 2px var(--state-color);
+}
+/* hover only: 外发光,无 border */
+.src-line-group.src-line-group-hover:not(.src-line-group-pinned){
+  box-shadow: 0 0 8px 0 var(--state-color);
+}
+/* pin + hover: 同时叠加 (border + glow) */
+.src-line-group.src-line-group-pinned.src-line-group-hover{
+  box-shadow: inset 0 0 0 2px var(--state-color), 0 0 8px 0 var(--state-color);
+}
+
+/* === 旧 bg-{state} / src-line-hover 保留但不再被 push (防外部引用) === */
+.src-line.bg-key   {background:rgba(250, 204, 21,0.04)}
+.src-line.bg-weak  {background:rgba(234,179,8,0.04)}
+.src-line.bg-oauth {background:rgba(96,165,250,0.06)}
+.src-line.bg-failed{background:rgba(248,113,113,0.06)}
 .src-line.src-line-hover{background:rgba(255,255,255,0.06);box-shadow:inset 3px 0 0 rgba(255,255,255,0.3)}
 
 /* ── Empty-state card ─────────────────────────────────────────── */
@@ -3440,17 +3842,32 @@ const IMPORT_CSS = `
 /* Inset bottom box-shadow + outer border = two adjacent 1px horizontal
    lines at the card bottom, mirroring master's "double-line" table
    ending (last-row border stacked with card outer border). */
-.draft-row{background:var(--imp-surface-3);border:1px solid rgba(255,255,255,0.05);border-radius:6px;box-shadow:inset 0 -1px 0 0 rgba(255,255,255,0.05);transition:all 150ms ease;overflow:visible;position:relative}
+.draft-row{background:var(--imp-surface-3);border:1px solid rgba(255,255,255,0.05);border-radius:6px;box-shadow:inset 0 -1px 0 0 rgba(255,255,255,0.05);transition:all 150ms ease;overflow:visible;position:relative;--state-color:rgba(255,255,255,0.4)}
 .draft-row:hover{border-color:rgba(255,255,255,0.14)}
-.draft-row.selected{border-color:rgba(250, 204, 21,0.22);box-shadow:0 0 0 1px rgba(250, 204, 21,0.06),inset 0 -1px 0 0 rgba(250, 204, 21,0.18)}
+.draft-row.selected{border-color:rgba(250, 204, 21,0.22);box-shadow:0 0 0 1px rgba(250, 204, 21,0.06),inset 0 -1px 0 0 rgba(250, 204, 21,0.18);--state-color:rgba(250, 204, 21,0.65)}
 /* 2026-04-23 第七轮:右侧卡片 bg 回滚到原浅色(weak 0.03 / oauth 0.04 / failed 0.05 /
    missing-provider 0.04)。用户决策:右侧弱化保持(卡片不抢眼),左侧 src-line bg 单独加深
    (源文本要让用户一眼能看到选中范围)。不再追求左右 1:1 同色,左右各自承担不同视觉职责。 */
-.draft-row.weak{border-color:#fde047;border-style:dashed;background:rgba(234,179,8,0.03)}
-.draft-row.oauth{border-color:rgba(96,165,250,0.35);background:rgba(96,165,250,0.04)}
-.draft-row.failed{border-color:rgba(248,113,113,0.4);background:rgba(248,113,113,0.05);box-shadow:0 0 0 1px rgba(248,113,113,0.06),inset 0 -1px 0 0 rgba(248,113,113,0.3)}
+.draft-row.weak{border-color:#fde047;border-style:dashed;background:rgba(234,179,8,0.03);--state-color:#fde047}
+.draft-row.oauth{border-color:rgba(96,165,250,0.35);background:rgba(96,165,250,0.04);--state-color:rgba(96,165,250,0.65)}
+.draft-row.failed{border-color:rgba(248,113,113,0.4);background:rgba(248,113,113,0.05);box-shadow:0 0 0 1px rgba(248,113,113,0.06),inset 0 -1px 0 0 rgba(248,113,113,0.3);--state-color:rgba(248,113,113,0.7)}
 /* Stage 7+ 规则 1: selected KEY draft 缺 Provider(必填),红框 + 淡红底提示导入会被阻止 */
-.draft-row.missing-provider{border-color:rgba(248,113,113,0.45);background:rgba(248,113,113,0.04);box-shadow:0 0 0 1px rgba(248,113,113,0.08),inset 0 -1px 0 0 rgba(248,113,113,0.3)}
+.draft-row.missing-provider{border-color:rgba(248,113,113,0.45);background:rgba(248,113,113,0.04);box-shadow:0 0 0 1px rgba(248,113,113,0.08),inset 0 -1px 0 0 rgba(248,113,113,0.3);--state-color:rgba(248,113,113,0.7)}
+
+/* === 2026-05-06: 双向联动视觉 ===
+   .draft-row-soft-hover: hover 状态(无论左侧源行触发还是右侧鼠标触发)→ 卡片外发光
+     - 强度与左侧 src-line-hover-glow 大致同源 (8px blur, state 色)
+     - 与现有 .draft-row.selected 等的 box-shadow 共存:多 shadow 列表,glow 在最后一段
+   .draft-row-pinned: pin 状态(左右都按 pinnedDraft === idx 命中)→ border 加粗
+     - border-width 从 1px → 2px,与左侧 .src-line-boxed 的"框框"语义对齐 */
+.draft-row.draft-row-soft-hover{box-shadow:0 0 8px 0 var(--state-color), inset 0 -1px 0 0 rgba(255,255,255,0.05)}
+.draft-row.draft-row-soft-hover.selected{box-shadow:0 0 8px 0 var(--state-color), 0 0 0 1px rgba(250, 204, 21,0.06), inset 0 -1px 0 0 rgba(250, 204, 21,0.18)}
+.draft-row.draft-row-soft-hover.failed,
+.draft-row.draft-row-soft-hover.missing-provider{box-shadow:0 0 8px 0 var(--state-color), 0 0 0 1px rgba(248,113,113,0.08), inset 0 -1px 0 0 rgba(248,113,113,0.3)}
+/* 2026-05-06 (用户反馈): pin 不仅加粗,也要"亮一点",和左侧 src-line-group-pinned
+   的 inset 2px var(--state-color) 视觉同源。直接用 state-color 覆盖原 border-color
+   (selected 0.22 → 0.65,oauth/failed 同 var,加粗后更显眼)。 */
+.draft-row.draft-row-pinned{border-width:2px;border-color:var(--state-color)}
 /* Stage 13.1+: IMPORT 拦截时在被拦 draft 上闪烁(2s 2 个回合),注意焦点落在这一条 */
 .draft-row.flash-warn{animation:draft-flash 1s ease-in-out 2}
 @keyframes draft-flash{
@@ -3650,8 +4067,11 @@ const IMPORT_CSS = `
    Import commit) carry heavier consequences than modal Save / Unlock,
    so we quiet them to the "in-use / chart accent" dark-yellow family
    already in use across the app. */
-.apply-btn{font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing: 0.05em;text-transform:uppercase;padding:6px 10px;border-radius:4px;background:#ca8a04;color:#0b0b0b;border:1px solid rgba(202,138,4,0.7);box-shadow:0 0 0 1px rgba(202,138,4,0.18);cursor:pointer}
-.apply-btn:hover{background:#eab308;transform:translateY(-1px)}
+/* 2026-05-06 (用户反馈): apply-btn 不是主按钮,改成暗色调。
+   原 #ca8a04 实金底 + 黑字过于抢眼,banner 是 hint 提示而非主操作 (主操作是右下 IMPORT)。
+   改成: 透明底 + 金色边 + 金色文字,与 .btn-outline 一致的低调样式。 */
+.apply-btn{font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing: 0.05em;text-transform:uppercase;padding:6px 10px;border-radius:4px;background:transparent;color:rgba(250,204,21,0.75);border:1px solid rgba(250,204,21,0.3);cursor:pointer;transition:all 120ms ease}
+.apply-btn:hover{background:rgba(250,204,21,0.08);border-color:rgba(250,204,21,0.5);color:rgba(250,204,21,0.95)}
 
 /* .btn-primary-dim is now defined globally in src/index.css 2026-04-25
    so vault, import, and any other page can stack it on .btn-primary

@@ -102,24 +102,8 @@ function shortVkId(id: string): string {
   return `${id.slice(0, 6)}…${id.slice(-3)}`;
 }
 
-// Derive a human label for a usage-by-key row. Mirrors the rule used on
-// /user/usage-ledger so the same key surfaces with the same label across
-// pages: identity (email) wins over alias; raw `(oauth:)?session_<hex>`
-// collapses to `OAuth · <hex8>…` so unreadable hex never reaches the UI.
-function deriveKeyLabel(k: { alias?: string; identity?: string; virtual_key_id: string }): string {
-  if (k.identity && k.identity.trim()) return k.identity;
-  const oauthRe = /^(?:oauth:)?session_([a-f0-9]+)/i;
-  const aliasStr = (k.alias ?? '').trim();
-  const aliasOAuth = aliasStr.match(oauthRe);
-  if (aliasOAuth) return `OAuth · ${aliasOAuth[1].slice(0, 8)}…`;
-  if (aliasStr) return aliasStr;
-  const id = (k.virtual_key_id || '').trim();
-  if (!id) return 'unlabeled';
-  const idOAuth = id.match(oauthRe);
-  if (idOAuth) return `OAuth · ${idOAuth[1].slice(0, 8)}…`;
-  if (id.startsWith('personal:')) return id.slice('personal:'.length);
-  return id;
-}
+// deriveKeyLabel moved to /user/cost (2026-05-06) along with the
+// "Usage by key today" card. Overview no longer needs it.
 
 export default function UserOverviewPage() {
   const navigate = useNavigate();
@@ -196,27 +180,8 @@ export default function UserOverviewPage() {
     queryFn: () => usageApi.personalHourly(usageIdentity!, todayDate),
     enabled: !!usageIdentity,
   });
-  // Per-key recent breakdown drives "Recent usage by key" below the main
-  // chart. Auto-falls-through to the most recent active day when today
-  // has no usage yet (e.g., early morning, fresh install) instead of
-  // showing an empty card. Derived from usageTimeline so we don't need
-  // a second per-day query — when today is empty we walk the timeline
-  // backwards to find the latest day with non-zero usage. Independent
-  // query key + 60s refetch keeps the card live.
-  const activeDate = useMemo(() => {
-    const tl = usageTimeline.data ?? [];
-    for (let i = tl.length - 1; i >= 0; i--) {
-      if (tl[i].total_tokens > 0) return tl[i].date;
-    }
-    return todayDate;
-  }, [usageTimeline.data, todayDate]);
-  const isShowingToday = activeDate === todayDate;
-  const byKeyRecent = useQuery({
-    queryKey: ['user-overview-by-key-recent', usageIdentityKey, activeDate],
-    queryFn: () => usageApi.personalByKeyTotal(usageIdentity!, activeDate, activeDate),
-    enabled: !!usageIdentity,
-    refetchInterval: 60_000,
-  });
+  // Per-key recent breakdown ("Usage by key today") moved to /user/cost (2026-05-06).
+  // Overview no longer fetches user-overview-by-key-recent.
 
   const seats = rawSeats ?? [];
   const allKeys = rawKeys ?? [];
@@ -282,53 +247,7 @@ export default function UserOverviewPage() {
   const providerUsage = useMemo(() => buildProviderRows(usageProtocols.data ?? [], allKeys, totalTokens),
     [usageProtocols.data, allKeys, totalTokens]);
 
-  // "Usage by key today" — 4-segment bar per account aligned to
-  // Anthropic's prompt-caching tuple. Math: proxy's input_tokens already
-  // includes both cache buckets (anthropic.go totalInput()), so:
-  //   uncached = input - cached - creation
-  //   total    = uncached + creation + cached + output  (= input + output)
-  const todayKeyRows = useMemo(() => {
-    const data = (byKeyRecent.data ?? []).map((k) => ({ ...k, label: deriveKeyLabel(k) }));
-    const nonZero = data.filter((k) => k.total_tokens > 0);
-    const sorted = [...nonZero].sort((a, b) => b.total_tokens - a.total_tokens);
-    const top = sorted[0]?.total_tokens ?? 1;
-    const grand = sorted.reduce((s, k) => s + k.total_tokens, 0) || 1;
-    const grandReqs = sorted.reduce((s, k) => s + k.request_count, 0);
-    const grandCached = sorted.reduce((s, k) => s + (k.cached_input_tokens ?? 0), 0);
-    const grandCreation = sorted.reduce((s, k) => s + (k.cache_creation_input_tokens ?? 0), 0);
-    return {
-      rows: sorted.map((k) => {
-        const inputAll = k.input_tokens ?? 0;
-        const cached = k.cached_input_tokens ?? 0;
-        const creation = k.cache_creation_input_tokens ?? 0;
-        const cappedCached = Math.min(cached, inputAll);
-        const cappedCreation = Math.min(creation, Math.max(inputAll - cappedCached, 0));
-        const uncached = Math.max(inputAll - cappedCached - cappedCreation, 0);
-        const output = k.output_tokens ?? 0;
-        const denom = uncached + cappedCreation + cappedCached + output > 0
-          ? uncached + cappedCreation + cappedCached + output
-          : 1;
-        return {
-          ...k,
-          uncached,
-          creation: cappedCreation,
-          cached: cappedCached,
-          output,
-          uncachedPctOfRow: (uncached / denom) * 100,
-          creationPctOfRow: (cappedCreation / denom) * 100,
-          cachedPctOfRow:   (cappedCached / denom) * 100,
-          outputPctOfRow:   (output / denom) * 100,
-          barPct: (k.total_tokens / top) * 100,
-          sharePct: (k.total_tokens / grand) * 100,
-        };
-      }),
-      grandTotal: sorted.reduce((s, k) => s + k.total_tokens, 0),
-      grandCached,
-      grandCreation,
-      grandReqs,
-      keyCount: sorted.length,
-    };
-  }, [byKeyRecent.data]);
+  // todayKeyRows moved to /user/cost (2026-05-06).
 
   const uniqueOrgs = useMemo(() => {
     const s = new Set(activeSeats.map((x) => x.org_id));
@@ -886,150 +805,8 @@ export default function UserOverviewPage() {
           </div>
         </section>
 
-        {/* ── Usage by key today (live, per-account input/cache/output split) ──
-            Layout aligned to Token usage / Top providers pattern:
-              header (title + minimal subtitle, mb-3) → body → footer
-              divider (mt-4 pt-3 border-top) carrying the aggregate
-              metrics. Avoids the cramped header that was packing date +
-              4 aggregate numbers on one line. */}
-        <section className="card p-4" data-origin-name="Usage by key today">
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-            <div className="min-w-0">
-              <h3 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
-                {/* Live dot only when actually showing today — when we
-                    fell through to an earlier day, the data is no
-                    longer "live", so the pulsing indicator is dropped. */}
-                {isShowingToday && <span className="ov-live-dot" aria-hidden />}
-                {isShowingToday ? ' Usage by key today' : ' Recent usage by key'}
-              </h3>
-              <p className="text-[12px]" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
-                {activeDate}{isShowingToday ? '' : ' · no usage today yet'}
-              </p>
-            </div>
-            {todayKeyRows.keyCount > 0 && (
-              <div className="ov-legend">
-                <span className="ov-legend-item">
-                  <span className="ov-legend-dot" style={{ background: '#ca8a04' }} />
-                  uncached
-                </span>
-                <span className="ov-legend-item">
-                  <span className="ov-legend-dot" style={{ background: 'rgba(202,138,4,0.7)' }} />
-                  creation
-                </span>
-                <span className="ov-legend-item">
-                  <span className="ov-legend-dot" style={{ background: 'rgba(202,138,4,0.45)' }} />
-                  cached
-                </span>
-                <span className="ov-legend-item">
-                  <span className="ov-legend-dot" style={{ background: 'rgba(202,138,4,0.2)' }} />
-                  output
-                </span>
-              </div>
-            )}
-          </div>
-
-          {byKeyRecent.isLoading ? (
-            <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              Loading...
-            </div>
-          ) : todayKeyRows.rows.length === 0 ? (
-            <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              No usage recorded yet
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {todayKeyRows.rows.map((k) => (
-                <li key={k.virtual_key_id} className="ov-key-row">
-                  <span
-                    className="font-mono text-[11.5px] truncate"
-                    title={k.label}
-                    style={{ color: 'var(--foreground)' }}
-                  >
-                    {k.label}
-                  </span>
-                  <div
-                    className="ov-key-bar"
-                    title={`uncached ${fmtTok(k.uncached)} · creation ${fmtTok(k.creation)} · cached ${fmtTok(k.cached)} · output ${fmtTok(k.output)} · ${k.request_count.toLocaleString()} req`}
-                  >
-                    <div
-                      className="ov-key-bar-fill"
-                      style={{ width: `${Math.max(k.barPct, 0.5)}%` }}
-                    >
-                      <span className="seg-uncached" style={{ width: `${k.uncachedPctOfRow}%` }} />
-                      <span className="seg-creation" style={{ width: `${k.creationPctOfRow}%` }} />
-                      <span className="seg-cached"   style={{ width: `${k.cachedPctOfRow}%`   }} />
-                      <span className="seg-output"   style={{ width: `${k.outputPctOfRow}%`   }} />
-                    </div>
-                  </div>
-                  {/* Per-row breakdown — small colored marker before each value
-                      mirroring the bar segments. 0-valued buckets are hidden
-                      to avoid `0` noise on non-Anthropic rows (no cache buckets)
-                      or first-turn rows (no cached_read yet). Total + share%
-                      stay rightmost as the primary at-a-glance metric. */}
-                  <div className="ov-key-stats font-mono text-[11.5px] whitespace-nowrap">
-                    {k.uncached > 0 && (
-                      <span className="ov-stat" title="uncached">
-                        <span className="ov-stat-dot ov-stat-uncached" />{fmtTok(k.uncached)}
-                      </span>
-                    )}
-                    {k.creation > 0 && (
-                      <span className="ov-stat" title="cache_creation">
-                        <span className="ov-stat-dot ov-stat-creation" />{fmtTok(k.creation)}
-                      </span>
-                    )}
-                    {k.cached > 0 && (
-                      <span className="ov-stat" title="cache_read">
-                        <span className="ov-stat-dot ov-stat-cached" />{fmtTok(k.cached)}
-                      </span>
-                    )}
-                    {k.output > 0 && (
-                      <span className="ov-stat" title="output">
-                        <span className="ov-stat-dot ov-stat-output" />{fmtTok(k.output)}
-                      </span>
-                    )}
-                    <span className="ov-stat-total">
-                      <span style={{ color: 'var(--foreground)' }}>{fmtTok(k.total_tokens)}</span>
-                      <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
-                        {k.sharePct < 1 ? '<1%' : `${Math.round(k.sharePct)}%`}
-                      </span>
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {todayKeyRows.keyCount > 0 && (
-            <div
-              className="mt-4 pt-3 flex items-center justify-between text-[12px] font-mono flex-wrap gap-2"
-              style={{ borderTop: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
-            >
-              <span>
-                {todayKeyRows.keyCount} key{todayKeyRows.keyCount === 1 ? '' : 's'}
-                {' · '}
-                <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandTotal)}</span>
-                {' total'}
-                {todayKeyRows.grandCreation > 0 && (
-                  <>
-                    {' · '}
-                    <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandCreation)}</span>
-                    {' creation'}
-                  </>
-                )}
-                {todayKeyRows.grandCached > 0 && (
-                  <>
-                    {' · '}
-                    <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandCached)}</span>
-                    {' cached'}
-                  </>
-                )}
-                {' · '}
-                <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{todayKeyRows.grandReqs.toLocaleString()}</span>
-                {' req'}
-              </span>
-            </div>
-          )}
-        </section>
+        {/* "Usage by key today" 已移出到 /user/cost 页面 (2026-05-06)。
+            该页面在左侧导航 Insights 下,与 Usage 并列。 */}
 
         {/* ── Recent Team Keys ── */}
         <section className="card" data-origin-name="Recent Virtual Keys">
@@ -1553,103 +1330,5 @@ const OVERVIEW_CSS = `
   color: var(--foreground);
 }
 
-/* ── "Usage by key today" card — share-of-day bar with 4 gold-shade
- *    segments (uncached / cache_creation / cache_read / output). ── */
-.overview-page .ov-live-dot {
-  display: inline-block;
-  width: 7px; height: 7px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: #ca8a04;
-  box-shadow: 0 0 6px rgba(250, 204, 21, 0.6);
-  animation: ov-live-pulse 1.6s ease-in-out infinite;
-  vertical-align: middle;
-}
-@keyframes ov-live-pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.35; }
-}
-.overview-page .ov-legend {
-  display: inline-flex; align-items: center; gap: 1rem;
-  font-family: monospace;
-  font-size: 11.5px;
-  color: var(--muted-foreground);
-  flex-wrap: wrap;
-}
-.overview-page .ov-legend-item {
-  display: inline-flex; align-items: center; gap: 0.4rem;
-}
-.overview-page .ov-legend-dot {
-  width: 9px; height: 9px;
-  border-radius: 2px;
-  display: inline-block;
-  flex-shrink: 0;
-}
-.overview-page .ov-key-row {
-  display: grid;
-  grid-template-columns: minmax(140px, 260px) 1fr auto;
-  align-items: center;
-  gap: 0.75rem;
-}
-.overview-page .ov-key-stats {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.85rem;
-  color: var(--muted-foreground);
-  text-align: right;
-}
-.overview-page .ov-stat {
-  display: inline-flex;
-  align-items: center;
-}
-.overview-page .ov-stat-dot {
-  display: inline-block;
-  width: 7px; height: 7px;
-  border-radius: 2px;
-  margin-right: 5px;
-  flex-shrink: 0;
-}
-.overview-page .ov-stat-dot.ov-stat-uncached { background: #ca8a04; }
-.overview-page .ov-stat-dot.ov-stat-creation { background: rgba(202, 138, 4, 0.7); }
-.overview-page .ov-stat-dot.ov-stat-cached   { background: rgba(202, 138, 4, 0.45); }
-.overview-page .ov-stat-dot.ov-stat-output   { background: rgba(202, 138, 4, 0.2); }
-.overview-page .ov-stat-total {
-  margin-left: 0.35rem;
-  padding-left: 0.85rem;
-  border-left: 1px solid var(--border);
-}
-.overview-page .ov-key-bar {
-  position: relative;
-  height: 10px;
-  border-radius: 3px;
-  background: rgba(255,255,255,0.04);
-  overflow: hidden;
-}
-.overview-page .ov-key-bar > .ov-key-bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  height: 100%;
-  display: flex;
-  border-radius: 3px;
-  overflow: hidden;
-  transition: width 200ms ease;
-}
-.overview-page .ov-key-bar-fill > span {
-  display: block;
-  height: 100%;
-  transition: width 200ms ease;
-}
-.overview-page .ov-key-bar-fill > .seg-uncached {
-  background: #ca8a04;
-  box-shadow: 0 0 8px rgba(250, 204, 21, 0.3);
-}
-.overview-page .ov-key-bar-fill > .seg-creation {
-  background: rgba(202, 138, 4, 0.7);
-}
-.overview-page .ov-key-bar-fill > .seg-cached {
-  background: rgba(202, 138, 4, 0.45);
-}
-.overview-page .ov-key-bar-fill > .seg-output {
-  background: rgba(202, 138, 4, 0.2);
-}
+/* "Usage by key today" CSS moved to /user/cost (2026-05-06). */
 `;
