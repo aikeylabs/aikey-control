@@ -1,0 +1,27 @@
+# Build artifacts
+service/bin/
+web/dist/
+web/node_modules/
+
+# Go
+*.test
+*.out
+vendor/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Local config / secrets (never commit)
+.env
+.env.local
+*.pem
+*.key
+*.crt
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
