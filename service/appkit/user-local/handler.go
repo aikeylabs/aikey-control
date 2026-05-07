@@ -97,6 +97,12 @@ func NewHandler(cfg Config) http.Handler {
 	passThrough := func(h http.Handler) http.Handler { return h }
 
 	userHandlers.Register(mux, passThrough)
+	// Web-modal "Allow" → POST /api/user/hook/install (Hook coverage v1
+	// update 2026-05-07). Personal local-server always runs on the same
+	// machine as the user's terminal, so the route is unconditionally
+	// mounted here. Production gates by Mode at the master router; see
+	// aikey-control-master/service/internal/api/router.go.
+	userHandlers.RegisterHook(mux, passThrough)
 
 	// /accounts/me/* stubs — Personal has no orgs / seats / team-managed keys,
 	// but the SPA's My Account / Overview / Pending Keys pages still call

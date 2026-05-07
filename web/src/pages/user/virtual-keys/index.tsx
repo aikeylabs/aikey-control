@@ -21,6 +21,10 @@ import { deliveryApi, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/u
 import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
+import {
+  HookWireRcModal,
+  useHookWireRcModal,
+} from '@/shared/components/HookWireRcModal';
 import { copyText } from '@/shared/utils/clipboard';
 import { mapUseError } from '@/shared/utils/mapUseError';
 
@@ -88,6 +92,9 @@ export default function UserVirtualKeysPage() {
   // success / error states and invalidate the list cache so freshly active
   // / formerly active rows reflect the swap.
   const setHookReadiness = useHookReadinessStore((s) => s.setReadiness);
+  // Hook coverage v1 update 2026-05-07: auto-pop wire-rc modal on first
+  // mutation in this session that detects rc_wired=false (local edition only).
+  const wireRcModal = useHookWireRcModal();
   const useMutTeam = useMutation({
     mutationFn: (id: string) => vaultApi.use({ target: 'team', id }),
     onSuccess: (res) => {
@@ -98,7 +105,11 @@ export default function UserVirtualKeysPage() {
       // Hook coverage v1: feed the three hook-status fields into the
       // shared readiness store so <HookReadinessBanner> renders the
       // right CTA (or hides) based on the freshly observed state.
-      setHookReadiness(pickHookReadiness(res));
+      // eligible=true: virtual-keys "Use" is an explicit active-set
+      // event (X2).
+      const r = pickHookReadiness(res);
+      setHookReadiness(r);
+      wireRcModal.openIfNeeded(r, true);
       qc.invalidateQueries({ queryKey: ['my-keys'] });
     },
     onError: (err: unknown) => {
@@ -136,9 +147,12 @@ export default function UserVirtualKeysPage() {
       >
         {/* Hook readiness banner — shows after a vault mutation when the
             Web bridge couldn't (or didn't) wire the shell rc. Reads from
-            useHookReadinessStore which the mutation onSuccess populates. */}
+            useHookReadinessStore which the mutation onSuccess populates.
+            Update 2026-05-07: onEnableClick re-opens the wire-rc modal,
+            for users who dismissed the auto-pop. */}
         <div style={{ padding: '0 16px', marginTop: 12 }}>
-          <HookReadinessBanner />
+          <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
+          <HookWireRcModal open={wireRcModal.open} onClose={wireRcModal.close} />
         </div>
 
         {/* Filter bar */}

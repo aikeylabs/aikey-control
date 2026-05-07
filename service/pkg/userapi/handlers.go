@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/cli"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/hook"
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/intake"
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/vault"
 )
@@ -70,6 +71,11 @@ type Handlers struct {
 
 	// Import hosts the bulk-import parse/confirm/rules endpoints.
 	Import *intake.ImportHandlers
+
+	// Hook hosts the shell-hook rc-wiring endpoint (POST /api/user/hook/install).
+	// Only mounted on local-user / trial-full editions — see RegisterHook.
+	// Per 20260507-web-hook-rc-modal-自动注入.md.
+	Hook *hook.Handlers
 }
 
 // NewHandlers constructs the user-facing Handlers bundle. A nil cfg triggers
@@ -98,6 +104,7 @@ func NewHandlers(cfg *Config, logger *slog.Logger) *Handlers {
 		Vault:     vault.NewHandlers(store, bridge),
 		VaultCRUD: vault.NewCRUDHandlers(store, bridge),
 		Import:    &intake.ImportHandlers{Bridge: bridge, VKCache: vkCache},
+		Hook:      hook.NewHandlers(bridge, logger),
 	}
 }
 
@@ -159,4 +166,24 @@ func (h *Handlers) Register(mux *http.ServeMux, authMW func(http.Handler) http.H
 	mux.Handle("POST /api/user/import/confirm",
 		authMW(http.HandlerFunc(h.Store.RequireUnlock(h.Import.ConfirmHandler))))
 	mux.HandleFunc("GET /api/user/import/rules", h.Import.RulesHandler)
+}
+
+// RegisterHook mounts POST /api/user/hook/install behind authMW.
+//
+// **Edition guard**: callers MUST only invoke this on local-user /
+// trial-full editions (i.e., wherever the trial-server / local-server
+// process and the user's terminal share the same `~/.zshrc`).
+// Production multi-tenant deployments where the service runs on a
+// remote box must NOT call RegisterHook — writing the server's
+// dotfile would do nothing for the user's terminal and pollutes the
+// service host. The decision lives at the caller (serve.go) so the
+// edition check stays close to the rest of the deployment-mode logic.
+//
+// Per 20260507-web-hook-rc-modal-自动注入.md.
+func (h *Handlers) RegisterHook(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
+	if h.Hook == nil {
+		return
+	}
+	mux.Handle("POST /api/user/hook/install",
+		authMW(http.HandlerFunc(h.Hook.InstallHandler)))
 }

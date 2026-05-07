@@ -115,11 +115,52 @@ interface HookReadinessState {
   /** Most recent reading; null = no vault op observed yet this session. */
   readiness: HookReadiness | null;
   setReadiness: (r: HookReadiness) => void;
+
+  /**
+   * Whether the wire-rc modal has been shown (auto-popped or user-opened)
+   * this browser session. Used by the page handlers to limit auto-pop to
+   * the FIRST mutation that detects rc_wired=false — subsequent mutations
+   * fall back to the persistent banner (whose CTA can re-open the modal
+   * on demand).
+   *
+   * Persisted in sessionStorage under MODAL_SHOWN_KEY so a page reload
+   * during the same session doesn't re-pop the modal. Clears on browser
+   * session end (intentionally NOT localStorage — drift is rare but the
+   * modal is the cheapest fix path for it).
+   *
+   * Per 20260507-web-hook-rc-modal-自动注入.md §H4.
+   */
+  modalShownThisSession: boolean;
+  markModalShown: () => void;
+}
+
+const MODAL_SHOWN_KEY = 'aikey:hookWireRcModalShown';
+
+function readModalShown(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.sessionStorage.getItem(MODAL_SHOWN_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 export const useHookReadinessStore = create<HookReadinessState>()((set) => ({
   readiness: null,
   setReadiness: (r) => set({ readiness: r }),
+  modalShownThisSession: readModalShown(),
+  markModalShown: () => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.setItem(MODAL_SHOWN_KEY, '1');
+      } catch {
+        // sessionStorage unavailable (private mode, quota exceeded) — fall
+        // through to in-memory only. Worst case: modal can re-pop within
+        // this tab's lifetime, which is the prior behavior anyway.
+      }
+    }
+    set({ modalShownThisSession: true });
+  },
 }));
 
 /**

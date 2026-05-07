@@ -23,7 +23,20 @@ import { copyText } from '@/shared/utils/clipboard';
 
 const SESSION_DISMISS_KEY = 'aikey:hookReadinessBannerDismissed';
 
-export function HookReadinessBanner() {
+interface HookReadinessBannerProps {
+  /**
+   * Optional callback to re-open the wire-rc modal. When provided and the
+   * banner kind is `almost-ready`, the primary CTA becomes "Enable
+   * auto-sync" → triggers this callback (which opens HookWireRcModal).
+   * When omitted (e.g. on a Production deployment where the modal isn't
+   * available), the CTA falls back to "Copy command" / `aikey hook install`.
+   *
+   * Hook coverage v1 update 2026-05-07.
+   */
+  onEnableClick?: () => void;
+}
+
+export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps = {}) {
   const readiness = useHookReadinessStore((s) => s.readiness);
   const [dismissed, setDismissed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -55,16 +68,30 @@ export function HookReadinessBanner() {
 
   // Per-kind copy and CTA. Kept inline so the whole banner contract is
   // visible in one place — no jumping between files to read the strings.
+  // Hook coverage v1 update 2026-05-07: when `onEnableClick` is wired up
+  // (Personal + Trial editions only), the `almost-ready` CTA becomes an
+  // in-place "Enable auto-sync" button that re-opens HookWireRcModal.
   let title: string;
   let body: string;
+  // CTA is either a copy-command (text → clipboard) or a click-action
+  // (re-open modal). Only one is set at a time.
   let cta: { label: string; command: string } | null = null;
+  let ctaAction: { label: string; onClick: () => void } | null = null;
   switch (kind) {
     case 'almost-ready':
       title = 'Almost ready — terminal auto-sync needs one more step';
-      body =
-        "Hook file installed but your shell rc isn't wired yet. Run the command below " +
-        'once to enable auto-sync (it will prompt before modifying your ~/.zshrc).';
-      cta = { label: 'Copy command', command: 'aikey hook install' };
+      if (onEnableClick) {
+        body =
+          "Hook file installed but your shell rc isn't wired yet. " +
+          'Click below to inject 3 lines into ~/.zshrc — we\'ll show you exactly what before changing anything. ' +
+          'You can also run `aikey hook install` from any terminal.';
+        ctaAction = { label: 'Enable auto-sync', onClick: onEnableClick };
+      } else {
+        body =
+          "Hook file installed but your shell rc isn't wired yet. Run the command below " +
+          'once to enable auto-sync (it will prompt before modifying your ~/.zshrc).';
+        cta = { label: 'Copy command', command: 'aikey hook install' };
+      }
       break;
     case 'shell-undetectable':
       title = "Trial server didn't expose a zsh/bash SHELL";
@@ -102,6 +129,15 @@ export function HookReadinessBanner() {
           <p>{body}</p>
         </div>
         <div className="hook-readiness-actions">
+          {ctaAction && (
+            <button
+              type="button"
+              className="hook-readiness-cta"
+              onClick={ctaAction.onClick}
+            >
+              {ctaAction.label}
+            </button>
+          )}
           {cta && (
             <button
               type="button"

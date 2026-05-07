@@ -36,6 +36,10 @@ import {
 } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
+import {
+  HookWireRcModal,
+  useHookWireRcModal,
+} from '@/shared/components/HookWireRcModal';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
 
@@ -400,6 +404,11 @@ export default function UserVaultPage() {
   // store — otherwise the banner won't surface for users on the pure-
   // Web onboarding path who only Add (never Use).
   const setHookReadinessFromMutation = useHookReadinessStore((s) => s.setReadiness);
+  // Hook coverage v1 update 2026-05-07: also auto-pop the wire-rc modal
+  // on the FIRST mutation in this session that detects rc_wired=false.
+  // The hook is local-edition gated and session-throttled internally —
+  // see useHookWireRcModal in HookWireRcModal.tsx.
+  const wireRcModal = useHookWireRcModal();
 
   const renameMut = useMutation({
     mutationFn: vaultApi.rename,
@@ -409,7 +418,11 @@ export default function UserVaultPage() {
     mutationFn: vaultApi.delete,
     onSuccess: (res) => {
       // CLI's handle_delete_target merges hook status; refresh the store.
-      setHookReadinessFromMutation(pickHookReadiness(res));
+      // eligible=false: delete is not "user-explicitly-setting-active";
+      // banner still surfaces if rc unwired (X2).
+      const r = pickHookReadiness(res);
+      setHookReadinessFromMutation(r);
+      wireRcModal.openIfNeeded(r, false);
       qc.invalidateQueries({ queryKey: ['vault-list'] });
     },
   });
@@ -420,7 +433,10 @@ export default function UserVaultPage() {
       // the hook coverage v1 banner is built for. Feed envelope fields
       // into the store so the banner can decide whether to show
       // "Almost ready" / "Shell undetectable" / etc.
-      setHookReadinessFromMutation(pickHookReadiness(res));
+      // eligible=true: add is the canonical onboarding event (X2).
+      const r = pickHookReadiness(res);
+      setHookReadinessFromMutation(r);
+      wireRcModal.openIfNeeded(r, true);
       qc.invalidateQueries({ queryKey: ['vault-list'] });
     },
   });
@@ -454,7 +470,11 @@ export default function UserVaultPage() {
     onSuccess: (res) => {
       // Hook coverage v1: feed envelope's hook fields into the shared
       // store so <HookReadinessBanner> can render the right CTA.
-      setHookReadinessFromMutation(pickHookReadiness(res));
+      // eligible=true: explicit "use this key" click is the canonical
+      // active-routing event (X2).
+      const r = pickHookReadiness(res);
+      setHookReadinessFromMutation(r);
+      wireRcModal.openIfNeeded(r, true);
       qc.invalidateQueries({ queryKey: ['vault-list'] });
     },
   });
@@ -862,8 +882,13 @@ export default function UserVaultPage() {
             external displays it left large empty gutters and wasted
             horizontal space in the keys card. Removed 2026-04-23. */}
         <div className="px-6 py-5 space-y-5">
-          {/* Hook coverage v1 banner — populated by switchMut.onSuccess. */}
-          <HookReadinessBanner />
+          {/* Hook coverage v1 banner — populated by switchMut.onSuccess.
+              Update 2026-05-07: passing onEnableClick wires the CTA to
+              re-open the wire-rc modal (Personal + Trial only — modal
+              auto-pops on first rc-unwired mutation; banner is the
+              session-persistent fallback / re-opener). */}
+          <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
+          <HookWireRcModal open={wireRcModal.open} onClose={wireRcModal.close} />
           <IdentityStrip counts={counts} onRefresh={() => refetchVault()} updatedAgo={updatedAgo} />
 
           <UnlockBanner

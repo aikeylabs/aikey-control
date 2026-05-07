@@ -42,6 +42,10 @@ import {
 import { pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
+import {
+  HookWireRcModal,
+  useHookWireRcModal,
+} from '@/shared/components/HookWireRcModal';
 import { ProviderMultiSelect, providerChipClassFromId } from '@/shared/ui/ProviderMultiSelect';
 
 type PageState = 'empty' | 'working' | 'done';
@@ -1008,6 +1012,9 @@ export default function UserBulkImportPage() {
   // useHookReadinessStore so HookReadinessBanner re-renders for users who
   // import-only and never visit /user/vault.
   const setHookReadinessFromMutation = useHookReadinessStore((s) => s.setReadiness);
+  // Hook coverage v1 update 2026-05-07: auto-pop wire-rc modal on first
+  // batch-import in this session that lands on rc_wired=false.
+  const wireRcModal = useHookWireRcModal();
 
   // v4.1 Stage 13+: 状态变更 → 写回模块缓存(切菜单回来时 hydrate)
   // F-5: savedAt 记录写入时刻,hydrate 时据此 TTL 过期(importPageCacheFresh)
@@ -1239,7 +1246,12 @@ export default function UserBulkImportPage() {
     onSuccess: (res) => {
       setConfirmResp(res);
       setState('done');
-      setHookReadinessFromMutation(pickHookReadiness(res));
+      // eligible=false: bulk import is "loading my collection", not an
+      // explicit "set active" event. Banner still surfaces if rc unwired
+      // (X2). User can hit banner CTA to open modal manually.
+      const r = pickHookReadiness(res);
+      setHookReadinessFromMutation(r);
+      wireRcModal.openIfNeeded(r, false);
       qc.invalidateQueries({ queryKey: ['my-keys'] });
     },
     onError: (e: Error & { code?: string }) => {
@@ -1500,7 +1512,8 @@ export default function UserBulkImportPage() {
           batch_import. Returns null when readiness is wired/empty, so it
           stays out of the way until needed. */}
       <div style={{ padding: '12px 24px 0' }}>
-        <HookReadinessBanner />
+        <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
+        <HookWireRcModal open={wireRcModal.open} onClose={wireRcModal.close} />
       </div>
 
       {/* ── Vault state banner ──────────────────────────────────────────────

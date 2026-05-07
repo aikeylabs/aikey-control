@@ -159,6 +159,15 @@ type initEnvelope struct {
 	RequestID string `json:"request_id,omitempty"`
 }
 
+// hookOpEnvelope: stdin shape for `aikey _internal hook-op --stdin-json`.
+// Distinct from stdinEnvelope because hook-op only touches the user's
+// dotfiles + ~/.aikey/hook.* — vault_key_hex would be ignored.
+// Per 20260507-web-hook-rc-modal-自动注入.md.
+type hookOpEnvelope struct {
+	Action    string `json:"action"`
+	RequestID string `json:"request_id,omitempty"`
+}
+
 // InvokeInit spawns `aikey _internal init --stdin-json` with `{password,
 // request_id}` and returns the parsed Result. Used by the web-driven
 // first-run flow (POST /api/user/vault/init) per
@@ -212,6 +221,70 @@ func (b *Bridge) InvokeInit(
 	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &result); err != nil {
 		if b.Logger != nil {
 			b.Logger.Warn("cli init reply unparseable",
+				slog.String("stdout", sanitizeForLog(stdout.String())),
+				slog.Any("err", err))
+		}
+		return nil, &InvokeError{
+			Code: ErrCliMalformedReply,
+			Msg:  "cli reply was not valid JSON (see server logs for details)",
+		}
+	}
+	return &result, nil
+}
+
+// InvokeHookOp spawns `aikey _internal hook-op --stdin-json` with
+// `{action, request_id}` and returns the parsed Result. Used by the
+// Web-modal "Allow" path (POST /api/user/hook/install) per
+// 20260507-web-hook-rc-modal-自动注入.md.
+//
+// Why a separate method: hook_op.rs reads its own envelope shape
+// (no vault_key_hex; this op only touches ~/.aikey/hook.* + ~/.zshrc).
+// The standard envelope wrapper would just add fields the cli ignores.
+func (b *Bridge) InvokeHookOp(
+	ctx context.Context,
+	action string,
+	requestID string,
+) (*Result, error) {
+	if err := b.resolveBinary(); err != nil {
+		return nil, &InvokeError{Code: ErrCliNotFound, Msg: err.Error()}
+	}
+
+	envJSON, err := json.Marshal(hookOpEnvelope{Action: action, RequestID: requestID})
+	if err != nil {
+		return nil, &InvokeError{Code: ErrBadRequest, Msg: "marshal hook-op envelope: " + err.Error()}
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, b.Timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(callCtx, b.BinaryPath, "_internal", "hook-op", "--stdin-json")
+	cmd.Stdin = bytes.NewReader(envJSON)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
+			return nil, &InvokeError{
+				Code: ErrCliTimeout,
+				Msg:  fmt.Sprintf("cli did not respond within %s", b.Timeout),
+			}
+		}
+		if b.Logger != nil {
+			b.Logger.Warn("cli hook-op spawn failed",
+				slog.String("stderr", sanitizeForLog(strings.TrimSpace(stderr.String()))),
+				slog.Any("err", err))
+		}
+		return nil, &InvokeError{
+			Code: ErrCliSpawnFailed,
+			Msg:  "cli invocation failed (see server logs for details)",
+		}
+	}
+
+	var result Result
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &result); err != nil {
+		if b.Logger != nil {
+			b.Logger.Warn("cli hook-op reply unparseable",
 				slog.String("stdout", sanitizeForLog(stdout.String())),
 				slog.Any("err", err))
 		}
