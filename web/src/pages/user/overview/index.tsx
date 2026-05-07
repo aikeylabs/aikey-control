@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router-dom';
 import { importApi } from '@/shared/api/user/import';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  ReferenceLine,
   PieChart, Pie, Cell, Label,
 } from 'recharts';
 import { userAccountsApi } from '@/shared/api/user/accounts';
@@ -641,6 +642,33 @@ export default function UserOverviewPage() {
                     strokeWidth={1.8}
                     fill="url(#ov-area-grad)"
                   />
+                  {/* Average reference line. Hidden when avgPerDay is 0
+                      (no data) to avoid a confusing line collapsed onto
+                      the x-axis baseline. Dashed + muted color so it
+                      reads as metadata, not as a second data series. The
+                      numeric value is already shown in the footer's
+                      "Avg/day" cell — the line provides the visual
+                      anchor; the label here just names the line so a
+                      first-time viewer knows what the dashed line means.
+                      ifOverflow="extendDomain" makes the y-axis stretch
+                      so the line is always visible even on flat-data
+                      days where avg > peak rounding. */}
+                  {avgPerDay > 0 && (
+                    <ReferenceLine
+                      y={avgPerDay}
+                      stroke="var(--muted-foreground)"
+                      strokeDasharray="3 3"
+                      strokeOpacity={0.6}
+                      ifOverflow="extendDomain"
+                      label={{
+                        value: `avg ${fmtTok(avgPerDay)}`,
+                        position: 'insideTopRight',
+                        fill: 'var(--muted-foreground)',
+                        fontSize: 9,
+                        fontFamily: 'monospace',
+                      }}
+                    />
+                  )}
                 </AreaChart>
                 </ResponsiveContainer>
               </div>

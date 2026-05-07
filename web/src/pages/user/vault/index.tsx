@@ -3047,6 +3047,7 @@ function AddKeyModal(props: {
   // exactly one provider name.
   const [oauthProvider, setOauthProvider] = useState('claude');
   const [secret, setSecret] = useState('');
+  const [revealSecret, setRevealSecret] = useState(false);
   const [baseUrl, setBaseUrl] = useState('');
   const [err, setErr] = useState<string | null>(null);
   // Field that should flash red when validation fails. Cleared after
@@ -3214,15 +3215,29 @@ function AddKeyModal(props: {
                     <KeyIcon className="w-3 h-3" />
                     Plaintext secret <span className="req">*</span>
                   </label>
-                  <input
-                    id="add-secret"
-                    type="password"
-                    className={`field-input${flashField === 'secret' ? ' field-input-flash' : ''}`}
-                    placeholder="sk-..."
-                    autoComplete="off"
-                    value={secret}
-                    onChange={(e) => setSecret(e.target.value)}
-                  />
+                  <span className="field-input-wrap">
+                    <input
+                      id="add-secret"
+                      type={revealSecret ? 'text' : 'password'}
+                      className={`field-input${secret.length > 0 ? ' field-input-has-reveal' : ''}${flashField === 'secret' ? ' field-input-flash' : ''}`}
+                      placeholder="sk-..."
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={secret}
+                      onChange={(e) => setSecret(e.target.value)}
+                    />
+                    {secret.length > 0 && (
+                      <button
+                        type="button"
+                        className="field-reveal-btn"
+                        onClick={() => setRevealSecret((r) => !r)}
+                        title={revealSecret ? 'Hide value' : 'Reveal value'}
+                        aria-label={revealSecret ? 'Hide secret' : 'Reveal secret'}
+                      >
+                        {revealSecret ? <EyeOffIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
+                  </span>
                   <span className="form-help">
                     Encrypted with your master key on save — we never send it to our servers.
                   </span>
@@ -3413,6 +3428,8 @@ function SvgIcon({
 // heroicons v2 outline paths
 const ICON_EYE =
   'M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178zM15 12a3 3 0 11-6 0 3 3 0 016 0z';
+const ICON_EYE_OFF =
+  'M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88';
 const ICON_CLIPBOARD =
   'M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184';
 const ICON_EDIT =
@@ -3475,6 +3492,7 @@ const ICON_LINK =
   'M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244';
 
 function EyeIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_EYE} {...p} />; }
+function EyeOffIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_EYE_OFF} {...p} />; }
 function ClipboardIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_CLIPBOARD} {...p} />; }
 function EditIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_EDIT} {...p} />; }
 function TrashIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_TRASH} {...p} />; }
@@ -4830,6 +4848,16 @@ const VAULT_CSS = `
   font-size: 12.5px; padding: 6px 10px;
   width: 100%;
 }
+.modal-body .field-input-wrap { position: relative; width: 100%; min-width: 0; display: block; }
+.modal-body .field-input-has-reveal { padding-right: 30px !important; }
+.modal-body .field-reveal-btn {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  background: transparent; border: none; cursor: pointer; padding: 4px;
+  color: var(--muted-foreground); display: inline-flex;
+  align-items: center; justify-content: center; border-radius: 3px;
+}
+.modal-body .field-reveal-btn:hover { color: var(--foreground); background: rgba(255,255,255,0.04); }
+.modal-body .field-reveal-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .modal-body .field-input:focus {
   outline: none; border-color: var(--primary);
   box-shadow: 0 0 0 2px rgba(250, 204, 21,0.15);
