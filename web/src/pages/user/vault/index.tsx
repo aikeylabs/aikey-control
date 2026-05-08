@@ -636,10 +636,11 @@ export default function UserVaultPage() {
         },
         onError: (err: unknown) => {
           rollback();
+          const message = err instanceof Error ? err.message : String(err);
           pushToast({
             kind: 'error',
             title: 'Failed to set routing',
-            sub: err instanceof Error ? err.message : String(err),
+            sub: message,
           });
         },
       },

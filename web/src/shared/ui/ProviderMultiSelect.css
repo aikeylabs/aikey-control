@@ -133,3 +133,11 @@
   font-size: 11px;
   font-style: italic;
 }
+
+.provider-ms-note {
+  margin-top: 0.25rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+}

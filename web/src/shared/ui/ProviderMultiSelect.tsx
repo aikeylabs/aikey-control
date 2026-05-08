@@ -93,6 +93,11 @@ interface ProviderMultiSelectProps {
   showRequired?: boolean;
 }
 
+// Kimi family members share a single env-var (`KIMI_BASE_URL`), so they're
+// mutually exclusive at selection time. Hoisted to module scope so both the
+// `add()` mutex and the rendered note read from one source.
+const KIMI_FAMILY = ['kimi_code', 'moonshot', 'kimi'];
+
 /**
  * ProviderMultiSelect — 多选 provider 下拉 (chips + search + custom add)。
  *
@@ -171,7 +176,24 @@ export function ProviderMultiSelect({
   function add(v: string) {
     const normalized = v.trim().toLowerCase();
     if (!normalized || values.includes(normalized)) return;
-    onChange([...values, normalized]);
+
+    // 2026-05-08 Kimi family select 互斥(详见 update/20260508-Kimi-family互斥-active-env
+    // 统一KIMI写入.md 决策 #3 + 第三方评审第八轮): 同一把 KEY 在 Kimi family 内部
+    // 只能 supports 一个 protocol —— `KIMI_BASE_URL` 只能指一个上游(api.kimi.com OR
+    // api.moonshot.cn,二选一);典型现实情况:sk-kimi-* key 只在 api.kimi.com/coding 工作,
+    // 不带 sk-kimi 前缀的 Moonshot key 只在 api.moonshot.cn 工作,跨平台用同 key 几乎不存在。
+    //
+    // input 层互斥 = 主防御。当用户已选 kimi_code 再选 moonshot,自动 deselect 前者
+    // (反之亦然)。deprecated 'kimi' 同 family 同此规则。
+    //
+    // Why 不报错而是 mute-replace: 用户行为视为"我改主意,改选另一个 platform",
+    // 比"对话框/红框警告"流畅。如果用户真的想要双协议(future multi-Kimi gateway),
+    // 仍可经 `aikey add --providers kimi_code,moonshot` —— 但目前现实无此场景,所以不留口子。
+    let nextValues = values;
+    if (KIMI_FAMILY.includes(normalized)) {
+      nextValues = values.filter(v => !KIMI_FAMILY.includes(v));
+    }
+    onChange([...nextValues, normalized]);
     setQuery('');
     // 保持 open,方便连续添加
   }
@@ -245,39 +267,52 @@ export function ProviderMultiSelect({
       ? 'provider-ms-add-btn provider-ms-add-btn-warn'
       : 'provider-ms-add-btn';
 
+  // Show a note when any selected chip is a kimi family member, mirroring the
+  // CLI `aikey use` picker hint. Surfaces the input-mutex behavior so users
+  // understand why picking kimi(kimi-code) drops a previously selected kimi(moonshot).
+  const hasKimiSelected = values.some((v) => KIMI_FAMILY.includes(v));
+
   return (
-    <div ref={wrapperRef} className={`provider-ms ${className ?? ''}`}>
-      {values.map((v) => (
-        <span key={v} className="provider-ms-chip">
-          {v}
-          <button
-            type="button"
-            className="provider-ms-chip-x"
-            onClick={() => remove(v)}
-            aria-label={`Remove ${v}`}
-          >
-            ×
+    <>
+      <div ref={wrapperRef} className={`provider-ms ${className ?? ''}`}>
+        {values.map((v) => (
+          <span key={v} className="provider-ms-chip">
+            {v}
+            <button
+              type="button"
+              className="provider-ms-chip-x"
+              onClick={() => remove(v)}
+              aria-label={`Remove ${v}`}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {open ? (
+          <input
+            autoFocus
+            className="provider-ms-search"
+            type="text"
+            placeholder={values.length === 0 ? placeholder : 'Add more…'}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            spellCheck={false}
+            autoComplete="off"
+          />
+        ) : (
+          <button type="button" className={addBtnClass} onClick={() => setOpen(true)}>
+            + Add
           </button>
-        </span>
-      ))}
-      {open ? (
-        <input
-          autoFocus
-          className="provider-ms-search"
-          type="text"
-          placeholder={values.length === 0 ? placeholder : 'Add more…'}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          spellCheck={false}
-          autoComplete="off"
-        />
-      ) : (
-        <button type="button" className={addBtnClass} onClick={() => setOpen(true)}>
-          + Add
-        </button>
+        )}
+        {dropdown}
+      </div>
+      {hasKimiSelected && (
+        <div className="provider-ms-note">
+          Note: kimi family routes through one upstream — picking kimi(kimi-code)
+          auto-deselects kimi(moonshot), and vice versa.
+        </div>
       )}
-      {dropdown}
-    </div>
+    </>
   );
 }
