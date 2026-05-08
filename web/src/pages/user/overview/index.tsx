@@ -37,6 +37,10 @@ const PROVIDER_COLORS: Record<string, string> = {
   anthropic: '#ca8a04',
   claude: '#ca8a04',
   kimi: '#38bdf8',
+  // 2026-05-08: kimi_code shares Kimi family hue (sky blue) — same brand,
+  // distinct protocol code per Kimi-family decisions in
+  // update/20260508-Kimi-family互斥-active-env统一KIMI写入.md.
+  kimi_code: '#38bdf8',
   moonshot: '#38bdf8',
   openai: '#a78bfa',
   gpt: '#a78bfa',

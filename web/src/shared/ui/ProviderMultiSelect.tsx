@@ -25,7 +25,12 @@ export type ProtocolMeta = { id: string; label?: string; aliases?: string[] };
 export const KNOWN_PROTOCOLS: ProtocolMeta[] = [
   { id: 'anthropic',     label: 'anthropic · Claude',               aliases: ['claude'] },
   { id: 'openai',        label: 'openai · ChatGPT',                 aliases: ['chatgpt', 'gpt'] },
-  { id: 'kimi',          label: 'kimi · Moonshot · 月之暗面',        aliases: ['moonshot', '月之暗面'] },
+  // 2026-05-08 Kimi 双平台拆分: 'kimi' 拆为 'moonshot' (api.moonshot.cn) +
+  // 'kimi_code' (api.kimi.com/coding)。display 标签格式 kimi(moonshot) /
+  // kimi(kimi-code) 与 CLI provider_registry.yaml 一致(family 在外、平台在括号)。
+  // 'kimi' alias 保留在两条候选的 aliases 里,搜索"kimi"两条都能命中,让用户挑。
+  { id: 'moonshot',      label: 'kimi(moonshot) · 月之暗面',         aliases: ['kimi', 'moonshot', '月之暗面'] },
+  { id: 'kimi_code',     label: 'kimi(kimi-code) · Kimi 代码',       aliases: ['kimi', 'kimi-code', 'kimicode'] },
   { id: 'deepseek',      label: 'deepseek · 深度求索',               aliases: ['深度求索'] },
   { id: 'google_gemini', label: 'google_gemini · Gemini',           aliases: ['gemini', 'google'] },
   { id: 'groq',          label: 'groq' },
@@ -63,7 +68,9 @@ export function providerChipClassFromId(provId?: string): string {
   if (lc.includes('openai') || lc.startsWith('sk-proj')) return 'chip-openai';
   if (lc.includes('oauth')) return 'chip-oauth';
   if (lc === 'openrouter' || lc === 'yunwu' || lc === 'zeroeleven') return 'chip-gateway';
-  if (lc === 'kimi' || lc === 'deepseek' || lc === 'zhipu' || lc === 'doubao'
+  // 2026-05-08 Kimi 双平台拆分: 新增 kimi_code / moonshot,'kimi' 保留为 deprecated alias。
+  if (lc === 'kimi_code' || lc === 'moonshot' || lc === 'kimi'
+      || lc === 'deepseek' || lc === 'zhipu' || lc === 'doubao'
       || lc === 'siliconflow' || lc === 'qwen' || lc === 'baichuan' || lc === 'minimax') {
     return 'chip-china';
   }

@@ -3445,7 +3445,13 @@ function oauthLoginProvider(inferredProvider: string | undefined): string | unde
   switch (inferredProvider) {
     case 'anthropic': return 'claude';
     case 'openai':    return 'codex';
+    // 2026-05-08 Kimi 双平台拆分: 'kimi_code' 是 family=kimi 内唯一支持 OAuth
+    // 的 canonical code (Moonshot 仅 API key,不支持 OAuth);UI inferred provider
+    // 是 kimi_code 或 deprecated 'kimi' 时都映射到 broker 的 'kimi' login flow。
+    // 'moonshot' 不映射 (返回 undefined → 隐藏 OAuth login 按钮)。
+    case 'kimi_code':
     case 'kimi':      return 'kimi';
+    case 'moonshot':  return undefined;
     default:          return undefined;
   }
 }

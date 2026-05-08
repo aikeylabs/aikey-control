@@ -78,7 +78,14 @@ function rowKey(r: VaultRecord): string {
  */
 function recordInUseForGroup(r: VaultRecord, groupProvider: string): boolean {
   if (Array.isArray(r.in_use_for)) {
-    return r.in_use_for.includes(groupProvider);
+    // 2026-05-08 V-layer family-grouping (update/20260508-display-family-grouping.md):
+    // groupProvider 是 family 名 (e.g. "kimi");in_use_for 是 provider_code 数组
+    // (e.g. ["kimi_code"] 或 ["moonshot"] —— `aikey use` 写入时已被 canonical 化)。
+    // 直接 .includes 在 split 后会漏命中:in_use_for=["kimi_code"] 与 groupProvider="kimi"
+    // 不字面匹配。fallback 到 family 比对。
+    return r.in_use_for.some(code =>
+      code === groupProvider || familyOfProviderCode(code) === groupProvider
+    );
   }
   // Back-compat: older CLI emits only the boolean. Render based on the flat
   // value — strictly speaking this still over-fires for multi-provider
@@ -166,6 +173,34 @@ function providerShellCommand(family: string | null | undefined): string | null 
   if (p.includes('openai') || p.includes('codex')) return 'codex';
   if (p.includes('kimi') || p.includes('moonshot')) return 'kimi';
   return null;
+}
+
+/** V-layer helper: provider_code → display family for vault group rendering.
+ *
+ *  2026-05-08 显示层 family-grouping (详见 update/20260508-display-family-grouping.md)
+ *
+ *  Source of truth: CLI registry (`aikey-cli/data/provider_registry.yaml`
+ *  RegistryEntry.family) + Rust `provider_registry::family_of()` helper.
+ *  This frontend mapping mirrors only the multi-platform families (currently
+ *  just Kimi) so the vault page can group personal keys by family even when
+ *  the V data is delivered via `supported_providers` (per-record provider_code
+ *  array) rather than the per-record `protocol_family` field.
+ *
+ *  Why duplicated here: vault `grouped` memo iterates `supported_providers` for
+ *  multi-provider expansion (e.g. 0011 gateway key supports anthropic+openai
+ *  → shows in BOTH groups). Each element is a provider_code, not a family. To
+ *  family-group correctly without exposing extra response fields, the V layer
+ *  maps each provider_code → family at render time.
+ *
+ *  Single-platform providers (anthropic / openai / google_gemini / ...) return
+ *  input unchanged — matches CLI registry's `family defaults to code` rule.
+ */
+function familyOfProviderCode(code: string): string {
+  const lc = (code ?? '').trim().toLowerCase();
+  if (lc === 'kimi_code' || lc === 'moonshot' || lc === 'kimi') return 'kimi';
+  // Add other multi-platform families here when they appear in the registry.
+  // Single-platform: family == code (e.g. anthropic, openai, deepseek).
+  return lc;
 }
 
 
@@ -646,17 +681,22 @@ export default function UserVaultPage() {
       // For personal keys with multi-provider support_providers, expand into
       // every family the key supports. OAuth records are inherently
       // single-provider — the credential is bound to one external account.
+      //
+      // 2026-05-08 V-layer family-grouping (update/20260508-display-family-grouping.md):
+      // 每个 supported_provider 通过 familyOfProviderCode() 映射到 display family —
+      // 多平台 family (Kimi: kimi_code/moonshot/kimi) 收敛到同一 group;
+      // 单平台 family (anthropic/openai/...) family==code,行为不变。
       const families: string[] = (() => {
         if (r.target === 'personal') {
           const sp = (r as PersonalVaultRecord).supported_providers;
           if (Array.isArray(sp) && sp.length > 0) {
-            // Canonical-map each entry, dedup, preserve order. Treat empty
-            // values defensively so corrupt rows don't take down the page.
+            // Map each provider_code → family, dedup, preserve order.
             const seen = new Set<string>();
             const fams: string[] = [];
             for (const p of sp) {
-              const fam = (p ?? '').toString().trim().toLowerCase();
-              if (!fam) continue;
+              const raw = (p ?? '').toString().trim();
+              if (!raw) continue;
+              const fam = familyOfProviderCode(raw);
               if (!seen.has(fam)) {
                 seen.add(fam);
                 fams.push(fam);
@@ -665,6 +705,8 @@ export default function UserVaultPage() {
             if (fams.length > 0) return fams;
           }
         }
+        // OAuth path: protocol_family already comes family-resolved from backend
+        // (commands_internal/query.rs::protocol_family_of returns registry.family).
         return [r.protocol_family ?? 'unknown'];
       })();
       for (const fam of families) addToGroup(fam, r);
@@ -1061,6 +1103,7 @@ export default function UserVaultPage() {
             addMut.mutateAsync(payload).then(() => setAddOpen(false))
           }
           pending={addMut.isPending}
+          providerToRoute={providerToRoute}
         />
       )}
 
@@ -3062,6 +3105,24 @@ function AddKeyModal(props: {
     base_url?: string;
   }) => Promise<unknown>;
   pending: boolean;
+  /**
+   * Single source of truth: provider id → ProviderRoute (host, base_url,
+   * version). Built by the parent from `/api/user/import/rules`'s
+   * `provider_routes` array, which mirrors
+   * `aikey-cli/data/provider_fingerprint.yaml::provider_routes` —
+   * the v4.3 (2026-05-01) successor to family_base_urls.
+   *
+   * 2026-05-08: added so the Add Key form auto-fills base_url when the
+   * user picks a protocol. Re-uses the parent's already-cached
+   * `providerToRoute` map (built once per session via React Query
+   * staleTime: Infinity), so no duplicate fetch and no drift from YAML.
+   *
+   * Earlier draft of this prop tried `family_base_urls` but the backend
+   * stopped emitting it after v4.3 collapsed family_base_urls +
+   * host_to_base_url into provider_routes — fixed 2026-05-08 after
+   * chrome MCP debug showed `family_base_urls: undefined`.
+   */
+  providerToRoute?: Map<string, { base_url: string; version: string }>;
 }) {
   const [kind, setKind] = useState<AddKind>('api');
   const [alias, setAlias] = useState('');
@@ -3278,14 +3339,46 @@ function AddKeyModal(props: {
                       · optional
                     </span>
                   </label>
-                  <input
-                    id="add-baseurl"
-                    type="text"
-                    className={`field-input${flashField === 'baseUrl' ? ' field-input-flash' : ''}`}
-                    placeholder="https://api.openai.com/v1"
-                    value={baseUrl}
-                    onChange={(e) => setBaseUrl(e.target.value)}
-                  />
+                  {/*
+                    2026-05-08: placeholder is the protocol's official
+                    base_url (looked up via providerToRoute, single source
+                    of truth = provider_fingerprint.yaml). Switching
+                    protocol updates the hint without ever touching the
+                    input value — user input is always authoritative.
+                    Empty input = backend uses provider default
+                    (matches the placeholder); typed input = custom.
+                  */}
+                  <span className="field-input-wrap">
+                    <input
+                      id="add-baseurl"
+                      type="text"
+                      className={`field-input${baseUrl.length > 0 ? ' field-input-has-reveal' : ''}${flashField === 'baseUrl' ? ' field-input-flash' : ''}`}
+                      placeholder={(() => {
+                        const first = providers[0];
+                        const route = first ? props.providerToRoute?.get(first) : undefined;
+                        return route
+                          ? `${route.base_url}${route.version}`
+                          : 'https://api.openai.com/v1';
+                      })()}
+                      value={baseUrl}
+                      onChange={(e) => setBaseUrl(e.target.value)}
+                    />
+                    {baseUrl.length > 0 && (
+                      // X clear button — only when user typed something.
+                      // Empty state shows placeholder hint of the protocol
+                      // default; clearing returns to that default (backend
+                      // applies it on submit when base_url is empty/undef).
+                      <button
+                        type="button"
+                        className="field-reveal-btn"
+                        onClick={() => setBaseUrl('')}
+                        title="Clear base_url (use provider default)"
+                        aria-label="Clear base_url"
+                      >
+                        <XIcon className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </span>
                   <span className="form-help">
                     Custom gateway URL if you route through your own proxy. Leave blank for provider default.
                   </span>
