@@ -120,8 +120,8 @@ export interface PersonalVaultRecord {
    * and never decrypts). The UI should render a pure-asterisk secret
    * pill whenever `secret_prefix === null`.
    */
-  secret_prefix: string | null;     // known prefix (sk-ant-api03- / sk-proj- / AIza ...) or first 4 chars; null when locked
-  secret_suffix: string | null;     // last 4 chars; null when locked
+  secret_prefix: string | null;     // first 12 chars of plaintext (2026-05-09); null when locked OR len < 24 (entire secret too short to safely partial-reveal)
+  secret_suffix: string | null;     // last 4 chars of plaintext; null when locked OR len < 24
   secret_len: number | null;        // total plaintext length; null when locked
 }
 

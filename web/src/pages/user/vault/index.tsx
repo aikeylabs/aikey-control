@@ -2590,22 +2590,28 @@ function DetailDrawer(props: {
                         <div className="secret-view masked" style={{ width: '100%' }}>
                           <div className="plain">
                             {personal.secret_prefix === null ? (
-                              <span className="mid">{'•'.repeat(24)}</span>
+                              // Locked / too-short: a short bar of dots — the
+                              // suffix span is absent in this branch, so we
+                              // don't need to leave room for it on the right.
+                              <span className="mid">{'•'.repeat(12)}</span>
                             ) : (
                               <>
                                 <span className="prefix">{personal.secret_prefix}</span>
                                 <span className="mid">
-                                  {'•'.repeat(
-                                    Math.max(
-                                      8,
-                                      Math.min(
-                                        24,
-                                        (personal.secret_len ?? 16) -
-                                          personal.secret_prefix.length -
-                                          (personal.secret_suffix?.length ?? 0),
-                                      ),
-                                    ),
-                                  )}
+                                  {/*
+                                    2026-05-09: fixed 8-dot bar instead of
+                                    `Math.min(24, len-16)`. The dots are
+                                    purely "there's hidden stuff here" filler
+                                    — the actual hidden length is irrelevant
+                                    to the user, and the previous up-to-24
+                                    cap pushed the suffix off-screen on the
+                                    drawer's narrow column for keys ≥ 32 chars.
+                                    8 keeps prefix(12) + mid(8) + suffix(4) =
+                                    24 chars visible, fitting any drawer width
+                                    while still communicating "key is masked
+                                    here".
+                                  */}
+                                  {'•'.repeat(8)}
                                 </span>
                                 <span className="suffix">{personal.secret_suffix}</span>
                               </>
@@ -2667,14 +2673,26 @@ function DetailDrawer(props: {
                     </span>
                   </div>
                 )}
-                {personal.route_token && (
-                  <div className="drawer-field">
-                    <span className="k">Route token</span>
-                    {/* .drawer-tokenbox — a <div> (not <textarea>) per the
-                        new template. word-break: break-all wraps the full
-                        token naturally, corner-anchored .copy-btn sits
-                        inside the box's reserved bottom-right padding. */}
-                    <span className="v stack">
+                {/*
+                  Route token row — always rendered so the drawer's
+                  field layout stays stable across lock state. When
+                  locked, show a masked placeholder + a hint pointing
+                  at unlock; never expose the real token until the
+                  vault session is alive (token is null in the locked
+                  list response).
+                  2026-05-09: previously the row was hidden when locked
+                  (`personal.route_token &&` gate). Users couldn't tell
+                  whether the field even existed for that key.
+                  .drawer-tokenbox — a <div> (not <textarea>) per the
+                  template. word-break: break-all wraps the full token
+                  naturally, corner-anchored .copy-btn sits inside the
+                  box's reserved bottom-right padding (unlocked branch
+                  only).
+                */}
+                <div className="drawer-field">
+                  <span className="k">Route token</span>
+                  <span className="v stack">
+                    {personal.route_token ? (
                       <div className="drawer-tokenbox" tabIndex={0} aria-label="Route token">
                         {personal.route_token}
                         <button
@@ -2691,9 +2709,31 @@ function DetailDrawer(props: {
                           )}
                         </button>
                       </div>
-                    </span>
-                  </div>
-                )}
+                    ) : (
+                      <div
+                        className="drawer-tokenbox drawer-tokenbox-locked"
+                        aria-label="Route token (locked)"
+                        style={{ color: 'var(--muted-foreground)' }}
+                      >
+                        <span style={{ letterSpacing: '0.15em' }}>
+                          {'•'.repeat(40)}
+                        </span>
+                        <span
+                          className="drawer-tokenbox-hint"
+                          style={{
+                            display: 'block',
+                            marginTop: 6,
+                            fontSize: '11px',
+                            fontStyle: 'italic',
+                            opacity: 0.75,
+                          }}
+                        >
+                          Unlock vault to reveal this token.
+                        </span>
+                      </div>
+                    )}
+                  </span>
+                </div>
               </>
             )}
             {!isPersonal && oauth && (
@@ -2766,10 +2806,18 @@ function DetailDrawer(props: {
                     </span>
                   </div>
                 )}
-                {oauth.route_token && (
-                  <div className="drawer-field">
-                    <span className="k">Route token</span>
-                    <span className="v stack">
+                {/*
+                  Route token row — always rendered; same lock-aware
+                  pattern as the personal branch above. OAuth route
+                  tokens come from a different storage table
+                  (provider_account_route_tokens), but the UX surface
+                  is identical: locked → masked dots + hint, unlocked →
+                  real token + copy button. 2026-05-09.
+                */}
+                <div className="drawer-field">
+                  <span className="k">Route token</span>
+                  <span className="v stack">
+                    {oauth.route_token ? (
                       <div className="drawer-tokenbox" tabIndex={0} aria-label="Route token">
                         {oauth.route_token}
                         <button
@@ -2786,9 +2834,31 @@ function DetailDrawer(props: {
                           )}
                         </button>
                       </div>
-                    </span>
-                  </div>
-                )}
+                    ) : (
+                      <div
+                        className="drawer-tokenbox drawer-tokenbox-locked"
+                        aria-label="Route token (locked)"
+                        style={{ color: 'var(--muted-foreground)' }}
+                      >
+                        <span style={{ letterSpacing: '0.15em' }}>
+                          {'•'.repeat(40)}
+                        </span>
+                        <span
+                          className="drawer-tokenbox-hint"
+                          style={{
+                            display: 'block',
+                            marginTop: 6,
+                            fontSize: '11px',
+                            fontStyle: 'italic',
+                            opacity: 0.75,
+                          }}
+                        >
+                          Unlock vault to reveal this token.
+                        </span>
+                      </div>
+                    )}
+                  </span>
+                </div>
               </>
             )}
           </div>
