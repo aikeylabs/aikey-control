@@ -135,6 +135,11 @@
 }
 
 .provider-ms-note {
+  /* flex-basis: 100% forces the note to wrap to its own row inside
+     .provider-ms (which is display: flex; flex-wrap: wrap). width: 100%
+     covers the case where the parent isn't flex (block fallback). */
+  flex-basis: 100%;
+  width: 100%;
   margin-top: 0.25rem;
   color: var(--muted-foreground);
   font-family: var(--font-mono);

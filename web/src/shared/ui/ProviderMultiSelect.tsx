@@ -126,6 +126,11 @@ export function ProviderMultiSelect({
   const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // Tracks whether the Kimi family mute-replace has actually fired in this
+  // component's lifetime. The note is reactive: it surfaces only after a
+  // real replace, not as preemptive teaching while the user has just one
+  // kimi chip. Reset to false when no kimi chip remains (see useEffect below).
+  const [hasFiredKimiMutex, setHasFiredKimiMutex] = useState(false);
 
   const queryLc = query.trim().toLowerCase();
   const availableCandidates = presets.filter((p) => !values.includes(p.id));
@@ -192,6 +197,12 @@ export function ProviderMultiSelect({
     let nextValues = values;
     if (KIMI_FAMILY.includes(normalized)) {
       nextValues = values.filter(v => !KIMI_FAMILY.includes(v));
+      // Replace actually happened (an existing kimi member was filtered out)
+      // → surface the explanatory note. Length-shrink is a sufficient signal
+      // because we already short-circuit identical-value adds at the top.
+      if (nextValues.length < values.length) {
+        setHasFiredKimiMutex(true);
+      }
     }
     onChange([...nextValues, normalized]);
     setQuery('');
@@ -267,52 +278,62 @@ export function ProviderMultiSelect({
       ? 'provider-ms-add-btn provider-ms-add-btn-warn'
       : 'provider-ms-add-btn';
 
-  // Show a note when any selected chip is a kimi family member, mirroring the
-  // CLI `aikey use` picker hint. Surfaces the input-mutex behavior so users
-  // understand why picking kimi(kimi-code) drops a previously selected kimi(moonshot).
+  // Reactive note: surfaces ONLY after a real mute-replace has fired AND a
+  // kimi chip is still selected. Reset path keeps it from "sticking" when
+  // the user clears all kimi chips and starts fresh.
   const hasKimiSelected = values.some((v) => KIMI_FAMILY.includes(v));
+  useEffect(() => {
+    if (!hasKimiSelected && hasFiredKimiMutex) {
+      setHasFiredKimiMutex(false);
+    }
+  }, [hasKimiSelected, hasFiredKimiMutex]);
+  const showKimiNote = hasFiredKimiMutex && hasKimiSelected;
 
   return (
-    <>
-      <div ref={wrapperRef} className={`provider-ms ${className ?? ''}`}>
-        {values.map((v) => (
-          <span key={v} className="provider-ms-chip">
-            {v}
-            <button
-              type="button"
-              className="provider-ms-chip-x"
-              onClick={() => remove(v)}
-              aria-label={`Remove ${v}`}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        {open ? (
-          <input
-            autoFocus
-            className="provider-ms-search"
-            type="text"
-            placeholder={values.length === 0 ? placeholder : 'Add more…'}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            spellCheck={false}
-            autoComplete="off"
-          />
-        ) : (
-          <button type="button" className={addBtnClass} onClick={() => setOpen(true)}>
-            + Add
+    <div ref={wrapperRef} className={`provider-ms ${className ?? ''}`}>
+      {values.map((v) => (
+        <span key={v} className="provider-ms-chip">
+          {v}
+          <button
+            type="button"
+            className="provider-ms-chip-x"
+            onClick={() => remove(v)}
+            aria-label={`Remove ${v}`}
+          >
+            ×
           </button>
-        )}
-        {dropdown}
-      </div>
-      {hasKimiSelected && (
+        </span>
+      ))}
+      {open ? (
+        <input
+          autoFocus
+          className="provider-ms-search"
+          type="text"
+          placeholder={values.length === 0 ? placeholder : 'Add more…'}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          spellCheck={false}
+          autoComplete="off"
+        />
+      ) : (
+        <button type="button" className={addBtnClass} onClick={() => setOpen(true)}>
+          + Add
+        </button>
+      )}
+      {dropdown}
+      {/* Note lives INSIDE .provider-ms so callers that use grid/flex layouts
+          (e.g. the import page's grid row) treat ProviderMultiSelect as one
+          cell instead of two siblings. .provider-ms-note CSS uses
+          flex-basis: 100% to wrap to its own row inside the flex container.
+          Visibility is reactive (showKimiNote) — only after a real mute-replace
+          has fired this lifetime, not preemptive teaching on first kimi pick. */}
+      {showKimiNote && (
         <div className="provider-ms-note">
           Note: kimi family routes through one upstream — picking kimi(kimi-code)
           auto-deselects kimi(moonshot), and vice versa.
         </div>
       )}
-    </>
+    </div>
   );
 }
