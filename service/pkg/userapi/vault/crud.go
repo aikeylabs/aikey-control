@@ -64,6 +64,17 @@ type listResponseData struct {
 	Records []json.RawMessage `json:"records"`
 	Counts  map[string]int    `json:"counts"`
 	Locked  bool              `json:"locked"`
+	// TeamActiveBindings (Phase 3B 2026-05-11): map of virtual_key_id →
+	// provider_codes for which the local CLI vault has the team key as
+	// the active binding. Populated by the CLI's load_active_binding_refs
+	// (managed_virtual_key partition). The Web vault page joins this with
+	// the team-store records (fetched cross-origin from B) so team rows
+	// can render the IN USE chip — without this field, clicking Use on
+	// a team key wrote the binding correctly but the UI showed no
+	// visible change. Either personal or oauth list path may emit it;
+	// both maps are byte-identical (same source table) so the personal
+	// branch wins arbitrarily and the oauth branch's value is discarded.
+	TeamActiveBindings map[string][]string `json:"team_active_bindings"`
 }
 
 // ListHandler: GET /api/user/vault/list.
@@ -140,7 +151,19 @@ func (h *CRUDHandlers) ListHandler(w http.ResponseWriter, r *http.Request) {
 	type result struct {
 		records []json.RawMessage
 		count   int
-		err     error
+		// personalCount / teamCount — Phase 3B revised (2026-05-11): when
+		// the CLI emits team records inline inside `entries`, `count`
+		// is the merged total; these split fields let the Go-side
+		// counts map distinguish per-target counts. -1 sentinel for
+		// older CLI builds that don't emit them.
+		personalCount int
+		teamCount     int
+		// teamBindings — Phase 3B (2026-05-11): map of virtual_key_id → providers
+		// (active team-key binding rows). Both personal and oauth list responses
+		// emit this field with byte-identical content (same source table); we
+		// take whichever arrived first that's non-nil. See collectRecords doc.
+		teamBindings map[string][]string
+		err          error
 	}
 	personalCh := make(chan result, 1)
 	oauthCh := make(chan result, 1)
@@ -169,17 +192,41 @@ func (h *CRUDHandlers) ListHandler(w http.ResponseWriter, r *http.Request) {
 	merged = append(merged, personal.records...)
 	merged = append(merged, oauth.records...)
 
+	teamBindings := personal.teamBindings
+	if teamBindings == nil {
+		teamBindings = oauth.teamBindings
+	}
+	if teamBindings == nil {
+		teamBindings = map[string][]string{}
+	}
+
 	resp := listResponse{
 		Status: "ok",
 		Data: listResponseData{
 			Records: merged,
-			Counts: map[string]int{
-				"personal": personal.count,
-				"oauth":    oauth.count,
-				"team":     0,
-				"total":    personal.count + oauth.count,
-			},
-			Locked: false,
+			Counts: func() map[string]int {
+				// Phase 3B revised (2026-05-11): when CLI emits team records
+				// inline, `personal.count` is the merged total. Use the
+				// split fields to populate per-target. Fallback for older
+				// CLI builds: personalCount/teamCount = -1 → treat full
+				// `personal.count` as personal, team=0.
+				p := personal.count
+				if personal.personalCount >= 0 {
+					p = personal.personalCount
+				}
+				t := 0
+				if personal.teamCount > 0 {
+					t = personal.teamCount
+				}
+				return map[string]int{
+					"personal": p,
+					"oauth":    oauth.count,
+					"team":     t,
+					"total":    p + oauth.count + t,
+				}
+			}(),
+			Locked:             false,
+			TeamActiveBindings: teamBindings,
 		},
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -189,16 +236,33 @@ func (h *CRUDHandlers) ListHandler(w http.ResponseWriter, r *http.Request) {
 // collectRecords extracts the array-of-objects payload from either list_*
 // cli response into a uniform shape. `arrayField` is the JSON key that holds
 // the array in data (`entries` for personal, `accounts` for oauth).
+//
+// Phase 3B (2026-05-11): also extracts the optional `team_active_bindings`
+// sibling field. Both list_personal_with_masked and list_oauth emit it
+// (byte-identical content from the same source table); caller picks one.
+// Older CLI builds don't emit the field — Unmarshal gracefully returns
+// nil and the upstream merge falls back to an empty map.
 func collectRecords(res *cli.Result, err error, arrayField string) struct {
 	records []json.RawMessage
 	count   int
-	err     error
+	// Phase 3B revised (2026-05-11): when CLI emits team records inline
+	// inside `entries`, `count` is the TOTAL (personal+team). Use these
+	// split fields to populate the counts map correctly. Older CLI
+	// builds don't emit them — caller falls back to `count` for
+	// personal and 0 for team.
+	personalCount int // -1 sentinel = field absent (older CLI)
+	teamCount     int // -1 sentinel = field absent
+	teamBindings  map[string][]string
+	err           error
 } {
 	out := struct {
-		records []json.RawMessage
-		count   int
-		err     error
-	}{}
+		records       []json.RawMessage
+		count         int
+		personalCount int
+		teamCount     int
+		teamBindings  map[string][]string
+		err           error
+	}{personalCount: -1, teamCount: -1}
 	if err != nil {
 		out.err = err
 		return out
@@ -223,6 +287,29 @@ func collectRecords(res *cli.Result, err error, arrayField string) struct {
 	}
 	out.records = arr
 	out.count = len(arr)
+	// Phase 3B revised (2026-05-11): split per-target counts. CLI
+	// emits these when it inlines team records into `entries`.
+	if rawPc, ok := data["personal_count"]; ok {
+		var n int
+		if err := json.Unmarshal(rawPc, &n); err == nil {
+			out.personalCount = n
+		}
+	}
+	if rawTc, ok := data["team_count"]; ok {
+		var n int
+		if err := json.Unmarshal(rawTc, &n); err == nil {
+			out.teamCount = n
+		}
+	}
+	// Optional team binding map. Missing field == older CLI build, so
+	// silently default to nil — the unlocked-list merge promotes to an
+	// empty map if every shard returned nil.
+	if rawTb, hasTb := data["team_active_bindings"]; hasTb {
+		var tb map[string][]string
+		if err := json.Unmarshal(rawTb, &tb); err == nil {
+			out.teamBindings = tb
+		}
+	}
 	return out
 }
 
@@ -249,10 +336,16 @@ func (h *CRUDHandlers) AliasPatchHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	switch req.Target {
-	case "personal", "oauth":
-	case "team":
-		cli.WriteErr(w, cli.ErrUnknownTarget, "target 'team' is not implemented in v1.0")
-		return
+	// Phase 3B (vault-page team-row rename, 2026-05-11):
+	//   team accepted — CLI writes managed_virtual_keys_cache.local_alias
+	//   (per-device label, mirrors the OAuth local_alias pattern). The CLI
+	//   resolves req.ID as virtual_key_id, local_alias, or server alias.
+	//   No conflict-suffix loop for team — local_alias is per-user, so the
+	//   only collisions would be against this user's own other team keys
+	//   and the CLI returns I_CREDENTIAL_CONFLICT in that case (UI handles
+	//   it as a normal error toast, since silent suffix-mangling on a
+	//   server-pushed key would be confusing).
+	case "personal", "oauth", "team":
 	default:
 		cli.WriteErr(w, cli.ErrUnknownTarget, "target must be personal|oauth|team")
 		return

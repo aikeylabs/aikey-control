@@ -80,6 +80,21 @@ func WriteErr(w http.ResponseWriter, code, msg string) {
 		status = http.StatusBadRequest
 	case "I_CREDENTIAL_NOT_FOUND":
 		status = http.StatusNotFound
+	case "I_KEY_DISABLED",
+		"I_KEY_NOT_DELIVERED",
+		"I_KEY_STALE",
+		"I_KEY_NO_PROVIDER":
+		// 422 Unprocessable Entity — team-key business-state errors:
+		// the request is well-formed but the underlying credential
+		// can't satisfy it (revoked / not yet delivered / stale cache /
+		// no provider assignment). Phase 3B (2026-05-11): previously
+		// fell through to 500, which made the Web UI render
+		// "Failed to set routing — status 500" for what's really a
+		// "this team key was just revoked" UX moment. Mapping to 422
+		// (same family as I_VAULT_KEY_INVALID) keeps the FE
+		// httpClient interceptor's 401-redirect logic out of the way
+		// while signalling "client should not retry blindly".
+		status = http.StatusUnprocessableEntity
 	case ErrAliasSuffixExhausted:
 		// 409: we ran out of `-2/-3/...` suffixes (up to 20) which means the
 		// user has twenty pre-existing collisions on the same stem — treat

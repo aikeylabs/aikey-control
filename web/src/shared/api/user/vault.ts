@@ -226,6 +226,20 @@ export interface VaultListData {
    * and reveal will return 401/422 from the HTTP layer while locked.
    */
   locked: boolean;
+  /**
+   * Phase 3B (2026-05-11): map of `virtual_key_id → provider_codes[]` for
+   * team keys that are the active binding in the local CLI vault. The
+   * `records[]` field above never contains team rows (those come from B
+   * cross-origin via useTeamVaultStore), but the binding info lives in
+   * the local vault — this map joins the two. Vault page reads it to
+   * populate each team row's `in_use_for` so the IN USE chip + active
+   * dot fire under the correct protocol group, mirroring Personal/OAuth
+   * semantics.
+   *
+   * Optional for forward-compat with older local-server / CLI builds
+   * that predate the field; treat `undefined` as `{}`.
+   */
+  team_active_bindings?: Record<string, string[]>;
 }
 
 // ── Mutation payloads ────────────────────────────────────────────────────

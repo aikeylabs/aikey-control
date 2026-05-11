@@ -2,9 +2,16 @@ package shared
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -109,16 +116,140 @@ func JWTMiddleware(ts *TokenService) func(http.Handler) http.Handler {
 	}
 }
 
-// CORSMiddleware sets CORS headers per an explicit origin allowlist.
+// CORSAllowControlPanelURL is the sentinel value that, when present in
+// allowedOrigins, makes CORSMiddleware reflect the Origin matching
+// `controlPanelUrl` from `~/.aikey/config/config.json` (Phase 3B R20).
+//
+// Single source of truth: `aikey login --control-url X` and
+// `aikey set-control-url X` both write X to that JSON file. Trial /
+// aikey-local-server CORS therefore tracks "where the user said the
+// team server lives" with no separate config to drift. The file is
+// re-read on every CORS check (cached for 30 s) so a CLI URL update
+// takes effect without restarting the server.
+//
+// Plain JSON (not encrypted): the file is a runtime config artefact,
+// not a secret store — vault credentials live in vault.db. The shape
+// is `{"controlPanelUrl": "http://...", "version": "1"}`.
+//
+// When the file is missing, unreadable, lacks `controlPanelUrl`, or
+// the URL is malformed, the sentinel matches nothing and CORS falls
+// through to the next rule (explicit allowlist or deny).
+const CORSAllowControlPanelURL = "<control-panel-url>"
+
+// CORSAllowLocalNetworks is the sentinel value that, when present in
+// allowedOrigins, makes CORSMiddleware reflect any Origin whose
+// hostname resolves to a loopback or RFC 1918 / RFC 4193 private
+// network address (or the literal `localhost`).
+//
+// Use case: dev / advanced deployments where the cross-fetcher's
+// origin is hard to pin down (multiple browsers, ephemeral docker
+// LAN IPs, office VPN). NOT the default for trial/local — the
+// preferred default is `<control-panel-url>` (single source of truth
+// via `aikey login`). Available as an opt-in for setups that want
+// "any local browser may cross-fetch this server" without going
+// through aikey login first.
+//
+// Threat model: public origins (evil.com, 8.8.8.8) fail the
+// private-network match and stay blocked from /api/user/vault/*
+// enumeration. A malicious page running on the user's LAN (e.g.
+// compromised printer admin UI at http://192.168.1.50/) could reach
+// 127.0.0.1:8090 — acceptable because any LAN-side attacker already
+// has broader options than CORS.
+const CORSAllowLocalNetworks = "<local-networks>"
+
+// controlPanelOriginCache caches the parsed config.json origin so the
+// CORS hot path doesn't stat the file on every request. 30 s TTL is
+// short enough that `aikey login` URL changes propagate quickly without
+// requiring a server restart, long enough to amortise file I/O.
+type controlPanelOriginCacheEntry struct {
+	origin string
+	at     time.Time
+}
+
+var controlPanelOriginCache atomic.Value // controlPanelOriginCacheEntry
+
+const controlPanelOriginCacheTTL = 30 * time.Second
+
+// readControlPanelOrigin reads `controlPanelUrl` from `~/.aikey/config/
+// config.json` and returns its origin (scheme://host[:port]), or empty
+// string if the file is missing / unparseable / the URL is malformed.
+// Result is cached for `controlPanelOriginCacheTTL`.
+//
+// We deliberately do NOT inject the path via env — single source of
+// truth is the home-relative path that aikey-cli also reads/writes
+// (see commands_account/mod.rs `read_remote_control_url` and
+// `handle_set_control_url`). Mismatching paths between CLI and server
+// would re-introduce the drift the sentinel exists to avoid.
+func readControlPanelOrigin() string {
+	if c, ok := controlPanelOriginCache.Load().(controlPanelOriginCacheEntry); ok &&
+		time.Since(c.at) < controlPanelOriginCacheTTL {
+		return c.origin
+	}
+	origin := loadControlPanelOriginFromDisk()
+	controlPanelOriginCache.Store(controlPanelOriginCacheEntry{
+		origin: origin,
+		at:     time.Now(),
+	})
+	return origin
+}
+
+// loadControlPanelOriginFromDisk is the uncached read path. Exposed for
+// tests via a thin wrapper that lets us point at a temp dir.
+func loadControlPanelOriginFromDisk() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	return loadControlPanelOriginFromPath(filepath.Join(home, ".aikey", "config", "config.json"))
+}
+
+func loadControlPanelOriginFromPath(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var parsed struct {
+		ControlPanelURL string `json:"controlPanelUrl"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return ""
+	}
+	if parsed.ControlPanelURL == "" {
+		return ""
+	}
+	u, err := url.Parse(parsed.ControlPanelURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// CORSMiddleware sets CORS headers per an origin allowlist that supports
+// three sentinel values + explicit exact-match entries.
 //
 // Semantics:
 //   - Empty allowedOrigins → deny all cross-origin requests. Same-origin
 //     requests (where the browser omits Origin, or Origin matches the
-//     served host) are unaffected because browsers don't enforce CORS on
-//     them. This is the safe default for local/trial installs.
-//   - allowedOrigins contains "*" → echo back the request Origin for any
-//     cross-origin caller (dev/testing only — do not use in prod).
-//   - Otherwise → echo back the Origin only when it's in the allowlist.
+//     served host) are unaffected. This is the safe default for
+//     production servers that don't want any cross-origin reads.
+//   - allowedOrigins contains `<control-panel-url>` (CORSAllowControlPanelURL) →
+//     reflect the Origin matching `controlPanelUrl` in
+//     `~/.aikey/config/config.json` (the URL `aikey login` writes).
+//     This is the **single source of truth** for "where is the team
+//     server" and the preferred default for trial / local-server.
+//   - allowedOrigins contains `<local-networks>` (CORSAllowLocalNetworks) →
+//     reflect the Origin when its hostname is loopback (127.0.0.0/8,
+//     ::1), private LAN (RFC 1918 IPv4: 10/8, 172.16/12, 192.168/16),
+//     IPv6 ULA (RFC 4193 fc00::/7), or the literal `localhost`. Use
+//     when the cross-fetcher's URL isn't known via `aikey login`.
+//   - allowedOrigins contains "*" → reflect any request Origin
+//     (dev/testing only — do not use in prod).
+//   - Otherwise → reflect the Origin only when it's an exact match
+//     against the allowlist.
+//
+// Multiple modes combine. Example for a deployment that wants both the
+// CLI-tracked URL and an explicit secondary URL:
+// `<control-panel-url>,https://other-team.example.com`.
 //
 // Why the default flipped (2026-04-24 security review): the previous
 // behavior treated an empty allowlist as "allow all", which contradicted
@@ -129,18 +260,29 @@ func JWTMiddleware(ts *TokenService) func(http.Handler) http.Handler {
 func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	originSet := make(map[string]bool, len(allowedOrigins))
 	allowAny := false
+	allowLocalNetworks := false
+	allowControlPanelURL := false
 	for _, o := range allowedOrigins {
-		if o == "*" {
+		switch o {
+		case "*":
 			allowAny = true
-			continue
+		case CORSAllowLocalNetworks:
+			allowLocalNetworks = true
+		case CORSAllowControlPanelURL:
+			allowControlPanelURL = true
+		default:
+			originSet[o] = true
 		}
-		originSet[o] = true
 	}
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if origin != "" && (allowAny || originSet[origin]) {
+			allow := origin != "" && (allowAny ||
+				originSet[origin] ||
+				(allowControlPanelURL && origin == readControlPanelOrigin()) ||
+				(allowLocalNetworks && isLocalNetworkOrigin(origin)))
+			if allow {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Vary", "Origin")
 			}
@@ -156,6 +298,43 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// isLocalNetworkOrigin reports whether the given Origin header value
+// parses to a hostname that's `localhost`, a loopback IP, or an
+// RFC 1918 / RFC 4193 private-network IP. Used by CORSMiddleware when
+// the allowlist contains the `<local-networks>` sentinel.
+//
+// Public DNS names (example.com), public-internet IPs, and malformed
+// origins all return false — the goal is to recognise origins that
+// genuinely belong to "this machine or its private network", not to be
+// a permissive default.
+//
+// Localhost name resolution is intentionally NOT done via net.LookupHost
+// here — that would let an attacker register a public DNS name that
+// resolves to 127.0.0.1 and bypass the check. We only trust the literal
+// hostname `localhost` plus parsed IP literals.
+func isLocalNetworkOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() || ip.IsPrivate() {
+		return true
+	}
+	// `IsPrivate` covers RFC 1918 + RFC 4193; loopback covers 127.0.0.0/8
+	// and ::1. Link-local (169.254.0.0/16, fe80::/10) is intentionally
+	// NOT included — those addresses indicate failed DHCP and shouldn't
+	// host trusted team-server deployments.
+	return false
 }
 
 // LoggingMiddleware logs every request with method, path, and correlation ID.

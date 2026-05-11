@@ -6,10 +6,29 @@ import { runtimeConfig } from '@/app/config/runtime';
 
 function getToken(): string | null {
   try {
-    // User session lives in its own localStorage key (`aikey-auth-user`).
-    // The master-edition console (private repo) uses a separate store; the
-    // two coexist in the same browser without bleeding into each other.
-    const raw = localStorage.getItem('aikey-auth-user');
+    // Master and user sessions use separate localStorage keys.
+    const isUser = window.location.pathname.startsWith('/user');
+    const primaryKey = isUser ? 'aikey-auth-user' : 'aikey-auth-master';
+    let raw = localStorage.getItem(primaryKey);
+
+    // Phase 3B R19 (2026-05-11): in local_bypass / trial mode, /user
+    // pages fall back to the master session JWT when the dedicated
+    // aikey-auth-user slot is empty. Trial composes /user/* and
+    // /master/* on a single backend with one JWT secret, so a master
+    // login authoritatively identifies the same user on /user
+    // endpoints too. Without this fallback, /user/account always
+    // shows the anonymous local-owner identity (local@localhost) even
+    // after the admin signed in via /master/login — defeating the
+    // "trial defaults to JWT with graceful fallback" intent.
+    //
+    // Production (jwt mode) is unaffected: the master JWT is bound
+    // to master-side claims and won't satisfy /user JWTMiddleware
+    // requirements there, but jwt-mode trial doesn't exist as a
+    // production target.
+    if (!raw && isUser && runtimeConfig.authMode === 'local_bypass') {
+      raw = localStorage.getItem('aikey-auth-master');
+    }
+
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { state?: { token?: string } };
     return parsed?.state?.token ?? null;
@@ -18,7 +37,7 @@ function getToken(): string | null {
   }
 }
 
-/** Whether the current page is a user-side route. Always true in this build. */
+/** Whether the current page is under /user (as opposed to /master). */
 function isUserPath(): boolean {
   return window.location.pathname.startsWith('/user');
 }
@@ -26,7 +45,7 @@ function isUserPath(): boolean {
 function redirectToLogin() {
   // User console: session comes from CLI (`aikey web`), not password login.
   // Redirect to a session-expired page instead of a login form.
-  window.location.href = '/user/session-expired';
+  window.location.href = isUserPath() ? '/user/session-expired' : '/master/login';
 }
 
 function createHttpClient(config?: AxiosRequestConfig): AxiosInstance {
@@ -39,17 +58,23 @@ function createHttpClient(config?: AxiosRequestConfig): AxiosInstance {
     ...config,
   });
 
-  // Attach Bearer token on every request.
-  // In local_bypass mode, /user pages don't need JWT (backend uses
-  // LocalIdentityMiddleware). /master pages still send their JWT.
+  // Attach Bearer token on every request when one is available.
+  //
+  // Phase 3B R19 (2026-05-11): always send the token when present —
+  // previously local_bypass + /user paths skipped the token entirely,
+  // which forced /user/account to render anonymous local-owner data
+  // even after the admin logged in via /master/login. Backend's
+  // LocalIdentityMiddleware uses the token when valid and falls back
+  // to anonymous (LocalOwnerAccountID) when absent or unverifiable —
+  // so "always send if present" is safe in both auth modes:
+  //   - jwt mode + valid token   → real identity
+  //   - jwt mode + no token      → 401 (handled by response interceptor)
+  //   - local_bypass + valid     → real identity (via JWT verify branch)
+  //   - local_bypass + absent    → local-owner fallback
   client.interceptors.request.use((req) => {
-    const skipToken =
-      runtimeConfig.authMode === 'local_bypass' && isUserPath();
-    if (!skipToken) {
-      const token = getToken();
-      if (token && req.headers) {
-        req.headers['Authorization'] = `Bearer ${token}`;
-      }
+    const token = getToken();
+    if (token && req.headers) {
+      req.headers['Authorization'] = `Bearer ${token}`;
     }
     return req;
   });

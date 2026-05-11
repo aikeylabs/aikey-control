@@ -130,3 +130,76 @@ export function parseApiError(err: unknown): ApiError {
 export function formatApiError(err: ApiError): string {
   return `[${err.code}] ${err.message}`;
 }
+
+// ── Friendly labels (1-2 words) for dense lists ──────────────────────────────
+//
+// Used in compact UI surfaces (e.g. batch issue Done step) where a long
+// sentence-form server message overwhelms the row. Click-to-expand surfaces
+// the raw message + suggestion when needed. Codes not listed fall back to
+// "Error" — labels are an enrichment, never a correctness gate.
+const LABELS: Record<string, string> = {
+  // BIZ — Auth
+  BIZ_AUTH_EMAIL_TAKEN:         'Email Taken',
+  BIZ_AUTH_INVALID_CREDENTIALS: 'Invalid Credentials',
+  BIZ_AUTH_ACCOUNT_INACTIVE:    'Account Inactive',
+  BIZ_AUTH_TOKEN_INVALID:       'Invalid Token',
+  BIZ_AUTH_TOKEN_REVOKED:       'Token Revoked',
+  BIZ_AUTH_TOKEN_EXPIRED:       'Token Expired',
+  BIZ_AUTH_TOKEN_RECYCLED:      'Token Recycled',
+  BIZ_AUTH_TOKEN_NOT_ACTIVE:    'Token Inactive',
+  BIZ_AUTH_ACCESS_DENIED:       'Access Denied',
+
+  // BIZ — Org / Seat
+  BIZ_ORG_NOT_FOUND:        'Org Not Found',
+  BIZ_SEAT_NOT_FOUND:       'Seat Not Found',
+  BIZ_SEAT_EMAIL_TAKEN:     'Seat Exists',
+  BIZ_SEAT_ALREADY_CLAIMED: 'Already Claimed',
+
+  // BIZ — Virtual Key
+  BIZ_KEY_NOT_FOUND:          'Key Not Found',
+  BIZ_KEY_NOT_ACTIVE:         'Key Not Active',
+  BIZ_KEY_DUPLICATE_PROTOCOL: 'Duplicate Protocol',
+  BIZ_KEY_ALIAS_TAKEN:        'Alias Taken',
+
+  // BIZ — Binding
+  BIZ_BIND_NOT_FOUND:         'Channel Not Found',
+  BIZ_BIND_PROTOCOL_MISMATCH: 'Protocol Mismatch',
+  BIZ_BIND_NO_ACTIVE:         'No Active Channel',
+  BIZ_BIND_NOT_DELIVERED:     'Delivery Failed',
+  BIZ_BIND_ALIAS_TAKEN:       'Alias Taken',
+  BIZ_BIND_DUPLICATE_TARGET:  'Already Issued',
+
+  // BIZ — Credential / Provider
+  BIZ_CRED_NAME_TAKEN: 'Name Taken',
+  BIZ_PROV_CODE_TAKEN: 'Code Taken',
+  BIZ_CRED_NOT_FOUND:  'Credential Not Found',
+  BIZ_CRED_INACTIVE:   'Credential Inactive',
+  BIZ_PROV_NOT_FOUND:  'Provider Not Found',
+
+  // DATA
+  DATA_INVALID_BODY:  'Invalid Request',
+  DATA_MISSING_FIELD: 'Missing Field',
+  DATA_INVALID_FIELD: 'Invalid Field',
+
+  // EXT — upstream
+  EXT_PROVIDER_UPSTREAM:     'Upstream Error',
+  EXT_PROVIDER_AUTH_FAILURE: 'Provider Auth Failed',
+  EXT_PROVIDER_RATE_LIMITED: 'Rate Limited',
+  EXT_PROVIDER_UNAVAILABLE:  'Provider Unreachable',
+
+  // SYS
+  SYS_INTERNAL: 'Server Error',
+  SYS_DB:       'Database Error',
+  SYS_CONFIG:   'Config Error',
+};
+
+/**
+ * Returns a 1-2 word friendly label for an error code (e.g.
+ * `BIZ_BIND_DUPLICATE_TARGET` → `"Already Issued"`). Falls back to
+ * `"Error"` for codes not in the map. Drives the compact one-line summary
+ * in dense list UIs; the raw code + message remain accessible via the
+ * expand-on-click path.
+ */
+export function friendlyLabelFor(code: string): string {
+  return LABELS[code] ?? 'Error';
+}

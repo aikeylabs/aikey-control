@@ -17,6 +17,18 @@ import { userAccountsApi, type SeatSummaryDTO } from '@/shared/api/user/accounts
 import { deliveryApi } from '@/shared/api/user/delivery';
 import { formatRelativeTime } from '@/shared/utils/datetime-intl';
 
+// Phase 3B R22 (2026-05-11) superseded R20: the cross-server "other
+// side account" card was removed. R22's `crossAppPreferred` flag on
+// the sidebar Account entry now makes A's Account link jump directly
+// to B's account page — the user navigates between the two sides
+// rather than viewing both on a single merged page. With that
+// navigation model, fetching cross-origin /accounts/me here is
+// redundant: A's data is always a synthetic local-bypass stub, and B
+// always shows its own real account locally. Removing the fetch also
+// lets local-server's /accounts/me revert to default NO CORS
+// (matching the 2026-04-24 vault-leak protection contract for all
+// /api/user/* surface).
+
 export default function MyAccountPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();

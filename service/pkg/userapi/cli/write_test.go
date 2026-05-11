@@ -24,6 +24,16 @@ func TestWriteErr_StatusMap(t *testing.T) {
 		{"I_CREDENTIAL_CONFLICT", 400},
 		{ErrCliNotFound, 503},
 		{ErrCliTimeout, 504},
+		// Phase 3B (2026-05-11) regression pin: team-key business-state
+		// errors must NOT fall through to 500. Web UI shows
+		// "Failed to set routing — status 500" for an honest "this team
+		// key is currently revoked" event before this mapping was added.
+		// 422 is the same family as I_VAULT_KEY_INVALID — keeps the FE
+		// httpClient interceptor's 401-redirect logic out of the way.
+		{"I_KEY_DISABLED", 422},
+		{"I_KEY_NOT_DELIVERED", 422},
+		{"I_KEY_STALE", 422},
+		{"I_KEY_NO_PROVIDER", 422},
 		{"I_INTERNAL", 500},
 		{"I_SOMETHING_UNKNOWN", 500}, // fallback
 	}

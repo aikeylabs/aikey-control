@@ -1,8 +1,13 @@
 import type { ApiError } from '@/shared/utils/api-error';
+import { friendlyLabelFor } from '@/shared/utils/api-error';
 
 interface ApiErrorDisplayProps {
   error: ApiError;
-  /** Compact mode: single-line code+message only, no meta rows. Used inside dense lists. */
+  /**
+   * Compact mode: collapsed single-line "friendly label" with click-to-expand
+   * raw code + message + meta + suggestion. Used inside dense lists where a
+   * full sentence overwhelms the row (e.g. batch issue Done step).
+   */
   compact?: boolean;
 }
 
@@ -18,24 +23,48 @@ export function ApiErrorDisplay({ error, compact = false }: ApiErrorDisplayProps
   const isExt  = error.code.startsWith('EXT_');
 
   if (compact) {
+    // Native <details>/<summary> for click-to-expand: zero state, accessible
+    // by default (keyboard, screen reader), and serializes consistently for
+    // tests/snapshots. The summary shows a short friendly label
+    // ("Already Issued") so the row stays scannable; expanding reveals the
+    // raw code + message + meta + suggestion for operators who need it.
     return (
-      <div className="space-y-0.5">
-        <span className="text-[10px] font-mono font-bold" style={{ color: '#f87171' }}>
-          [{error.code}] {error.message}
-        </span>
-        {isExt && error.upstream_message && (
-          <span className="block text-[10px] font-mono" style={{ color: '#fca5a5' }}>
-            ↳ {error.provider && <>{error.provider}: </>}
-            {error.upstream_status && <>{error.upstream_status} — </>}
-            {error.upstream_message}
+      <details className="group">
+        <summary
+          className="cursor-pointer text-[10px] font-mono font-bold list-none flex items-center gap-1.5"
+          style={{ color: '#f87171' }}
+        >
+          <span
+            className="inline-block transition-transform group-open:rotate-90"
+            style={{ color: '#fca5a5' }}
+          >
+            ▶
           </span>
-        )}
-        {isData && error.field && (
-          <span className="block text-[10px] font-mono" style={{ color: '#fca5a5' }}>
-            ↳ field: {error.field}{error.rule && ` (${error.rule})`}
-          </span>
-        )}
-      </div>
+          {friendlyLabelFor(error.code)}
+        </summary>
+        <div className="mt-1.5 space-y-1 pl-3 border-l" style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
+          <p className="text-[10px] font-mono" style={{ color: '#f87171' }}>
+            [{error.code}] {error.message}
+          </p>
+          {isExt && error.upstream_message && (
+            <p className="text-[10px] font-mono" style={{ color: '#fca5a5' }}>
+              ↳ {error.provider && <>{error.provider}: </>}
+              {error.upstream_status && <>{error.upstream_status} — </>}
+              {error.upstream_message}
+            </p>
+          )}
+          {isData && error.field && (
+            <p className="text-[10px] font-mono" style={{ color: '#fca5a5' }}>
+              ↳ field: {error.field}{error.rule && ` (${error.rule})`}
+            </p>
+          )}
+          {error.suggestion && (
+            <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+              → {error.suggestion}
+            </p>
+          )}
+        </div>
+      </details>
     );
   }
 

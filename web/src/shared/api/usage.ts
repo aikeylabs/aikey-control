@@ -36,6 +36,21 @@ export interface ProtocolTotal {
   request_count: number;
 }
 
+/** Phase 3B R23 (2026-05-11) — raw recent request row surfaced by the
+ *  Overview "Recent Requests" card. Sourced from `usage_event_ods`
+ *  directly so canary probes can be filtered (DWD aggregates strip
+ *  `route_source`). Default limit 5 in the API call. */
+export interface RecentRequest {
+  request_id: string;
+  event_time_ms: number;
+  provider_code: string;
+  model: string;
+  total_tokens: number;
+  http_status_code: number;
+  virtual_key_id: string;
+  request_status: string; // "success" | "error" | ...
+}
+
 export interface KeyTotal {
   virtual_key_id: string;
   alias?: string;    // human-readable label (personal / team BYOK)
@@ -151,6 +166,18 @@ export const usageApi = {
       params: { ...personalParams(id), ...range, tz: browserTZ() },
     });
     return res.data;
+  },
+
+  /** Phase 3B R23: most recent N non-canary requests for the Overview
+   *  "Recent Requests" card. Default 5, max 50 (server caps). No date
+   *  window — "recent" always means newest regardless of the chart
+   *  range the user is currently viewing. */
+  personalRecent: async (id: PersonalIdentity, limit = 5): Promise<RecentRequest[]> => {
+    const res = await httpClient.get<{ requests: RecentRequest[] }>(
+      '/v1/usage/personal/recent',
+      { params: { ...personalParams(id), limit: String(limit) } },
+    );
+    return res.data.requests ?? [];
   },
 
   // ── Master page methods (masterTimeline, masterByProtocolTotal,

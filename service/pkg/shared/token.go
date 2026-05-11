@@ -11,8 +11,20 @@ import (
 // TokenTTL is the JWT validity window for legacy/admin tokens.
 const TokenTTL = 24 * time.Hour
 
-// AccessTokenTTL is the validity window for OAuth access tokens issued to CLI.
-const AccessTokenTTL = 1 * time.Hour
+// AccessTokenTTL is the validity window for OAuth access tokens issued to
+// the CLI (via `aikey login`) and to the web (via `aikey web` on
+// production JWT-mode deployments). Refresh-token (RefreshTokenTTL =
+// 30 days) is the longer-lived companion the CLI uses for silent
+// renewal — so this number controls "how often the CLI must talk to
+// the server" rather than "max session length".
+//
+// 2026-05-11 raised from 1 h → 24 h: 1 h forced a refresh every hour
+// which was noisy in logs and made the browser webJWT (same TTL)
+// expire mid-session whenever the user kept a tab open through
+// lunch, surfacing as the unfriendly `/user/session-expired` page
+// every couple of hours. 24 h matches the legacy TokenTTL above so
+// both flows have the same "one workday before refresh" cadence.
+const AccessTokenTTL = 24 * time.Hour
 
 // Claims are the payload fields embedded in every JWT issued by this service.
 type Claims struct {
@@ -48,8 +60,10 @@ func (ts *TokenService) Issue(accountID, email string) (string, error) {
 	return tok.SignedString(ts.secret)
 }
 
-// IssueAccessToken creates a short-lived (1 h) JWT for OAuth CLI sessions.
-// Use this instead of Issue for tokens issued through the aikey login flow.
+// IssueAccessToken creates an access JWT for OAuth CLI sessions (lifetime
+// `AccessTokenTTL`, currently 24 h). Use this instead of Issue for tokens
+// issued through the aikey login flow — they round-trip the
+// access/refresh pair the CLI silently renews.
 func (ts *TokenService) IssueAccessToken(accountID, email string) (string, error) {
 	now := time.Now()
 	claims := Claims{

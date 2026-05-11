@@ -130,11 +130,42 @@ func NewHandlers(cfg *Config, logger *slog.Logger) *Handlers {
 //
 // The former POST /api/user/vault/reveal endpoint (plaintext secret read)
 // was removed 2026-04-24 security review round 2; see vault/crud.go.
-func (h *Handlers) Register(mux *http.ServeMux, authMW func(http.Handler) http.Handler) {
+//
+// Phase 3B R23 (2026-05-11) extension: `readCORSMW` wraps the two
+// read-only vault endpoints (`GET /api/user/vault/list`,
+// `GET /api/user/vault/status`) so the team server's Overview page can
+// cross-fetch them via the `<control-panel-url>` sentinel allowlist.
+// Pass nil to disable cross-origin reads entirely (the default for
+// production deployments where vault doesn't exist server-side).
+//
+// Why only `list` + `status` get the CORS wrap:
+//   - `list` returns the keys-with-route_tokens payload the Overview
+//     "Accessible Keys" card and the cross-server merge UI need.
+//     route_token is a usable proxy bearer — accepted risk per user's
+//     2026-05-11 decision: the team URL allowlist via
+//     `<control-panel-url>` sentinel restricts readers to the single
+//     origin the user explicitly opted into via `aikey login`.
+//   - `status` is a probe (initialised / locked) with no secrets.
+//   - Mutation endpoints (`unlock`, `lock`, `init`, entry add/patch/
+//     delete, use) stay same-origin only — a malicious cross-origin
+//     POST is much more dangerous than a leaked metadata read.
+func (h *Handlers) Register(
+	mux *http.ServeMux,
+	authMW func(http.Handler) http.Handler,
+	readCORSMW func(http.Handler) http.Handler,
+) {
+	// Default to passthrough if no CORS wrap supplied (production
+	// multi-tenant deployments don't expose vault to the team page).
+	if readCORSMW == nil {
+		readCORSMW = func(h http.Handler) http.Handler { return h }
+	}
 	// Vault session endpoints.
 	mux.Handle("POST /api/user/vault/unlock", authMW(http.HandlerFunc(h.Vault.UnlockHandler)))
 	mux.Handle("POST /api/user/vault/lock", authMW(http.HandlerFunc(h.Vault.LockHandler)))
-	mux.HandleFunc("GET /api/user/vault/status", h.Vault.StatusHandler)
+	mux.Handle("GET /api/user/vault/status", readCORSMW(http.HandlerFunc(h.Vault.StatusHandler)))
+	mux.Handle("OPTIONS /api/user/vault/status", readCORSMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})))
 
 	// Vault first-run init (web-driven path) — per
 	// 20260430-个人vault-Web首次设置-方案A.md, only mounted on local-user /
@@ -150,7 +181,10 @@ func (h *Handlers) Register(mux *http.ServeMux, authMW func(http.Handler) http.H
 	// for the session-dispatch logic.
 	if h.VaultCRUD != nil {
 		mux.Handle("GET /api/user/vault/list",
-			authMW(http.HandlerFunc(h.VaultCRUD.ListHandler)))
+			readCORSMW(authMW(http.HandlerFunc(h.VaultCRUD.ListHandler))))
+		mux.Handle("OPTIONS /api/user/vault/list", readCORSMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})))
 		mux.Handle("PATCH /api/user/vault/entry/alias",
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.VaultCRUD.AliasPatchHandler))))
 		mux.Handle("POST /api/user/vault/entry",

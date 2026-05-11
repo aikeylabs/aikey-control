@@ -24,10 +24,9 @@
 import { Navigate, useParams } from 'react-router-dom';
 
 export const GO_TARGETS: Record<string, string> = {
-  // Canonical aliases
+  // Canonical aliases — local-server-served pages on A.
   overview: '/user/overview',
   import: '/user/import',
-  keys: '/user/virtual-keys',
   vault: '/user/vault',
   account: '/user/account',
   usage: '/user/usage-ledger',
@@ -35,8 +34,6 @@ export const GO_TARGETS: Record<string, string> = {
 
   // Historical / alternate names the CLI may still send. Keep them
   // mapped so older binaries or muscle-memory commands don't break.
-  'virtual-keys': '/user/virtual-keys',
-  'team-keys': '/user/virtual-keys',
   profile: '/user/account',
   'usage-ledger': '/user/usage-ledger',
   'bulk-import': '/user/import',
@@ -44,6 +41,17 @@ export const GO_TARGETS: Record<string, string> = {
   // Common spellings for the personal credential vault.
   secrets: '/user/vault',
   'my-vault': '/user/vault',
+  // Phase 3B R7 (2026-05-11): team-keys / virtual-keys / keys aliases
+  // previously pointed at A's local /user/virtual-keys stub. The
+  // canonical Team Keys page now lives on B (the team server) and the
+  // sidebar reaches it via cross-app menu (a real cross-origin link).
+  // From a `/go/<alias>` redirect we can't easily emit a cross-origin
+  // <a>; map to overview where the sidebar's Team Keys link is visible.
+  // CLI users wanting the team page directly: `aikey master keys` opens
+  // the team server's URL straight in the browser.
+  keys: '/user/overview',
+  'virtual-keys': '/user/overview',
+  'team-keys': '/user/overview',
 };
 
 const FALLBACK = '/user/overview';

@@ -7,16 +7,24 @@
  * only keys their team/org assigned them, so "Team Keys" better matches
  * intent. Master console retains "Virtual Keys" (operator technical view).
  *
- * v3 style pass (2026-04-23): visuals aligned with
- * .superdesign/design_iterations/user_virtual_keys_3.html.
- * LOGIC UNCHANGED — all state / queries / handlers preserved.
- * Additive filter pills (All / Issued / Pending / Shared) in the reference
- * are intentionally omitted; they would add new filter logic outside the
- * "style only" scope. When we add them we'll wire real state for them.
+ * Phase 3B vault-style alignment (2026-05-11): page restructured to use
+ * the same visual vocabulary as the User Vault page (`.vault-page` outer
+ * class, shared KEYS_PAGE_CSS, IdentityStrip + Card + FilterStrip +
+ * GroupHeaderRow + Row + DetailDrawer + ToastStack patterns). Spec:
+ * requirements/2026-05-11-aikey-web-local-first-team-merge.md R10.
+ *
+ * IMPORTANT: this file is consumed by BOTH editions:
+ *   - A side: not routed (Phase 3B R7 removed the route); the file
+ *     stays here for B's npm-link import.
+ *   - B side: master/web imports as
+ *     `import UserVirtualKeysPage from 'aikey-control-web/pages/virtual-keys'`.
+ *     This is the canonical Team Keys page on the team server.
  */
-import { useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
+
 import { deliveryApi, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
 import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
@@ -27,43 +35,218 @@ import {
 } from '@/shared/components/HookWireRcModal';
 import { copyText } from '@/shared/utils/clipboard';
 import { mapUseError } from '@/shared/utils/mapUseError';
+import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
+import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl } from '@/shared/cross-app-menu';
 
-// Per-provider chip colours — keep in sync with overview / usage-ledger.
-function providerChipClass(code: string): string {
-  const k = (code || '').toLowerCase();
-  if (k.includes('anthropic') || k.includes('claude')) return 'provider-chip anthropic';
-  if (k.includes('openai') || k.includes('gpt')) return 'provider-chip openai';
-  if (k.includes('kimi') || k.includes('moonshot')) return 'provider-chip kimi';
-  if (k.includes('google') || k.includes('gemini')) return 'provider-chip google';
-  return 'provider-chip';
+// Phase 3B R23 revised (2026-05-11): on B (team server) the Team Keys
+// drawer cross-fetches Personal A's vault.list to surface the
+// CLI-local route_url + route_token rows for each team key. On A
+// (Personal local-server) — the route never registers (R7) and this
+// detection just stays false.
+const IS_PERSONAL_SIDE = OWN_MENU === OWN_PERSONAL_MENU;
+
+// ── Derived types ────────────────────────────────────────────────────────
+
+type TypeFilter = 'all' | 'issued' | 'pending' | 'revoked';
+type SortKey = 'alias' | 'expires' | 'status';
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+/** Lower-case provider family for grouping. Strips _api / _oauth tails. */
+function providerFamily(code: string | null | undefined): string {
+  return (code ?? 'unknown').toLowerCase().replace(/_oauth$|_api$/, '');
 }
 
-function statusMeta(keyStatus: string): { cls: string; label: string } {
-  if (keyStatus === 'active') return { cls: 'status-issued', label: 'Issued' };
-  if (keyStatus === 'pending_claim') return { cls: 'status-pending', label: 'Pending' };
-  if (keyStatus === 'revoked') return { cls: 'status-revoked', label: 'Revoked' };
-  if (keyStatus === 'expired') return { cls: 'status-revoked', label: 'Expired' };
-  return { cls: 'status-revoked', label: keyStatus || 'Unknown' };
+function providerBrandColor(provider: string | null | undefined): string {
+  const p = (provider ?? '').toLowerCase();
+  if (p.includes('anthropic') || p.includes('claude')) return 'var(--chart-anthropic)';
+  if (p.includes('openai')) return 'var(--chart-openai)';
+  if (p.includes('codex')) return 'var(--chart-codex)';
+  if (p.includes('kimi') || p.includes('moonshot')) return 'var(--chart-kimi)';
+  if (p.includes('gemini') || p.includes('google')) return 'var(--chart-gemini)';
+  return 'var(--chart-neutral)';
 }
+
+/** key_status (CLI side) → vault page chip semantics. */
+function statusMeta(keyStatus: string): {
+  chipClass: 'success' | 'warning' | 'danger';
+  label: string;
+} {
+  if (keyStatus === 'active')        return { chipClass: 'success', label: 'ISSUED' };
+  if (keyStatus === 'pending_claim') return { chipClass: 'warning', label: 'PENDING' };
+  if (keyStatus === 'revoked')       return { chipClass: 'danger',  label: 'REVOKED' };
+  if (keyStatus === 'expired')       return { chipClass: 'danger',  label: 'EXPIRED' };
+  return { chipClass: 'danger', label: (keyStatus || 'UNKNOWN').toUpperCase() };
+}
+
+function shareLabel(s: string | undefined): string {
+  const k = (s ?? '').toLowerCase();
+  if (k === 'pending_claim') return 'pending';
+  if (k === 'claimed')       return 'claimed';
+  if (k === 'revoked')       return 'revoked';
+  if (k === 'shared' || k === 'team') return 'shared';
+  if (k === 'private' || k === 'owner_only') return 'private';
+  return s || 'unknown';
+}
+
+function formatExpiresAt(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  if (t < Date.now()) return 'expired';
+  const d = new Date(t);
+  return `expires ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+}
+
+function shortVk(vk: string): string {
+  if (vk.length <= 14) return vk;
+  return `${vk.slice(0, 8)}…${vk.slice(-4)}`;
+}
+
+// ── Main component ──────────────────────────────────────────────────────
 
 export default function UserVirtualKeysPage() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [summary, setSummary] = useState<KeySummaryDTO | null>(null);
-  const [drawerError, setDrawerError] = useState<string | null>(null);
-  const [useStatus, setUseStatus] = useState<{ kind: 'ok'; msg: string } | { kind: 'err'; msg: string } | null>(null);
   const qc = useQueryClient();
 
-  const { data: rawAll, isLoading } = useQuery({ queryKey: ['my-keys'], queryFn: deliveryApi.allKeys });
-  const allKeys = rawAll ?? [];
-
-  const filtered = allKeys.filter((k) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return k.alias.toLowerCase().includes(q) || k.virtual_key_id.toLowerCase().includes(q);
+  const { data: rawAll, isLoading, isError, error } = useQuery({
+    queryKey: ['my-keys'],
+    queryFn: deliveryApi.allKeys,
   });
+  const allKeys: UserKeyDTO[] = useMemo(() => rawAll ?? [], [rawAll]);
 
-  const selected = allKeys.find((k) => k.virtual_key_id === selectedId) ?? null;
+  // ── R23 revised (2026-05-11): cross-fetch A's vault.list ──────────
+  //
+  // CLI vault is where `route_url` + `route_token` live for each team
+  // key (CLI populates them on claim, see `_internal query
+  // list_personal_with_masked` → emits team records). The team server
+  // (this page's same-origin backend) has no knowledge of the user's
+  // local aikey-proxy URL or the route_token mint, so we must reach
+  // back to A.
+  //
+  // CORS gate: `<control-panel-url>` sentinel on A's
+  // /api/user/vault/list — already wired in R23. Only runs on B side
+  // (IS_PERSONAL_SIDE=false) and only when otherBaseUrl resolves to a
+  // different origin than the current page (no point cross-fetching
+  // ourselves; the trial single-binary case is hypothetical here
+  // because this Team Keys page is master/web-only). Anonymous fetch
+  // (no JWT) — A's LocalIdentityMiddleware returns the local-owner
+  // identity which owns the vault records.
+  const otherBaseUrl = useMemo(() => getOtherBaseUrl(), []);
+  const vaultCrossClient = useMemo(() => {
+    if (IS_PERSONAL_SIDE || !otherBaseUrl) return null;
+    try {
+      if (new URL(otherBaseUrl).origin === window.location.origin) return null;
+    } catch {
+      return null;
+    }
+    return axios.create({
+      baseURL: otherBaseUrl,
+      timeout: 15_000,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, [otherBaseUrl]);
+
+  // Team record lookup: { virtual_key_id → { route_url, route_token } }.
+  // Empty map when cross-fetch is unavailable or returns no records;
+  // drawer falls back to "—" hints for those fields.
+  const teamVaultQuery = useQuery({
+    queryKey: ['team-vault-records-cross', otherBaseUrl ?? ''],
+    queryFn: async () => {
+      if (!vaultCrossClient) return {} as Record<string, { route_url?: string; route_token?: string | null }>;
+      try {
+        const r = await vaultCrossClient.get<{ status: string; data?: { records?: Array<{
+          target?: string; virtual_key_id?: string; route_url?: string; route_token?: string | null;
+        }> } }>('/api/user/vault/list');
+        const records = r.data?.data?.records ?? [];
+        const map: Record<string, { route_url?: string; route_token?: string | null }> = {};
+        for (const rec of records) {
+          if (rec.target === 'team' && rec.virtual_key_id) {
+            map[rec.virtual_key_id] = {
+              route_url: rec.route_url,
+              route_token: rec.route_token ?? null,
+            };
+          }
+        }
+        return map;
+      } catch {
+        return {} as Record<string, { route_url?: string; route_token?: string | null }>;
+      }
+    },
+    enabled: !!vaultCrossClient,
+    staleTime: 30_000,
+  });
+  const teamVaultByVk = teamVaultQuery.data ?? {};
+
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('alias');
+
+  // Filter + sort
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allKeys
+      .filter((k) => {
+        if (typeFilter === 'issued' && k.key_status !== 'active') return false;
+        if (typeFilter === 'pending' && k.key_status !== 'pending_claim') return false;
+        if (typeFilter === 'revoked' && !(k.key_status === 'revoked' || k.key_status === 'expired')) return false;
+        if (q) {
+          const a = k.alias.toLowerCase();
+          const id = k.virtual_key_id.toLowerCase();
+          const p = (k.provider_code ?? '').toLowerCase();
+          if (!a.includes(q) && !id.includes(q) && !p.includes(q)) return false;
+        }
+        return true;
+      })
+      .slice()
+      .sort((a, b) => {
+        switch (sortKey) {
+          case 'alias':
+            return a.alias.localeCompare(b.alias);
+          case 'expires': {
+            const ta = a.expires_at ? Date.parse(a.expires_at) : Number.POSITIVE_INFINITY;
+            const tb = b.expires_at ? Date.parse(b.expires_at) : Number.POSITIVE_INFINITY;
+            return ta - tb;
+          }
+          case 'status':
+            return a.key_status.localeCompare(b.key_status);
+          default:
+            return 0;
+        }
+      });
+  }, [allKeys, search, typeFilter, sortKey]);
+
+  // Counts for IdentityStrip + filter pills
+  const counts = useMemo(() => {
+    const total = allKeys.length;
+    const issued = allKeys.filter((k) => k.key_status === 'active').length;
+    const pending = allKeys.filter((k) => k.key_status === 'pending_claim').length;
+    const revoked = allKeys.filter((k) => k.key_status === 'revoked' || k.key_status === 'expired').length;
+    return { total, issued, pending, revoked };
+  }, [allKeys]);
+
+  // Group by provider family (preserves filter order)
+  const grouped = useMemo(() => {
+    const order: string[] = [];
+    const map = new Map<string, UserKeyDTO[]>();
+    for (const k of filtered) {
+      const fam = providerFamily(k.provider_code);
+      if (!map.has(fam)) {
+        map.set(fam, []);
+        order.push(fam);
+      }
+      map.get(fam)!.push(k);
+    }
+    return order.map((provider) => ({
+      provider,
+      color: providerBrandColor(provider),
+      records: map.get(provider)!,
+    }));
+  }, [filtered]);
+
+  // Drawer + selected row
+  const [drawerKey, setDrawerKey] = useState<UserKeyDTO | null>(null);
+  const [summary, setSummary] = useState<KeySummaryDTO | null>(null);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
 
   const viewMut = useMutation({
     mutationFn: (id: string) => deliveryApi.getSummary(id),
@@ -77,1029 +260,794 @@ export default function UserVirtualKeysPage() {
     },
   });
 
-  const claimMut = useMutation({
-    mutationFn: (id: string) => deliveryApi.claimKey(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['my-keys'] });
-    },
-  });
+  // Toast stack — vault-style transient feedback (5s auto-dismiss)
+  type ToastKind = 'success' | 'error';
+  interface ToastEntry { id: number; kind: ToastKind; title: string; sub?: string }
+  const [toasts, setToasts] = useState<ToastEntry[]>([]);
+  const toastIdRef = useRef(0);
+  const pushToast = useCallback((t: Omit<ToastEntry, 'id'>): number => {
+    toastIdRef.current += 1;
+    const id = toastIdRef.current;
+    setToasts((prev) => [...prev, { ...t, id }]);
+    setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== id)), 5000);
+    return id;
+  }, []);
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((x) => x.id !== id));
+  }, []);
 
-  // Stage 7-2: "Set as active" mutation — POSTs to /api/user/vault/use
-  // with target=team. Backend (Stage 7-1) resolves vk_id via the canonical
-  // bridge → CLI vault-op → refresh_implicit_profile_activation, which
-  // writes ~/.aikey/active.env so any open terminal picks up the new key
-  // on its next prompt (precmd seq diff). UI just needs to show pending /
-  // success / error states and invalidate the list cache so freshly active
-  // / formerly active rows reflect the swap.
+  // Use action — Stage 7-2 / Phase 3B: routes via vault-op use (target=team)
   const setHookReadiness = useHookReadinessStore((s) => s.setReadiness);
-  // Hook coverage v1 update 2026-05-07: auto-pop wire-rc modal on first
-  // mutation in this session that detects rc_wired=false (local edition only).
   const wireRcModal = useHookWireRcModal();
   const useMutTeam = useMutation({
     mutationFn: (id: string) => vaultApi.use({ target: 'team', id }),
-    onSuccess: (res) => {
-      setUseStatus({
-        kind: 'ok',
-        msg: 'Active key switched. Open terminals will pick it up on next prompt.',
-      });
-      // Hook coverage v1: feed the three hook-status fields into the
-      // shared readiness store so <HookReadinessBanner> renders the
-      // right CTA (or hides) based on the freshly observed state.
-      // eligible=true: virtual-keys "Use" is an explicit active-set
-      // event (X2).
+    onSuccess: (res, vkId) => {
       const r = pickHookReadiness(res);
       setHookReadiness(r);
       wireRcModal.openIfNeeded(r, true);
       qc.invalidateQueries({ queryKey: ['my-keys'] });
+      const k = allKeys.find((x) => x.virtual_key_id === vkId);
+      pushToast({
+        kind: 'success',
+        title: 'Now routing through ' + (k?.alias ?? '(unnamed)'),
+        sub: 'Open terminals will pick up the change on next prompt',
+      });
     },
     onError: (err: unknown) => {
-      setUseStatus({ kind: 'err', msg: mapUseError(err) });
+      pushToast({ kind: 'error', title: 'Failed to set routing', sub: mapUseError(err) });
     },
   });
 
-  function handleRowClick(k: UserKeyDTO) {
-    setSelectedId(k.virtual_key_id);
+  // Claim mutation
+  const claimMut = useMutation({
+    mutationFn: (id: string) => deliveryApi.claimKey(id),
+    onSuccess: (_res, vkId) => {
+      qc.invalidateQueries({ queryKey: ['my-keys'] });
+      const k = allKeys.find((x) => x.virtual_key_id === vkId);
+      pushToast({ kind: 'success', title: 'Claimed ' + (k?.alias ?? '(unnamed)') });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      pushToast({ kind: 'error', title: 'Failed to claim key', sub: msg });
+    },
+  });
+
+  function openDrawer(k: UserKeyDTO) {
+    setDrawerKey(k);
     setDrawerError(null);
-    setUseStatus(null);
+    setSummary(null);
     if (k.key_status === 'active') {
-      setSummary(null);
       viewMut.mutate(k.virtual_key_id);
-    } else {
-      setSummary(null);
     }
   }
 
-  function handleClose() {
-    setSelectedId(null);
+  function closeDrawer() {
+    setDrawerKey(null);
     setSummary(null);
     setDrawerError(null);
-    setUseStatus(null);
   }
 
   return (
-    <div className="tk-page flex flex-1 overflow-hidden">
-      <style>{TK_CSS}</style>
+    <div className="vault-page h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
+      <style>{KEYS_PAGE_CSS}</style>
 
-      {/* List Area */}
-      <div
-        className="flex-1 flex flex-col min-w-0 overflow-hidden relative"
-        style={{ borderRight: selected ? '1px solid var(--border)' : undefined }}
-      >
-        {/* Hook readiness banner — shows after a vault mutation when the
-            Web bridge couldn't (or didn't) wire the shell rc. Reads from
-            useHookReadinessStore which the mutation onSuccess populates.
-            Update 2026-05-07: onEnableClick re-opens the wire-rc modal,
-            for users who dismissed the auto-pop. */}
-        <div style={{ padding: '0 16px', marginTop: 12 }}>
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-6 py-5 space-y-5">
           <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
           <HookWireRcModal open={wireRcModal.open} onClose={wireRcModal.close} />
-        </div>
 
-        {/* Filter bar */}
-        <div className="filter-bar">
-          <label className="search">
-            <span className="ico"><SearchIcon /></span>
-            <input
-              type="text"
-              placeholder="Search by alias or ID..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
-          <span className="count-chip">
-            <span className="num">{filtered.length}</span> Keys
-          </span>
-        </div>
+          <IdentityStrip counts={counts} />
 
-        {/* Table OR empty-state card.
-            When there are no keys at all (not just filtered-out), render a
-            full empty-state card with a key-in-ring visual — same pattern
-            the account page uses for "No seats assigned yet" so the two
-            empty states read as a family. Searching on zero-keys still
-            gets the card (nothing to filter); a search that filters out
-            real keys still renders the table with an in-row "no match"
-            line so the user can tell it's search, not a data issue. */}
-        {!isLoading && allKeys.length === 0 ? (
-          <div className="flex-1 flex p-7">
-            <div className="tk-empty">
-              <div className="tk-empty-ring">
-                <KeyIconLarge />
-              </div>
-              <div className="tk-empty-title">No keys assigned yet</div>
-              <p className="tk-empty-desc">
-                Keys your team or organisation grants you will show up here.
-                Ask a <strong className="tk-empty-strong">team admin</strong> to share a key,
-                or import your own from the{' '}
-                <Link to="/user/import" className="tk-empty-link">Import</Link> page.
-              </p>
-            </div>
-          </div>
-        ) : (
-        <div className="flex-1 overflow-y-auto px-7 pb-7">
-          <div className="table-wrap">
-            <table className="keys">
-              <colgroup>
-                <col style={{ width: '28%' }} />
-                <col style={{ width: '16%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '14%' }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>Alias / ID</th>
-                  <th>Protocols</th>
-                  <th>Status</th>
-                  <th>Share</th>
-                  <th>Expires</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr><td colSpan={6} className="empty-cell">Loading...</td></tr>
-                ) : filtered.length === 0 ? (
-                  <tr><td colSpan={6} className="empty-cell">No keys match your search.</td></tr>
-                ) : (
-                  filtered.map((k) => {
-                    const isSelected = selectedId === k.virtual_key_id;
-                    const status = statusMeta(k.key_status);
-                    return (
-                      <tr
-                        key={k.virtual_key_id}
-                        className={isSelected ? 'selected' : undefined}
-                        onClick={() => handleRowClick(k)}
+          <FilterStrip
+            search={search}
+            onSearchChange={setSearch}
+            typeFilter={typeFilter}
+            onTypeFilterChange={setTypeFilter}
+            counts={counts}
+          />
+
+          <section className="card overflow-hidden">
+            <CardHeader counts={counts} />
+
+            <div className="overflow-x-auto">
+              {isLoading && <EmptyState message="Loading…" />}
+              {isError && <EmptyState message={`Failed to load: ${(error as Error)?.message ?? 'unknown error'}`} />}
+              {!isLoading && !isError && allKeys.length === 0 && <TeamKeysEmptyPanel />}
+              {!isLoading && !isError && allKeys.length > 0 && filtered.length === 0 && (
+                <EmptyState message="No keys match your filters." />
+              )}
+              {filtered.length > 0 && (
+                <table className="vault">
+                  <thead>
+                    <tr>
+                      <th
+                        style={{ width: '34%' }}
+                        className={`th-sortable ${sortKey === 'alias' ? 'active' : ''}`}
+                        onClick={() => setSortKey('alias')}
+                        aria-sort={sortKey === 'alias' ? 'ascending' : 'none'}
                       >
-                        <td>
-                          <div className="cell-alias">{k.alias}</div>
-                          <div className="cell-id">{k.virtual_key_id.slice(0, 12)}…</div>
-                        </td>
-                        <td>
-                          {k.provider_code ? (
-                            <span className={providerChipClass(k.provider_code)}>{k.provider_code}</span>
-                          ) : (
-                            <span className="dim-dash">—</span>
-                          )}
-                        </td>
-                        <td>
-                          <span className={`status ${status.cls}`}>
-                            <span className="dot" />
-                            {status.label}
-                          </span>
-                        </td>
-                        <td>
-                          <ShareBadge shareStatus={k.share_status} />
-                        </td>
-                        <td>
-                          {k.expires_at ? (
-                            <span className="expires">
-                              {new Date(k.expires_at).toLocaleDateString(undefined, {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                              })}
-                            </span>
-                          ) : (
-                            <span className="expires"><span className="dim">Never</span></span>
-                          )}
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
-                          {k.share_status === 'pending_claim' ? (
-                            <button
-                              onClick={() => claimMut.mutate(k.virtual_key_id)}
-                              disabled={claimMut.isPending}
-                              className="tk-btn tk-btn-primary tk-btn-sm"
-                            >
-                              {claimMut.isPending ? 'Claiming…' : 'Claim'}
-                            </button>
-                          ) : k.key_status === 'active' ? (
-                            <button className="tk-btn tk-btn-outline tk-btn-sm">
-                              Details
-                            </button>
-                          ) : (
-                            <span className="dim-dash">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                        Alias <span className="th-hint">team-managed</span>
+                        {sortKey === 'alias' && <span className="th-sort-arrow">↓</span>}
+                      </th>
+                      <th style={{ width: '20%' }}>Protocol</th>
+                      <th
+                        style={{ width: '14%' }}
+                        className={`th-sortable ${sortKey === 'status' ? 'active' : ''}`}
+                        onClick={() => setSortKey('status')}
+                      >
+                        Status
+                        {sortKey === 'status' && <span className="th-sort-arrow">↓</span>}
+                      </th>
+                      <th style={{ width: '12%' }}>Share</th>
+                      <th
+                        style={{ width: '12%' }}
+                        className={`th-sortable ${sortKey === 'expires' ? 'active' : ''}`}
+                        onClick={() => setSortKey('expires')}
+                      >
+                        Expires
+                        {sortKey === 'expires' && <span className="th-sort-arrow">↓</span>}
+                      </th>
+                      <th style={{ width: 130, textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grouped.map((g) => (
+                      <React.Fragment key={g.provider}>
+                        <GroupHeaderRow
+                          provider={g.provider}
+                          color={g.color}
+                          totalCount={g.records.length}
+                        />
+                        {g.records.map((k, idx) => (
+                          <Row
+                            key={k.virtual_key_id}
+                            record={k}
+                            isLastInGroup={idx === g.records.length - 1}
+                            onOpenDrawer={() => openDrawer(k)}
+                            onClaim={() => claimMut.mutate(k.virtual_key_id)}
+                            onUse={() => useMutTeam.mutate(k.virtual_key_id)}
+                            claimPending={claimMut.isPending && claimMut.variables === k.virtual_key_id}
+                            usePending={useMutTeam.isPending && useMutTeam.variables === k.virtual_key_id}
+                          />
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </section>
+
+          <PageFooter />
         </div>
-        )}
       </div>
 
-      {/* Detail drawer — kept, restyled with v3 tokens */}
-      {selected && (
-        <div className="tk-drawer">
-          <div className="tk-drawer-header">
-            <div className="min-w-0">
-              <h2 className="tk-drawer-title">{selected.alias}</h2>
-              <div className="tk-drawer-sub">
-                <KeyIconSmall />
-                <span className="truncate">{selected.virtual_key_id}</span>
-                <CopyButton text={selected.virtual_key_id} />
-              </div>
-            </div>
-            <button onClick={handleClose} className="tk-close" aria-label="Close">
-              <CloseIcon />
-            </button>
-          </div>
+      {drawerKey && (
+        <DetailDrawer
+          record={drawerKey}
+          summary={summary}
+          summaryPending={viewMut.isPending}
+          summaryError={drawerError}
+          onClose={closeDrawer}
+          localRoute={teamVaultByVk[drawerKey.virtual_key_id]}
+        />
+      )}
 
-          <div className="tk-drawer-body">
-            {/* Basic info */}
-            <div className="tk-info">
-              <DrawerRow
-                label="Status"
-                value={
-                  <span className={`status ${statusMeta(selected.key_status).cls}`}>
-                    <span className="dot" />
-                    {statusMeta(selected.key_status).label}
-                  </span>
-                }
-              />
-              <DrawerRow
-                label="Share status"
-                value={<ShareBadge shareStatus={selected.share_status} />}
-              />
-              <DrawerRow
-                label="Protocol"
-                value={
-                  selected.provider_code ? (
-                    <span className={providerChipClass(selected.provider_code)}>{selected.provider_code}</span>
-                  ) : (
-                    <span className="dim-dash">—</span>
-                  )
-                }
-              />
-              <DrawerRow
-                label="Expires at"
-                value={
-                  <span className="tk-value">
-                    {selected.expires_at
-                      ? new Date(selected.expires_at).toLocaleDateString(undefined, {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                        })
-                      : <span className="dim">Never</span>}
-                  </span>
-                }
-              />
-            </div>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+    </div>
+  );
+}
 
-            {/* Protocols & routing */}
-            {viewMut.isPending && (
-              <div className="tk-loading">Loading binding details…</div>
-            )}
-            {drawerError && (
-              <div className="tk-error">{drawerError}</div>
-            )}
-            {summary && summary.slots.length > 0 && (
-              <div>
-                <h3 className="tk-section-title">
-                  <NetworkIcon /> Protocols &amp; routing
-                </h3>
-                {summary.slots.map((slot) => (
-                  <div key={slot.protocol_type} className="tk-slot">
-                    <div className="tk-slot-head">
-                      <span>{slot.protocol_type.toUpperCase()}</span>
-                    </div>
-                    <div className="tk-slot-body">
-                      {slot.targets.map((t) => (
-                        <div
-                          key={t.binding_id}
-                          className={`tk-target ${t.fallback_role === 'primary' ? 'primary' : 'fallback'}`}
-                        >
-                          <div className="tk-target-head">
-                            <span className="tk-target-provider">{t.provider_code}</span>
-                            <span className={`tk-role ${t.fallback_role === 'primary' ? 'primary' : 'fallback'}`}>
-                              {t.fallback_role.toUpperCase()}
-                            </span>
-                          </div>
-                          <div className="tk-target-url">
-                            <span className="dim">Base URL:</span> <span>{t.base_url}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                <p className="tk-note">
-                  Provider secret keys are securely stored in the master vault and are never exposed to seat members.
-                </p>
-              </div>
-            )}
-
-            {/* Stage 7-2: "Set as active" — switches the routing target
-                via POST /api/user/vault/use. Only offered for usable keys
-                (`key_status === 'active'`); revoked / expired / pending
-                keys fall back to the CLI hint below.
-
-                Why no global toast: the existing virtual-keys page has no
-                toast plumbing and this status is naturally drawer-scoped
-                ("you set THIS key as active"). Inline status keeps the
-                feedback close to the action and zero-imports. */}
-            {selected.key_status === 'active' && (
-              <div className="tk-cli">
-                <h4 className="tk-section-title" style={{ marginTop: 0 }}>
-                  <TerminalIcon /> Make this key active
-                </h4>
-                <p className="tk-cli-hint">
-                  Route traffic for this key's protocol(s) through it. Open terminals will pick up the change on their next prompt — no <code>source</code> needed.
-                </p>
-                <button
-                  type="button"
-                  className="tk-cli-button"
-                  onClick={() => {
-                    setUseStatus(null);
-                    useMutTeam.mutate(selected.virtual_key_id);
-                  }}
-                  disabled={useMutTeam.isPending}
-                >
-                  {useMutTeam.isPending ? 'Setting active…' : 'Set as active'}
-                </button>
-                {useStatus && (
-                  <div
-                    className={useStatus.kind === 'ok' ? 'tk-use-ok' : 'tk-use-err'}
-                    role="status"
-                  >
-                    {useStatus.msg}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Fallback CLI hint for non-active (revoked / pending) keys */}
-            {selected.key_status !== 'active' && (
-              <div className="tk-cli">
-                <h4 className="tk-section-title" style={{ marginTop: 0 }}>
-                  <TerminalIcon /> Use this key locally
-                </h4>
-                <p className="tk-cli-hint">
-                  This key is not currently active. Run the following command to authenticate and fetch its configuration:
-                </p>
-                <div className="tk-cli-box">
-                  <code>aikey login</code>
-                  <CopyButton text="aikey login" />
-                </div>
-              </div>
-            )}
+// ── Identity strip (team-keys flavor) ────────────────────────────────────
+function IdentityStrip({ counts }: { counts: { total: number; issued: number; pending: number; revoked: number } }) {
+  return (
+    <section className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className="w-9 h-9 rounded flex items-center justify-center flex-shrink-0"
+          style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+        >
+          <KeyRoundIcon className="w-4 h-4" style={{ color: 'var(--primary)' }} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--foreground)' }}>Team Keys</div>
+          <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+            <span>{counts.total} TOTAL</span>
+            {counts.issued > 0 && (<><span className="opacity-40">·</span><span>{counts.issued} ISSUED</span></>)}
+            {counts.pending > 0 && (<><span className="opacity-40">·</span><span>{counts.pending} PENDING</span></>)}
+            {counts.revoked > 0 && (<><span className="opacity-40">·</span><span>{counts.revoked} REVOKED</span></>)}
           </div>
         </div>
-      )}
+      </div>
+    </section>
+  );
+}
+
+// ── Card header ──────────────────────────────────────────────────────────
+function CardHeader({ counts }: { counts: { total: number; issued: number; pending: number; revoked: number } }) {
+  return (
+    <div className="card-header flex items-center justify-between gap-3 px-4 py-3">
+      <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+        <span>ALL KEYS</span>
+        <span className="chip">
+          <span className="status-dot idle" style={{ width: 5, height: 5 }} />
+          {counts.total} stored
+        </span>
+        {counts.issued > 0 && (
+          <span className="chip success">
+            <span className="status-dot" style={{ width: 5, height: 5 }} />
+            {counts.issued} issued
+          </span>
+        )}
+        {counts.pending > 0 && (
+          <span className="chip warning">
+            <span className="status-dot stale" style={{ width: 5, height: 5 }} />
+            {counts.pending} pending
+          </span>
+        )}
+        {counts.revoked > 0 && (
+          <span className="chip danger">
+            <span className="status-dot error" style={{ width: 5, height: 5 }} />
+            {counts.revoked} revoked
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ── Inline helpers ─────────────────────────────────────────────────── */
-
-function DrawerRow({ label, value }: { label: string; value: React.ReactNode }) {
+// ── Filter strip ─────────────────────────────────────────────────────────
+function FilterStrip(props: {
+  search: string;
+  onSearchChange: (s: string) => void;
+  typeFilter: TypeFilter;
+  onTypeFilterChange: (v: TypeFilter) => void;
+  counts: { total: number; issued: number; pending: number; revoked: number };
+}) {
   return (
-    <div className="tk-info-row">
-      <span className="tk-info-label">{label}</span>
-      <span className="tk-info-value">{value}</span>
+    <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-4 flex-wrap min-w-0">
+        <div className="relative">
+          <SearchIcon
+            className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ color: 'var(--muted-foreground)' }}
+          />
+          <input
+            type="text"
+            className="pl-10 pr-3 py-2 text-sm w-96"
+            placeholder="Search alias, ID, or provider…"
+            value={props.search}
+            onChange={(e) => props.onSearchChange(e.target.value)}
+            aria-label="Search team keys"
+          />
+        </div>
+        <div className="filter-group" role="radiogroup" aria-label="Filter by status">
+          <FilterPill active={props.typeFilter === 'all'} onClick={() => props.onTypeFilterChange('all')} label="All" count={props.counts.total} />
+          <FilterPill active={props.typeFilter === 'issued'} onClick={() => props.onTypeFilterChange('issued')} label="Issued" count={props.counts.issued} />
+          <FilterPill active={props.typeFilter === 'pending'} onClick={() => props.onTypeFilterChange('pending')} label="Pending" count={props.counts.pending} />
+          <FilterPill active={props.typeFilter === 'revoked'} onClick={() => props.onTypeFilterChange('revoked')} label="Revoked" count={props.counts.revoked} />
+        </div>
+      </div>
     </div>
   );
 }
 
-function ShareBadge({ shareStatus }: { shareStatus: string }) {
-  // Map the backend's share_status strings to a v3-style icon + label pair.
-  // Unknown values fall back to plain text so no data is hidden when the
-  // backend surfaces a new state we haven't mapped yet.
-  const s = (shareStatus || '').toLowerCase();
-  if (s === 'claimed' || s === 'private' || s === 'owner_only') {
-    return (
-      <span className="share-badge">
-        <LockIcon /> <span className="dim">Private</span>
-      </span>
-    );
-  }
-  if (s === 'shared' || s === 'team') {
-    return (
-      <span className="share-badge">
-        <UsersIcon /> <span>Team</span>
-      </span>
-    );
-  }
-  if (s === 'owner') {
-    return (
-      <span className="share-badge">
-        <UserIcon /> <span className="dim">Owner</span>
-      </span>
-    );
-  }
-  if (s === 'pending_claim') {
-    return (
-      <span className="share-badge">
-        <ClockIcon /> <span>Pending</span>
-      </span>
-    );
-  }
-  return <span className="share-badge"><span className="dim">{shareStatus || '—'}</span></span>;
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
+function FilterPill({ active, onClick, label, count }: {
+  active: boolean; onClick: () => void; label: string; count?: number;
+}) {
   return (
-    <button
-      onClick={(e) => { e.stopPropagation(); copyText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-      className="tk-copy-btn"
-      style={{ color: copied ? '#4ade80' : undefined }}
-      title="Copy"
-      type="button"
-    >
-      <CopyIcon />
+    <button className={`filter-pill${active ? ' active' : ''}`} onClick={onClick}>
+      {label}
+      {typeof count === 'number' && <span className="count">{count}</span>}
     </button>
   );
 }
 
-/* ── Inline icons ───────────────────────────────────────────────────── */
-
-function SearchIcon() {
+// ── Group header row ─────────────────────────────────────────────────────
+function GroupHeaderRow({ provider, color, totalCount }: {
+  provider: string; color: string; totalCount: number;
+}) {
+  const entryWord = totalCount === 1 ? 'entry' : 'entries';
   return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-    </svg>
-  );
-}
-function CopyIcon() {
-  return (
-    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-    </svg>
-  );
-}
-function KeyIconSmall() {
-  return (
-    <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
-    </svg>
-  );
-}
-
-function KeyIconLarge() {
-  return (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.6}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
-    </svg>
-  );
-}
-function CloseIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-function NetworkIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-    </svg>
-  );
-}
-function TerminalIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
-    </svg>
-  );
-}
-function LockIcon() {
-  return (
-    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-    </svg>
-  );
-}
-function UsersIcon() {
-  return (
-    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: '#60a5fa' }}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-    </svg>
-  );
-}
-function UserIcon() {
-  return (
-    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-    </svg>
-  );
-}
-function ClockIcon() {
-  return (
-    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
+    <tr className="group-row" data-group-provider={provider}>
+      <td colSpan={6}>
+        <div className="gr-inner">
+          <span
+            className="gr-chip"
+            style={{ background: color }}
+            aria-hidden="false"
+          >
+            {provider}
+          </span>
+          <span className="gr-meta">
+            · {totalCount} {entryWord}
+          </span>
+        </div>
+      </td>
+    </tr>
   );
 }
 
-/* ── Scoped CSS ─────────────────────────────────────────────────────── */
+// ── Row ──────────────────────────────────────────────────────────────────
+const Row = React.memo(function Row(props: {
+  record: UserKeyDTO;
+  isLastInGroup?: boolean;
+  onOpenDrawer: () => void;
+  onClaim: () => void;
+  onUse: () => void;
+  claimPending: boolean;
+  usePending: boolean;
+}) {
+  const r = props.record;
+  const status = statusMeta(r.key_status);
+  const fam = providerFamily(r.provider_code);
+  const expiresStr = formatExpiresAt(r.expires_at);
+  const trClasses = [
+    'group-child',
+    'row-clickable',
+    props.isLastInGroup ? 'last-in-group' : '',
+  ].filter(Boolean).join(' ');
 
-const TK_CSS = `
-.tk-page {
-  --tk-surface-2: #1f1f23;
-  --tk-surface-3: #2a2a2f;
-  --tk-line: rgba(255,255,255,0.06);
-  --tk-line-strong: rgba(255,255,255,0.10);
-  --tk-text-dim: #8b8b94;
-  --tk-sky: #60a5fa;
-  --tk-violet: #a78bfa;
-}
+  const onRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
+    const t = e.target as HTMLElement;
+    if (t.closest('button, input, textarea, a, [role="button"]')) return;
+    props.onOpenDrawer();
+  };
 
-/* ── Filter bar ─────────────────────────────────────────────────── */
-.tk-page .filter-bar {
-  padding: 16px 28px;
-  display: flex; align-items: center; gap: 12px;
-}
-.tk-page .search {
-  position: relative;
-  width: 320px;
-}
-.tk-page .search input {
-  width: 100%;
-  height: 36px;
-  padding: 0 12px 0 34px;
-  background: var(--tk-surface-2);
-  border: 1px solid var(--tk-line-strong);
-  border-radius: 6px;
-  color: var(--foreground);
-  font-family: monospace;
-  font-size: 12.5px;
-  outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-.tk-page .search input::placeholder { color: var(--tk-text-dim); }
-.tk-page .search input:focus {
-  border-color: rgba(250, 204, 21,0.45);
-  box-shadow: 0 0 0 3px rgba(250, 204, 21,0.08);
-}
-.tk-page .search .ico {
-  position: absolute; left: 12px; top: 50%;
-  transform: translateY(-50%);
-  color: var(--tk-text-dim);
-  pointer-events: none;
-}
-.tk-page .count-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--tk-line-strong);
-  border-radius: 6px;
-  font-family: monospace;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--tk-text-dim);
-  background: var(--tk-surface-2);
-}
-.tk-page .count-chip .num { color: var(--foreground); font-weight: 700; }
+  return (
+    <tr className={trClasses} onClick={onRowClick}>
+      <td>
+        <div className="alias-main">{r.alias || '(unnamed)'}</div>
+        <div className="alias-sub">
+          <span className="font-mono" title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
+        </div>
+      </td>
 
-/* ── Table ──────────────────────────────────────────────────────── */
-.tk-page .table-wrap {
-  background: var(--tk-surface-2);
-  border: 1px solid var(--tk-line);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.tk-page table.keys {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-.tk-page table.keys thead th {
-  text-align: left;
-  padding: 14px 20px;
-  font-family: monospace;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--tk-text-dim);
-  background: rgba(0,0,0,0.2);
-  border-bottom: 1px solid var(--tk-line);
-}
-.tk-page table.keys thead th:last-child { text-align: right; }
-.tk-page table.keys tbody td {
-  padding: 16px 20px;
-  font-size: 13px;
-  border-bottom: 1px solid var(--tk-line);
-  vertical-align: middle;
-}
-/* Keep the last row's bottom border — stacks with the card's outer
-   bottom border to produce the master-style "double line" at the end
-   of the table. */
-.tk-page table.keys tbody tr { cursor: pointer; transition: background 120ms ease; }
-.tk-page table.keys tbody tr:hover { background: rgba(255,255,255,0.02); }
-.tk-page table.keys tbody tr.selected {
-  background: rgba(250, 204, 21,0.05);
-  box-shadow: inset 2px 0 0 0 var(--primary);
-}
-.tk-page table.keys tbody tr.selected .cell-alias { color: var(--primary); }
+      <td>
+        <span className="provider-cell">
+          <span className="prov-dot" style={{ background: providerBrandColor(fam) }} aria-hidden="true" />
+          <span className="name">{fam}</span>
+          <span className="kind-pill team">TEAM</span>
+        </span>
+      </td>
 
-.tk-page .empty-cell {
-  text-align: center;
-  padding: 48px 20px;
-  font-family: monospace;
-  font-size: 12px;
-  color: var(--tk-text-dim);
-}
+      <td>
+        <span className={`chip ${status.chipClass}`}>
+          {status.chipClass === 'success' && <span className="status-dot" style={{ width: 5, height: 5 }} />}
+          {status.chipClass === 'warning' && <span className="status-dot stale" style={{ width: 5, height: 5 }} />}
+          {status.chipClass === 'danger'  && <span className="status-dot error" style={{ width: 5, height: 5 }} />}
+          {status.label}
+        </span>
+      </td>
 
-/* Full-pane empty state — "No keys assigned yet" with a key-in-ring
-   visual, rendered in place of the table when allKeys.length === 0.
-   Same card/ring pattern as the account page's "No seats" state so the
-   two empty states read as a visual family. Note: avoid the class name
-   'ring' — Tailwind ships a utility of that name which applies a blue
-   box-shadow and would fight our styling; we use 'tk-empty-ring'. */
-.tk-page .tk-empty {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center;
-  padding: 48px 32px;
-  background: var(--tk-surface-2);
-  border: 1px solid var(--tk-line);
-  border-radius: 8px;
-}
-.tk-page .tk-empty-ring {
-  width: 56px; height: 56px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.25);
-  border: 1px solid var(--tk-line-strong);
-  color: var(--primary);
-  margin-bottom: 14px;
-  box-shadow: 0 0 0 6px rgba(250, 204, 21,0.04);
-}
-.tk-page .tk-empty-title {
-  font-family: monospace;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--muted-foreground);
-  opacity: 0.85;
-  margin-bottom: 10px;
-}
-.tk-page .tk-empty-desc {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--tk-text-dim);
-  max-width: 420px;
-}
-.tk-page .tk-empty-strong {
-  color: var(--foreground);
-  font-weight: 700;
-}
-.tk-page .tk-empty-link {
-  font-family: monospace;
-  color: var(--primary);
-  font-size: 12.5px;
-  text-decoration: none;
-  border-bottom: 1px solid rgba(250, 204, 21,0.35);
-  transition: border-color 150ms ease, color 150ms ease;
-}
-.tk-page .tk-empty-link:hover {
-  color: #fde047;
-  border-bottom-color: rgba(250, 204, 21,0.7);
-}
+      <td>
+        <span className="text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>
+          {shareLabel(r.share_status)}
+        </span>
+      </td>
 
-.tk-page .cell-alias {
-  font-family: monospace;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--foreground);
-}
-.tk-page .cell-id {
-  font-family: monospace;
-  font-size: 12px;
-  color: var(--tk-text-dim);
-  margin-top: 4px;
-}
+      <td className="font-mono text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>
+        {expiresStr ?? '—'}
+      </td>
 
-/* ── Provider chip ──────────────────────────────────────────────── */
-.tk-page .provider-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-family: monospace;
-  font-size: 11px; font-weight: 700;
-  letter-spacing: 0.1em; text-transform: uppercase;
-  padding: 4px 9px;
-  border-radius: 3px;
-  border: 1px solid var(--tk-line-strong);
-  color: var(--foreground);
-  background: rgba(255,255,255,0.03);
-}
-.tk-page .provider-chip.openai    { color: var(--tk-violet); background: rgba(167,139,250,0.08); border-color: rgba(167,139,250,0.3); }
-.tk-page .provider-chip.anthropic { color: var(--primary); background: rgba(250, 204, 21,0.08); border-color: rgba(250, 204, 21,0.3); }
-.tk-page .provider-chip.google    { color: var(--tk-sky); background: rgba(96,165,250,0.08); border-color: rgba(96,165,250,0.3); }
-.tk-page .provider-chip.kimi      { color: var(--tk-sky); background: rgba(96,165,250,0.08); border-color: rgba(96,165,250,0.3); }
+      <td style={{ textAlign: 'right' }}>
+        <div className="row-actions">
+          {r.share_status === 'pending_claim' ? (
+            <button
+              type="button"
+              className="row-use-btn"
+              onClick={props.onClaim}
+              disabled={props.claimPending}
+              title={props.claimPending ? 'Claiming…' : 'Claim this team key'}
+            >
+              {props.claimPending ? '…' : 'Claim'}
+            </button>
+          ) : r.key_status === 'active' ? (
+            <button
+              type="button"
+              className="row-use-btn"
+              onClick={props.onUse}
+              disabled={props.usePending}
+              title={props.usePending ? 'Switching…' : 'Route requests through this key (aikey use)'}
+              aria-label="Set as active key"
+            >
+              <ZapIcon className="w-3 h-3" />
+              Use
+            </button>
+          ) : (
+            <span className="text-[11px]" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>—</span>
+          )}
+          <button className="icon-btn" title="View details" onClick={(e) => { e.stopPropagation(); props.onOpenDrawer(); }}>
+            <EyeIcon className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
 
-/* ── Status ─────────────────────────────────────────────────────── */
-.tk-page .status {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-family: monospace;
-  font-size: 11px; font-weight: 700;
-  letter-spacing: 0.05em; text-transform: uppercase;
-}
-.tk-page .status .dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  display: inline-block; flex-shrink: 0;
-}
-.tk-page .status-issued { color: #6ee7b7; }
-.tk-page .status-issued .dot { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.5); }
-.tk-page .status-pending { color: #fdba74; }
-.tk-page .status-pending .dot { background: #f97316; box-shadow: 0 0 6px rgba(249,115,22,0.5); }
-.tk-page .status-revoked { color: var(--tk-text-dim); }
-.tk-page .status-revoked .dot { background: var(--tk-text-dim); }
+// ── Detail drawer ────────────────────────────────────────────────────────
+function DetailDrawer(props: {
+  record: UserKeyDTO;
+  summary: KeySummaryDTO | null;
+  summaryPending: boolean;
+  summaryError: string | null;
+  onClose: () => void;
+  /** Phase 3B R23 revised (2026-05-11): local-side proxy routing
+   *  for this team key, cross-fetched from Personal A's vault.list.
+   *  Both fields optional — undefined when this Team Keys page is
+   *  rendered without a reachable Personal local-server (cross-app
+   *  base URL absent / unreachable / CORS denied / locked vault).
+   *  Drawer renders graceful empty hints in those cases. */
+  localRoute?: { route_url?: string; route_token?: string | null };
+  /** Phase 3B R12 (2026-05-11): drawer no longer hosts a direct
+   *  vaultApi.use button — primary CTA is now copy-CLI
+   *  ("Activate in terminal"), matching vault page's drawer pattern.
+   *  The inline row Use button (handled at the table-row level)
+   *  preserves one-click activation for users who want it. */
+}) {
+  const r = props.record;
+  const status = statusMeta(r.key_status);
+  const fam = providerFamily(r.provider_code);
+  const expiresStr = formatExpiresAt(r.expires_at);
 
-/* ── Share badge ────────────────────────────────────────────────── */
-.tk-page .share-badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-family: monospace;
-  font-size: 11.5px;
-  color: var(--foreground);
-}
-.tk-page .share-badge .dim { color: var(--tk-text-dim); }
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') props.onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [props]);
 
-/* ── Expires cell ──────────────────────────────────────────────── */
-.tk-page .expires {
-  font-family: monospace;
-  font-size: 12px;
-  color: var(--foreground);
-}
-.tk-page .expires .dim { color: var(--tk-text-dim); }
-.tk-page .dim-dash { color: var(--tk-text-dim); }
+  const [copied, setCopied] = useState<string | null>(null);
+  function copy(field: string, text: string) {
+    copyText(text);
+    setCopied(field);
+    window.setTimeout(() => setCopied((k) => (k === field ? null : k)), 1200);
+  }
 
-/* ── Action buttons ────────────────────────────────────────────── */
-.tk-page .tk-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  font-family: monospace;
-  font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.05em;
-  border-radius: 6px;
-  transition: all 180ms ease;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-.tk-page .tk-btn-sm { padding: 6px 12px; font-size: 10.5px; }
-.tk-page .tk-btn-primary {
-  background: var(--primary); color: var(--primary-foreground);
-  border-color: rgba(250, 204, 21,0.6);
-  box-shadow: 0 0 0 1px rgba(250, 204, 21,0.15), 0 6px 20px -10px rgba(250, 204, 21,0.5);
-}
-.tk-page .tk-btn-primary:hover:not(:disabled) { background: #fde047; transform: translateY(-1px); }
-.tk-page .tk-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-.tk-page .tk-btn-outline {
-  background: transparent;
-  color: var(--foreground);
-  border-color: var(--tk-line-strong);
-}
-.tk-page .tk-btn-outline:hover { background: rgba(255,255,255,0.04); border-color: var(--tk-text-dim); }
+  return (
+    <>
+      <div className="drawer-overlay" data-open="true" onClick={props.onClose} />
+      <aside className="drawer" data-open="true" role="dialog" aria-modal="true">
+        <div className="drawer-head">
+          <div className="content">
+            <div className="alias-title">{r.alias || '(unnamed)'}</div>
+            <div className="meta-row">
+              <span className="provider-cell">
+                <span className="prov-dot" style={{ background: providerBrandColor(fam) }} />
+                <span className="name font-mono" style={{ color: 'var(--muted-foreground)' }}>{fam}</span>
+                <span className="kind-pill team">TEAM</span>
+              </span>
+              <span className={`chip ${status.chipClass}`}>
+                {status.chipClass === 'success' && <span className="status-dot" style={{ width: 5, height: 5 }} />}
+                {status.chipClass === 'warning' && <span className="status-dot stale" style={{ width: 5, height: 5 }} />}
+                {status.chipClass === 'danger'  && <span className="status-dot error" style={{ width: 5, height: 5 }} />}
+                {status.label}
+              </span>
+            </div>
+          </div>
+          <button className="drawer-close" onClick={props.onClose} title="Close (Esc)" aria-label="Close drawer">
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
 
-/* ── Drawer ────────────────────────────────────────────────────── */
-.tk-page .tk-drawer {
-  width: 400px;
-  flex-shrink: 0;
-  display: flex; flex-direction: column;
-  background: var(--background);
-  box-shadow: -10px 0 30px rgba(0,0,0,0.5);
-  position: relative;
-  z-index: 20;
-}
-.tk-page .tk-drawer-header {
-  padding: 18px 22px;
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
-  border-bottom: 1px solid var(--tk-line);
-  background: var(--tk-surface-2);
-}
-.tk-page .tk-drawer-title {
-  font-family: monospace;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--foreground);
-}
-.tk-page .tk-drawer-sub {
-  display: flex; align-items: center; gap: 8px;
-  font-family: monospace;
-  font-size: 12px;
-  color: var(--tk-text-dim);
-  margin-top: 6px;
-}
-.tk-page .tk-drawer-sub .truncate {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: 220px;
-}
-.tk-page .tk-close {
-  color: var(--tk-text-dim);
-  background: transparent;
-  border: none;
-  padding: 4px;
-  cursor: pointer;
-  transition: color 120ms ease;
-}
-.tk-page .tk-close:hover { color: var(--foreground); }
-.tk-page .tk-copy-btn {
-  background: transparent;
-  border: none;
-  color: var(--tk-text-dim);
-  cursor: pointer;
-  padding: 2px;
-  transition: color 120ms ease;
-}
-.tk-page .tk-copy-btn:hover { color: var(--foreground); }
+        <div className="drawer-body">
+          {/* Virtual Key section — analog of vault page's Credential block */}
+          <div className="drawer-section">
+            <div className="drawer-section-title">
+              <KeyRoundIcon className="w-3 h-3" />
+              Virtual Key
+            </div>
+            <div className="drawer-field">
+              <span className="k">Alias</span>
+              <span className="v">{r.alias || '(unnamed)'}</span>
+            </div>
+            <div className="drawer-field">
+              <span className="k">Virtual key id</span>
+              <span className="v mono">
+                <span title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
+                <button type="button" className="copy-btn" onClick={() => copy('vk_id', r.virtual_key_id)} title={`Copy ${r.virtual_key_id}`}>
+                  {copied === 'vk_id' ? <CheckIcon className="w-3 h-3" /> : <ClipboardIcon className="w-3 h-3" />}
+                </button>
+              </span>
+            </div>
+            <div className="drawer-field">
+              <span className="k">Share</span>
+              <span className="v">
+                <span className={`chip ${r.share_status === 'claimed' ? 'success' : r.share_status === 'revoked' ? 'danger' : 'warning'}`}>
+                  {shareLabel(r.share_status).toUpperCase()}
+                </span>
+              </span>
+            </div>
+          </div>
 
-.tk-page .tk-drawer-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 22px 28px;
-  display: flex; flex-direction: column; gap: 24px;
-}
-.tk-page .tk-info {
-  display: flex; flex-direction: column; gap: 12px;
-  font-family: monospace;
-  font-size: 12px;
-}
-.tk-page .tk-info-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--tk-line);
-}
-.tk-page .tk-info-row:last-child { border-bottom: none; }
-.tk-page .tk-info-label {
-  font-size: 10.5px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--tk-text-dim);
-}
-.tk-page .tk-info-value {
-  text-align: right;
-}
-.tk-page .tk-value { color: var(--foreground); }
-.tk-page .tk-value .dim { color: var(--tk-text-dim); }
+          {/* Routing section — protocol slots from KeySummaryDTO */}
+          <div className="drawer-section">
+            <div className="drawer-section-title">
+              <NetworkIcon className="w-3 h-3" />
+              Routing
+            </div>
+            {props.summaryPending && (
+              <div className="drawer-field">
+                <span className="v" style={{ color: 'var(--muted-foreground)' }}>Loading binding details…</span>
+              </div>
+            )}
+            {props.summaryError && (
+              <div className="drawer-field">
+                <span className="v" style={{ color: '#fca5a5' }}>{props.summaryError}</span>
+              </div>
+            )}
+            {props.summary && props.summary.slots.length === 0 && (
+              <div className="drawer-field">
+                <span className="v" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>No routing slots configured.</span>
+              </div>
+            )}
+            {props.summary && props.summary.slots.map((slot) => (
+              <div key={slot.protocol_type} className="drawer-field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                <span className="k">{slot.protocol_type.toUpperCase()}</span>
+                <span className="v" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4, width: '100%' }}>
+                  {slot.targets.map((t) => (
+                    <div key={t.binding_id} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <span className="font-mono text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{t.base_url}</span>
+                      <span className={`kind-pill${t.fallback_role === 'primary' ? '' : ' oauth'}`}>{t.fallback_role}</span>
+                    </div>
+                  ))}
+                </span>
+              </div>
+            ))}
 
-.tk-page .tk-loading {
-  font-family: monospace;
-  font-size: 12px;
-  color: var(--tk-text-dim);
-  text-align: center;
-  padding: 16px;
-}
-.tk-page .tk-error {
-  font-family: monospace;
-  font-size: 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(248,113,113,0.3);
-  background: rgba(248,113,113,0.05);
-  color: #f87171;
-  border-radius: 6px;
-}
+            {/* Phase 3B R23 revised (2026-05-11): local proxy mapping
+                rows. Mirrors Personal Vault drawer's `route_url` +
+                `Route token` pair (see vault/index.tsx). Data is the
+                user's machine view (cross-fetched A's vault.list); when
+                A is unreachable / vault locked / not configured the
+                row renders a single "—" hint instead of disappearing,
+                so the user can tell the slot exists. */}
+            {props.localRoute?.route_url && (
+              <div className="drawer-field">
+                <span className="k">route_url</span>
+                <span className="v stack">
+                  <span className="mono font-mono text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
+                    {props.localRoute.route_url}
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span className="text-[10px]" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
+                      SDK base URL (via aikey-proxy)
+                    </span>
+                    <button
+                      type="button"
+                      className="copy-btn"
+                      title="Copy route URL"
+                      aria-label="Copy route_url"
+                      onClick={() => copy('route_url', props.localRoute!.route_url!)}
+                    >
+                      {copied === 'route_url' ? <CheckIcon className="w-3 h-3" /> : <ClipboardIcon className="w-3 h-3" />}
+                    </button>
+                  </span>
+                </span>
+              </div>
+            )}
+            <div className="drawer-field">
+              <span className="k">Route token</span>
+              <span className="v stack">
+                {props.localRoute?.route_token ? (
+                  <div className="drawer-tokenbox" tabIndex={0} aria-label="Route token">
+                    {props.localRoute.route_token}
+                    <button
+                      type="button"
+                      className="copy-btn"
+                      title="Copy route token"
+                      aria-label="Copy route token"
+                      onClick={() => copy('route_token', props.localRoute!.route_token!)}
+                    >
+                      {copied === 'route_token' ? <CheckIcon className="w-3 h-3" /> : <ClipboardIcon className="w-3 h-3" />}
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="drawer-tokenbox drawer-tokenbox-locked"
+                    aria-label="Route token unavailable"
+                    style={{ color: 'var(--muted-foreground)' }}
+                  >
+                    <span style={{ letterSpacing: '0.15em' }}>{'•'.repeat(40)}</span>
+                    <span className="drawer-tokenbox-hint text-[10px]" style={{ opacity: 0.55 }}>
+                      Unlock your local vault to reveal
+                    </span>
+                  </div>
+                )}
+              </span>
+            </div>
+          </div>
 
-.tk-page .tk-section-title {
-  display: flex; align-items: center; gap: 8px;
-  font-family: monospace;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--tk-text-dim);
-  margin-bottom: 12px;
-}
-.tk-page .tk-slot {
-  background: rgba(0,0,0,0.2);
-  border: 1px solid var(--tk-line);
-  border-radius: 6px;
-  overflow: hidden;
-  margin-bottom: 12px;
-}
-.tk-page .tk-slot-head {
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--tk-line);
-  background: rgba(255,255,255,0.02);
-  font-family: monospace;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--foreground);
-}
-.tk-page .tk-slot-body {
-  padding: 14px;
-  display: flex; flex-direction: column; gap: 14px;
-}
-.tk-page .tk-target {
-  padding-left: 12px;
-  border-left: 2px solid var(--muted);
-}
-.tk-page .tk-target.primary { border-left-color: var(--primary); }
-.tk-page .tk-target-head {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 4px;
-}
-.tk-page .tk-target-provider {
-  font-family: monospace;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--foreground);
-}
-.tk-page .tk-role {
-  font-family: monospace;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  padding: 2px 6px;
-  border-radius: 3px;
-  background: rgba(255,255,255,0.05);
-  color: var(--tk-text-dim);
-}
-.tk-page .tk-role.primary {
-  background: rgba(250, 204, 21,0.15);
-  color: var(--primary);
-}
-.tk-page .tk-target-url {
-  font-family: monospace;
-  font-size: 11.5px;
-  color: var(--foreground);
-  word-break: break-all;
-}
-.tk-page .tk-target-url .dim { color: var(--tk-text-dim); }
-.tk-page .tk-note {
-  font-family: monospace;
-  font-size: 11.5px;
-  font-style: italic;
-  line-height: 1.5;
-  color: var(--tk-text-dim);
-  padding: 10px 12px;
-  border-left: 2px solid rgba(250, 204, 21,0.45);
-  background: rgba(250, 204, 21,0.04);
-  border-radius: 3px;
+          {/* Actions section — Phase 3B R12 (2026-05-11): unified
+              "Activate in terminal" copy-CLI primary CTA, matching
+              vault page's drawer pattern across all credential
+              targets (Personal / OAuth / Team). The inline row Use
+              button still calls vaultApi.use directly for one-click;
+              the drawer button gives the user a copy-paste
+              alternative for muscle memory + scriptability. */}
+          <div className="drawer-section">
+            <div className="drawer-section-title">
+              <WrenchIcon className="w-3 h-3" />
+              Actions
+            </div>
+            <div className="drawer-actions">
+              {r.key_status === 'active' && r.alias ? (
+                <>
+                  <button
+                    type="button"
+                    className="action-btn primary-route"
+                    onClick={() => copy('route_cmd', `aikey activate ${r.alias}`)}
+                    title={`Copy CLI command: aikey activate ${r.alias}`}
+                  >
+                    {copied === 'route_cmd' ? (
+                      <>
+                        <CheckIcon className="w-3.5 h-3.5" />
+                        Command copied
+                      </>
+                    ) : (
+                      <>
+                        <ZapIcon className="w-3.5 h-3.5" />
+                        Activate in terminal
+                      </>
+                    )}
+                  </button>
+                  <div className="drawer-actions-hint" role="note">
+                    {copied === 'route_cmd' ? (
+                      <>
+                        <CheckIcon className="w-3 h-3" />
+                        <span>Copied — paste in a terminal.</span>
+                      </>
+                    ) : (
+                      <>
+                        <ZapIcon className="w-3 h-3" />
+                        <span>
+                          Copy <code className="font-mono">aikey activate {r.alias}</code>, run in a terminal.
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="drawer-actions-hint" role="note">
+                  <InfoIcon className="w-3 h-3" />
+                  <span>This key is {status.label.toLowerCase()} and cannot be activated.</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Meta section */}
+          <div className="drawer-section">
+            <div className="drawer-section-title">
+              <InfoIcon className="w-3 h-3" />
+              Meta
+            </div>
+            <div className="drawer-field">
+              <span className="k">Protocol</span>
+              <span className="v">{fam}<span className="ro-pill">RO</span></span>
+            </div>
+            <div className="drawer-field">
+              <span className="k">Type</span>
+              <span className="v">Team key<span className="ro-pill">RO</span></span>
+            </div>
+            <div className="drawer-field">
+              <span className="k">Status</span>
+              <span className="v">
+                {status.chipClass === 'success'
+                  ? <><span className="status-dot" style={{ width: 5, height: 5 }} /><span style={{ color: 'var(--success)' }}>{status.label}</span></>
+                  : <><span className="status-dot error" style={{ width: 5, height: 5 }} /><span style={{ color: '#fca5a5' }}>{status.label}</span></>}
+              </span>
+            </div>
+            {expiresStr && (
+              <div className="drawer-field">
+                <span className="k">Expires</span>
+                <span className="v">{expiresStr}</span>
+              </div>
+            )}
+            <div className="drawer-field">
+              <span className="k">Org</span>
+              <span className="v mono dim">{r.org_id || '—'}</span>
+            </div>
+            <div className="drawer-field">
+              <span className="k">Seat</span>
+              <span className="v mono dim">{r.seat_id || '—'}</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </>
+  );
 }
 
-.tk-page .tk-cli {
-  padding: 14px 16px;
-  background: rgba(0,0,0,0.15);
-  border: 1px solid var(--tk-line);
-  border-radius: 6px;
+// ── Toast stack ──────────────────────────────────────────────────────────
+function ToastStack({ toasts, onDismiss }: {
+  toasts: Array<{ id: number; kind: 'success' | 'error'; title: string; sub?: string }>;
+  onDismiss: (id: number) => void;
+}) {
+  return (
+    <div className="toast-stack" aria-live="polite" aria-atomic="true">
+      {toasts.map((t) => (
+        <div key={t.id} className={`toast${t.kind === 'error' ? ' error' : ''}`} data-open="true">
+          <span className="toast-icon">
+            {t.kind === 'success' ? <ZapIcon className="w-3 h-3" /> : <InfoIcon className="w-3 h-3" />}
+          </span>
+          <div className="toast-body">
+            <div className="toast-title">{t.title}</div>
+            {t.sub && <div className="toast-sub">{t.sub}</div>}
+          </div>
+          <div className="toast-actions">
+            <button type="button" className="toast-dismiss" onClick={() => onDismiss(t.id)} aria-label="Dismiss">
+              <XIcon className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
-.tk-page .tk-cli-hint {
-  font-family: monospace;
-  font-size: 11.5px;
-  color: var(--tk-text-dim);
-  margin-bottom: 10px;
+
+// ── Empty state ──────────────────────────────────────────────────────────
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="text-center py-16" style={{ color: 'var(--muted-foreground)' }}>
+      <div className="text-[12px] font-mono">{message}</div>
+    </div>
+  );
 }
-.tk-page .tk-cli-box {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 8px 12px;
-  background: #000;
-  border: 1px solid var(--tk-line);
-  border-radius: 4px;
+
+function TeamKeysEmptyPanel() {
+  return (
+    <div className="text-center py-20">
+      <div className="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-5" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+        <KeyRoundIcon className="w-6 h-6" style={{ color: 'var(--primary)' }} />
+      </div>
+      <div className="text-[12px] font-mono uppercase tracking-wider mb-2" style={{ color: 'var(--foreground)' }}>No keys assigned yet</div>
+      <p className="text-[12px] mx-auto max-w-md" style={{ color: 'var(--muted-foreground)' }}>
+        Keys your team or organisation grants you will show up here. Ask a{' '}
+        <strong style={{ color: 'var(--foreground)' }}>team admin</strong> to share a key, or import your own from the{' '}
+        <Link to="/user/import" className="underline" style={{ color: 'var(--primary)' }}>Import</Link> page.
+      </p>
+    </div>
+  );
 }
-.tk-page .tk-cli-box code {
-  font-family: monospace;
-  font-size: 12px;
-  color: var(--primary);
+
+// ── Page footer ──────────────────────────────────────────────────────────
+function PageFooter() {
+  return (
+    <div className="text-center py-3 text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
+      Team keys are managed by your team server. Local routing decisions live in your CLI vault.
+    </div>
+  );
 }
-/* Stage 7-2 — Set as active button + status. Keep visually distinct from
-   the CLI box (which is a passive copy target) by using the project's
-   primary CSS var for fill, so it reads as the page's recommended action. */
-.tk-page .tk-cli-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #fff;
-  background: var(--primary);
-  border: 1px solid var(--primary);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: opacity 120ms ease;
+
+// ── Icons (subset borrowed from vault page's icon library) ───────────────
+function SvgIcon({ d, className = 'w-4 h-4', style }: { d: string; className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+    </svg>
+  );
 }
-.tk-page .tk-cli-button:hover:not(:disabled) {
-  opacity: 0.9;
-}
-.tk-page .tk-cli-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.tk-page .tk-use-ok,
-.tk-page .tk-use-err {
-  margin-top: 10px;
-  padding: 8px 12px;
-  font-size: 11.5px;
-  border-radius: 4px;
-  line-height: 1.4;
-}
-.tk-page .tk-use-ok {
-  color: var(--success, #22c55e);
-  background: rgba(34, 197, 94, 0.08);
-  border: 1px solid rgba(34, 197, 94, 0.25);
-}
-.tk-page .tk-use-err {
-  color: var(--danger, #ef4444);
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-}
-`;
+const ICON_KEY_ROUND = 'M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z';
+const ICON_SEARCH = 'M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z';
+const ICON_X = 'M6 18L18 6M6 6l12 12';
+const ICON_EYE = 'M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178zM15 12a3 3 0 11-6 0 3 3 0 016 0z';
+const ICON_CHECK = 'M4.5 12.75l6 6 9-13.5';
+const ICON_CLIPBOARD = 'M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184';
+const ICON_NETWORK = 'M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5';
+const ICON_ZAP = 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z';
+const ICON_INFO = 'M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z';
+const ICON_WRENCH = 'M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z';
+
+function KeyRoundIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_KEY_ROUND} {...p} />; }
+function SearchIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_SEARCH} {...p} />; }
+function XIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_X} {...p} />; }
+function EyeIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_EYE} {...p} />; }
+function CheckIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_CHECK} {...p} />; }
+function ClipboardIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_CLIPBOARD} {...p} />; }
+function NetworkIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_NETWORK} {...p} />; }
+function ZapIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_ZAP} {...p} />; }
+function InfoIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_INFO} {...p} />; }
+function WrenchIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_WRENCH} {...p} />; }

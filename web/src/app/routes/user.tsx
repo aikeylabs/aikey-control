@@ -13,7 +13,14 @@ import UserLoginPage from '../../pages/user/login';
 import SessionExpiredPage from '../../pages/user/session-expired';
 import UserOverviewPage from '../../pages/user/overview';
 import MyAccountPage from '../../pages/user/account';
-import UserVirtualKeysPage from '../../pages/user/virtual-keys';
+// NOTE: pages/user/virtual-keys/index.tsx is intentionally NOT routed here
+// (Phase 3B R7, 2026-05-11). The Team Keys experience canonically lives on
+// the team server (B side); A's stub showed an empty state because A's
+// local-server has no team data source. The page file stays in this repo
+// because B's master/web imports it via npm-link
+// (`import UserVirtualKeysPage from 'aikey-control-web/pages/virtual-keys'`).
+// Removing only A's route entry: same file, two consumers (A no, B yes).
+// Spec: requirements/2026-05-11-aikey-web-local-first-team-merge.md R7.
 import UserUsageLedgerPage from '../../pages/user/usage-ledger';
 import UserCostPage from '../../pages/user/cost';
 import UserBulkImportPage from '../../pages/user/import';
@@ -48,15 +55,22 @@ export function buildUserRoutes(): RouteObject[] {
       children: [
         { path: 'overview', element: <UserOverviewPage /> },
         { path: 'account', element: <MyAccountPage /> },
-        { path: 'virtual-keys', element: <UserVirtualKeysPage /> },
+        // /user/virtual-keys removed from A's routes — see import-block
+        // comment above. Users who type the URL get the AuthGuard's
+        // 404-or-redirect behavior; sidebar Team Keys link points at the
+        // team server's canonical page via cross-app menu.
         { path: 'vault', element: <UserVaultPage /> },
         { path: 'import', element: <UserBulkImportPage /> },
         { path: 'usage-ledger', element: <UserUsageLedgerPage /> },
         { path: 'cost', element: <UserCostPage /> },
         { path: 'referrals', element: <UserReferralsPage /> },
-        // Legacy routes → redirect to canonical names.
-        { path: 'my-keys', element: <Navigate to="/user/virtual-keys" replace /> },
-        { path: 'pending-keys', element: <Navigate to="/user/virtual-keys" replace /> },
+        // Legacy redirects → overview. Phase 3B R7 removed A's
+        // /user/virtual-keys route; the canonical Team Keys page lives
+        // on the team server (B). Users who follow my-keys / pending-keys
+        // bookmarks land on overview, where the sidebar shows the
+        // cross-app Team Keys link to the team server.
+        { path: 'my-keys', element: <Navigate to="/user/overview" replace /> },
+        { path: 'pending-keys', element: <Navigate to="/user/overview" replace /> },
         { path: 'my-seats', element: <Navigate to="/user/account" replace /> },
       ],
     },

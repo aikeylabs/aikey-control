@@ -18,6 +18,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { importApi } from '@/shared/api/user/import';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -27,9 +28,19 @@ import {
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { deliveryApi, type UserKeyDTO } from '@/shared/api/user/delivery';
 import { vaultApi } from '@/shared/api/user/vault';
-import { usageApi, type TimelinePoint, type ProtocolTotal, type HourlyPoint } from '@/shared/api/usage';
+import { usageApi, type TimelinePoint, type ProtocolTotal, type HourlyPoint, type RecentRequest } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
 import { formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
+import {
+  OWN_MENU,
+  OWN_PERSONAL_MENU,
+  getOtherBaseUrl,
+} from '@/shared/cross-app-menu';
+import type { AccountDTO } from '@/shared/api/types/account';
+
+// Phase 3B R23 (2026-05-11): same-side detection — A bundle's OWN_MENU
+// reference-equals OWN_PERSONAL_MENU; B bundle's points at OWN_TEAM_MENU.
+const IS_PERSONAL_SIDE = OWN_MENU === OWN_PERSONAL_MENU;
 
 // Provider palette: brand yellow for Anthropic, cool/violet counterbalances
 // for the others. Matches `--chart-*` tokens in user_overview_3_1.html.
@@ -116,6 +127,48 @@ export default function UserOverviewPage() {
   const [range, setRange] = useState<RangeKey>('14D');
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
+  // ── R23: cross-origin data source ──────────────────────────────────
+  //
+  // On B side (team server's web), pull personal-flavored data from
+  // A's local-server (the user's machine) via CORS-allowed endpoints.
+  // On A side (or trial loopback), stay same-origin.
+  //
+  // Cards routing:
+  //   - Identity / Hi banner / Token usage / Top providers / Accessible
+  //     keys / Today usage / Recent Requests → cross-fetch from A
+  //   - Recent Team Keys → B-local (team-side data), conditional on
+  //     logged-in via existing /accounts/me/all-keys (NOT remapped)
+  //   - Vault status / list → SKIPPED on B (vault is sensitive, no CORS;
+  //     calls fall back to undefined and the metric card renders 0)
+  const otherBaseUrl = useMemo(() => getOtherBaseUrl(), []);
+  const useCrossOrigin = useMemo(() => {
+    if (IS_PERSONAL_SIDE) return false;
+    if (!otherBaseUrl) return false;
+    try {
+      return new URL(otherBaseUrl).origin !== window.location.origin;
+    } catch {
+      return false;
+    }
+  }, [otherBaseUrl]);
+  const crossClient = useMemo(() => {
+    if (!useCrossOrigin || !otherBaseUrl) return null;
+    // No Authorization header — local-server's `<control-panel-url>`-
+    // gated CORS allows this origin to read /accounts/me + /v1/usage/*
+    // anonymously; LocalIdentityMiddleware returns the local-bypass
+    // identity (local@aikey.local / personal-local) which is the
+    // legitimate "this machine's data" payload.
+    return axios.create({
+      baseURL: otherBaseUrl,
+      timeout: 15_000,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, [useCrossOrigin, otherBaseUrl]);
+
+  // queryKey suffix so React Query caches B's cross-origin data
+  // separately from A's same-origin (otherwise switching sides would
+  // serve the wrong cache).
+  const dataScope = useCrossOrigin ? `cross:${otherBaseUrl}` : 'local';
+
   // Vault initialisation status — drives the "Accessible Keys" card and the
   // first-run banner. Pre-2026-04-30 this hook also auto-redirected to
   // /user/vault when initialized=false, but that punted users away from the
@@ -125,36 +178,104 @@ export default function UserOverviewPage() {
   // pointing at /user/vault for users who haven't set a master password yet.
   // `initialized` is undefined on legacy local-server builds; the api client
   // coerces that to true so existing users see no banner.
+  // R23 (2026-05-11 revised): vault status cross-fetched from A on B
+  // side via the `<control-panel-url>` sentinel-gated CORS on
+  // /api/user/vault/status. Only the team URL `aikey login` wrote can
+  // read; everything else is still 2026-04-24 same-origin only.
   const { data: vaultStatus } = useQuery({
-    queryKey: ['vault-status'],
-    queryFn: importApi.vaultStatus,
+    queryKey: ['vault-status', dataScope],
+    queryFn: crossClient
+      ? async () => (await crossClient.get('/api/user/vault/status')).data
+      : importApi.vaultStatus,
   });
   const vaultUninitialized = !!vaultStatus && vaultStatus.initialized === false;
 
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
-  const { data: rawSeats } = useQuery({ queryKey: ['my-seats'], queryFn: userAccountsApi.mySeats });
+  // R23: Identity (me) + Seats — cross-fetch from A on B side.
+  const { data: me } = useQuery({
+    queryKey: ['me', dataScope],
+    queryFn: crossClient
+      ? async () => (await crossClient.get<AccountDTO>('/accounts/me')).data
+      : userAccountsApi.me,
+  });
+  // R23 (revised 2026-05-11): Seats is a B-side concept — Personal A
+  // has no team/seat domain (A's `/accounts/me/seats` is an empty stub
+  // for FE-compat). On A side this query returns []; on B side it
+  // returns real org_seats rows. Cross-fetch to A is pointless (always
+  // empty), so we explicitly stay same-origin.
+  const { data: rawSeats } = useQuery({
+    queryKey: ['my-seats', 'local'],
+    queryFn: userAccountsApi.mySeats,
+  });
+  // Recent Team Keys table — B-LOCAL same-origin, conditional on
+  // logged-in (R23 2026-05-11).
+  //
+  // Why localStorage probe (not the `me` query): `me` is cross-fetched
+  // from A on B side (R23 directionality), so its account_id is
+  // always A's local-bypass stub (`local-owner` for trial,
+  // `personal-local` for aikey-local-server). It tells us nothing
+  // about whether the user has authenticated to B. The team session
+  // JWT lives in `aikey-auth-user` localStorage — its presence is
+  // the only signal we have for "logged into the team server".
+  //
+  // Excluded scenarios (correctly):
+  //   - User never went through /master/login or `aikey web` flow →
+  //     `aikey-auth-user` empty → table hidden
+  //   - User on Personal A standalone → no team key data anyway,
+  //     table hidden (deliveryApi.allKeys returns the empty-keys stub)
+  const teamKeysLoggedIn = useMemo(() => {
+    if (IS_PERSONAL_SIDE) return false; // A side: no team-keys backend
+    try {
+      const raw = localStorage.getItem('aikey-auth-user');
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as { state?: { token?: string } };
+      return !!parsed?.state?.token;
+    } catch {
+      return false;
+    }
+  }, []);
   const { data: rawKeys, isLoading: keysLoading } = useQuery({
-    queryKey: ['my-all-keys'],
+    queryKey: ['my-all-keys', 'local'],
     queryFn: deliveryApi.allKeys,
+    enabled: teamKeysLoggedIn,
   });
   const { data: rawPending } = useQuery({
-    queryKey: ['my-pending-keys'],
+    queryKey: ['my-pending-keys', 'local'],
     queryFn: deliveryApi.pendingKeys,
+    enabled: teamKeysLoggedIn,
   });
-  // Vault list drives the "Accessible Keys" metric (count, active/idle
-  // split, provider preview, spark). Locked vault still returns
-  // metadata-only records with counts populated, so the card stays
-  // useful before unlock. 2026-04-24: repointed from deliveryApi (team
-  // keys only) to vault so the number reflects what the user actually
-  // holds locally — Personal + OAuth + Team.
+  // R23 (2026-05-11 revised): vault list cross-fetched from A on B
+  // via `<control-panel-url>`-gated CORS. Sensitive route_token in
+  // each record IS exposed cross-origin to the allowed origin (the
+  // team URL `aikey login` wrote) — accepted security trade-off per
+  // user decision: the sentinel restricts readers to a single
+  // explicitly-trusted origin. Vault mutations (unlock, init, entry
+  // add/patch/delete, use) remain same-origin only.
+  //
+  // Server response shape: `{records, counts, locked, ...}` (already
+  // unwrapped from the `{status:"ok", data:{...}}` envelope by
+  // vaultApi.list). The cross-fetch path must do the same envelope
+  // unwrap.
   const { data: vaultList } = useQuery({
-    queryKey: ['user-overview-vault'],
-    queryFn: vaultApi.list,
+    queryKey: ['user-overview-vault', dataScope],
+    queryFn: crossClient
+      ? async () => {
+        const r = await crossClient.get<{ status: string; data: typeof vaultList }>('/api/user/vault/list');
+        return r.data?.data ?? null;
+      }
+      : vaultApi.list,
   });
 
-  // Usage identity — same rule as before (local_bypass uses org_id=personal).
+  // Usage identity — local_bypass uses org_id=personal.
+  //
+  // R23 (2026-05-11): when cross-fetching usage from A's local-server
+  // (B side viewing personal data), force `org_id=personal` regardless
+  // of B's own runtimeConfig.authMode. Reason: the TARGET is A, which
+  // always runs in local_bypass mode and tags its usage_event_ods rows
+  // with `org_id=personal` (no account_id binding). Sending the cross-
+  // fetched `me.account_id` (which is A's stub `personal-local` or
+  // `local-owner`) would not match any rows in A's events table.
   const accountId = me?.account_id;
-  const isLocalMode = runtimeConfig.authMode === 'local_bypass';
+  const isLocalMode = useCrossOrigin || runtimeConfig.authMode === 'local_bypass';
   const usageIdentity = isLocalMode
     ? { org_id: 'personal' as const }
     : accountId ? { account_id: accountId } : null;
@@ -164,25 +285,75 @@ export default function UserOverviewPage() {
   const endDate = daysAgoStr(0);
   const startDate = daysAgoStr(days - 1);
 
+  // R23: usage queries — cross-fetch on B, same-origin on A. The
+  // identity tuple (seat_id / account_id / org_id=personal) is
+  // computed from the `me` query above which itself may be cross-
+  // fetched; on B side the cross-fetched local-server returns the
+  // personal stub identity (`org_id=personal` semantics via local-
+  // bypass), which is what we want — usage data is the user's local
+  // proxy stream.
+  function usageParams(): Record<string, string> {
+    const p: Record<string, string> = {};
+    if (usageIdentity) {
+      if ('seat_id' in usageIdentity && usageIdentity.seat_id) p.seat_id = usageIdentity.seat_id;
+      else if ('account_id' in usageIdentity && usageIdentity.account_id) p.account_id = usageIdentity.account_id;
+      else if (usageIdentity.org_id === 'personal') p.org_id = 'personal';
+    }
+    try {
+      p.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch { p.tz = 'UTC'; }
+    return p;
+  }
+
   const usageTimeline = useQuery({
-    queryKey: ['user-overview-timeline', usageIdentityKey, range],
-    queryFn: () => usageApi.personalTimeline(usageIdentity!, startDate, endDate),
+    queryKey: ['user-overview-timeline', dataScope, usageIdentityKey, range],
+    queryFn: crossClient
+      ? async () => {
+        const r = await crossClient.get<TimelinePoint[]>('/v1/usage/personal/timeline', {
+          params: { ...usageParams(), start_date: startDate, end_date: endDate },
+        });
+        return r.data;
+      }
+      : () => usageApi.personalTimeline(usageIdentity!, startDate, endDate),
     enabled: !!usageIdentity,
   });
   const usageProtocols = useQuery({
-    queryKey: ['user-overview-protocols', usageIdentityKey, range],
-    queryFn: () => usageApi.personalByProtocolTotal(usageIdentity!, startDate, endDate),
+    queryKey: ['user-overview-protocols', dataScope, usageIdentityKey, range],
+    queryFn: crossClient
+      ? async () => {
+        const r = await crossClient.get<ProtocolTotal[]>('/v1/usage/personal/by-protocol/total', {
+          params: { ...usageParams(), start_date: startDate, end_date: endDate },
+        });
+        return r.data;
+      }
+      : () => usageApi.personalByProtocolTotal(usageIdentity!, startDate, endDate),
     enabled: !!usageIdentity,
   });
-  // Intra-day hourly buckets for today (UTC). Drives the "Today used"
-  // metric card — main value is the day's total, mini chart shows the
-  // 24-hour distribution. 2026-04-24: new endpoint /v1/usage/personal/
-  // hourly was added to query-service specifically for this card; the
-  // daily TimelinePoint API couldn't express sub-day resolution.
   const todayDate = daysAgoStr(0);
   const usageToday = useQuery({
-    queryKey: ['user-overview-today-hourly', usageIdentityKey, todayDate],
-    queryFn: () => usageApi.personalHourly(usageIdentity!, todayDate),
+    queryKey: ['user-overview-today-hourly', dataScope, usageIdentityKey, todayDate],
+    queryFn: crossClient
+      ? async () => {
+        const r = await crossClient.get<HourlyPoint[]>('/v1/usage/personal/hourly', {
+          params: { ...usageParams(), date: todayDate },
+        });
+        return r.data;
+      }
+      : () => usageApi.personalHourly(usageIdentity!, todayDate),
+    enabled: !!usageIdentity,
+  });
+  // R23: Recent Requests — NEW card, always rendered, last 5 non-canary
+  // proxy events from the user's local machine.
+  const recentRequests = useQuery({
+    queryKey: ['user-overview-recent-requests', dataScope, usageIdentityKey],
+    queryFn: crossClient
+      ? async () => {
+        const r = await crossClient.get<{ requests: RecentRequest[] }>('/v1/usage/personal/recent', {
+          params: { ...usageParams(), limit: '5' },
+        });
+        return r.data.requests ?? [];
+      }
+      : () => usageApi.personalRecent(usageIdentity!, 5),
     enabled: !!usageIdentity,
   });
   // Per-key recent breakdown ("Usage by key today") moved to /user/cost (2026-05-06).
@@ -840,7 +1011,108 @@ export default function UserOverviewPage() {
         {/* "Usage by key today" 已移出到 /user/cost 页面 (2026-05-06)。
             该页面在左侧导航 Insights 下,与 Usage 并列。 */}
 
-        {/* ── Recent Team Keys ── */}
+        {/* ── Recent Requests (R23, 2026-05-11) ────────────────────────
+            Always rendered. Cross-fetched from the user's local-server
+            on B side (Personal proxy events); same-origin on A side.
+            Replaces the old position of "Recent Team Keys" as the
+            primary "what's flowing through my AiKey right now" view.
+            Filters canary probes server-side (route_source != 'canary'). */}
+        <section className="card" data-origin-name="Recent Requests">
+          <div
+            className="flex items-center justify-between px-4 py-3"
+            style={{ borderBottom: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center gap-3">
+              <h3 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+                Recent requests
+              </h3>
+              <span className="chip">{(recentRequests.data ?? []).length} shown</span>
+            </div>
+            <button
+              type="button"
+              className="ov-btn ov-btn-outline text-[11px]"
+              onClick={() => navigate('/user/usage-ledger')}
+            >
+              View all
+              <ArrowRightIcon />
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="vault w-full">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2.5">When</th>
+                  <th className="px-4 py-2.5">Provider · Model</th>
+                  <th className="px-4 py-2.5">Key</th>
+                  <th className="px-4 py-2.5 text-right">Tokens</th>
+                  <th className="px-4 py-2.5 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentRequests.isLoading ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                      Loading...
+                    </td>
+                  </tr>
+                ) : (recentRequests.data ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                      No requests yet
+                    </td>
+                  </tr>
+                ) : (
+                  (recentRequests.data ?? []).map((rr) => {
+                    const status = rr.http_status_code || 0;
+                    const ok = status >= 200 && status < 400;
+                    return (
+                      <tr key={rr.request_id || `${rr.event_time_ms}-${rr.virtual_key_id}`}>
+                        <td className="px-4 py-2.5 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                          {formatRelativeTime(new Date(rr.event_time_ms)) || '—'}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--foreground)' }}>
+                            <span className="prov-dot" style={{ backgroundColor: providerColor(rr.provider_code) }} />
+                            {rr.provider_code || 'unknown'}
+                            <span style={{ color: 'var(--muted-foreground)', opacity: 0.7 }} className="font-mono text-[11px]">
+                              · {rr.model || '—'}
+                            </span>
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 font-mono text-[11px]" style={{ color: 'var(--muted-foreground)' }} title={rr.virtual_key_id}>
+                          {shortVkId(rr.virtual_key_id) || '—'}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono text-[12px]" style={{ color: 'var(--foreground)' }}>
+                          {rr.total_tokens.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span
+                            className="chip font-mono text-[11px]"
+                            style={{
+                              color: ok ? '#4ade80' : '#f87171',
+                              borderColor: ok ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)',
+                            }}
+                          >
+                            {status || (rr.request_status || '—')}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* ── Recent Team Keys ──
+            R23 (2026-05-11): conditional on logged-in. On A or
+            logged-out B, the underlying allKeys query is disabled and
+            we hide the section entirely so the page doesn't show an
+            empty "0 accessible / No team keys assigned" placeholder
+            for users without a team session. */}
+        {teamKeysLoggedIn && (
         <section className="card" data-origin-name="Recent Virtual Keys">
           <div
             className="flex items-center justify-between px-4 py-3"
@@ -937,6 +1209,7 @@ export default function UserOverviewPage() {
             </table>
           </div>
         </section>
+        )}
 
         {/* ── Footer links ── */}
         <section

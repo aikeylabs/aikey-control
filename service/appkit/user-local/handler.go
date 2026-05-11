@@ -43,8 +43,11 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/AiKeyLabs/aikey-control/service/pkg/crossappmenu"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 	user "github.com/AiKeyLabs/aikey-control/service/pkg/userapi"
 )
 
@@ -67,6 +70,66 @@ type Config struct {
 	// `useQuery` defensively defaults to empty arrays — charts show
 	// empty, no crash).
 	UsageFacade http.Handler
+
+	// ReadTeamURL returns the team-server base URL the user has logged
+	// into via `aikey login --control-url`, or "" if not logged in.
+	// Nil = endpoint disabled (returns 404). Used by /system/team-url
+	// to let the local web auto-discover where to fetch the Team
+	// cross-app menu from, so users don't have to manually configure
+	// the URL in localStorage.
+	//
+	// Why a function (not a string): vault may evolve at runtime
+	// (logout / re-login between requests). Each call re-reads.
+	// Caller wires this from trial-server (which has the SQLite dep)
+	// — see cmd/local/main.go.
+	ReadTeamURL func() (string, error)
+
+	// ReadTeamJWT returns the team-server JWT the CLI obtained during
+	// `aikey login`, or "" if not logged in. Nil = endpoint disabled
+	// (returns 404). Used by /system/team-jwt — Phase 3A vault-merge
+	// needs the JWT to authorise cross-origin fetches against the
+	// team server's /accounts/me/all-keys.
+	//
+	// Security: the endpoint is intentionally same-origin only (no
+	// CORS headers — see handleTeamJWT) so other web apps in the
+	// browser can't read this user's JWT. The Personal local web
+	// (port 8090) is the only legitimate caller, and it runs in the
+	// same origin as local-server itself.
+	ReadTeamJWT func() (string, error)
+
+	// ReadLoggedInEmail returns the email of the user currently logged
+	// in via `aikey login` (from vault's platform_account.email), or
+	// "" when no login session exists. Nil = endpoint falls back to
+	// the default `local@aikey.local` stub.
+	//
+	// Why: the sidebar avatar in the Personal local web (port 8090)
+	// reads /accounts/me to render its identity. Without this hook
+	// it would always show `local@aikey.local` even after the user
+	// logged into a team server — confusing because the same web
+	// also surfaces team-key data fetched under that account. Reading
+	// the vault on every request keeps the badge in lockstep with
+	// login / logout state changes between requests.
+	ReadLoggedInEmail func() (string, error)
+
+	// CORSOrigins is the allowlist passed to shared.CORSMiddleware
+	// for the endpoints the **team server's web** is allowed to
+	// cross-fetch (Phase 3B R23, 2026-05-11). Surface kept narrow:
+	//
+	//   - /accounts/me                 (identity for Overview header)
+	//   - /accounts/me/seats           (seat counter)
+	//   - /v1/usage/personal/*         (charts + Recent Requests)
+	//
+	// Other endpoints (vault, intake, hook, system/*) intentionally
+	// stay same-origin only — see the 2026-04-24 vault-leak
+	// protection rule in pkg/shared/middleware.go.
+	//
+	// The expected value in trial-edition yaml is the sentinel
+	// `<control-panel-url>` which `shared.CORSMiddleware` resolves
+	// at request time by reading `controlPanelUrl` from
+	// `~/.aikey/config/config.json` (`aikey login` writes this file
+	// — single source of truth for the team server URL). Empty list
+	// disables cross-origin reads entirely.
+	CORSOrigins []string
 }
 
 // NewHandler returns the HTTP handler for the Personal local-server.
@@ -96,7 +159,13 @@ func NewHandler(cfg Config) http.Handler {
 	// boundary, not changes to userapi itself.
 	passThrough := func(h http.Handler) http.Handler { return h }
 
-	userHandlers.Register(mux, passThrough)
+	// Phase 3B R23 (2026-05-11): cross-origin read CORS for
+	// /api/user/vault/{list,status} — passed as 3rd arg to Register.
+	// Uses the same CORSOrigins allowlist (sentinel `<control-panel-url>`
+	// resolves to the team URL from `aikey login`) as the /accounts/me
+	// and /v1/usage/* wraps below.
+	vaultReadCORS := shared.CORSMiddleware(cfg.CORSOrigins)
+	userHandlers.Register(mux, passThrough, vaultReadCORS)
 	// Web-modal "Allow" → POST /api/user/hook/install (Hook coverage v1
 	// update 2026-05-07). Personal local-server always runs on the same
 	// machine as the user's terminal, so the route is unconditionally
@@ -114,18 +183,42 @@ func NewHandler(cfg Config) http.Handler {
 	//   - they are HTTP-shape compatibility shims, not domain logic
 	//   - they exist solely because Personal has no team-key / seat / org
 	//     domain at all; in SaaS they are served by the Delivery handlers
-	mux.HandleFunc("GET /accounts/me", localAccountsMe)
+	// Phase 3B R23 (2026-05-11): /accounts/me + /accounts/me/seats +
+	// /v1/usage/* are cross-fetched by the team server's web (Overview
+	// page reads local-server identity + usage data over CORS so the
+	// Personal user's view on the team URL shows their own machine's
+	// data). Wrapped with `shared.CORSMiddleware(cfg.CORSOrigins)` —
+	// in trial-edition the allowlist is the `<control-panel-url>`
+	// sentinel, which reflects only the origin matching
+	// `controlPanelUrl` from `~/.aikey/config/config.json` (the URL
+	// `aikey login` wrote — single source of truth).
+	//
+	// Vault / intake / hook / system/team-jwt stay outside this wrap:
+	// they're sensitive (JWT, secret keys, request mutations) and
+	// remain same-origin only per the 2026-04-24 vault-leak rule.
+	corsWrap := shared.CORSMiddleware(cfg.CORSOrigins)
+	mux.Handle("GET /accounts/me", corsWrap(localAccountsMe(cfg.ReadLoggedInEmail, logger)))
+	mux.Handle("OPTIONS /accounts/me",
+		corsWrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})))
 	// Bare array matches FE accountsApi.mySeats: `httpClient.get<SeatSummaryDTO[]>`.
-	mux.HandleFunc("GET /accounts/me/seats", emptyJSONArray)
+	mux.Handle("GET /accounts/me/seats", corsWrap(http.HandlerFunc(emptyJSONArray)))
+	mux.Handle("OPTIONS /accounts/me/seats",
+		corsWrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})))
 	// /v1/usage/* — mount the in-proc query-service facade if the caller
 	// supplied one. The trial server's serve.Run constructs
 	// querykit.NewHandler on the local SQLite DB and passes it through
 	// ControlConfig.UsageFacade. Personal users thereby read their own
 	// collector→DWD usage data without any extra process or HTTP hop.
 	// When the facade isn't supplied the SPA charts simply 404 → useQuery
-	// falls back to empty arrays (non-fatal).
+	// falls back to empty arrays (non-fatal). Same R23 CORS wrap as
+	// above so the team server's Overview page can cross-fetch the
+	// timeline / by-protocol / recent endpoints from this local-server.
 	if cfg.UsageFacade != nil {
-		mux.Handle("/v1/usage/", cfg.UsageFacade)
+		mux.Handle("/v1/usage/", corsWrap(cfg.UsageFacade))
 	}
 	// Envelope matches FE deliveryApi.allKeys: `httpClient.get<{keys: UserKeyDTO[]}>`
 	// then `res.data.keys ?? []`. Returning bare `[]` here is a footgun because
@@ -143,23 +236,155 @@ func NewHandler(cfg Config) http.Handler {
 	mux.HandleFunc("GET /accounts/me/sync-version", localSyncVersion)
 	mux.HandleFunc("GET /accounts/me/managed-keys-snapshot", localKeysSnapshot)
 
+	// /system/cross-app-menu — exposes the Personal sidebar menu so that
+	// a Team-side web (running at the user's team server origin) can
+	// fetch this list at runtime and render Personal entries in its own
+	// sidebar (M scheme, see roadmap update 20260510-personal-team-数据隔
+	// 离与合并显示.md). Wrapped in CORS so the cross-origin fetch from
+	// the team web works.
+	mux.Handle("GET /system/cross-app-menu",
+		withCrossAppMenuCORS(crossappmenu.Handler(crossappmenu.SourcePersonal, crossappmenu.PersonalMenu)))
+	mux.Handle("OPTIONS /system/cross-app-menu",
+		withCrossAppMenuCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})))
+
+	// /system/team-url — auto-discovery for the local web. Returns the
+	// team-server URL the user has logged into via `aikey login
+	// --control-url <REMOTE>` (read from the CLI vault). The web uses
+	// this to populate cross-app sidebar links without making the user
+	// manually paste the URL into localStorage / Settings.
+	//
+	// Response shape: {"team_url": "http://..."} when set, {"team_url": ""}
+	// when not logged in (still 200 — empty is a valid state, not an
+	// error). Endpoint absent (404) when the host process didn't supply
+	// ReadTeamURL — typically only in test harnesses.
+	if cfg.ReadTeamURL != nil {
+		mux.Handle("GET /system/team-url", withCrossAppMenuCORS(handleTeamURL(cfg.ReadTeamURL, logger)))
+		mux.Handle("OPTIONS /system/team-url",
+			withCrossAppMenuCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			})))
+	}
+
+	// /system/team-jwt — same-origin-only endpoint that returns the
+	// team-server JWT for the local web's vault-page Team-key merge.
+	// Phase 3A only — see roadmap update 20260511-vault-page-team-key-
+	// merged-display.md.
+	//
+	// SECURITY: NO CORS headers. The browser default deny on cross-origin
+	// reads keeps this endpoint accessible only from the same origin
+	// (http://localhost:8090 / http://127.0.0.1:8090) where local-server
+	// itself serves the SPA. JWT is sensitive — never reflect Origin.
+	if cfg.ReadTeamJWT != nil {
+		mux.HandleFunc("GET /system/team-jwt", handleTeamJWT(cfg.ReadTeamJWT, logger))
+	}
+
 	return mux
 }
 
-// localAccountsMe returns a fixed Personal-user identity. The fields match
-// what the SaaS /accounts/me endpoint would return so the SPA's TypeScript
-// types don't need a Personal-specific branch — Personal just gets a
-// default-shaped response.
-func localAccountsMe(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"account_id":   "personal-local",
-		"email":        "local@aikey.local",
-		"display_name": "Personal User",
-		"auth_mode":    "local_bypass",
-		"orgs":         []any{}, // Personal has no orgs
+// withCrossAppMenuCORS allows the /system/cross-app-menu endpoint to be
+// fetched cross-origin from any origin. The endpoint serves only static
+// menu metadata (labels + paths + sentinels) — no secrets, no user data,
+// no mutation — so a permissive Access-Control-Allow-Origin is safe and
+// avoids the operator having to enumerate every team-server origin a
+// Personal user might log into. Method/header restrictions still scope
+// the surface to harmless GETs.
+//
+// Why not localhost-only: the team web runs at the user's team server
+// origin (e.g., http://team.example.com:3000), not localhost. A
+// fixed allowlist would force per-deploy config. For a static
+// metadata-only endpoint that's overkill.
+func withCrossAppMenuCORS(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
+		w.Header().Set("Access-Control-Allow-Methods", strings.Join([]string{"GET", "OPTIONS"}, ", "))
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+		h.ServeHTTP(w, r)
 	})
+}
+
+// handleTeamJWT serves GET /system/team-jwt. Same-origin only (no CORS
+// headers anywhere in the chain — see /system/team-jwt registration).
+// Returns the JWT from the CLI vault, or "" when the user hasn't logged
+// in. Read errors collapse to empty (same convention as handleTeamURL)
+// so the caller can treat both "no JWT" and "vault unreachable" the
+// same way (degrade to no team data).
+func handleTeamJWT(read func() (string, error), logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		jwt, err := read()
+		if err != nil {
+			logger.Warn("read team JWT from vault", "error", err)
+			jwt = ""
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		// Vault state can change between requests (logout/login); JWT
+		// also rotates on refresh. Don't cache.
+		w.Header().Set("Cache-Control", "no-store")
+		// Defence-in-depth: even if some intermediary tries to inject
+		// a CORS header, also signal we don't want this in any cache
+		// keyed off Origin or Authorization.
+		w.Header().Set("Vary", "Origin, Authorization")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"jwt": jwt})
+	}
+}
+
+// handleTeamURL serves GET /system/team-url. Calls the injected
+// ReadTeamURL on every request (vault may have changed since boot).
+// Read errors collapse to empty — the caller treats empty same as
+// "not logged in", and the operator sees the actual error in the log.
+func handleTeamURL(read func() (string, error), logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		url, err := read()
+		if err != nil {
+			logger.Warn("read team URL from vault", "error", err)
+			url = ""
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store") // vault state changes shouldn't be cached
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"team_url": url})
+	}
+}
+
+// localAccountsMe returns the Personal-user identity. The fields match what
+// the SaaS /accounts/me endpoint would return so the SPA's TypeScript types
+// don't need a Personal-specific branch.
+//
+// When readEmail is supplied and returns a non-empty value, the response
+// reflects the email the user logged in with via `aikey login` (read from
+// vault's platform_account row on every call so the sidebar stays in lockstep
+// with login / logout between requests). Otherwise it falls back to the
+// `local@aikey.local` stub — the not-logged-in default.
+func localAccountsMe(readEmail func() (string, error), logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		email := "local@aikey.local"
+		if readEmail != nil {
+			if v, err := readEmail(); err != nil {
+				logger.Warn("read logged-in email from vault", "error", err)
+			} else if v != "" {
+				email = v
+			}
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		// Vault state can change between requests (login / logout); don't
+		// cache. Same convention as /system/team-url and /system/team-jwt.
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"account_id":   "personal-local",
+			"email":        email,
+			"display_name": "Personal User",
+			"auth_mode":    "local_bypass",
+			"orgs":         []any{}, // Personal has no orgs
+		})
+	}
 }
 
 // emptyJSONArray serves `[]` for endpoints that the SaaS Delivery handler
