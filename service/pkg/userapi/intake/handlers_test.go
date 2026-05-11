@@ -15,6 +15,12 @@ import (
 // TestRulesHandler_ReturnsStaticLayerVersions covers the fallback path: with
 // Bridge=nil the handler serves the hardcoded snapshot, which the Web Import
 // page consumes for Use-Official auto-fill rules.
+//
+// 2026-05-11 (rc3): contract changed when kimi dual-platform split landed
+// (commit a1409f1) — `family_base_urls` was retired in favor of the per-host
+// `provider_routes` table (single source of truth across cli + proxy +
+// fallback). Asserting on `provider_routes` here keeps the test aligned with
+// the actual handler output.
 func TestRulesHandler_ReturnsStaticLayerVersions(t *testing.T) {
 	h := &ImportHandlers{}
 	rr := httptest.NewRecorder()
@@ -26,7 +32,7 @@ func TestRulesHandler_ReturnsStaticLayerVersions(t *testing.T) {
 		Status string `json:"status"`
 		Data   struct {
 			LayerVersions   map[string]string `json:"layer_versions"`
-			FamilyBaseURLs  map[string]string `json:"family_base_urls"`
+			ProviderRoutes  []map[string]any  `json:"provider_routes"`
 			FamilyLoginURLs map[string]string `json:"family_login_urls"`
 		} `json:"data"`
 	}
@@ -39,11 +45,31 @@ func TestRulesHandler_ReturnsStaticLayerVersions(t *testing.T) {
 	if resp.Data.LayerVersions["rules"] == "" {
 		t.Fatal("rules version missing")
 	}
-	if got := resp.Data.FamilyBaseURLs["anthropic"]; got != "https://api.anthropic.com" {
-		t.Fatalf("family_base_urls[anthropic] = %q, want https://api.anthropic.com", got)
+	if len(resp.Data.ProviderRoutes) == 0 {
+		t.Fatal("provider_routes must have entries")
 	}
-	if _, ok := resp.Data.FamilyBaseURLs["openai"]; !ok {
-		t.Fatal("family_base_urls missing openai")
+	// Anthropic route should be present + point at api.anthropic.com.
+	var foundAnthropic bool
+	for _, r := range resp.Data.ProviderRoutes {
+		if r["provider"] == "anthropic" && r["base_url"] == "https://api.anthropic.com" {
+			foundAnthropic = true
+			break
+		}
+	}
+	if !foundAnthropic {
+		t.Fatal("provider_routes missing anthropic entry pointing at https://api.anthropic.com")
+	}
+	// OpenAI route should be present too (any host/base_url; we only assert
+	// the provider key exists for cross-check with cli's yaml).
+	var foundOpenAI bool
+	for _, r := range resp.Data.ProviderRoutes {
+		if r["provider"] == "openai" {
+			foundOpenAI = true
+			break
+		}
+	}
+	if !foundOpenAI {
+		t.Fatal("provider_routes missing openai entry")
 	}
 	if got := resp.Data.FamilyLoginURLs["google_gemini"]; got != "https://aistudio.google.com/app/apikey" {
 		t.Fatalf("family_login_urls[google_gemini] = %q, want aistudio.google.com URL", got)
@@ -125,13 +151,22 @@ exit 17
 	var resp struct {
 		Status string `json:"status"`
 		Data   struct {
-			FamilyBaseURLs map[string]string `json:"family_base_urls"`
+			ProviderRoutes []map[string]any `json:"provider_routes"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got := resp.Data.FamilyBaseURLs["anthropic"]; got != "https://api.anthropic.com" {
-		t.Fatalf("fallback not served on cli failure: anthropic=%q", got)
+	// Fallback must include the anthropic route pointing at api.anthropic.com
+	// — same assertion as the no-bridge fallback test above.
+	var foundAnthropic bool
+	for _, r := range resp.Data.ProviderRoutes {
+		if r["provider"] == "anthropic" && r["base_url"] == "https://api.anthropic.com" {
+			foundAnthropic = true
+			break
+		}
+	}
+	if !foundAnthropic {
+		t.Fatalf("fallback not served on cli failure: provider_routes missing anthropic entry")
 	}
 }

@@ -27,7 +27,7 @@ import {
 } from 'recharts';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { deliveryApi, type UserKeyDTO } from '@/shared/api/user/delivery';
-import { vaultApi } from '@/shared/api/user/vault';
+import { vaultApi, type VaultListData } from '@/shared/api/user/vault';
 import { usageApi, type TimelinePoint, type ProtocolTotal, type HourlyPoint, type RecentRequest } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
 import { formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
@@ -255,11 +255,11 @@ export default function UserOverviewPage() {
   // unwrapped from the `{status:"ok", data:{...}}` envelope by
   // vaultApi.list). The cross-fetch path must do the same envelope
   // unwrap.
-  const { data: vaultList } = useQuery({
+  const { data: vaultList } = useQuery<VaultListData | null>({
     queryKey: ['user-overview-vault', dataScope],
     queryFn: crossClient
-      ? async () => {
-        const r = await crossClient.get<{ status: string; data: typeof vaultList }>('/api/user/vault/list');
+      ? async (): Promise<VaultListData | null> => {
+        const r = await crossClient.get<{ status: string; data: VaultListData }>('/api/user/vault/list');
         return r.data?.data ?? null;
       }
       : vaultApi.list,
@@ -295,9 +295,8 @@ export default function UserOverviewPage() {
   function usageParams(): Record<string, string> {
     const p: Record<string, string> = {};
     if (usageIdentity) {
-      if ('seat_id' in usageIdentity && usageIdentity.seat_id) p.seat_id = usageIdentity.seat_id;
-      else if ('account_id' in usageIdentity && usageIdentity.account_id) p.account_id = usageIdentity.account_id;
-      else if (usageIdentity.org_id === 'personal') p.org_id = 'personal';
+      if ('account_id' in usageIdentity && usageIdentity.account_id) p.account_id = usageIdentity.account_id;
+      else if ('org_id' in usageIdentity && usageIdentity.org_id === 'personal') p.org_id = 'personal';
     }
     try {
       p.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -1183,7 +1182,14 @@ export default function UserOverviewPage() {
                         {k.expires_at ? relativeTime(k.expires_at) : '—'}
                       </td>
                       <td className="px-4 py-2.5 text-right">
-                        {k.share_status === 'pending_claim' ? (
+                        {/* Claim only renders when the key is BOTH pending_claim
+                         *  AND active. A revoked-but-still-pending_claim ghost
+                         *  state would otherwise let the user POST /claim → 422
+                         *  BIZ_KEY_NOT_ACTIVE. Backend RevokeVirtualKey now
+                         *  flips share_status alongside key_status to prevent
+                         *  new ghosts; this UI guard handles any historical
+                         *  rows still in the wild. */}
+                        {k.share_status === 'pending_claim' && k.key_status === 'active' ? (
                           <button
                             type="button"
                             className="ov-btn ov-btn-outline text-[11px]"
@@ -1192,15 +1198,46 @@ export default function UserOverviewPage() {
                           >
                             Claim
                           </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="ov-btn ov-btn-outline text-[11px]"
-                            onClick={() => navigate('/user/virtual-keys')}
-                          >
-                            Use
-                          </button>
-                        )}
+                        ) : k.key_status !== 'active' ? (
+                          // Revoked / expired keys can't be used — the REVOKED
+                          // chip in the Status column already conveys the state;
+                          // rendering a Use button here would be a footgun
+                          // (navigates to Vault but there's nothing actionable
+                          // on a dead key).
+                          <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>—</span>
+                        ) : (() => {
+                          // Mirror the sidebar Vault menu's routing: on the
+                          // Personal (A) side `/user/vault` is a local SPA
+                          // route; on the Team (B) side the menu renders a
+                          // cross-origin <a> to `${otherBaseUrl}/user/vault`
+                          // (B has no `/user/vault` route, the Personal
+                          // local-server owns it). Use button must follow
+                          // the same destination to stay in lockstep with
+                          // the menu — see UserShell.tsx cross-app render
+                          // around line 725.
+                          const otherBaseUrl = getOtherBaseUrl();
+                          if (!IS_PERSONAL_SIDE && otherBaseUrl) {
+                            const href = `${otherBaseUrl}/user/vault`;
+                            return (
+                              <a
+                                href={href}
+                                className="ov-btn ov-btn-outline text-[11px]"
+                                title={`Opens ${href}`}
+                              >
+                                Use
+                              </a>
+                            );
+                          }
+                          return (
+                            <button
+                              type="button"
+                              className="ov-btn ov-btn-outline text-[11px]"
+                              onClick={() => navigate('/user/vault')}
+                            >
+                              Use
+                            </button>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))
@@ -1269,6 +1306,20 @@ function buildProviderRows(
 /* ── Key status chip ───────────────────────────────────────────────── */
 
 function KeyStatusChip({ keyStatus, shareStatus }: { keyStatus: string; shareStatus: string }) {
+  // Terminal key_status (revoked / expired) wins over share_status. A
+  // historical ghost state observed in prod: key_status=revoked +
+  // share_status=pending_claim — the user can't claim a revoked key (server
+  // returns 422 BIZ_KEY_NOT_ACTIVE), so showing "PENDING" is a lie. The
+  // backend-side fix (RevokeVirtualKey flipping share_status to inactive)
+  // prevents new ghosts, but this guard is the safety net for any
+  // historical row still in the wild.
+  if (keyStatus === 'revoked' || keyStatus === 'expired') {
+    return (
+      <span className="chip" style={{ color: '#f87171', background: 'rgba(248,113,113,0.08)', borderColor: 'rgba(248,113,113,0.3)' }}>
+        {keyStatus.toUpperCase()}
+      </span>
+    );
+  }
   if (shareStatus === 'pending_claim') {
     return (
       <span className="chip" style={{ color: 'var(--primary)', background: 'rgba(250, 204, 21,0.08)', borderColor: 'rgba(250, 204, 21,0.3)' }}>
@@ -1281,13 +1332,6 @@ function KeyStatusChip({ keyStatus, shareStatus }: { keyStatus: string; shareSta
       <span className="chip" style={{ color: '#4ade80', background: 'rgba(74,222,128,0.08)', borderColor: 'rgba(74,222,128,0.3)' }}>
         <span className="status-dot" style={{ width: 5, height: 5 }} />
         ACTIVE
-      </span>
-    );
-  }
-  if (keyStatus === 'revoked' || keyStatus === 'expired') {
-    return (
-      <span className="chip" style={{ color: '#f87171', background: 'rgba(248,113,113,0.08)', borderColor: 'rgba(248,113,113,0.3)' }}>
-        {keyStatus.toUpperCase()}
       </span>
     );
   }
