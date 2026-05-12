@@ -276,11 +276,31 @@ export default function UserVirtualKeysPage() {
     setToasts((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
-  // Use action — Stage 7-2 / Phase 3B: routes via vault-op use (target=team)
+  // Use action — Stage 7-2 / Phase 3B: routes via vault-op use (target=team).
+  //
+  // B-side fix (rc.3 post-publish, 2026-05-12): the previous default
+  // `vaultApi.use(...)` posts to relative `/api/user/vault/use`, which on
+  // the B side (team-server origin) hits a route the team server does
+  // NOT register → 405 Method Not Allowed surfaces as a confusing
+  // "Failed to set routing" toast. On B side we cross-origin POST to
+  // A's local-server (where the vault + binding tables actually live);
+  // on A side we keep the same-origin vaultApi.use call.
+  // Same shape as the vaultCrossClient.get('/api/user/vault/list') above.
   const setHookReadiness = useHookReadinessStore((s) => s.setReadiness);
   const wireRcModal = useHookWireRcModal();
   const useMutTeam = useMutation({
-    mutationFn: (id: string) => vaultApi.use({ target: 'team', id }),
+    mutationFn: async (id: string) => {
+      if (vaultCrossClient) {
+        const res = await vaultCrossClient.post<
+          { status: 'ok'; data: Awaited<ReturnType<typeof vaultApi.use>> }
+          | { status: 'error'; error: { code: string; message: string } }
+        >('/api/user/vault/use', { target: 'team', id });
+        const env = res.data;
+        if (env.status === 'ok') return env.data;
+        throw new Error(env.error.message || env.error.code);
+      }
+      return vaultApi.use({ target: 'team', id });
+    },
     onSuccess: (res, vkId) => {
       const r = pickHookReadiness(res);
       setHookReadiness(r);

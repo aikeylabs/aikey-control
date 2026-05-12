@@ -2162,10 +2162,13 @@ function GroupHeaderRow(props: {
 }
 
 const Row = React.memo(function Row(props: {
-  /** Phase 3A-2: row union widened to include team rows. The Row branches
-   *  on `r.target === 'team'` to suppress mutation actions (rename / delete /
-   *  reveal-drawer / use), since team-server keys are read-only from A's
-   *  vault page (decision 3, see roadmap update 20260511). */
+  /** Row union widened to include team rows (Phase 3A-2 introduction,
+   *  Phase 3B revision 2026-05-11). The Row branches on
+   *  `r.target === 'team'` to suppress only the destructive Delete
+   *  action; everything else — Use, Rename (writes CLI `local_alias`,
+   *  not the server alias), drawer open with route_url / Route token —
+   *  is enabled in Phase 3B. See roadmap update 20260511 decision 3
+   *  for the per-action gate breakdown. */
   record: VaultRowRecord;
   locked: boolean;
   isEditing: boolean;
@@ -2277,11 +2280,13 @@ const Row = React.memo(function Row(props: {
   // key hint + aikey activate CTA"). Skip when the click landed on an
   // interactive descendant — inline action buttons, the alias edit
   // input, etc. — so each cell-level action keeps its own semantics.
-  // Phase 3A-2: team rows have no drawer surface; their row-click is a
-  // no-op so the user gets honest "no detail to show" feedback instead
-  // of a broken-looking empty drawer.
+  // Phase 3B (2026-05-11): the prior Phase 3A guard `if (isTeam) return`
+  // was removed — team rows used to lack a drawer surface (honest "no
+  // detail" feedback was the right call back then). Phase 3B inlined
+  // route_url + Route token + Virtual Key id into the team drawer, so
+  // there IS something to show now; row-click should peek-open in lock-
+  // step with Personal / OAuth for UX consistency.
   const onRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
-    if (isTeam) return;
     const t = e.target as HTMLElement;
     if (t.closest('button, input, textarea, a, [role="button"]')) return;
     // Row-level open is a "peek" — casual click while scanning; the

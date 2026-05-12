@@ -131,24 +131,33 @@ func NewHandlers(cfg *Config, logger *slog.Logger) *Handlers {
 // The former POST /api/user/vault/reveal endpoint (plaintext secret read)
 // was removed 2026-04-24 security review round 2; see vault/crud.go.
 //
-// Phase 3B R23 (2026-05-11) extension: `readCORSMW` wraps the two
-// read-only vault endpoints (`GET /api/user/vault/list`,
-// `GET /api/user/vault/status`) so the team server's Overview page can
-// cross-fetch them via the `<control-panel-url>` sentinel allowlist.
-// Pass nil to disable cross-origin reads entirely (the default for
-// production deployments where vault doesn't exist server-side).
+// Phase 3B R23 (2026-05-11) + rc.3 post-publish (2026-05-12) extension:
+// `readCORSMW` wraps the read-only vault endpoints + `POST
+// /api/user/vault/use` (binding flip only — does NOT expose credential
+// material) so the team server's Overview / TeamKeys page can drive
+// them cross-origin via the `<control-panel-url>` sentinel allowlist.
+// Pass nil to disable cross-origin entirely (the default for production
+// deployments where vault doesn't exist server-side).
 //
-// Why only `list` + `status` get the CORS wrap:
-//   - `list` returns the keys-with-route_tokens payload the Overview
-//     "Accessible Keys" card and the cross-server merge UI need.
-//     route_token is a usable proxy bearer — accepted risk per user's
-//     2026-05-11 decision: the team URL allowlist via
+// What's CORS-wrapped:
+//   - `GET /api/user/vault/list` — keys + route_tokens; Overview card +
+//     cross-server merge UI need it. route_token is a usable proxy
+//     bearer — accepted risk per 2026-05-11 decision: the
 //     `<control-panel-url>` sentinel restricts readers to the single
-//     origin the user explicitly opted into via `aikey login`.
-//   - `status` is a probe (initialised / locked) with no secrets.
-//   - Mutation endpoints (`unlock`, `lock`, `init`, entry add/patch/
-//     delete, use) stay same-origin only — a malicious cross-origin
-//     POST is much more dangerous than a leaked metadata read.
+//     origin the user `aikey login`'d to.
+//   - `GET /api/user/vault/status` — probe (initialised / locked),
+//     no secrets.
+//   - `POST /api/user/vault/use` — flips
+//     `user_profile_provider_bindings.key_source_ref` (a binding
+//     pointer), no credential material. Same allowlist as the reads.
+//     TeamKeys page needs this to drive cross-origin "Use" clicks from
+//     B side. The 2026-04-24 vault-leak rule that kept ALL vault
+//     mutations same-origin was about credential plaintext; `use`
+//     doesn't qualify.
+//
+// What still stays same-origin only (per 2026-04-24 vault-leak rule):
+//   - `unlock` / `lock` / `init` — touch the master password.
+//   - entry `add` / `patch` / `delete` — touch credential material.
 func (h *Handlers) Register(
 	mux *http.ServeMux,
 	authMW func(http.Handler) http.Handler,
@@ -191,8 +200,25 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.VaultCRUD.EntryAddHandler))))
 		mux.Handle("DELETE /api/user/vault/entry",
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.VaultCRUD.EntryDeleteHandler))))
+		// Phase 3B rc.3 post-publish (2026-05-12): POST /vault/use opens
+		// to the same cross-origin allowlist (`<control-panel-url>`
+		// sentinel) as the read endpoints. The team server's TeamKeys
+		// page needs to flip "which key is active" from B side, which
+		// requires cross-origin POST to A's local-server (where the
+		// binding table lives). The 2026-04-24 vault-leak rule that
+		// kept ALL vault mutations same-origin was about not exposing
+		// credential material (provider plaintext); `use` doesn't —
+		// it writes `user_profile_provider_bindings.key_source_ref`,
+		// which is a binding pointer, not a secret. CORS allowlist
+		// stays exactly the same as the read CORS (sentinel resolves
+		// to the team URL the user `aikey login`'d to). OPTIONS
+		// preflight must be registered for the browser preflight to
+		// pass — Go's ServeMux returns 405 on method mismatch.
 		mux.Handle("POST /api/user/vault/use",
-			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.VaultCRUD.UseHandler))))
+			readCORSMW(authMW(http.HandlerFunc(h.Store.RequireUnlock(h.VaultCRUD.UseHandler)))))
+		mux.Handle("OPTIONS /api/user/vault/use", readCORSMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})))
 	}
 
 	// Import endpoints. ConfirmHandler needs an unlocked session.
