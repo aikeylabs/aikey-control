@@ -287,31 +287,27 @@ export default function UserVirtualKeysPage() {
     setToasts((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
-  // Use action — Stage 7-2 / Phase 3B: routes via vault-op use (target=team).
+  // Use action — same-origin only.
   //
-  // B-side fix (rc.3 post-publish, 2026-05-12): the previous default
-  // `vaultApi.use(...)` posts to relative `/api/user/vault/use`, which on
-  // the B side (team-server origin) hits a route the team server does
-  // NOT register → 405 Method Not Allowed surfaces as a confusing
-  // "Failed to set routing" toast. On B side we cross-origin POST to
-  // A's local-server (where the vault + binding tables actually live);
-  // on A side we keep the same-origin vaultApi.use call.
-  // Same shape as the vaultCrossClient.get('/api/user/vault/list') above.
+  // History:
+  //   - rc.3 first attempt (2026-05-12 morning): cross-origin POST via
+  //     vaultCrossClient. Cleared 405 (server's POST /vault/use lacked
+  //     OPTIONS preflight) but surfaced a deeper 401: A's session cookie
+  //     deliberately doesn't cross origins per the 2026-04-24 vault-leak
+  //     rule, so the cross-origin POST fails I_VAULT_NO_SESSION.
+  //   - rc.3 final design (2026-05-12 afternoon): on B side render an
+  //     external link to A's local Vault page instead (see Row.useHref
+  //     prop below). Phase 3B decision 8 promised B-side Use clicks; the
+  //     architectural reality is they must be confirmed in A's local
+  //     session. The link UX is the design realization. Updated 20260511
+  //     vault-page doc decision 8 accordingly.
+  // This mutation only fires on A side now (where the page is same-
+  // origin to /api/user/vault/use). On B side the link short-circuits
+  // before this mutation is invoked.
   const setHookReadiness = useHookReadinessStore((s) => s.setReadiness);
   const wireRcModal = useHookWireRcModal();
   const useMutTeam = useMutation({
-    mutationFn: async (id: string) => {
-      if (vaultCrossClient) {
-        const res = await vaultCrossClient.post<
-          { status: 'ok'; data: Awaited<ReturnType<typeof vaultApi.use>> }
-          | { status: 'error'; error: { code: string; message: string } }
-        >('/api/user/vault/use', { target: 'team', id });
-        const env = res.data;
-        if (env.status === 'ok') return env.data;
-        throw new Error(env.error.message || env.error.code);
-      }
-      return vaultApi.use({ target: 'team', id });
-    },
+    mutationFn: (id: string) => vaultApi.use({ target: 'team', id }),
     onSuccess: (res, vkId) => {
       const r = pickHookReadiness(res);
       setHookReadiness(r);
@@ -439,6 +435,14 @@ export default function UserVirtualKeysPage() {
                             onUse={() => useMutTeam.mutate(k.virtual_key_id)}
                             claimPending={claimMut.isPending && claimMut.variables === k.virtual_key_id}
                             usePending={useMutTeam.isPending && useMutTeam.variables === k.virtual_key_id}
+                            // On B side, Use must be confirmed against A's
+                            // local-session-bearing vault page; same-origin
+                            // POST stays for A side (useHref=undefined).
+                            useHref={
+                              !IS_PERSONAL_SIDE && otherBaseUrl
+                                ? `${otherBaseUrl}/user/vault?focus=${encodeURIComponent(k.virtual_key_id)}`
+                                : undefined
+                            }
                           />
                         ))}
                       </React.Fragment>
@@ -608,6 +612,15 @@ const Row = React.memo(function Row(props: {
   onUse: () => void;
   claimPending: boolean;
   usePending: boolean;
+  /** rc.3 fix (2026-05-12): when set, render the Use action as an
+   *  external link to A side's vault page instead of a same-origin
+   *  POST button. Used on B side (team server origin) where direct
+   *  cross-origin POST to /api/user/vault/use returns 401
+   *  (I_VAULT_NO_SESSION — A's unlock session cookie deliberately
+   *  doesn't cross origins per 2026-04-24 vault-leak rule). Clicking
+   *  here opens A's local Vault page in a new tab where the user has
+   *  a local session to confirm Use. Undefined on A side. */
+  useHref?: string;
 }) {
   const r = props.record;
   const status = statusMeta(r.key_status);
@@ -674,17 +687,35 @@ const Row = React.memo(function Row(props: {
               {props.claimPending ? '…' : 'Claim'}
             </button>
           ) : r.key_status === 'active' ? (
-            <button
-              type="button"
-              className="row-use-btn"
-              onClick={props.onUse}
-              disabled={props.usePending}
-              title={props.usePending ? 'Switching…' : 'Route requests through this key (aikey use)'}
-              aria-label="Set as active key"
-            >
-              <ZapIcon className="w-3 h-3" />
-              Use
-            </button>
+            props.useHref ? (
+              // B side: vault.use is same-origin only (2026-04-24 vault-leak
+              // rule keeps A's session cookie from crossing origins). Render
+              // a link that opens A's local Vault page so the user can click
+              // Use there with a valid local session.
+              <a
+                href={props.useHref}
+                target="_blank"
+                rel="noopener"
+                className="row-use-btn"
+                title={`Set as active key — opens local Vault to confirm (${props.useHref})`}
+                aria-label="Open local vault to set as active key"
+              >
+                <ZapIcon className="w-3 h-3" />
+                Use
+              </a>
+            ) : (
+              <button
+                type="button"
+                className="row-use-btn"
+                onClick={props.onUse}
+                disabled={props.usePending}
+                title={props.usePending ? 'Switching…' : 'Route requests through this key (aikey use)'}
+                aria-label="Set as active key"
+              >
+                <ZapIcon className="w-3 h-3" />
+                Use
+              </button>
+            )
           ) : (
             <span className="text-[11px]" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>—</span>
           )}
