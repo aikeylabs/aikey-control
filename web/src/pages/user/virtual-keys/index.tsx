@@ -161,9 +161,20 @@ export default function UserVirtualKeysPage() {
         const map: Record<string, { route_url?: string; route_token?: string | null }> = {};
         for (const rec of records) {
           if (rec.target === 'team' && rec.virtual_key_id) {
+            // rc.3 fix (2026-05-12): team route_token = `aikey_team_<vk_id>`
+            // is purely derived from the public vk_id — CLI's
+            // commands_internal/query.rs::team_records_for_emit builds it the
+            // same way. So when the cross-fetch returns it null (because A's
+            // vault is locked OR the request goes without credentials per
+            // 2026-04-24 vault-leak rule), we can safely reconstruct it
+            // client-side. This avoids needing `withCredentials: true` which
+            // would expose A's unlock-session cookie to the B origin — a
+            // 2026-04-24 vault-leak rule violation. route_url stays as-fetched
+            // (it depends on A's local proxy port + provider_routes table,
+            // which B doesn't know).
             map[rec.virtual_key_id] = {
               route_url: rec.route_url,
-              route_token: rec.route_token ?? null,
+              route_token: rec.route_token ?? `aikey_team_${rec.virtual_key_id}`,
             };
           }
         }

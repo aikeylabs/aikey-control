@@ -895,8 +895,15 @@ export default function UserVaultPage() {
       // 多平台 family (Kimi: kimi_code/moonshot/kimi) 收敛到同一 group;
       // 单平台 family (anthropic/openai/...) family==code,行为不变。
       const families: string[] = (() => {
-        if (r.target === 'personal') {
-          const sp = (r as PersonalVaultRecord).supported_providers;
+        // rc.3 fix (2026-05-12): team rows also need supported_providers
+        // expansion. CLI emits the field for team records (commands_internal/
+        // query.rs::team_records_for_emit), so aggregator-style team keys
+        // that span multiple families (e.g. anthropic + openai) appear in
+        // BOTH groups instead of just the primary protocol_family. OAuth
+        // stays on the single-family path — OAuth sessions are per-provider
+        // by construction (one identity per provider site).
+        if (r.target === 'personal' || r.target === 'team') {
+          const sp = (r as PersonalVaultRecord | TeamRowRecord).supported_providers;
           if (Array.isArray(sp) && sp.length > 0) {
             // Map each provider_code → family, dedup, preserve order.
             const seen = new Set<string>();
@@ -3763,7 +3770,7 @@ type AddKind = 'api' | 'oauth';
 
 // ── Provider presets ────────────────────────────────────────────────────
 //
-// OAuth 预设保留在本地: `aikey account login <provider>` 仅支持 3 家 (claude /
+// OAuth 预设保留在本地: `aikey auth login <provider>` 仅支持 3 家 (claude /
 // codex / kimi),与 API Key 的"协议清单"语义不同,不复用 ProviderMultiSelect。
 // API Key 的 providers 预设已统一迁到 shared/ui/ProviderMultiSelect 的
 // `KNOWN_PROTOCOLS`,同 import 页面一套 (带品牌别名 + CJK 搜索)。
@@ -3856,7 +3863,7 @@ function AddKeyModal(props: {
   // API-Key kind accepts multiple providers (aggregator gateways like
   // openrouter frequently serve several protocols through one key).
   const [providers, setProviders] = useState<string[]>(['openai']);
-  // OAuth kind is single-select — `aikey account login <provider>` takes
+  // OAuth kind is single-select — `aikey auth login <provider>` takes
   // exactly one provider name.
   const [oauthProvider, setOauthProvider] = useState('claude');
   const [secret, setSecret] = useState('');
@@ -4167,7 +4174,23 @@ function OAuthGuide({
   provider: string;
   onProviderChange: (v: string) => void;
 }) {
-  const cmd = `aikey account login ${provider}`;
+  const cmd = `aikey auth login ${provider}`;
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    const done = () => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(cmd).then(done).catch(() => {
+        fallbackCopy(cmd);
+        done();
+      });
+    } else {
+      fallbackCopy(cmd);
+      done();
+    }
+  };
   return (
     <>
       <div className="form-row">
@@ -4183,7 +4206,7 @@ function OAuthGuide({
           allowCustom
         />
         <span className="form-help">
-          Custom providers are passed verbatim to <span className="font-mono">aikey account login &lt;provider&gt;</span>.
+          Custom providers are passed verbatim to <span className="font-mono">aikey auth login &lt;provider&gt;</span>.
         </span>
       </div>
       <div
@@ -4211,13 +4234,20 @@ function OAuthGuide({
           </code>
           <button
             type="button"
-            className="btn btn-outline text-[11px] px-3 py-1.5"
-            onClick={() => {
-              if (navigator.clipboard) navigator.clipboard.writeText(cmd);
-              else fallbackCopy(cmd);
-            }}
+            className="btn btn-outline text-[11px] px-3 py-1.5 inline-flex items-center gap-1"
+            style={
+              copied
+                ? {
+                    borderColor: 'rgba(74,222,128,0.4)',
+                    color: '#4ade80',
+                    backgroundColor: 'rgba(74,222,128,0.08)',
+                  }
+                : undefined
+            }
+            onClick={handleCopy}
           >
-            Copy
+            {copied && <CheckIcon className="w-3 h-3" />}
+            {copied ? 'Copied' : 'Copy'}
           </button>
         </div>
         <div
