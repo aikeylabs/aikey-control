@@ -51,6 +51,25 @@ export interface RecentRequest {
   request_status: string; // "success" | "error" | ...
 }
 
+/** Per-model usage breakdown row powering `/user/cost`'s "Usage by
+ *  model" chart. Same 4-segment Anthropic cache shape as KeyTotal so
+ *  the FE can render with the existing stacked-bar idiom (uncached /
+ *  cache_creation / cache_read / output).
+ *
+ *  `model` is the provider-reported string verbatim (no snapshot
+ *  normalization — `claude-sonnet-4-5-20250929` and `claude-sonnet-4-6`
+ *  are separate rows). NULL / empty values are coalesced to `"unknown"`
+ *  server-side. */
+export interface ModelTotal {
+  model: string;
+  input_tokens?: number;
+  cached_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  output_tokens?: number;
+  total_tokens: number;
+  request_count: number;
+}
+
 export interface KeyTotal {
   virtual_key_id: string;
   alias?: string;    // human-readable label (personal / team BYOK)
@@ -163,6 +182,16 @@ export const usageApi = {
   personalByKeyTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<KeyTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const res = await httpClient.get<KeyTotal[]>('/v1/usage/personal/by-key/total', {
+      params: { ...personalParams(id), ...range, tz: browserTZ() },
+    });
+    return res.data;
+  },
+
+  /** Per-model usage rows for `/user/cost`'s "Usage by model" chart.
+   *  Server sorts by total_tokens DESC and caps at 20 rows. */
+  personalByModelTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<ModelTotal[]> => {
+    const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
+    const res = await httpClient.get<ModelTotal[]>('/v1/usage/personal/by-model/total', {
       params: { ...personalParams(id), ...range, tz: browserTZ() },
     });
     return res.data;

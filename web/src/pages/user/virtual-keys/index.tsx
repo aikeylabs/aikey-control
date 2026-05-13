@@ -617,9 +617,11 @@ const Row = React.memo(function Row(props: {
    *  POST button. Used on B side (team server origin) where direct
    *  cross-origin POST to /api/user/vault/use returns 401
    *  (I_VAULT_NO_SESSION — A's unlock session cookie deliberately
-   *  doesn't cross origins per 2026-04-24 vault-leak rule). Clicking
-   *  here opens A's local Vault page in a new tab where the user has
-   *  a local session to confirm Use. Undefined on A side. */
+   *  doesn't cross origins per 2026-04-24 vault-leak rule). The link
+   *  navigates the current window to A's local Vault page (mirroring
+   *  /user/overview's Use button — same-window keeps the user in a
+   *  single tab so back-button returns them to the team listing).
+   *  Undefined on A side. */
   useHref?: string;
 }) {
   const r = props.record;
@@ -690,15 +692,15 @@ const Row = React.memo(function Row(props: {
             props.useHref ? (
               // B side: vault.use is same-origin only (2026-04-24 vault-leak
               // rule keeps A's session cookie from crossing origins). Render
-              // a link that opens A's local Vault page so the user can click
-              // Use there with a valid local session.
+              // an in-window link to A's local Vault page so the user can
+              // confirm Use there with a valid local session. Same-window
+              // navigation matches /user/overview's Use button (2026-05-12
+              // user feedback: a new tab broke the back-button flow).
               <a
                 href={props.useHref}
-                target="_blank"
-                rel="noopener"
                 className="row-use-btn"
-                title={`Set as active key — opens local Vault to confirm (${props.useHref})`}
-                aria-label="Open local vault to set as active key"
+                title={`Set as active key — navigates to local Vault to confirm (${props.useHref})`}
+                aria-label="Navigate to local vault to set as active key"
               >
                 <ZapIcon className="w-3 h-3" />
                 Use

@@ -86,6 +86,13 @@ export default function UserCostPage() {
     refetchInterval: 60_000,
   });
 
+  const byModelRecent = useQuery({
+    queryKey: ['user-cost-by-model', usageIdentityKey, activeDate],
+    queryFn: () => usageApi.personalByModelTotal(usageIdentity!, activeDate, activeDate),
+    enabled: !!usageIdentity,
+    refetchInterval: 60_000,
+  });
+
   // 4-segment bar (uncached / creation / cached / output) per account, share-of-day.
   // Math mirrors the proxy's anthropic.go totalInput() so segments sum to total_tokens.
   const todayKeyRows = useMemo(() => {
@@ -130,6 +137,53 @@ export default function UserCostPage() {
       keyCount: sorted.length,
     };
   }, [byKeyRecent.data]);
+
+  // Same 4-segment math as todayKeyRows but keyed by `model`. Kept
+  // inline (not extracted to a helper) because this is the second
+  // occurrence — extract on the third per the project's "third-time"
+  // abstraction rule.
+  const todayModelRows = useMemo(() => {
+    const data = byModelRecent.data ?? [];
+    const nonZero = data.filter((m) => m.total_tokens > 0);
+    const sorted = [...nonZero].sort((a, b) => b.total_tokens - a.total_tokens);
+    const top = sorted[0]?.total_tokens ?? 1;
+    const grand = sorted.reduce((s, m) => s + m.total_tokens, 0) || 1;
+    const grandReqs = sorted.reduce((s, m) => s + m.request_count, 0);
+    const grandCached = sorted.reduce((s, m) => s + (m.cached_input_tokens ?? 0), 0);
+    const grandCreation = sorted.reduce((s, m) => s + (m.cache_creation_input_tokens ?? 0), 0);
+    return {
+      rows: sorted.map((m) => {
+        const inputAll = m.input_tokens ?? 0;
+        const cached = m.cached_input_tokens ?? 0;
+        const creation = m.cache_creation_input_tokens ?? 0;
+        const cappedCached = Math.min(cached, inputAll);
+        const cappedCreation = Math.min(creation, Math.max(inputAll - cappedCached, 0));
+        const uncached = Math.max(inputAll - cappedCached - cappedCreation, 0);
+        const output = m.output_tokens ?? 0;
+        const denom = uncached + cappedCreation + cappedCached + output > 0
+          ? uncached + cappedCreation + cappedCached + output
+          : 1;
+        return {
+          ...m,
+          uncached,
+          creation: cappedCreation,
+          cached: cappedCached,
+          output,
+          uncachedPctOfRow: (uncached / denom) * 100,
+          creationPctOfRow: (cappedCreation / denom) * 100,
+          cachedPctOfRow: (cappedCached / denom) * 100,
+          outputPctOfRow: (output / denom) * 100,
+          barPct: (m.total_tokens / top) * 100,
+          sharePct: (m.total_tokens / grand) * 100,
+        };
+      }),
+      grandTotal: sorted.reduce((s, m) => s + m.total_tokens, 0),
+      grandCached,
+      grandCreation,
+      grandReqs,
+      modelCount: sorted.length,
+    };
+  }, [byModelRecent.data]);
 
   const updatedAt = byKeyRecent.dataUpdatedAt
     ? new Date(byKeyRecent.dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -280,6 +334,140 @@ export default function UserCostPage() {
                 )}
                 {' · '}
                 <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{todayKeyRows.grandReqs.toLocaleString()}</span>
+                {' req'}
+              </span>
+            </div>
+          )}
+        </section>
+
+        {/* 2026-05-12: "Usage by model" — same 4-segment shape as the
+            by-key chart above, grouped by the provider-reported `model`
+            string. Sort: total_tokens DESC; server caps at 20 rows. */}
+        <section className="chart-card" data-origin-name="Usage by model today">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <div className="min-w-0">
+              <div className="chart-title">
+                {isShowingToday && <span className="live-dot" aria-hidden />}
+                {isShowingToday ? 'Usage by model' : 'Usage by model (recent)'}
+              </div>
+              <div className="chart-sub">
+                {activeDate}{isShowingToday ? '' : ' · no usage today yet'}
+              </div>
+            </div>
+            {todayModelRows.modelCount > 0 && (
+              <div className="legend">
+                <span className="item">
+                  <span className="dot" style={{ background: '#ca8a04' }} />
+                  uncached
+                </span>
+                <span className="item">
+                  <span className="dot" style={{ background: 'rgba(202,138,4,0.7)' }} />
+                  creation
+                </span>
+                <span className="item">
+                  <span className="dot" style={{ background: 'rgba(202,138,4,0.45)' }} />
+                  cached
+                </span>
+                <span className="item">
+                  <span className="dot" style={{ background: 'rgba(202,138,4,0.2)' }} />
+                  output
+                </span>
+              </div>
+            )}
+          </div>
+
+          {byModelRecent.isLoading ? (
+            <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+              Loading...
+            </div>
+          ) : todayModelRows.rows.length === 0 ? (
+            <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+              No usage recorded yet
+            </div>
+          ) : (
+            <ul className="mt-4 space-y-2.5">
+              {todayModelRows.rows.map((m) => (
+                <li key={m.model} className="key-row">
+                  <span
+                    className="font-mono text-[11.5px] truncate"
+                    title={m.model}
+                    style={{ color: 'var(--foreground)' }}
+                  >
+                    {m.model}
+                  </span>
+                  <div
+                    className="key-bar"
+                    title={`uncached ${fmtTok(m.uncached)} · creation ${fmtTok(m.creation)} · cached ${fmtTok(m.cached)} · output ${fmtTok(m.output)} · ${m.request_count.toLocaleString()} req`}
+                  >
+                    <div
+                      className="key-bar-fill"
+                      style={{ width: `${Math.max(m.barPct, 0.5)}%` }}
+                    >
+                      <span className="seg-uncached" style={{ width: `${m.uncachedPctOfRow}%` }} />
+                      <span className="seg-creation" style={{ width: `${m.creationPctOfRow}%` }} />
+                      <span className="seg-cached" style={{ width: `${m.cachedPctOfRow}%` }} />
+                      <span className="seg-output" style={{ width: `${m.outputPctOfRow}%` }} />
+                    </div>
+                  </div>
+                  <div className="key-stats font-mono text-[11.5px] whitespace-nowrap">
+                    {m.uncached > 0 && (
+                      <span className="stat" title="uncached">
+                        <span className="stat-dot stat-uncached" />{fmtTok(m.uncached)}
+                      </span>
+                    )}
+                    {m.creation > 0 && (
+                      <span className="stat" title="cache_creation">
+                        <span className="stat-dot stat-creation" />{fmtTok(m.creation)}
+                      </span>
+                    )}
+                    {m.cached > 0 && (
+                      <span className="stat" title="cache_read">
+                        <span className="stat-dot stat-cached" />{fmtTok(m.cached)}
+                      </span>
+                    )}
+                    {m.output > 0 && (
+                      <span className="stat" title="output">
+                        <span className="stat-dot stat-output" />{fmtTok(m.output)}
+                      </span>
+                    )}
+                    <span className="stat-total">
+                      <span style={{ color: 'var(--foreground)' }}>{fmtTok(m.total_tokens)}</span>
+                      <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
+                        {m.sharePct < 1 ? '<1%' : `${Math.round(m.sharePct)}%`}
+                      </span>
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {todayModelRows.modelCount > 0 && (
+            <div
+              className="mt-4 pt-3 flex items-center justify-between text-[12px] font-mono flex-wrap gap-2"
+              style={{ borderTop: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
+            >
+              <span>
+                {todayModelRows.modelCount} model{todayModelRows.modelCount === 1 ? '' : 's'}
+                {' · '}
+                <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayModelRows.grandTotal)}</span>
+                {' total'}
+                {todayModelRows.grandCreation > 0 && (
+                  <>
+                    {' · '}
+                    <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayModelRows.grandCreation)}</span>
+                    {' creation'}
+                  </>
+                )}
+                {todayModelRows.grandCached > 0 && (
+                  <>
+                    {' · '}
+                    <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayModelRows.grandCached)}</span>
+                    {' cached'}
+                  </>
+                )}
+                {' · '}
+                <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{todayModelRows.grandReqs.toLocaleString()}</span>
                 {' req'}
               </span>
             </div>

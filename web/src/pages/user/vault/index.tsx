@@ -42,6 +42,7 @@ import {
 } from '@/shared/components/HookWireRcModal';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
+import { ENTRY_BY_FAMILY } from '@/shared/generated/provider-registry';
 import {
   useTeamVaultStore,
   type TeamVaultStatus,
@@ -2148,6 +2149,22 @@ function GroupHeaderRow(props: {
           >
             {provider}
           </span>
+          {/* 2026-05-12 single-platform brand alias rendered OUTSIDE the
+              chip in muted text — e.g. `anthropic` chip + ` (claude)`.
+              Source of truth: generated provider-registry.ts (codegen'd
+              from aikey-cli/data/provider_registry.yaml display_alias
+              field). Multi-platform families (kimi) have no family-level
+              alias by design — the per-row labels (kimi(kimi-code) /
+              kimi(moonshot)) carry the platform discriminator. */}
+          {ENTRY_BY_FAMILY.get(provider)?.displayAlias && (
+            <span
+              className="gr-alias"
+              style={{ color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)', fontSize: '11.5px' }}
+              aria-hidden="true"
+            >
+              ({ENTRY_BY_FAMILY.get(provider)!.displayAlias})
+            </span>
+          )}
           <span className="gr-meta">
             · {totalCount} {entryWord}
             {parts.length > 0 && (

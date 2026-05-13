@@ -142,7 +142,7 @@ export default function CLIGuidePage() {
           <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
             Your team admin has created keys in the control panel. Log in and pick your assigned key.
           </p>
-          <CopyBlock code={`aikey login          # Log in via browser authorization\naikey use            # Pick a key (arrow keys + Enter)`} lang="bash" />
+          <CopyBlock code={`aikey login          # Log in to the AiKey control service (email-activation browser flow)\naikey use            # Pick a key (arrow keys + Enter)`} lang="bash" />
         </Section>
 
         <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--border), transparent)' }} />

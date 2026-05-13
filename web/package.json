@@ -15,11 +15,13 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "build:user": "cross-env VITE_AUTH_MODE=local_bypass tsc && cross-env VITE_AUTH_MODE=local_bypass vite build",
-    "build:user-nocheck": "cross-env VITE_AUTH_MODE=local_bypass vite build",
-    "build:full": "cross-env VITE_AUTH_MODE=jwt tsc && cross-env VITE_AUTH_MODE=jwt vite build",
-    "build:full-nocheck": "cross-env VITE_AUTH_MODE=jwt vite build",
+    "gen:provider-registry": "node scripts/generate-provider-registry.mjs",
+    "prebuild": "node scripts/generate-provider-registry.mjs",
+    "build": "npm run gen:provider-registry && tsc && vite build",
+    "build:user": "npm run gen:provider-registry && cross-env VITE_AUTH_MODE=local_bypass tsc && cross-env VITE_AUTH_MODE=local_bypass vite build",
+    "build:user-nocheck": "npm run gen:provider-registry && cross-env VITE_AUTH_MODE=local_bypass vite build",
+    "build:full": "npm run gen:provider-registry && cross-env VITE_AUTH_MODE=jwt tsc && cross-env VITE_AUTH_MODE=jwt vite build",
+    "build:full-nocheck": "npm run gen:provider-registry && cross-env VITE_AUTH_MODE=jwt vite build",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "preview": "vite preview",
@@ -45,6 +47,7 @@
     "tailwindcss": "^3.4.12",
     "typescript": "^5.5.3",
     "vite": "^5.4.8",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "yaml": "^2.9.0"
   }
 }

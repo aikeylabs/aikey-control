@@ -508,7 +508,7 @@ func (h *CRUDHandlers) EntryAddHandler(w http.ResponseWriter, r *http.Request) {
 		req.Target = "personal"
 	case "oauth":
 		cli.WriteErr(w, cli.ErrOAuthAddViaCLI,
-			"OAuth accounts must be added via `aikey account login <provider>` from the CLI")
+			"OAuth accounts must be added via `aikey auth login <provider>` from the CLI")
 		return
 	case "team":
 		cli.WriteErr(w, cli.ErrUnknownTarget, "target 'team' is not implemented in v1.0")

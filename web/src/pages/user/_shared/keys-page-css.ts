@@ -6,9 +6,13 @@
 // 2026-05-11-aikey-web-local-first-team-merge.md R10 (vault-style alignment).
 
 export const KEYS_PAGE_CSS = `
-  /* Brand dot colors — kept here so the page is self-contained. Match
-     user_overview_3_1's palette exactly so provider chips read the same
-     across pages. */
+  /* Page-scoped tokens. Defines surface tones (--surface-1/-2) and brand
+     dot palette so the page is self-contained and matches
+     user_overview_3_1. Must live inside .vault-page so the closing brace
+     on the last line is balanced — orphan declarations get dropped by
+     the CSS parser, which previously left .card background transparent
+     and the "All keys" header reading near-black. */
+  .vault-page {
   --chart-anthropic: #ca8a04;
   --chart-kimi:      #38bdf8;
   --chart-openai:    #a78bfa;
@@ -311,18 +315,20 @@ export const KEYS_PAGE_CSS = `
 /* ---- Vault table ------------------------------------------- */
 .vault-page table.vault { width: 100%; border-collapse: collapse; }
 .vault-page table.vault th {
-  /* 2026-04-25: thead row gets the same rgba(0,0,0,0.2) dark overlay
-     as the CardHeader above, so the whole "lid" above tbody reads as
-     one continuous dark band. Previous note about "master has no th
-     bg" was a misread — we want the CardHeader + thead to visually
-     chain together, which requires the same overlay on both. */
+  /* 2026-05-12: thead bg deepened to match /user/virtual-keys's thead
+     appearance. Virtual-keys' card is transparent, so its rgba(0,0,0,0.2)
+     overlay lands on the page bg (#18181b) and reads as ~rgb(19,19,22).
+     Vault's card now uses var(--surface-2) (#27272a), so the same 0.2
+     overlay would read as ~rgb(31,31,33) — visibly lighter. Bumping the
+     thead overlay to 0.5 makes the rendered color match across both
+     pages without changing the card surface or the CardHeader strip. */
   font-family: var(--font-mono);
   font-size: 10px; letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted-foreground);
   font-weight: 600;
   text-align: left;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.5);
   border-bottom: 1px solid var(--border);
   padding: 12px 20px;
   white-space: nowrap;
@@ -343,7 +349,7 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page table.vault th.th-sortable:hover {
   color: var(--foreground);
-  background: rgba(0, 0, 0, 0.32);
+  background: rgba(0, 0, 0, 0.62);
 }
 .vault-page table.vault th.th-sortable.active {
   color: var(--foreground);
