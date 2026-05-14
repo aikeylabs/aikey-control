@@ -143,10 +143,10 @@ export default function UserLoginPage() {
             style={{ backgroundColor: '#000', borderColor: 'var(--border)' }}
           >
             <code className="text-xs font-mono truncate" style={{ color: 'var(--primary)' }}>
-              curl -fsSL https://github.com/aikeylabs/launch/releases/download/v1.0.1-alpha/local-install.sh | sh -s -- --version v1.0.1-alpha
+              curl -fsSL https://github.com/aikeylabs/launch/releases/latest/download/local-install.sh | sh
             </code>
             <CopyBtn
-              text="curl -fsSL https://github.com/aikeylabs/launch/releases/download/v1.0.1-alpha/local-install.sh | sh -s -- --version v1.0.1-alpha"
+              text="curl -fsSL https://github.com/aikeylabs/launch/releases/latest/download/local-install.sh | sh"
               copied={copiedInstall}
               onCopy={() => { setCopiedInstall(true); setTimeout(() => setCopiedInstall(false), 2000); }}
             />

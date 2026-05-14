@@ -98,9 +98,9 @@ export default function CLIGuidePage() {
           title="Install"
           icon={<DownloadIcon />}
         >
-          <CopyBlock code="curl -fsSL https://github.com/aikeylabs/launch/releases/download/v1.0.1-alpha/local-install.sh | sh -s -- --version v1.0.1-alpha" lang="bash" />
+          <CopyBlock code="curl -fsSL https://github.com/aikeylabs/launch/releases/latest/download/local-install.sh | sh" lang="bash" />
           <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            Supports macOS, Linux, and Windows (WSL). The installer places the <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>aikey</code> binary in <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>~/.aikey/bin</code>.
+            Supports macOS, Linux, and Windows (native PowerShell — no WSL required). The installer places the <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>aikey</code> binary in <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>~/.aikey/bin</code>. The URL above resolves to the latest release automatically.
           </p>
         </Section>
 
@@ -122,7 +122,7 @@ export default function CLIGuidePage() {
           <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
             Then use your usual tools — the local proxy handles key injection:
           </p>
-          <CopyBlock code={`claude              # Anthropic Claude CLI\nopenai              # OpenAI CLI\ncursor              # IDE / any SDK tool`} lang="bash" />
+          <CopyBlock code={`claude              # Anthropic Claude CLI\ncodex               # OpenAI Codex / ChatGPT CLI\nkimi                # Kimi CLI (kimi_code + moonshot)`} lang="bash" />
           <div
             className="rounded border p-3 text-xs font-mono flex items-start gap-2"
             style={{ backgroundColor: 'rgba(74,222,128,0.05)', borderColor: 'rgba(74,222,128,0.2)', color: '#4ade80' }}
@@ -140,9 +140,25 @@ export default function CLIGuidePage() {
           icon={<UsersIcon />}
         >
           <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            Your team admin has created keys in the control panel. Log in and pick your assigned key.
+            Your team admin has issued virtual keys in the control panel. Log the CLI in to the control service, then pick your assigned key.
           </p>
-          <CopyBlock code={`aikey login          # Log in to the AiKey control service (email-activation browser flow)\naikey use            # Pick a key (arrow keys + Enter)`} lang="bash" />
+          <CopyBlock code={`aikey login --email <you>@example.com --control-url http://<server-ip>:3000\naikey use            # Pick a key (arrow keys + Enter)`} lang="bash" />
+          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+            <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>aikey login</code> is the shorthand for <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>aikey account login</code> — it connects the CLI to the AiKey control service. This is NOT the same as <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>aikey auth login &lt;provider&gt;</code>, which adds an upstream provider OAuth account (Claude Pro/Max, ChatGPT Plus, Kimi) to your local vault.
+          </p>
+        </Section>
+
+        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--border), transparent)' }} />
+
+        {/* Scenario 2.5: Provider OAuth (subscription) */}
+        <Section
+          title="Sign in to a Provider via OAuth (no API key)"
+          icon={<KeyIcon />}
+        >
+          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+            Got a Claude Pro/Max, ChatGPT Plus, or Kimi subscription? Add the provider OAuth account into the local vault — no API key needed:
+          </p>
+          <CopyBlock code={`aikey auth login claude        # Claude (Anthropic) — Pro / Max\naikey auth login codex         # Codex / ChatGPT (OpenAI) — Plus / Pro\naikey auth login kimi_code     # Kimi Code (api.kimi.com); 'kimi' alias still works`} lang="bash" />
         </Section>
 
         <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--border), transparent)' }} />
@@ -165,7 +181,7 @@ export default function CLIGuidePage() {
           title="Daily Commands"
           icon={<ListIcon />}
         >
-          <CopyBlock code={`aikey list              # View all keys and secrets\naikey use               # Switch active key\naikey whoami            # Current identity + active key\naikey doctor            # One-click health check`} lang="bash" />
+          <CopyBlock code={`aikey list              # View all keys (API + OAuth + Team)\naikey use               # Switch the global active key\naikey activate my-key   # Switch only in this terminal (closes terminal = revert)\naikey route             # Show base_url + api_key for 3rd-party clients\naikey whoami            # Current identity + active key + control URL\naikey env               # View active.env (shell) + proxy.env (proxy process)\naikey web               # Open local Vault console in browser\naikey doctor            # One-click health check`} lang="bash" />
         </Section>
 
         <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--border), transparent)' }} />
