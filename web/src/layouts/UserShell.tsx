@@ -533,6 +533,13 @@ export function UserShell() {
         // ignored — B always renders local because B owns the
         // canonical account data.
         { path: '/user/account', icon: <UserIcon />, label: 'Account', originName: 'My Account', crossAppPreferred: true },
+        // Phase 4F (spec §6.14.2): generate / revoke anonymous
+        // install-attribution invite codes. personalOnly because
+        // the local-api this page calls only lives on Personal +
+        // Trial editions — Production's aikey-control runs on a
+        // VPS and can't read the per-machine installer_id from a
+        // user's laptop.
+        { path: '/user/invites', icon: <UserPlusIcon />, label: 'Invites', personalOnly: true },
       ],
     },
   ];

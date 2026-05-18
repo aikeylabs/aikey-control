@@ -26,6 +26,7 @@ import UserCostPage from '../../pages/user/cost';
 import UserBulkImportPage from '../../pages/user/import';
 import UserVaultPage from '../../pages/user/vault';
 import UserReferralsPage from '../../pages/user/referrals';
+import UserInvitesPage from '../../pages/user/invites';
 import CLIGuidePage from '../../pages/user/cli-guide';
 import { GoAliasRedirect } from '../router/go-alias';
 
@@ -64,6 +65,7 @@ export function buildUserRoutes(): RouteObject[] {
         { path: 'usage-ledger', element: <UserUsageLedgerPage /> },
         { path: 'cost', element: <UserCostPage /> },
         { path: 'referrals', element: <UserReferralsPage /> },
+        { path: 'invites', element: <UserInvitesPage /> },
         // Legacy redirects → overview. Phase 3B R7 removed A's
         // /user/virtual-keys route; the canonical Team Keys page lives
         // on the team server (B). Users who follow my-keys / pending-keys
