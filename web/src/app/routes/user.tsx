@@ -23,6 +23,10 @@ import MyAccountPage from '../../pages/user/account';
 // Spec: requirements/2026-05-11-aikey-web-local-first-team-merge.md R7.
 import UserUsageLedgerPage from '../../pages/user/usage-ledger';
 import UserCostPage from '../../pages/user/cost';
+// M5 Day 1 (2026-05-21): degrade-detector trust-check page. Sits under
+// /user/trust-check in the Insights group of the sidebar. Calls
+// trust-local 8801 from Day 2 onwards; Day 1 ships with mock data only.
+import UserTrustCheckPage from '../../pages/user/trust-check';
 import UserBulkImportPage from '../../pages/user/import';
 import UserVaultPage from '../../pages/user/vault';
 import UserReferralsPage from '../../pages/user/referrals';
@@ -64,6 +68,7 @@ export function buildUserRoutes(): RouteObject[] {
         { path: 'import', element: <UserBulkImportPage /> },
         { path: 'usage-ledger', element: <UserUsageLedgerPage /> },
         { path: 'cost', element: <UserCostPage /> },
+        { path: 'trust-check', element: <UserTrustCheckPage /> },
         { path: 'referrals', element: <UserReferralsPage /> },
         { path: 'invites', element: <UserInvitesPage /> },
         // Legacy redirects → overview. Phase 3B R7 removed A's

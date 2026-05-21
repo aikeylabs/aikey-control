@@ -120,6 +120,13 @@ const ICON_SHIELD =
 const ICON_USER_PLUS =
   'M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z';
 
+// lucide "radar" — Trust Check (degrade-detector M5) sidebar glyph.
+// Multi-path icon, so we can't reuse the single-`d` NavIcon path; the
+// RadarIcon function below renders all paths inline. The radar metaphor
+// matches the page's role: scanning each credential source for trust
+// signals (degrade / impersonation) — same icon used in the UI template
+// `.superdesign/design_iterations/degrade_detector_web_1_2_1_1_1.html`.
+
 // Named thin wrappers — keeps call sites self-documenting and gives
 // elements a stable identity for tests / `data-origin-name`-style tooling.
 function KeyIcon({ className }: { className?: string } = {}) {
@@ -156,6 +163,30 @@ function TeamUsageIcon() {
         strokeLinejoin="round"
         d="M4 21h17M7 21v-6M12 21v-9M17 21v-4"
       />
+    </svg>
+  );
+}
+
+// Multi-path lucide "radar" (M5 Day 1, 2026-05-21). Re-rendered as inline
+// SVG instead of NavIcon since NavIcon takes only a single `d`.
+function RadarIcon() {
+  return (
+    <svg
+      className="w-4 h-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      viewBox="0 0 24 24"
+    >
+      <path d="M19.07 4.93A10 10 0 0 0 6.99 3.34" />
+      <path d="M4 6h.01" />
+      <path d="M2.29 9.62A10 10 0 1 0 21.31 8.35" />
+      <path d="M16.24 7.76A6 6 0 1 0 19.4 12.91" />
+      <path d="M14 12a2 2 0 1 0-4 0" />
+      <path d="M11.55 21.95A10 10 0 0 0 21.55 12" />
+      <path d="M4.05 14a10 10 0 0 0 1.92 5.99" />
     </svg>
   );
 }
@@ -242,6 +273,7 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   'virtual-keys': { label: 'Team Keys',  originName: 'Virtual Keys' },
   vault:          { label: 'Vault',      originName: 'My Vault' },
   'usage-ledger': { label: 'Usage',      originName: 'Usage Ledger' },
+  'trust-check':  { label: 'Trust Check' },
   import:         { label: 'Import',     originName: 'Bulk Import' },
 };
 
@@ -515,6 +547,14 @@ export function UserShell() {
         //   - Cost            → DollarIcon
         { path: '/user/usage-ledger', icon: <ReceiptIcon />,   label: 'Usage',      originName: 'Usage Ledger', personalOnly: true },
         { path: '/user/usage-ledger', icon: <TeamUsageIcon />, label: 'Team Usage',                            teamOnly: true     },
+        // M5 Day 1 (2026-05-21): degrade-detector trust-check entry.
+        // Sits between Team Usage and Cost in the Insights group to
+        // match the UI template's sidebar order (Overview · Vault ·
+        // Import · Team Keys · Usage · Trust Check · Cost · Account).
+        // personalOnly because the page calls trust-local 8801 which
+        // only lives on the user's machine — same constraint as Cost
+        // and the Personal Usage variant above.
+        { path: '/user/trust-check', icon: <RadarIcon />,     label: 'Trust Check',                            personalOnly: true },
         { path: '/user/cost',         icon: <DollarIcon />,    label: 'Cost',                                  personalOnly: true },
       ],
     },
