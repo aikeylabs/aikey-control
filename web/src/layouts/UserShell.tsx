@@ -120,6 +120,28 @@ const ICON_SHIELD =
 const ICON_USER_PLUS =
   'M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z';
 
+// lucide "bot" (outline) — Connected Apps glyph (refreshed 2026-05-23
+// per design_iterations/vault_logo_layout_refine_3.html mockup).
+// Renders a rounded robot head: body rect, antenna stem + top bar,
+// left/right "ear" stubs, and two eye dots. The bot metaphor fits the
+// page meaning better than the previous square-stack — these are
+// third-party AI Agents (Claude / Codex / Kimi) that the user "plugs
+// into" via AiKey, so a friendly bot face reads more immediately as
+// "AI Apps" than abstract stacked squares.
+//
+// Geometry note: lucide's stock bot has heavy internal padding inside
+// the 24×24 viewBox (y=4..20 = 67% vertical fill) which made the
+// rendered glyph visually smaller than sibling icons (which fill ~92%
+// of the box). Re-tightened the coordinates so the bot occupies y=3..22
+// (~79% fill): antenna pushed up 1 unit, body extended down 2 units.
+// Horizontal kept (x=2..22) since the ears were already at the edge.
+//
+// Compiled into one `d` via multiple M subpaths so NavIcon's
+// single-path renderer works (lucide's original 7-element multi-path
+// can't be inlined directly).
+const ICON_APPS =
+  'M6 7 H18 a2 2 0 0 1 2 2 V20 a2 2 0 0 1 -2 2 H6 a2 2 0 0 1 -2 -2 V9 a2 2 0 0 1 2 -2 Z M8 3 H16 M12 3 V7 M2 14 H4 M20 14 H22 M9 13 V16 M15 13 V16';
+
 // lucide "radar" — Trust Check (degrade-detector M5) sidebar glyph.
 // Multi-path icon, so we can't reuse the single-`d` NavIcon path; the
 // RadarIcon function below renders all paths inline. The radar metaphor
@@ -137,6 +159,7 @@ function UserIcon()        { return <NavIcon d={ICON_USER} />; }
 function ReceiptIcon()     { return <NavIcon d={ICON_RECEIPT} />; }
 function DollarIcon()      { return <NavIcon d={ICON_DOLLAR} />; }
 function UploadCloudIcon() { return <NavIcon d={ICON_UPLOAD_CLOUD} />; }
+function AppsIcon()        { return <NavIcon d={ICON_APPS} />; }
 function UserPlusIcon()    { return <NavIcon d={ICON_USER_PLUS} />; }
 function ShieldIcon()      { return <NavIcon d={ICON_SHIELD} />; }
 
@@ -207,8 +230,16 @@ function RadarIcon() {
  *                       rendering on A; differentiated from local
  *                       Usage's plain bar-chart so the two Insights
  *                       rows don't look identical)
- *   - 'cost'         → DollarIcon (R15 — A's Cost cross-app rendering
- *                       on B; B has no /user/cost route, A is canonical)
+ *   - 'cost'         → DollarIcon (R15 — A's Performance cross-app
+ *                       rendering on B; B has no /user/performance route,
+ *                       A is canonical. Icon name kept as 'cost' for
+ *                       backward-compat with stored menu snapshots.)
+ *   - 'apps'         → AppsIcon (2026-05-21 — A's Connected Apps
+ *                       cross-app rendering on B; B has no /user/apps
+ *                       route, A is canonical)
+ *   - 'trust-check'  → RadarIcon (2026-05-21 — A's degrade-detector
+ *                       Trust Check cross-app rendering on B; sits in
+ *                       the new QUALITY group, see types.go/types.ts)
  *   - 'user'         → UserIcon (legacy, no longer emitted by any
  *                       cross-app menu after R16 dropped Account
  *                       cross-app — kept for backward-compat with
@@ -226,6 +257,8 @@ function crossAppIconFor(iconName: string | undefined): React.ReactNode {
     case 'chart':        return <ReceiptIcon />;
     case 'team-chart':   return <TeamUsageIcon />;
     case 'cost':         return <DollarIcon />;
+    case 'apps':         return <AppsIcon />;
+    case 'trust-check':  return <RadarIcon />;
     case 'user':
     case 'team-account': return <UserIcon />;
     default:
@@ -525,37 +558,53 @@ export function UserShell() {
       ],
     },
     {
-      title: 'Insights',
+      // Phase 4 阶段 3 (2026-05-21): "Insights" group renamed to "Cost".
+      // Rationale: every item in this group answers a "how much / where
+      // did the money go" question — Usage (token spend), Performance
+      // (cost-vs-output analysis, formerly the "Cost" sub-item), and
+      // Apps (which agents are spending). Renaming the GROUP to Cost
+      // pins the mental model; the previous "Cost" sub-item became
+      // "Performance" so the cost-related items don't collide on names.
+      title: 'Cost',
       items: [
         // Phase 3B R18 (2026-05-11): Insights split into 3 explicit
-        // items so A↔B order is consistent. Previously a single
-        // `Usage` entry with `teamSideLabel: 'Team Usage'` rendered
-        // local on both sides (label flipped per side) and the
-        // cross-app trailer landed AFTER the local item, producing:
-        //   A: [Usage, Cost, Team Usage]   (Team Usage = trailer)
-        //   B: [Team Usage, Cost, Usage]   (Usage = trailer)
-        // After the split, R13's slot-position logic re-places each
-        // cross-app entry in its declared navGroups index, giving
-        // both sides [Usage, Team Usage, Cost]:
-        //   - Usage (personalOnly):   A local / B cross-app slot
-        //   - Team Usage (teamOnly):  A cross-app slot / B local
-        //   - Cost (personalOnly):    A local / B cross-app slot
+        // items so A↔B order is consistent. (See git history for the
+        // pre-2026-05-21 cross-app slot reasoning — still applies.)
         //
-        // Same icon-per-side intent as before:
-        //   - Personal Usage  → ReceiptIcon (plain bar-chart)
-        //   - Team Usage      → TeamUsageIcon (bars + people)
-        //   - Cost            → DollarIcon
-        { path: '/user/usage-ledger', icon: <ReceiptIcon />,   label: 'Usage',      originName: 'Usage Ledger', personalOnly: true },
-        { path: '/user/usage-ledger', icon: <TeamUsageIcon />, label: 'Team Usage',                            teamOnly: true     },
-        // M5 Day 1 (2026-05-21): degrade-detector trust-check entry.
-        // Sits between Team Usage and Cost in the Insights group to
-        // match the UI template's sidebar order (Overview · Vault ·
-        // Import · Team Keys · Usage · Trust Check · Cost · Account).
-        // personalOnly because the page calls trust-local 8801 which
-        // only lives on the user's machine — same constraint as Cost
-        // and the Personal Usage variant above.
-        { path: '/user/trust-check', icon: <RadarIcon />,     label: 'Trust Check',                            personalOnly: true },
-        { path: '/user/cost',         icon: <DollarIcon />,    label: 'Cost',                                  personalOnly: true },
+        // Order (after 2026-05-21 rename):
+        //   - Usage       (personalOnly)  → ReceiptIcon
+        //   - Team Usage  (teamOnly)      → TeamUsageIcon
+        //   - Performance (personalOnly)  → DollarIcon (was: "Cost")
+        //   - Apps        (personalOnly)  → AppsIcon — Phase 4 阶段 3 new
+        { path: '/user/usage-ledger', icon: <ReceiptIcon />,   label: 'Usage',       originName: 'Usage Ledger', personalOnly: true },
+        { path: '/user/usage-ledger', icon: <TeamUsageIcon />, label: 'Team Usage',                              teamOnly: true     },
+        // 2026-05-21 (later same day): URL also renamed `/user/cost` →
+        // `/user/performance` so the sidebar path matches the visible label.
+        // The page file, function name, CSS class, and trailer ID stay keyed
+        // on "cost" (internal-only identifiers, not user-facing). Old
+        // `/user/cost` URL still works via redirect in routes/user.tsx.
+        { path: '/user/performance',  icon: <DollarIcon />,    label: 'Performance', originName: 'Cost',          personalOnly: true },
+        // Phase 4 阶段 3 (2026-05-21) — Connected Apps list. personalOnly
+        // because the /api/user/apps/* endpoints read app_records /
+        // app_keys from the personal vault, which only lives on the
+        // user's machine (same constraint as Vault / Usage / Performance).
+        { path: '/user/apps',         icon: <AppsIcon />,      label: 'Apps',        originName: 'Connected Apps', personalOnly: true },
+      ],
+    },
+    {
+      // Phase 4 阶段 3 (2026-05-21): new "Quality" group, holds the
+      // degrade-detector "Trust Check" entry. Moved here from the
+      // previous Insights group because Trust Check is about service-
+      // quality monitoring (is upstream actually serving claude-3.5 or
+      // a downgrade?), distinct from the "how much money" framing of
+      // the Cost group. Solo-item group today; future quality-related
+      // signals (latency, error rate, freshness probes) join here.
+      title: 'Quality',
+      items: [
+        // M5 (2026-05-21): degrade-detector trust-check entry.
+        // personalOnly because the page calls trust-local on 8801,
+        // which only lives on the user's machine.
+        { path: '/user/trust-check', icon: <RadarIcon />, label: 'Trust Check', personalOnly: true },
       ],
     },
     {
@@ -621,7 +670,22 @@ export function UserShell() {
             intentionally removed earlier (user flagged "全是横线"); the
             top glow is a single line of primary with diffused shadow,
             reads as a spotlight rather than a divider. */}
-        <div className="nav-brand h-16 flex items-center justify-center relative flex-shrink-0">
+        {/* Brand row geometry (2026-05-23 v3 — "slightly centered" tuning):
+              h-20  (80px tall, was 64px) — gives the AK mark ~26px of
+                    breathing room above and below for a balanced
+                    head/box ratio (~3:1).
+              pl-[40px] (was 27px which strict-aligned the AK box center
+                    with the nav-icon column at 40.5px). Strict alignment
+                    left the whole brand block hugging the sidebar's
+                    left edge (left-to-right ratio ~1:5.3 against the
+                    280px sidebar). Bumping pl to 40 shifts the brand
+                    13px right, dropping the ratio to ~1:3.5 — still
+                    left-leaning but no longer cramped, while keeping
+                    distinct from a "fully centered" treatment.
+            Collapsed-sidebar CSS (index.css:366) overrides both with
+            `padding:0; justify-content:center` so the icon-only mode
+            still centers properly. */}
+        <div className="nav-brand h-20 flex items-center justify-start pl-[40px] relative flex-shrink-0">
           <div
             className="absolute top-0 left-0 w-full h-px"
             aria-hidden="true"
@@ -631,8 +695,61 @@ export function UserShell() {
               boxShadow: '0 0 10px rgba(250,204,21,0.5)',
             }}
           />
-          <div className="flex items-center gap-2 font-mono font-bold tracking-widest text-xl" style={{ color: 'var(--foreground)' }}>
-            <KeyIcon className="w-6 h-6" />
+          {/* Logo aligned with aikeylabs.com main site (2026-05-23):
+              32x32 "AK" letterform box + Space Grotesk display font for
+              the "AiKey" word, tracking-tight. Replaces the previous
+              lucide KeyIcon + JetBrains-Mono tracking-widest combo so
+              users moving between the public site and the console see
+              the same wordmark.
+
+              Color treatment (2026-05-23 v2): main site dark-mode
+              default is a stark `bg-white` box; in the perpetually-
+              dark console sidebar that read too "hard" against the
+              surrounding amber accents (top glow line, active nav
+              rail). Switched to the main site's HOVER amber instead
+              (bg-amber-400 → var(--primary) #facc15 + dark text), so
+              the AK box sits in-family with the rest of the sidebar's
+              amber strong-marks. Subtle amber halo box-shadow echoes
+              the top brand glow. */}
+          <div
+            className="flex items-center gap-[7px] font-bold text-lg tracking-tight"
+            style={{
+              // "AiKey" wordmark color — uses shared --display-foreground
+              // token (#c8c4ba) so all premium-headings (sidebar brand
+              // + topbar breadcrumb + page H1s) stay in lockstep.
+              // Single source of truth; tweak the token in index.css.
+              color: 'var(--display-foreground)',
+              fontFamily: 'var(--font-display)',
+            }}
+          >
+            <div
+              className="nav-brand-mark w-8 h-8 rounded-[10px] flex items-center justify-center flex-shrink-0"
+              style={{
+                // Dark-amber treatment (2026-05-23 v3): solid #facc15 box
+                // read as "too loud" in the dark sidebar. Switched to the
+                // same dim-amber pattern used elsewhere — cli-guide brand
+                // ⌘ glyph, vault IdentityStrip icon box: subtle amber-
+                // tinted bg + amber 22% border + bright amber content +
+                // soft amber halo. Keeps the brand mark in the amber
+                // family without overpowering surrounding nav items.
+                //
+                // Size bumped 28→32 (2026-05-23 v4) per user feedback
+                // "稍微大一点点". Radius scaled 9→10, font 12→13 to
+                // keep proportions; halo nudged 10→12 to match the
+                // slightly larger box.
+                background: 'rgba(250, 204, 21, 0.085)',
+                color: 'var(--primary)',
+                border: '1px solid rgba(250, 204, 21, 0.22)',
+                fontFamily: 'var(--font-display)',
+                fontWeight: 700,
+                fontSize: 13,
+                letterSpacing: '-0.02em',
+                boxShadow: '0 0 12px rgba(250, 204, 21, 0.08)',
+              }}
+              aria-hidden="true"
+            >
+              AK
+            </div>
             <span className="nav-brand-text">{logoText}</span>
           </div>
         </div>
@@ -914,14 +1031,14 @@ export function UserShell() {
             <span className="mx-2 opacity-50">/</span>
             <span
               className="font-bold"
-              style={{ color: 'var(--foreground)' }}
+              style={{ color: 'var(--display-foreground)' }}
               {...(breadcrumb.originName ? { 'data-origin-name': breadcrumb.originName } : {})}
             >
               {breadcrumb.label}
             </span>
           </div>
           <button
-            onClick={() => navigate('/user/referrals')}
+            onClick={() => navigate('/user/invites')}
             className="btn btn-outline text-[10px] px-3 py-1.5 flex items-center gap-1.5"
             style={{ borderColor: 'rgba(250,204,21,0.3)', color: 'var(--primary)' }}
           >

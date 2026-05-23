@@ -402,6 +402,39 @@ export const KEYS_PAGE_CSS = `
   50%  { box-shadow: 0 0 0 6px rgba(56, 189, 248, 0); }
   100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
 }
+
+/* ── Test Connection popup spinner ─────────────────────────────────────
+   The popup itself is a fixed overlay so its descendants live OUTSIDE
+   .vault-page in the DOM tree — that means any selector scoped to
+   .vault-page (like the rest of this file) won't reach the spinner.
+   Use an unscoped @keyframes + .aikey-spinner class so the rule applies
+   wherever the spinner mounts. Earlier attempts that scoped the
+   keyframes to a popup component via inline <style>{...}</style> were
+   flaky in practice (some render timings didn't pick up the keyframe
+   name); routing through the global stylesheet that lives in the same
+   <style> tag VAULT_CSS injects guarantees the rule is parsed before
+   the spinner ever paints. SMIL <animateTransform> was a previous
+   attempt — it animates fine but interacts poorly with screenshot
+   tools that capture a single frame, so users report it as "static".
+   CSS animation has stable visual behaviour in both live and recorded
+   captures. */
+@keyframes aikey-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.aikey-spinner {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border, #2a2a2a);
+  border-top-color: var(--accent, #3b82f6);
+  border-radius: 50%;
+  animation: aikey-spin 0.9s linear infinite;
+  /* GPU-promoted layer so the rotation transform compositor-paints in
+     its own layer instead of triggering layout/paint on every frame.
+     Cheap insurance against rare slow-redraw cases. */
+  will-change: transform;
+}
 .vault-page table.vault tbody tr.in-use.just-switched {
   animation: route-pulse 600ms ease-out 1;
 }
@@ -1311,8 +1344,8 @@ export const KEYS_PAGE_CSS = `
   display: flex; flex-direction: column; gap: 0.9rem;
   color: var(--foreground);
 }
-.modal-body .form-row { display: flex; flex-direction: column; gap: 0.3rem; }
-.modal-body .form-label {
+.modal-body .form-row, .modal-panel-guided .page .form-row { display: flex; flex-direction: column; gap: 0.3rem; }
+.modal-body .form-label, .modal-panel-guided .page .form-label {
   display: inline-flex; align-items: center; gap: 0.35rem;
   /* Aligned with table <th> style 2026-04-25: mono + bold +
      uppercase + muted-foreground. Previously too light (no explicit
@@ -1324,11 +1357,11 @@ export const KEYS_PAGE_CSS = `
   text-transform: uppercase;
   color: var(--muted-foreground);
 }
-.modal-body .form-help {
+.modal-body .form-help, .modal-panel-guided .page .form-help {
   font-size: 12px; color: var(--muted-foreground);
 }
-.modal-body .req { color: var(--destructive, #ef4444); }
-.modal-body .field-input {
+.modal-body .req, .modal-panel-guided .page .req { color: var(--destructive, #ef4444); }
+.modal-body .field-input, .modal-panel-guided .page .field-input {
   background: var(--surface-1, #1f1f23);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1336,17 +1369,17 @@ export const KEYS_PAGE_CSS = `
   font-size: 12.5px; padding: 6px 10px;
   width: 100%;
 }
-.modal-body .field-input-wrap { position: relative; width: 100%; min-width: 0; display: block; }
-.modal-body .field-input-has-reveal { padding-right: 30px !important; }
-.modal-body .field-reveal-btn {
+.modal-body .field-input-wrap, .modal-panel-guided .page .field-input-wrap { position: relative; width: 100%; min-width: 0; display: block; }
+.modal-body .field-input-has-reveal, .modal-panel-guided .page .field-input-has-reveal { padding-right: 30px !important; }
+.modal-body .field-reveal-btn, .modal-panel-guided .page .field-reveal-btn {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
   background: transparent; border: none; cursor: pointer; padding: 4px;
   color: var(--muted-foreground); display: inline-flex;
   align-items: center; justify-content: center; border-radius: 3px;
 }
-.modal-body .field-reveal-btn:hover { color: var(--foreground); background: rgba(255,255,255,0.04); }
-.modal-body .field-reveal-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-.modal-body .field-input:focus {
+.modal-body .field-reveal-btn:hover, .modal-panel-guided .page .field-reveal-btn:hover { color: var(--foreground); background: rgba(255,255,255,0.04); }
+.modal-body .field-reveal-btn:focus-visible, .modal-panel-guided .page .field-reveal-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.modal-body .field-input:focus, .modal-panel-guided .page .field-input:focus {
   outline: none; border-color: var(--primary);
   box-shadow: 0 0 0 2px rgba(250, 204, 21,0.15);
 }
@@ -1354,11 +1387,11 @@ export const KEYS_PAGE_CSS = `
    so the user's eye is drawn to the offending field even if they
    missed the inline error message. Class is auto-removed after 1.2s
    (timer in AddKeyModal). 2026-04-25. */
-.modal-body .field-input.field-input-flash {
+.modal-body .field-input.field-input-flash, .modal-panel-guided .page .field-input.field-input-flash {
   animation: modal-field-flash 0.5s ease-in-out 2;
   border-color: rgba(239, 68, 68, 0.8) !important;
 }
-.modal-body .field-input.field-input-flash:focus {
+.modal-body .field-input.field-input-flash:focus, .modal-panel-guided .page .field-input.field-input-flash:focus {
   border-color: rgba(239, 68, 68, 0.9) !important;
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
 }
@@ -1372,12 +1405,12 @@ export const KEYS_PAGE_CSS = `
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
   }
 }
-.modal-body .seg {
+.modal-body .seg, .modal-panel-guided .page .seg {
   display: inline-flex; padding: 2px;
   background: var(--surface-1, #1f1f23); border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
-.modal-body .seg button {
+.modal-body .seg button, .modal-panel-guided .page .seg button {
   font-family: var(--font-mono);
   font-size: 10px; letter-spacing: 0.05em;
   padding: 3px 9px; border-radius: 3px;
@@ -1385,7 +1418,7 @@ export const KEYS_PAGE_CSS = `
   background: transparent; border: none; cursor: pointer;
   display: inline-flex; align-items: center; gap: 4px;
 }
-.modal-body .seg button.active {
+.modal-body .seg button.active, .modal-panel-guided .page .seg button.active {
   background: var(--surface-2, #27272a); color: var(--foreground);
   box-shadow: inset 0 0 0 1px var(--border);
 }
@@ -1477,4 +1510,597 @@ export const KEYS_PAGE_CSS = `
   border-radius: 6px;
 }
 .vault-page ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+
+/* ============================================================
+   Add Key Guided flow (spec §17 visual contract)
+   ============================================================
+   Scoped under .modal-panel-guided so the existing 540px modal layout
+   used by other dialogs is untouched. The Guided modal is wider (780px)
+   to fit the left rail + page content + probe table grid.
+
+   Why a sibling class instead of a data-attr on .modal-panel: existing
+   styles already key off the bare class; piggy-backing on it via
+   modifier keeps the cascade flat and easy to override.
+*/
+.modal-panel-guided {
+  width: 780px !important;
+}
+.modal-panel-guided .modal-header-sub {
+  /* "stored locally, never leaves device" trust ribbon — spec §13.1.
+     mono uppercase 10px, dim color, NOT decorative — when this string
+     is missing the user loses the local-first promise (spec §18.1). */
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  margin-left: 6px;
+}
+.modal-panel-guided .mode-switch {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.modal-panel-guided .mode-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  border-radius: 3px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.modal-panel-guided .mode-switch button.active {
+  background: var(--surface-2);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.modal-panel-guided .header-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Body shell: 170px rail + page. simple-mode collapses to single column. */
+.modal-panel-guided .body-shell {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  min-height: 480px;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+.modal-panel-guided .body-shell.simple-mode {
+  grid-template-columns: 1fr;
+}
+.modal-panel-guided .body-shell.simple-mode .rail {
+  display: none;
+}
+.modal-panel-guided .rail {
+  background: rgba(0, 0, 0, 0.14);
+  border-right: 1px solid var(--border);
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal-panel-guided .rail-kicker {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.modal-panel-guided .step {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: start;
+  gap: 9px;
+  padding: 9px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  border: 1px solid transparent;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  /* Buttonized rail: strip native <button> chrome but keep cursor + text alignment. */
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.modal-panel-guided .step:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.modal-panel-guided .step.active {
+  color: var(--foreground);
+  background: rgba(250, 204, 21, 0.07);
+  border-color: rgba(250, 204, 21, 0.18);
+}
+.modal-panel-guided .step-num {
+  width: 24px; height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted-foreground);
+}
+.modal-panel-guided .step.active .step-num {
+  color: var(--primary);
+  border-color: rgba(250, 204, 21, 0.35);
+  background: rgba(250, 204, 21, 0.1);
+}
+.modal-panel-guided .step-body strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.modal-panel-guided .step-body span {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+.modal-panel-guided .rail-note {
+  margin-top: auto;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* Page transitions: spec §17.4 page-in 180ms fade-up. */
+.modal-panel-guided .page {
+  display: none;
+  flex-direction: column;
+  gap: 0.9rem;
+  animation: ak-page-in 180ms ease-out both;
+  padding: 16px 18px;
+  overflow-y: auto;
+  min-width: 0;
+}
+.modal-panel-guided .page.active {
+  display: flex;
+}
+@keyframes ak-page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.modal-panel-guided .page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.modal-panel-guided .page-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.modal-panel-guided .page-copy {
+  margin: 5px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 520px;
+}
+.modal-panel-guided .status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Card / Connectivity summary — page 2 top block. */
+.modal-panel-guided .card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+.modal-panel-guided .card-label {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.modal-panel-guided .connectivity-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.modal-panel-guided .health-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--muted-foreground);
+  margin: 0;
+}
+.modal-panel-guided .health-title.good { color: var(--success); }
+.modal-panel-guided .health-title.warn { color: var(--warning); }
+.modal-panel-guided .health-title.bad  { color: var(--destructive, #ef4444); }
+.modal-panel-guided .health-copy {
+  margin: 6px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+/* Probe table — 4 columns (Phase / Status / Latency / What it proves). */
+.modal-panel-guided .probe-table {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-1);
+}
+.modal-panel-guided .probe-head,
+.modal-panel-guided .probe-row {
+  display: grid;
+  grid-template-columns: 1.15fr 0.75fr 1fr 1.35fr;
+  align-items: center;
+}
+.modal-panel-guided .probe-head {
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.modal-panel-guided .probe-head > div,
+.modal-panel-guided .probe-row > div {
+  padding: 9px 11px;
+  min-width: 0;
+}
+.modal-panel-guided .probe-row {
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 12.5px;
+  color: var(--foreground);
+}
+.modal-panel-guided .probe-row:last-child {
+  border-bottom: 0;
+}
+.modal-panel-guided .probe-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.modal-panel-guided .result-dot {
+  width: 7px; height: 7px;
+  border-radius: 999px;
+  background: var(--muted-foreground);
+  opacity: 0.7;
+}
+.modal-panel-guided .probe-row.good .result-dot {
+  background: var(--success);
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.55);
+  opacity: 1;
+}
+.modal-panel-guided .probe-row.warn .result-dot {
+  background: var(--warning);
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.4);
+  opacity: 1;
+}
+/* destructive red — spec §5.1 gap fix (4th row state for hard
+   failures like 5xx / state mismatch / chat-stage rejection). */
+.modal-panel-guided .probe-row.bad .result-dot {
+  background: var(--destructive, #ef4444);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+  opacity: 1;
+}
+.modal-panel-guided .probe-table .mono {
+  font-family: var(--font-mono);
+  color: var(--muted-foreground);
+  font-size: 11.5px;
+}
+
+/* Repair card — actionable guidance below probe table. */
+.modal-panel-guided .repair {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 10px 11px;
+  border-radius: var(--radius-sm);
+  background: rgba(96, 165, 250, 0.06);
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.modal-panel-guided .repair.warn {
+  background: rgba(250, 204, 21, 0.07);
+  border-color: rgba(250, 204, 21, 0.25);
+}
+.modal-panel-guided .repair.bad {
+  background: rgba(239, 68, 68, 0.07);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+.modal-panel-guided .repair.good {
+  background: rgba(74, 222, 128, 0.05);
+  border-color: rgba(74, 222, 128, 0.22);
+}
+
+/* Name strip — alias input + risk line on page 2. */
+.modal-panel-guided .name-strip {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--border);
+}
+.modal-panel-guided .risk-line {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--warning);
+  font-size: 11.5px;
+}
+.modal-panel-guided .risk-line.show {
+  display: flex;
+}
+
+/* Trust ribbon — footer left side, mono uppercase. */
+.modal-panel-guided .modal-footer .trust {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.modal-panel-guided .modal-footer .trust svg {
+  color: var(--success);
+}
+
+/* btn-outline + btn-sm/md — spec §17.1 button sizes. */
+.modal-panel-guided .btn-outline {
+  background: var(--surface-1);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+.modal-panel-guided .btn-outline:hover {
+  background: var(--surface-2);
+  border-color: var(--muted-foreground);
+}
+.modal-panel-guided .btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 10.5px;
+}
+.modal-panel-guided .btn-md {
+  height: 34px;
+  padding: 0 13px;
+  font-size: 11px;
+}
+
+/* Page-2 actions row: footer adds Back + Save next to Cancel. Save
+   anyway keeps btn-primary class — spec §14.1 explicit: never demote
+   to outline / grey, the user has actively chosen to save. */
+.modal-panel-guided .modal-footer .actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* OAuth Broker Card (spec §6 + design HTML lines 1158-1217). Lives
+   inside the Guided modal page 1 when kind = OAuth. The 3-step flow
+   (provider / open auth / paste-or-wait) drives all three OAuth
+   providers (claude setup_token / codex auth_code / kimi device_code)
+   off the same component — see vault/index.tsx::OAuthBrokerCard. */
+.modal-panel-guided .oauth-broker-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--border);
+}
+.modal-panel-guided .oauth-flow-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.modal-panel-guided .oauth-flow-title strong {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--foreground);
+}
+.modal-panel-guided .flow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 23px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(250, 204, 21, 0.22);
+  background: rgba(250, 204, 21, 0.07);
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.modal-panel-guided .flow-steps {
+  display: grid;
+  gap: 9px;
+}
+.modal-panel-guided .flow-step {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: start;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.modal-panel-guided .flow-step > span:first-child {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+}
+.modal-panel-guided .flow-step-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.modal-panel-guided .flow-step-title {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 650;
+}
+.modal-panel-guided .flow-step-control {
+  display: grid;
+  gap: 6px;
+}
+.modal-panel-guided .field-select {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  font-size: 12.5px;
+  padding: 6px 10px;
+  min-height: 35px;
+}
+.modal-panel-guided .inline-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.modal-panel-guided .pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.08);
+}
+.modal-panel-guided .oauth-code-input {
+  display: none;
+  gap: 8px;
+  align-items: center;
+}
+.modal-panel-guided .oauth-code-input.show {
+  display: grid;
+  grid-template-columns: 1fr auto;
+}
+.modal-panel-guided .code-status {
+  min-width: 96px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.modal-panel-guided .code-status.loading { color: var(--primary); }
+.modal-panel-guided .code-status.success { color: var(--success); }
+.modal-panel-guided .code-status.error   { color: var(--destructive, #ef4444); }
+.modal-panel-guided .copy-auth-url {
+  width: fit-content;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.modal-panel-guided .copy-auth-url:hover { color: var(--primary); }
+
+/* Responsive: spec §17.5 breakpoint 780px. Modal goes full-screen,
+   rail becomes horizontal, probe-table hides 3rd + 4th columns. */
+@media (max-width: 780px) {
+  .modal-panel-guided {
+    width: 100% !important;
+    max-width: none;
+    max-height: none;
+    min-height: 100vh;
+    border-radius: 0;
+  }
+  .modal-panel-guided .body-shell {
+    grid-template-columns: 1fr;
+  }
+  .modal-panel-guided .rail {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .modal-panel-guided .rail-kicker,
+  .modal-panel-guided .rail-note {
+    display: none;
+  }
+  .modal-panel-guided .step {
+    min-width: 190px;
+  }
+  .modal-panel-guided .probe-head,
+  .modal-panel-guided .probe-row {
+    grid-template-columns: 1fr 0.65fr;
+  }
+  .modal-panel-guided .probe-head > div:nth-child(3),
+  .modal-panel-guided .probe-head > div:nth-child(4),
+  .modal-panel-guided .probe-row > div:nth-child(3),
+  .modal-panel-guided .probe-row > div:nth-child(4) {
+    display: none;
+  }
+}
 `;

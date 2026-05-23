@@ -26,7 +26,11 @@ export const CROSS_APP_MENU_SCHEMA_VERSION = 1;
  * within a group come from BOTH sides interleaved by the order they
  * appear in the entries array (no per-entry order field — array order
  * IS the order). */
-export type CrossAppMenuGroup = 'KEYS' | 'INSIGHTS' | 'ACCOUNT';
+export type CrossAppMenuGroup = 'KEYS' | 'INSIGHTS' | 'ACCOUNT' | 'QUALITY';
+// 'QUALITY' added 2026-05-21 for the degrade-detector Trust Check entry.
+// Keep this union in sync with service/pkg/crossappmenu/types.go's
+// Group constants — both sides must list the same set or matchesGroup()
+// silently drops cross-app entries from unrecognised groups.
 
 /** Visibility sentinel — string label only; each side maps to its own
  * runtime predicate. The sentinels are intentionally edition-aware:

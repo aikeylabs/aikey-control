@@ -234,7 +234,7 @@ export default function UserUsageLedgerPage() {
           used across master pages. */}
       <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
         <div>
-          <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--foreground)' }}>
+          <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--display-foreground)' }}>
             My Usage
           </h1>
           <p className="text-[11.5px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>

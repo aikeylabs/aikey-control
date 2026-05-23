@@ -485,7 +485,7 @@ function IdentityStrip({ counts }: { counts: { total: number; issued: number; pe
           <KeyRoundIcon className="w-4 h-4" style={{ color: 'var(--primary)' }} />
         </div>
         <div className="min-w-0">
-          <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--foreground)' }}>Team Keys</div>
+          <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>Team Keys</div>
           <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
             <span>{counts.total} TOTAL</span>
             {counts.issued > 0 && (<><span className="opacity-40">·</span><span>{counts.issued} ISSUED</span></>)}

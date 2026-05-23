@@ -66,12 +66,13 @@ func WriteErr(w http.ResponseWriter, code, msg string) {
 		status = http.StatusConflict
 	case ErrBadRequest, ErrCliMalformedReply, "I_STDIN_INVALID_JSON", "I_CREDENTIAL_CONFLICT":
 		status = http.StatusBadRequest
-	case ErrOAuthAddViaCLI:
+	case ErrOAuthAddViaCLI, ErrAppMutationDenied:
 		// 403: the operation is valid protocol-wise but intentionally denied
-		// for this target. The UI should stop trying and switch to the CLI
-		// guidance affordance (done-like view for OAuth add). The earlier
-		// companion case for I_OAUTH_REVEAL_FORBIDDEN was dropped when the
-		// reveal endpoint itself was removed.
+		// by policy. UI should stop trying.
+		//   - ErrOAuthAddViaCLI: OAuth add flow lives in CLI, not Web.
+		//   - ErrAppMutationDenied: revoke / rotate blocked for protected
+		//     first-party apps (e.g. degrade-detector — destroying its
+		//     bearer would break the trust-local data pipeline).
 		status = http.StatusForbidden
 	case ErrUnknownTarget:
 		// 400: client sent an unknown target ("team" is valid in the protocol
@@ -102,11 +103,21 @@ func WriteErr(w http.ResponseWriter, code, msg string) {
 		status = http.StatusConflict
 	case ErrUnlockRateLimited:
 		status = http.StatusTooManyRequests
-	case ErrCliNotFound:
-		// 503: feature requires local cli; this happens when aikey is not on
-		// the host (e.g., in a production control-service container that
-		// doesn't ship the cli). The /user/import page still renders; only
-		// action endpoints degrade.
+	case ErrCliNotFound, "I_PROXY_NOT_RUNNING":
+		// 503: feature requires a local dependency that isn't running.
+		//   - I_CLI_NOT_FOUND: aikey binary missing on the host (e.g., a
+		//     production control-service container that doesn't ship the
+		//     cli). The /user/import page still renders; only action
+		//     endpoints degrade.
+		//   - I_PROXY_NOT_RUNNING: aikey-proxy daemon isn't listening on
+		//     27200; the cli reports it as a known I_* code rather than a
+		//     generic spawn failure. Previously fell through to 500, which
+		//     made the Vault "Test connection" popup show "Local server is
+		//     unavailable" (5xx branch in friendlyTestError) and steered the
+		//     user to restart web — wrong target. 503 keeps it in the
+		//     "dependency not running" semantic family and is the http
+		//     standard for it. Bugfix: 20260523-test-connection-proxy-down-
+		//     shows-local-server-error.md
 		status = http.StatusServiceUnavailable
 	case ErrCliTimeout:
 		status = http.StatusGatewayTimeout

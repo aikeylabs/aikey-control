@@ -31,6 +31,13 @@ const (
 	ErrUnknownTarget        = "I_UNKNOWN_TARGET"         // target is not personal|oauth|team, or team is not yet implemented
 	ErrAliasSuffixExhausted = "I_ALIAS_SUFFIX_EXHAUSTED" // auto -2/-3 retry ran 20× and still conflicted (extreme edge case)
 	ErrUnlockRateLimited    = "I_UNLOCK_RATE_LIMITED"    // too many unlock attempts from one source; online brute-force defense
+
+	// App mutation policy layer (2026-05-23)
+	// Protected app: revoke / rotate denied because the bearer is wired
+	// into an AiKey-internal pipeline and tearing it down would break
+	// the internal component (e.g. degrade-detector loses its first-
+	// party bearer → trust-local cannot consume probe traffic).
+	ErrAppMutationDenied = "I_APP_MUTATION_DENIED"
 )
 
 // JSONError is the HTTP-side error envelope. Shape intentionally matches the

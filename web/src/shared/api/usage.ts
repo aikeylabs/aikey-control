@@ -51,7 +51,7 @@ export interface RecentRequest {
   request_status: string; // "success" | "error" | ...
 }
 
-/** Per-model usage breakdown row powering `/user/cost`'s "Usage by
+/** Per-model usage breakdown row powering `/user/performance`'s "Usage by
  *  model" chart. Same 4-segment Anthropic cache shape as KeyTotal so
  *  the FE can render with the existing stacked-bar idiom (uncached /
  *  cache_creation / cache_read / output).
@@ -148,11 +148,20 @@ function personalParams(id: PersonalIdentity): Record<string, string> {
 export const usageApi = {
   // ── Personal page ──
 
-  personalTimeline: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<TimelinePoint[]> => {
+  /**
+   * Daily total tokens / request count. Powers `/user/cost` whole-vault
+   * trend AND `/user/apps/<slug>` per-app trend.
+   *
+   * `appSlug` (Phase 4 Connected Apps Stage B, v1.0.0-rc.5): when set,
+   * the server narrows the aggregate to `usage_fact_dwd.app_slug = ?`.
+   * Omit / pass empty for whole-vault view (existing /user/cost
+   * behaviour, unchanged).
+   */
+  personalTimeline: async (id: PersonalIdentity, startDate?: string, endDate?: string, appSlug?: string): Promise<TimelinePoint[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const res = await httpClient.get<TimelinePoint[]>('/v1/usage/personal/timeline', {
-      params: { ...personalParams(id), ...range, tz: browserTZ() },
-    });
+    const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
+    if (appSlug) params.app_slug = appSlug;
+    const res = await httpClient.get<TimelinePoint[]>('/v1/usage/personal/timeline', { params });
     return res.data;
   },
 
@@ -187,13 +196,18 @@ export const usageApi = {
     return res.data;
   },
 
-  /** Per-model usage rows for `/user/cost`'s "Usage by model" chart.
-   *  Server sorts by total_tokens DESC and caps at 20 rows. */
-  personalByModelTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<ModelTotal[]> => {
+  /**
+   * Per-model usage rows for `/user/performance`'s "Usage by model"
+   * chart AND `/user/apps/<slug>` per-app model breakdown.
+   * Server sorts by total_tokens DESC and caps at 20 rows.
+   *
+   * `appSlug` — see `personalTimeline` doc; same semantics.
+   */
+  personalByModelTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string, appSlug?: string): Promise<ModelTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const res = await httpClient.get<ModelTotal[]>('/v1/usage/personal/by-model/total', {
-      params: { ...personalParams(id), ...range, tz: browserTZ() },
-    });
+    const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
+    if (appSlug) params.app_slug = appSlug;
+    const res = await httpClient.get<ModelTotal[]>('/v1/usage/personal/by-model/total', { params });
     return res.data;
   },
 

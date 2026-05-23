@@ -52,17 +52,44 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
     icon: 'chart',
   },
   // Phase 3B R15 (2026-05-11): Cost added so B side can render a
-  // cross-app link to A's local /user/cost page (B has no /user/cost
-  // route — A is the canonical owner). Without this entry, navGroups
-  // Cost (personalOnly) was filtered on B with no cross-app match,
-  // making the Cost item silently disappear on B's sidebar.
+  // cross-app link to A's local /user/performance page (B has no
+  // /user/performance route — A is the canonical owner). Without
+  // this entry, the Performance item (personalOnly) was filtered
+  // on B with no cross-app match and silently disappeared.
+  // 2026-05-21: label renamed Cost → Performance, URL renamed
+  // /user/cost → /user/performance. Trailer ID kept as
+  // 'personal-cost' so existing A↔B menu reconciliation still
+  // matches across already-deployed peers.
   {
     id: 'personal-cost',
     group: 'INSIGHTS',
-    label: 'Cost',
-    path: '/user/cost',
+    label: 'Performance',
+    path: '/user/performance',
     visibility: 'always',
     icon: 'cost',
+  },
+  // Phase 4 阶段 3 (2026-05-21): Apps — surface A's local Connected
+  // Apps list to B's sidebar. /api/user/apps/* lives on A's
+  // local-server; B has no own /user/apps route.
+  {
+    id: 'personal-apps',
+    group: 'INSIGHTS',
+    label: 'Apps',
+    path: '/user/apps',
+    visibility: 'always',
+    icon: 'apps',
+  },
+  // M5 (2026-05-21): degrade-detector Trust Check. Belongs to the
+  // QUALITY group (added 2026-05-21 in types.ts). Peers on older
+  // binaries don't know QUALITY → matchesGroup() drops the entry
+  // silently; safe degradation.
+  {
+    id: 'personal-trust-check',
+    group: 'QUALITY',
+    label: 'Trust Check',
+    path: '/user/trust-check',
+    visibility: 'always',
+    icon: 'trust-check',
   },
 
   // Phase 3B R16 (2026-05-11): Account intentionally NOT exposed via

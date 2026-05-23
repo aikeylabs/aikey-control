@@ -22,11 +22,19 @@ import MyAccountPage from '../../pages/user/account';
 // Removing only A's route entry: same file, two consumers (A no, B yes).
 // Spec: requirements/2026-05-11-aikey-web-local-first-team-merge.md R7.
 import UserUsageLedgerPage from '../../pages/user/usage-ledger';
-import UserCostPage from '../../pages/user/cost';
+import UserPerformancePage from '../../pages/user/performance';
 // M5 Day 1 (2026-05-21): degrade-detector trust-check page. Sits under
 // /user/trust-check in the Insights group of the sidebar. Calls
 // trust-local 8801 from Day 2 onwards; Day 1 ships with mock data only.
 import UserTrustCheckPage from '../../pages/user/trust-check';
+// Phase 4 阶段 3 (2026-05-21): third-party Agent management UI.
+// Lives under /user/apps (list) + /user/apps/:slug (detail). Calls
+// /api/user/apps/* (前置 2 — pkg/userapi/app), which subprocess-bridges
+// to `aikey _internal app.<action>`. Pages stay relative-imported
+// (same convention as the rest of this file) so the trial composer
+// resolves them from user/web, not master/web.
+import UserAppsListPage from '../../pages/user/apps';
+import UserAppDetailPage from '../../pages/user/apps/detail';
 import UserBulkImportPage from '../../pages/user/import';
 import UserVaultPage from '../../pages/user/vault';
 import UserReferralsPage from '../../pages/user/referrals';
@@ -67,8 +75,21 @@ export function buildUserRoutes(): RouteObject[] {
         { path: 'vault', element: <UserVaultPage /> },
         { path: 'import', element: <UserBulkImportPage /> },
         { path: 'usage-ledger', element: <UserUsageLedgerPage /> },
-        { path: 'cost', element: <UserCostPage /> },
+        // 2026-05-21: full rename `/user/cost` → `/user/performance`
+        // (URL + sidebar label + page H1 + directory + function + CSS
+        // class). Trailer ID `personal-cost` and icon `cost` kept on
+        // purpose for cross-version A↔B menu compat. The old `/user/cost`
+        // URL is kept as a Navigate-replace redirect below for bookmark
+        // compatibility.
+        { path: 'performance', element: <UserPerformancePage /> },
+        { path: 'cost', element: <Navigate to="/user/performance" replace /> },
         { path: 'trust-check', element: <UserTrustCheckPage /> },
+        // Phase 4 阶段 3 — third-party Agent management.
+        // List shows all registered apps; Detail shows binding + usage + audit.
+        // Registration itself happens via CLI (`aikey app register`) — no
+        // Web-side "Add new app" CTA per the Day 9.5 UX redesign.
+        { path: 'apps', element: <UserAppsListPage /> },
+        { path: 'apps/:slug', element: <UserAppDetailPage /> },
         { path: 'referrals', element: <UserReferralsPage /> },
         { path: 'invites', element: <UserInvitesPage /> },
         // Legacy redirects → overview. Phase 3B R7 removed A's

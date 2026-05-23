@@ -123,6 +123,13 @@ export interface PersonalVaultRecord {
   secret_prefix: string | null;     // first 12 chars of plaintext (2026-05-09); null when locked OR len < 24 (entire secret too short to safely partial-reveal)
   secret_suffix: string | null;     // last 4 chars of plaintext; null when locked OR len < 24
   secret_len: number | null;        // total plaintext length; null when locked
+  /**
+   * Generic extension blob — see VaultExtra. The Vault page's "Last test"
+   * column reads `extra?.last_test`. Optional + nullable for forward
+   * compat: old CLI builds omit the field entirely, old vaults set it to
+   * null. Both render as an em-dash placeholder.
+   */
+  extra?: VaultExtra | null;
 }
 
 export interface OAuthVaultRecord {
@@ -205,6 +212,63 @@ export interface OAuthVaultRecord {
    * Null on pre-route-token vaults; drawer omits the row in that case.
    */
   route_token?: string | null;
+  /**
+   * Generic extension blob — see PersonalVaultRecord.extra. Same
+   * forward-compat contract.
+   */
+  extra?: VaultExtra | null;
+}
+
+/**
+ * Connectivity-test result snapshot persisted per key (2026-05-22).
+ * Written by the Web "Test Connection" button (POST /api/user/vault/test)
+ * and surfaced as the Vault page "Last test" column. `at` is unix
+ * seconds; `latency_ms` is min successful API latency on pass, max ping
+ * latency on fail (undefined if every probe failed before TCP).
+ * `suite_results` is opaque per-target JSON used only by the popup —
+ * shape mirrors the CLI's `aikey test --json` envelope so the same
+ * shared renderer can drive both.
+ */
+export interface VaultLastTest {
+  at: number;
+  status: 'pass' | 'fail';
+  /** Phase booleans (any-ok semantics across the credential's provider
+   *  bindings). The Vault page's "Last test" column renders three dots
+   *  driven directly by these — colour rule per user-spec 2026-05-22:
+   *    chat_ok = true                   → green dot
+   *    api_ok = false                   → amber dot (key reaches proxy,
+   *                                       but upstream rejected — most
+   *                                       commonly auth / quota)
+   *    ping_ok = false                  → red dot (cannot even reach
+   *                                       upstream, network / proxy
+   *                                       config issue)
+   *  Older snapshots may not carry these fields; treat undefined as
+   *  the legacy `status` booleans (pass = all true, fail = api/chat
+   *  not ok).
+   */
+  ping_ok?: boolean;
+  api_ok?: boolean;
+  chat_ok?: boolean;
+  latency_ms?: number;
+  error_code?: string;
+  error_message?: string;
+  suggestion?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  suite_results?: any[];
+}
+
+/**
+ * Generic per-key extension blob (2026-05-22). Source-of-truth doc lives
+ * on the CLI side at `storage::SecretMetadata::extra`. First consumer is
+ * `last_test`; any future per-key fact (favourites, tags, notes …) nests
+ * here as a sibling subkey without a column-level migration.
+ *
+ * Always emitted by the server — null when the column doesn't exist yet
+ * (old vault) or when no subkey has been set. Treat undefined the same
+ * as null.
+ */
+export interface VaultExtra {
+  last_test?: VaultLastTest | null;
 }
 
 export type VaultRecord = PersonalVaultRecord | OAuthVaultRecord;
@@ -314,6 +378,54 @@ export interface AddResponse {
 // `aikey get <alias>` command; users run it in their terminal where the
 // plaintext lands in the clipboard (auto-clears after 30s). The absence of
 // these types is the contract — do not restore them.
+
+/**
+ * Connectivity test request (2026-05-22). Web sends `{target, id}` and
+ * the backend runs the same suite the CLI's `aikey test` runs (via
+ * `_internal vault-op test`), persists the aggregate to vault, and
+ * returns it for the popup.
+ */
+export interface TestRequest {
+  target: 'personal' | 'oauth' | 'team';
+  id: string;
+}
+
+export interface TestResponse {
+  target: 'personal' | 'oauth' | 'team';
+  id: string;
+  /**
+   * Whether the aggregated result was written to vault `extra.$.last_test`.
+   * False for team rows in this iteration (storage layer not yet wired —
+   * see VirtualKeyCacheEntry in storage_platform.rs). The popup should
+   * surface "ran successfully but won't show in the column until the
+   * next release" when this is false on a team target.
+   */
+  persisted: boolean;
+  last_test: VaultLastTest;
+}
+
+/**
+ * Pre-save connectivity probe request (2026-05-23). Web sends the
+ * plaintext secret + protocol list, the backend builds an ad-hoc probe
+ * target without ever touching the vault and returns aggregated phase
+ * results in `VaultLastTest` shape.
+ *
+ * `alias_hint` is purely a label that appears in `suite_results[*].source_ref`
+ * so the popup's per-provider breakdown can render an identifier; it is
+ * NOT a vault alias and gets nothing written anywhere.
+ */
+export interface TestRawRequest {
+  providers: string[];
+  secret: string;
+  alias_hint?: string;
+  base_url?: string;
+}
+
+export interface TestRawResponse {
+  providers: string[];
+  alias_hint: string;
+  last_test: VaultLastTest;
+}
 
 export interface UseRequest {
   // Stage 7-1 (active-state cross-shell sync, 2026-04-27): team accepted.
@@ -474,5 +586,204 @@ export const vaultApi = {
       req,
     );
     return unwrap(res.data);
+  },
+
+  /**
+   * Run a connectivity probe against one key and persist the result to
+   * `extra.$.last_test`. Backed by `_internal vault-op test`. Same suite
+   * as the CLI's `aikey test --json` — single source of truth.
+   *
+   * No unlock required: the probe runs via aikey-proxy which decrypts
+   * server-side; the Web only sees pass/fail + latency + error code.
+   *
+   * Latency note: this can take 5-30s depending on provider count + network.
+   * Callers should set generous axios timeouts on the request (the backend's
+   * internal CLI timeout is 45s; client should be >= that to surface the
+   * server's I_CLI_TIMEOUT cleanly instead of a generic abort).
+   */
+  /**
+   * Pre-save connectivity probe for the Add Key Guided flow (spec §3.1 /
+   * §5.1). Differs from {@link test} in that the credential has not been
+   * written to the vault yet — we send the plaintext secret + provider
+   * list directly so the user can see Ping / API / Chat outcomes BEFORE
+   * deciding to Save / Save anyway / Cancel.
+   *
+   * Result shape matches `VaultLastTest` so the page 2 Connectivity card
+   * and probe table render identically to a post-save row.
+   *
+   * Backed by `_internal vault-op test_raw`. Reuses the same aggregation
+   * rules (`aggregate_test_outcome`) and target factory
+   * (`targets_from_new_personal_key`) that `aikey add`'s post-entry
+   * probe uses — internal-command-reuses-public-core principle.
+   */
+  testRaw: async (req: TestRawRequest): Promise<TestRawResponse> => {
+    // Same retry-on-5xx posture as test(): local-server restarts cleanly
+    // and a single quiet retry hides that transient class of failure
+    // from the user without papering over real backend bugs.
+    try {
+      const res = await httpClient.post<OkEnvelope<TestRawResponse> | ErrEnvelope>(
+        '/api/user/vault/test-raw',
+        req,
+        { timeout: 60_000 },
+      );
+      return unwrap(res.data);
+    } catch (err) {
+      const httpStatus = (err as { response?: { status?: number } })?.response?.status;
+      const transient = typeof httpStatus === 'number' && httpStatus >= 500 && httpStatus < 600;
+      if (!transient) throw err;
+      await new Promise(r => setTimeout(r, 800));
+      const res2 = await httpClient.post<OkEnvelope<TestRawResponse> | ErrEnvelope>(
+        '/api/user/vault/test-raw',
+        req,
+        { timeout: 60_000 },
+      );
+      return unwrap(res2.data);
+    }
+  },
+
+  test: async (req: TestRequest): Promise<TestResponse> => {
+    // Auto-retry once on a 5xx response. The most common cause is the
+    // local-server being restarted mid-request (e.g. `make rebuild`
+    // briefly drops connections). A single quiet retry hides that
+    // transient class of failure from the user without papering over
+    // real backend bugs — if the retry also 5xxes, we surface the
+    // error so the popup's "Probe could not run" path can render a
+    // friendly message.
+    try {
+      const res = await httpClient.post<OkEnvelope<TestResponse> | ErrEnvelope>(
+        '/api/user/vault/test',
+        req,
+        { timeout: 60_000 },
+      );
+      return unwrap(res.data);
+    } catch (err) {
+      const httpStatus = (err as { response?: { status?: number } })?.response?.status;
+      const transient = typeof httpStatus === 'number' && httpStatus >= 500 && httpStatus < 600;
+      if (!transient) throw err;
+      // Wait briefly so a restarting server has time to accept again.
+      await new Promise(r => setTimeout(r, 800));
+      const res2 = await httpClient.post<OkEnvelope<TestResponse> | ErrEnvelope>(
+        '/api/user/vault/test',
+        req,
+        { timeout: 60_000 },
+      );
+      return unwrap(res2.data);
+    }
+  },
+};
+
+// ============================================================================
+// OAuth Broker — Web Add-Key Guided flow (spec §6)
+// ============================================================================
+//
+// The browser cannot speak directly to aikey-proxy:27200 (CORS + same-origin
+// policy + the user has no idea what port the proxy is on). local-server
+// stands in as a same-origin relay (POST /api/user/oauth/*) that forwards
+// straight to the broker's POST /oauth/login / GET /oauth/status / POST
+// /oauth/poll endpoints. The state machine lives in the React component;
+// these helpers are just thin axios wrappers around the relay routes.
+
+/**
+ * OAuth login session as returned by the broker for Phase-1 (start) and
+ * read by GET /status. Field presence depends on the flow type:
+ *   - setup_token (Claude):   auth_url present; user pastes code#state
+ *                             which is submitted via login() Phase-2.
+ *   - auth_code   (Codex):    auth_url present; broker hosts a localhost
+ *                             callback. Web polls /status until status
+ *                             flips to "completed".
+ *   - device_code (Kimi):     verification_url + user_code present.
+ *                             Web polls /poll periodically.
+ *
+ * Shape mirrors aikey-auth-broker/types.go::LoginSession.
+ */
+export interface OAuthSession {
+  id: string;
+  provider: 'claude' | 'codex' | 'kimi' | string;
+  flow_type: 'setup_token' | 'auth_code' | 'device_code' | string;
+  status?: 'pending' | 'completed' | 'failed' | string;
+  auth_url?: string;
+  verification_url?: string;
+  user_code?: string;
+  // Populated once a token is acquired (Phase-2 / completed poll).
+  // Wire field is `account_id` (broker's LoginSession.AccountID JSON tag);
+  // the broker's logout endpoint takes `provider_account_id` in its
+  // request body but the session response keeps the shorter form. We
+  // mirror the broker's wire name here to avoid a transform layer.
+  account_id?: string;
+  display_identity?: string;
+  error?: { code?: string; message?: string };
+}
+
+export interface OAuthStartRequest {
+  provider: 'claude' | 'codex' | 'kimi' | string;
+}
+
+export interface OAuthSubmitCodeRequest {
+  session_id: string;
+  provider: 'claude' | 'codex' | 'kimi' | string;
+  code: string; // For Claude: "<authcode>#<state>"
+}
+
+export interface OAuthPollRequest {
+  session_id: string;
+}
+
+async function postBrokerJSON(url: string, body: unknown): Promise<OAuthSession> {
+  const res = await httpClient.post<OAuthSession | { error: { code?: string; message?: string } }>(
+    url,
+    body,
+    { timeout: 60_000 },
+  );
+  const data = res.data as OAuthSession & { error?: { code?: string; message?: string } };
+  if (data?.error) {
+    const err = new Error(data.error.message || 'OAuth broker error') as Error & { code?: string };
+    err.code = data.error.code;
+    throw err;
+  }
+  return data;
+}
+
+export const oauthApi = {
+  /**
+   * Phase-1: start a broker session for the given provider. Returns the
+   * session id + flow_type + flow-specific URLs.
+   *
+   * Why no auto-retry: starting a session is cheap and idempotent only at
+   * the broker level (a duplicate start opens a 2nd browser tab). The
+   * caller's UI already has an "Open auth again" button for retries —
+   * exposing a transparent retry here would cause silent double-opens.
+   */
+  start: async (req: OAuthStartRequest): Promise<OAuthSession> => {
+    return postBrokerJSON('/api/user/oauth/login', req);
+  },
+
+  /**
+   * Phase-2: submit the `code#state` paste (Claude setup_token only).
+   * On success returns the session with provider_account_id +
+   * display_identity populated and status="completed".
+   */
+  submitCode: async (req: OAuthSubmitCodeRequest): Promise<OAuthSession> => {
+    return postBrokerJSON('/api/user/oauth/login', req);
+  },
+
+  /**
+   * Poll the session status (Codex auth_code: broker is hosting the
+   * localhost callback; we wait for it to flip "completed").
+   */
+  status: async (sessionId: string): Promise<OAuthSession> => {
+    const res = await httpClient.get<OAuthSession>(
+      `/api/user/oauth/status?session_id=${encodeURIComponent(sessionId)}`,
+      { timeout: 30_000 },
+    );
+    return res.data;
+  },
+
+  /**
+   * Device-Code poll (Kimi). The broker contacts upstream with the
+   * stored device code and returns either pending (HTTP 202-ish) or
+   * completed with token material.
+   */
+  poll: async (req: OAuthPollRequest): Promise<OAuthSession> => {
+    return postBrokerJSON('/api/user/oauth/poll', req);
   },
 };

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,13 +8,39 @@
 :root {
   /* Exact values from theme_2.css */
   --background: #18181b;       /* zinc-900 */
-  --foreground: #f4f4f5;       /* zinc-50 */
+  --foreground: #f4f4f5;       /* zinc-50 — body text, labels, small headings */
+  /* Display foreground (2026-05-23) — used by large prominent
+     headings (page H1s, topbar breadcrumb current-page, sidebar
+     brand wordmark). Warm off-white pairs with the amber accent
+     palette and reads as a "premium whisper" instead of pure-white
+     billboard-shout. Body text keeps `--foreground` so reading
+     contrast isn't reduced. */
+  --display-foreground: #c8c4ba;
+  /* Soft foreground (2026-05-23 v2) — intermediate tier between
+     --foreground (pure white) and --display-foreground (heading
+     dim). Used for prominent row content + status labels that need
+     to read as "primary" without screaming pure-white: vault row
+     aliases, "VAULT LOCKED" banner label, etc. Only ~6% darker than
+     foreground but warm-toned so it harmonizes with the amber palette.
+     Hierarchy (brightest → dimmest):
+        --foreground         #f4f4f5  body / labels / default
+        --soft-foreground    #dcd8d1  row content / status labels
+        --display-foreground #c8c4ba  headings / brand
+        --muted-foreground   #a1a1aa  secondary / captions */
+  --soft-foreground: #dcd8d1;
   --card: #27272a;             /* zinc-800 */
   --card-foreground: #f4f4f5;
   --popover: #27272a;
   --popover-foreground: #f4f4f5;
-  --primary: #facc15;          /* yellow-400 */
+  --primary: #facc15;          /* yellow-400 — accents, active rails, brand glyph */
   --primary-foreground: #18181b;
+  /* Dim amber (2026-05-23) — for SECONDARY amber treatments where the
+     full --primary reads as too loud: top divider lines, faint state
+     borders, low-emphasis indicator strokes. Matches the value already
+     used by the existing .vault-header box-shadow halo `rgba(202, 138,
+     4, .1)` so the divider line + its glow now share the same hue
+     basis. Single source of truth — add new amber-dim uses here. */
+  --primary-dim: #ca8a04;      /* yellow-600 */
   --secondary: #3f3f46;        /* zinc-700 */
   --secondary-foreground: #f4f4f5;
   --muted: #3f3f46;
@@ -36,6 +62,11 @@
   --success: #4ade80;
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Space Mono', ui-monospace, monospace;
+  /* Display font — aligned with aikeylabs.com main site (logo + headlines
+     there use Space Grotesk via the `font-display` Tailwind class). Loaded
+     in the @import above. Kept as a CSS variable so non-Tailwind layouts
+     (UserShell brand row) can reference it inline. */
+  --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --radius: 0.375rem;
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
@@ -101,7 +132,12 @@ body {
 /* ── Vault Header ── */
 .vault-header {
   background: linear-gradient(180deg, var(--card) 0%, var(--background) 100%);
-  border-bottom: 1px solid var(--primary);
+  /* Border switched from full --primary (#facc15) to --primary-dim
+     (#ca8a04, yellow-600) so the divider reads as a calm accent stripe
+     instead of a hot neon line. The box-shadow's rgba(202, 138, 4, …)
+     halo is already at the same hue basis, so line + glow now belong
+     to the same color story. */
+  border-bottom: 1px solid var(--primary-dim);
   box-shadow: 0 1px 10px rgba(202, 138, 4, 0.1);
 }
 
@@ -161,15 +197,23 @@ body {
    horizontal padding. nav 10→14px + item 14→18px → total 32px gutter from
    sidebar edge to icon (was 24px). Gives菜单项明显的"呼吸空间",和右侧
    主内容的 px-6 (24px) 两侧节奏对齐。 */
-.user-sidebar nav { padding: 18px 14px 8px 14px; }
+/* Top padding bumped 18→24 (2026-05-23) so the first nav item
+   (Overview) doesn't sit too close to the brand row — gives a bit
+   more visual separation between the wordmark and the navigation. */
+.user-sidebar nav { padding: 24px 14px 8px 14px; }
 
-.user-sidebar .nav-section + .nav-section { margin-top: 22px; }
-.user-sidebar .nav-section > .nav-item + .nav-item { margin-top: 5px; }
+.user-sidebar .nav-section + .nav-section { margin-top: 18px; }
+.user-sidebar .nav-section > .nav-item + .nav-item { margin-top: 3px; }
 
 .user-sidebar .nav-item {
   position: relative;
   gap: 12px;
-  padding: 11px 18px;
+  /* Vertical padding tightened 11→9 (2026-05-23, v2 after first
+     pass of 8px felt a touch cramped). -4px per item × ~10 visible
+     items reclaims ~40px of vertical real estate while keeping the
+     row tall enough to read as "tappable". Section gap 22→18 and
+     per-item gap 5→3 keep the cadence proportional. */
+  padding: 9px 18px;
   border-radius: 7px;
   /* 2026-04-24: font-size 13.5 → 14.5 + weight 500 → 550 (via
      `medium`). Master's base .nav-item is 14px/500; the slight bump

@@ -2,226 +2,684 @@
  * CLI Guide page — /user/cli-guide
  *
  * Standalone page (no sidebar shell) that opens in a new tab.
- * Shows install instructions + quickstart usage guide.
+ * Implements design `aikeylabs/.superdesign/design_iterations/
+ * cli_guide_redesign_1_1.html` (2026-05-22 redesign).
+ *
+ * Deliberate drops vs the previous version (user-confirmed
+ * "完全跟设计稿砍 7 个功能"):
+ *   - Install / curl command — page assumes "Installed already"
+ *   - `aikey quickstart` wizard hint
+ *   - CI / Scripts section (`aikey run -- python eval.py`)
+ *   - Daily Commands trimmed from 16 → 6 (no activate/deactivate/
+ *     unuse/env/web/web usage/watch/update/delete/import/doctor)
+ *   - `aikey import` in BYOK path
+ *   - Team Keys placeholder + login-vs-auth-login explainer
+ *   - OAuth provider per-provider descriptions
+ *
+ * Theme: always-dark by design (no var(--…)/theme-token usage).
+ * Page bg + colors come from the local PALETTE const below.
  */
-import { useState } from 'react';
-import { runtimeConfig } from '@/app/config/runtime';
+import { useEffect, useState } from 'react';
 import { copyText } from '@/shared/utils/clipboard';
 
-function CopyBlock({ code, lang }: { code: string; lang?: string }) {
+const PALETTE = {
+  bg:      '#18181b',
+  surface: '#202024',
+  card:    '#27272a',
+  muted:   '#3f3f46',
+  border:  '#3f3f46',
+  // v1 vault skin alignment (2026-05-23): the solid #3f3f46 borders read
+  // too "wired-up" against the dark surfaces. Softer rgba borders + a
+  // body-level amber atmosphere + card-lift shadow mirror the vault page
+  // (see _shared/vault-page-skin.ts). Tokens kept here in PALETTE so they
+  // stay co-located with the rest of the page's self-contained styling.
+  borderSoft:  'rgba(244, 244, 245, 0.085)',
+  borderFaint: 'rgba(244, 244, 245, 0.04)',
+  text:    '#f4f4f5',
+  subtle:  '#a1a1aa',
+  faint:   '#71717a',
+  primary: '#facc15',
+  success: '#4ade80',
+} as const;
+
+const BG_ATMOSPHERE =
+  `radial-gradient(circle at 78% -10%, rgba(250, 204, 21, 0.05), transparent 32rem), ` +
+  `linear-gradient(180deg, rgba(255, 255, 255, 0.012) 0%, transparent 42rem), ` +
+  PALETTE.bg;
+
+const TOPBAR_GRADIENT =
+  'linear-gradient(180deg, rgba(36, 36, 40, 0.92), rgba(23, 23, 25, 0.9))';
+
+// Card lift — matches v1 .card box-shadow (inset top white highlight +
+// outer 18px deep drop). Lets sections float above the body gradient.
+const CARD_LIFT =
+  '0 1px 0 rgba(255, 255, 255, 0.025) inset, 0 18px 50px rgba(0, 0, 0, 0.22)';
+// Smaller lift for inner sub-cards (PathCard, Command, status aside).
+const SUB_CARD_LIFT =
+  '0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 6px 20px rgba(0, 0, 0, 0.14)';
+
+const MONO = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+const SANS = '"Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+const TABS = [
+  { id: 'setup',          label: 'Check setup' },
+  { id: 'paths',          label: 'Choose key path' },
+  { id: 'tools',          label: 'Use tools' },
+  { id: 'commands',       label: 'Daily commands' },
+  { id: 'outbound-proxy', label: 'Outbound proxy' },
+  { id: 'trouble',        label: 'Troubleshooting' },
+] as const;
+
+function CodeBlock({ code, lang = 'bash' }: { code: string; lang?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div
-      className="rounded border relative group"
-      style={{ backgroundColor: '#000', borderColor: 'var(--border)' }}
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        border: `1px solid ${PALETTE.borderSoft}`,
+        borderRadius: 8,
+        // Was '#09090b' (near-pure black) — too dark against the card's
+        // rgba(32,32,36,0.86) surface; the contrast read as "punched-out
+        // hole" rather than "recessed code well". Bumping to ~#16161a-ish
+        // keeps a clear hierarchy (card > code-block) without the harsh
+        // black step.
+        background: 'rgba(22, 22, 26, 0.88)',
+        boxShadow: 'inset 0 1px 0 rgba(0, 0, 0, 0.25)',
+      }}
     >
-      {lang && (
-        <div className="absolute top-2 left-3 text-[9px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', opacity: 0.5 }}>
-          {lang}
-        </div>
-      )}
-      <button
-        onClick={() => { copyText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-        className="absolute top-2 right-2 text-[10px] font-mono px-2 py-0.5 rounded border opacity-0 group-hover:opacity-100 transition-opacity"
+      <span
         style={{
-          color: copied ? '#4ade80' : 'var(--muted-foreground)',
-          borderColor: copied ? 'rgba(74,222,128,0.3)' : 'var(--border)',
-          backgroundColor: 'var(--card)',
+          position: 'absolute',
+          top: 9,
+          left: 12,
+          color: PALETTE.faint,
+          fontFamily: MONO,
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+        }}
+      >
+        {lang}
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          copyText(code);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1500);
+        }}
+        style={{
+          position: 'absolute',
+          top: 7,
+          right: 7,
+          minHeight: 25,
+          padding: '0 9px',
+          border: `1px solid ${copied ? 'rgba(74,222,128,0.4)' : PALETTE.borderSoft}`,
+          borderRadius: 6,
+          background: PALETTE.card,
+          color: copied ? PALETTE.success : PALETTE.subtle,
+          fontFamily: MONO,
+          fontSize: 10,
+          fontWeight: 700,
+          cursor: 'pointer',
         }}
       >
         {copied ? 'Copied!' : 'Copy'}
       </button>
-      <pre className="p-4 pt-6 overflow-x-auto text-sm font-mono leading-relaxed" style={{ color: 'var(--primary)' }}>
+      <pre
+        style={{
+          margin: 0,
+          padding: '32px 14px 13px',
+          overflowX: 'auto',
+          color: PALETTE.primary,
+          fontFamily: MONO,
+          fontSize: 13,
+          lineHeight: 1.6,
+          whiteSpace: 'pre',
+        }}
+      >
         {code}
       </pre>
     </div>
   );
 }
 
-function Section({ title, children, icon }: { title: string; children: React.ReactNode; icon?: React.ReactNode }) {
+function Section({
+  id,
+  title,
+  note,
+  step,
+  children,
+}: {
+  id: string;
+  title: string;
+  note: string;
+  step: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="space-y-4">
-      <h2 className="text-sm font-mono font-bold tracking-wider flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
-        {icon}
+    <section
+      id={id}
+      style={{
+        border: `1px solid ${PALETTE.borderSoft}`,
+        borderRadius: 11,
+        background: 'rgba(32, 32, 36, 0.86)',
+        overflow: 'hidden',
+        scrollMarginTop: 80,
+        boxShadow: CARD_LIFT,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 16,
+          padding: '15px 16px',
+          borderBottom: `1px solid ${PALETTE.borderFaint}`,
+          background: 'rgba(23, 23, 25, 0.2)',
+        }}
+      >
+        <div>
+          <h2 style={{ margin: 0, color: PALETTE.text, fontFamily: MONO, fontSize: 15 }}>{title}</h2>
+          <p style={{ margin: '5px 0 0', color: PALETTE.subtle, fontSize: 12, lineHeight: 1.45 }}>{note}</p>
+        </div>
+        <span
+          style={{
+            color: PALETTE.faint,
+            fontFamily: MONO,
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {step}
+        </span>
+      </div>
+      <div style={{ padding: 16 }}>{children}</div>
+    </section>
+  );
+}
+
+function PathCard({ title, blurb, code }: { title: string; blurb: string; code: string }) {
+  return (
+    <article
+      style={{
+        padding: 12,
+        border: `1px solid ${PALETTE.borderSoft}`,
+        borderRadius: 9,
+        background: PALETTE.surface,
+        boxShadow: SUB_CARD_LIFT,
+      }}
+    >
+      <strong
+        style={{
+          display: 'block',
+          marginBottom: 6,
+          color: PALETTE.text,
+          fontFamily: MONO,
+          fontSize: 12,
+        }}
+      >
         {title}
-      </h2>
-      {children}
+      </strong>
+      <p style={{ margin: '0 0 10px', color: PALETTE.subtle, fontSize: 12, lineHeight: 1.45 }}>{blurb}</p>
+      <CodeBlock code={code} />
+    </article>
+  );
+}
+
+function Command({ cmd, desc }: { cmd: string; desc: string }) {
+  return (
+    <div
+      style={{
+        padding: 10,
+        border: `1px solid ${PALETTE.borderSoft}`,
+        borderRadius: 9,
+        background: PALETTE.surface,
+        boxShadow: SUB_CARD_LIFT,
+      }}
+    >
+      <code
+        style={{
+          display: 'block',
+          marginBottom: 4,
+          color: PALETTE.primary,
+          fontFamily: MONO,
+          fontSize: 12,
+          fontWeight: 700,
+        }}
+      >
+        {cmd}
+      </code>
+      <span style={{ color: PALETTE.subtle, fontSize: 11, lineHeight: 1.35 }}>{desc}</span>
     </div>
   );
 }
 
 export default function CLIGuidePage() {
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    // Initial state from URL hash if it matches a known tab; else first tab.
+    if (typeof window === 'undefined') return TABS[0].id;
+    const h = window.location.hash.slice(1);
+    return TABS.some((t) => t.id === h) ? h : TABS[0].id;
+  });
+
+  // Scroll-spy: update active tab while user scrolls through sections.
+  // Uses IntersectionObserver with a viewport band that activates a section
+  // when its top is roughly in the upper third of the viewport — feels
+  // natural for tab-anchored nav and avoids flicker between sections.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) return;
+    const sections = TABS.map((t) => document.getElementById(t.id)).filter(Boolean) as HTMLElement[];
+    if (!sections.length) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visible?.target.id) setActiveTab(visible.target.id);
+      },
+      { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.25, 0.5, 0.75] },
+    );
+    sections.forEach((s) => obs.observe(s));
+    return () => obs.disconnect();
+  }, []);
+
+  // Refs are only used by the tab click handler to scroll smoothly into view.
+  // Native anchor jump would work too, but smooth-scroll polishes the feel.
+  const handleTabClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+    e.preventDefault();
+    const el = document.getElementById(id);
+    if (!el) return;
+    setActiveTab(id);
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Update URL hash without triggering hashchange-driven reset.
+    if (window.history.replaceState) {
+      window.history.replaceState(null, '', `#${id}`);
+    }
+  };
+
   return (
     <div
-      className="min-h-screen"
       style={{
-        backgroundColor: 'var(--background)',
-        color: 'var(--foreground)',
-        backgroundImage: 'radial-gradient(circle at 50% 0%, rgba(250, 204, 21,0.03) 0%, transparent 40%)',
+        minHeight: '100vh',
+        background: BG_ATMOSPHERE,
+        color: PALETTE.text,
+        fontFamily: SANS,
+        WebkitFontSmoothing: 'antialiased',
       }}
     >
-      {/* Header bar */}
+      {/* Responsive rules — inline so this page stays self-contained
+          (no shared CSS file pulled into the standalone bundle).         */}
+      <style>{`
+        @media (max-width: 820px) {
+          .cli-guide-intro,
+          .cli-guide-path-grid,
+          .cli-guide-commands { grid-template-columns: 1fr !important; }
+          .cli-guide-topbar {
+            align-items: flex-start !important;
+            height: auto !important;
+            min-height: 56px;
+            padding: 14px !important;
+            flex-direction: column !important;
+          }
+          .cli-guide-page {
+            width: min(100vw - 24px, 940px) !important;
+            padding-top: 26px !important;
+          }
+        }
+      `}</style>
+
+      {/* Topbar */}
       <header
-        className="sticky top-0 z-10 h-14 flex items-center justify-between px-6"
+        className="cli-guide-topbar"
         style={{
-          backgroundColor: 'var(--card)',
-          borderBottom: '1px solid var(--border)',
-          boxShadow: '0 1px 10px rgba(0,0,0,0.5)',
+          height: 56,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          padding: '0 22px',
+          borderBottom: '1px solid rgba(250, 204, 21, 0.18)',
+          background: TOPBAR_GRADIENT,
         }}
       >
-        <div className="flex items-center gap-2 font-mono font-bold tracking-widest" style={{ color: 'var(--foreground)' }}>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary)' }}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
-          </svg>
-          <span>{runtimeConfig.branding.appName}</span>
-          <span className="text-xs font-normal" style={{ color: 'var(--muted-foreground)' }}>/ CLI Guide</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, fontFamily: MONO, fontSize: 13, fontWeight: 700 }}>
+          <span
+            style={{
+              width: 28,
+              height: 28,
+              display: 'inline-grid',
+              placeItems: 'center',
+              borderRadius: 7,
+              background: 'rgba(250, 204, 21, 0.085)',
+              border: '1px solid rgba(250, 204, 21, 0.22)',
+              boxShadow: '0 0 14px rgba(250, 204, 21, 0.07)',
+              color: PALETTE.primary,
+              fontSize: 14,
+            }}
+          >
+            ⌘
+          </span>
+          <span>AiKey</span>
+          <span style={{ color: PALETTE.faint, fontWeight: 500 }}>/ CLI Guide</span>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <a
+            href="#commands"
+            onClick={(e) => handleTabClick(e, 'commands')}
+            style={topButtonStyle(false)}
+          >
+            Commands
+          </a>
+          <a
+            href="#setup"
+            onClick={(e) => handleTabClick(e, 'setup')}
+            style={topButtonStyle(true)}
+          >
+            Check setup
+          </a>
         </div>
       </header>
 
-      {/* Content */}
-      <div className="max-w-2xl mx-auto px-6 py-10 space-y-10">
-
-        {/* Hero */}
-        <div className="text-center space-y-3">
-          <h1 className="text-2xl font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
-            AiKey <span style={{ color: 'var(--primary)' }}>Quickstart</span>
-          </h1>
-          <p className="text-sm font-mono" style={{ color: 'var(--muted-foreground)' }}>
-            Install the CLI, log in, and start using AI tools in under 2 minutes.
-          </p>
-        </div>
-
-        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--primary), transparent)', opacity: 0.2 }} />
-
-        {/* Install */}
-        <Section
-          title="Install"
-          icon={<DownloadIcon />}
+      <main
+        className="cli-guide-page"
+        style={{
+          width: 'min(940px, calc(100vw - 36px))',
+          margin: '0 auto',
+          padding: '42px 0 64px',
+        }}
+      >
+        {/* Intro */}
+        <section
+          className="cli-guide-intro"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) 240px',
+            gap: 24,
+            alignItems: 'end',
+            marginBottom: 24,
+          }}
         >
-          <CopyBlock code="curl -fsSL https://github.com/aikeylabs/launch/releases/latest/download/local-install.sh | sh" lang="bash" />
-          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            Supports macOS, Linux, and Windows (native PowerShell — no WSL required). The installer places the <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>aikey</code> binary in <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>~/.aikey/bin</code>. The URL above resolves to the latest release automatically.
-          </p>
-        </Section>
-
-        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--border), transparent)' }} />
-
-        {/* Scenario 1: Personal Key (BYOK) */}
-        <Section
-          title="Use Your Own API Key"
-          icon={<KeyIcon />}
-        >
-          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            Add your API key to the local encrypted vault:
-          </p>
-          <CopyBlock code="aikey add my-key" lang="bash" />
-          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            Activate it for the current session:
-          </p>
-          <CopyBlock code="aikey use my-key" lang="bash" />
-          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            Then use your usual tools — the local proxy handles key injection:
-          </p>
-          <CopyBlock code={`claude              # Anthropic Claude CLI\ncodex               # OpenAI Codex / ChatGPT CLI\nkimi                # Kimi CLI (kimi_code + moonshot)`} lang="bash" />
-          <div
-            className="rounded border p-3 text-xs font-mono flex items-start gap-2"
-            style={{ backgroundColor: 'rgba(74,222,128,0.05)', borderColor: 'rgba(74,222,128,0.2)', color: '#4ade80' }}
-          >
-            <CheckIcon />
-            <span>Keys are routed through a local proxy. Real credentials are never exposed.</span>
+          <div>
+            <p
+              style={{
+                margin: '0 0 12px',
+                color: PALETTE.primary,
+                fontFamily: MONO,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Installed already
+            </p>
+            <h1
+              style={{
+                margin: 0,
+                maxWidth: 720,
+                color: PALETTE.text,
+                fontFamily: MONO,
+                fontSize: 'clamp(30px, 4vw, 42px)',
+                lineHeight: 1.08,
+                letterSpacing: '-0.04em',
+              }}
+            >
+              Finish setup and start using your AI tools.
+            </h1>
+            <p style={{ margin: '14px 0 0', maxWidth: 680, color: PALETTE.subtle, fontSize: 14, lineHeight: 1.58 }}>
+              Check the local CLI, choose how AiKey should provide keys, then use Claude, Codex, Kimi, scripts, or third-party clients without exposing real provider keys.
+            </p>
           </div>
-        </Section>
+          <aside
+            aria-label="Current setup status"
+            style={{
+              padding: 14,
+              border: `1px solid ${PALETTE.borderSoft}`,
+              borderRadius: 10,
+              background: PALETTE.surface,
+              boxShadow: SUB_CARD_LIFT,
+            }}
+          >
+            <div
+              style={{
+                color: PALETTE.subtle,
+                fontFamily: MONO,
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Recommended first command
+            </div>
+            <div style={{ marginTop: 8, color: PALETTE.success, fontFamily: MONO, fontSize: 18, fontWeight: 700 }}>
+              aikey doctor
+            </div>
+          </aside>
+        </section>
 
-        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--border), transparent)' }} />
-
-        {/* Scenario 2: Team Keys */}
-        <Section
-          title="Use Team Keys"
-          icon={<UsersIcon />}
+        {/* Tabs */}
+        <nav
+          aria-label="Page sections"
+          style={{
+            display: 'flex',
+            gap: 8,
+            marginBottom: 18,
+            overflowX: 'auto',
+            paddingBottom: 2,
+          }}
         >
-          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            Your team admin has issued virtual keys in the control panel. Log the CLI in to the control service, then pick your assigned key.
-          </p>
-          <CopyBlock code={`aikey login --email <you>@example.com --control-url http://<server-ip>:3000\naikey use            # Pick a key (arrow keys + Enter)`} lang="bash" />
-          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>aikey login</code> is the shorthand for <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>aikey account login</code> — it connects the CLI to the AiKey control service. This is NOT the same as <code className="px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)' }}>aikey auth login &lt;provider&gt;</code>, which adds an upstream provider OAuth account (Claude Pro/Max, ChatGPT Plus, Kimi) to your local vault.
-          </p>
-        </Section>
+          {TABS.map((t) => {
+            const active = t.id === activeTab;
+            return (
+              <a
+                key={t.id}
+                href={`#${t.id}`}
+                onClick={(e) => handleTabClick(e, t.id)}
+                style={{
+                  flex: '0 0 auto',
+                  padding: '8px 11px',
+                  border: `1px solid ${active ? 'rgba(250,204,21,0.48)' : PALETTE.borderSoft}`,
+                  borderRadius: 999,
+                  color: active ? PALETTE.primary : PALETTE.subtle,
+                  background: active ? 'rgba(250,204,21,0.08)' : PALETTE.surface,
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                }}
+              >
+                {t.label}
+              </a>
+            );
+          })}
+        </nav>
 
-        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--border), transparent)' }} />
+        {/* Stack */}
+        <div style={{ display: 'grid', gap: 14 }}>
+          <Section id="setup" title="Check the local setup" step="Step 1" note="Confirm PATH, proxy, shell hook readiness, and vault state.">
+            <CodeBlock code="aikey doctor" />
+          </Section>
 
-        {/* Scenario 2.5: Provider OAuth (subscription) */}
-        <Section
-          title="Sign in to a Provider via OAuth (no API key)"
-          icon={<KeyIcon />}
-        >
-          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            Got a Claude Pro/Max, ChatGPT Plus, or Kimi subscription? Add the provider OAuth account into the local vault — no API key needed:
-          </p>
-          <CopyBlock code={`aikey auth login claude        # Claude (Anthropic) — Pro / Max\naikey auth login codex         # Codex / ChatGPT (OpenAI) — Plus / Pro\naikey auth login kimi_code     # Kimi Code (api.kimi.com); 'kimi' alias still works`} lang="bash" />
-        </Section>
+          <Section id="paths" title="Choose a key path" step="Step 2" note="Pick the one that matches how you want to use AiKey today.">
+            <div
+              className="cli-guide-path-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gap: 10,
+              }}
+            >
+              <PathCard
+                title="Personal API key"
+                blurb="Add your own provider key to the local encrypted vault."
+                code={'aikey add my-key --provider anthropic\naikey use my-key'}
+              />
+              <PathCard
+                title="Provider OAuth"
+                blurb="Use Claude, ChatGPT, or Kimi account access without an API key."
+                code={'aikey auth login claude\naikey auth login codex\naikey auth login kimi_code'}
+              />
+              <PathCard
+                title="Team key"
+                blurb="Log in to your team's control service and select an assigned key."
+                code={'aikey login --email you@example.com --control-url http://server:3000\naikey use'}
+              />
+            </div>
+          </Section>
 
-        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--border), transparent)' }} />
+          <Section id="tools" title="Use your tools" step="Step 3" note="Install the hook once, open a new terminal, then run your normal tools.">
+            <CodeBlock code={'aikey hook install\n# open a NEW terminal, then:\nclaude\ncodex\nkimi'} />
+          </Section>
 
-        {/* Scenario 3: CI */}
-        <Section
-          title="CI / Scripts (Non-Interactive)"
-          icon={<TerminalIcon />}
-        >
-          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            No shell hook needed. Works with GitHub Actions, cron jobs, etc.
-          </p>
-          <CopyBlock code="aikey run -- python eval.py" lang="bash" />
-        </Section>
+          <Section id="commands" title="Daily commands" step="Reference" note="Small reference for common operations.">
+            <div
+              className="cli-guide-commands"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: 8,
+              }}
+            >
+              <Command cmd="aikey list" desc="View all keys and OAuth accounts." />
+              <Command cmd="aikey use" desc="Switch the global active key." />
+              <Command cmd="aikey route" desc="Show base URL and API key for clients." />
+              <Command cmd="aikey whoami" desc="Show identity and active key." />
+              <Command cmd="aikey web vault" desc="Open the local Vault page." />
+              <Command cmd="aikey test --all" desc="Test every key in the vault." />
+              <Command cmd="aikey env" desc="Inspect proxy.env + active.env." />
+              <Command cmd="aikey env set --" desc="Merge-write proxy.env (see Outbound proxy)." />
+              <Command
+                cmd="aikey service <action> <name>"
+                desc="Actions: start, stop, restart. Names: trust-local, web, proxy."
+              />
+            </div>
+          </Section>
 
-        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--border), transparent)' }} />
+          <Section
+            id="outbound-proxy"
+            title="Outbound proxy (VPN / corp network)"
+            step="Optional"
+            note="If GitHub or providers are unreachable without a VPN, point aikey-proxy at your local SOCKS / HTTP proxy via proxy.env."
+          >
+            <p style={{ margin: '0 0 10px', color: PALETTE.subtle, fontSize: 12, lineHeight: 1.5 }}>
+              Two forms are supported. Pick whichever you find easier to remember.
+            </p>
+            <p style={{ margin: '0 0 6px', color: PALETTE.text, fontSize: 12, fontFamily: MONO }}>
+              A. Space-separated KEY=VALUE pairs (simplest):
+            </p>
+            <CodeBlock
+              code={
+                'aikey env set -- http_proxy=http://127.0.0.1:7890 https_proxy=http://127.0.0.1:7890 all_proxy=socks5://127.0.0.1:7890\n' +
+                'aikey proxy restart   # required after editing proxy.env'
+              }
+            />
+            <p style={{ margin: '14px 0 6px', color: PALETTE.text, fontSize: 12, fontFamily: MONO }}>
+              B. Paste a shell-export snippet — wrap the whole thing in single quotes:
+            </p>
+            <CodeBlock
+              code={
+                "aikey env set -- 'export https_proxy=http://127.0.0.1:7890; export http_proxy=http://127.0.0.1:7890; export all_proxy=socks5://127.0.0.1:7890'\n" +
+                'aikey proxy restart'
+              }
+            />
+            <div
+              style={{
+                marginTop: 14,
+                padding: '10px 12px',
+                border: '1px solid rgba(245, 158, 11, 0.28)',
+                borderRadius: 7,
+                background: 'rgba(245, 158, 11, 0.08)',
+                boxShadow: 'inset 3px 0 0 rgba(245, 158, 11, 0.6)',
+                color: PALETTE.text,
+                fontSize: 12,
+                lineHeight: 1.55,
+              }}
+            >
+              ⚠️ <strong>Common pitfall:</strong> without the surrounding{' '}
+              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>&apos;...&apos;</code>{' '}
+              your shell (zsh/bash) reads every <code style={{ fontFamily: MONO, fontSize: 11.5 }}>;</code>{' '}
+              as a command separator. Only the first <code style={{ fontFamily: MONO, fontSize: 11.5 }}>export</code>{' '}
+              reaches <code style={{ fontFamily: MONO, fontSize: 11.5 }}>aikey</code>; the rest run inside your
+              current shell and never touch <code style={{ fontFamily: MONO, fontSize: 11.5 }}>proxy.env</code>.
+              Diagnostic: run <code style={{ fontFamily: MONO, fontSize: 11.5 }}>aikey env</code> afterward —
+              if the missing keys show up under <em>&quot;Shell env (inherited by proxy)&quot;</em> instead of{' '}
+              <em>&quot;Proxy env&quot;</em>, that&apos;s what happened.
+            </div>
+            <p style={{ margin: '14px 0 0', color: PALETTE.subtle, fontSize: 12, lineHeight: 1.55 }}>
+              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>aikey env set</code> only writes{' '}
+              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>~/.aikey/proxy.env</code> — it never touches{' '}
+              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>active.env</code>. It merges into the existing
+              file (no full replace) and accepts plain{' '}
+              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>KEY=VAL</code> pairs, optional{' '}
+              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>export</code> prefix, and semicolon-separated
+              input <strong>inside a quoted string</strong>.
+            </p>
+          </Section>
 
-        {/* Cheatsheet */}
-        <Section
-          title="Daily Commands"
-          icon={<ListIcon />}
-        >
-          <CopyBlock code={`aikey list              # View all keys (API + OAuth + Team)\naikey use               # Switch the global active key\naikey activate my-key   # Switch only in this terminal (closes terminal = revert)\naikey route             # Show base_url + api_key for 3rd-party clients\naikey whoami            # Current identity + active key + control URL\naikey env               # View active.env (shell) + proxy.env (proxy process)\naikey web               # Open local Vault console in browser\naikey doctor            # One-click health check`} lang="bash" />
-        </Section>
-
-        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--border), transparent)' }} />
-
-        {/* Troubleshooting */}
-        <Section
-          title="Troubleshooting"
-          icon={<WrenchIcon />}
-        >
-          <CopyBlock code={`aikey doctor            # Auto-check common issues\naikey proxy restart     # Restart if proxy is stuck\naikey key sync          # Force sync key status`} lang="bash" />
-        </Section>
+          <Section id="trouble" title="Troubleshooting" step="Fix" note="Use these when proxy, hook, vault, or sync state looks wrong.">
+            <CodeBlock code={'aikey doctor\naikey logs\naikey proxy restart\naikey key sync'} />
+          </Section>
+        </div>
 
         {/* Footer */}
-        <div className="pt-6 text-center text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.5 }}>
-          {runtimeConfig.branding.appName} — CLI Guide
-        </div>
-      </div>
+        <footer
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 12,
+            marginTop: 20,
+            color: PALETTE.faint,
+            fontFamily: MONO,
+            fontSize: 11,
+          }}
+        >
+          <span>AiKey CLI Guide</span>
+          <span>
+            <a
+              href="https://github.com/aikeylabs/launch/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: PALETTE.faint, textDecoration: 'none' }}
+            >
+              Report an issue
+            </a>
+            <span style={{ color: PALETTE.muted }}> · </span>
+            <a
+              href="https://aikeylabs.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: PALETTE.faint, textDecoration: 'none' }}
+            >
+              Main site
+            </a>
+          </span>
+        </footer>
+      </main>
     </div>
   );
 }
 
-/* ── Icons ── */
-function DownloadIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>;
-}
-function UsersIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" /></svg>;
-}
-function KeyIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg>;
-}
-function TerminalIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" /></svg>;
-}
-function ListIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>;
-}
-function WrenchIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17l-5.81 5.81a2.121 2.121 0 01-3-3l5.81-5.81M18.36 8.64a4.5 4.5 0 00-6.36 0l-3.53 3.53a4.5 4.5 0 000 6.36l.53.53a4.5 4.5 0 006.36 0l3.53-3.53a4.5 4.5 0 000-6.36l-.53-.53z" /></svg>;
-}
-function CheckIcon() {
-  return <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+function topButtonStyle(primary: boolean): React.CSSProperties {
+  return {
+    minHeight: 32,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 12px',
+    border: `1px solid ${primary ? PALETTE.primary : PALETTE.borderSoft}`,
+    borderRadius: 6,
+    background: primary ? PALETTE.primary : PALETTE.surface,
+    color: primary ? PALETTE.bg : PALETTE.text,
+    fontFamily: MONO,
+    fontSize: 11,
+    fontWeight: 700,
+    textDecoration: 'none',
+    whiteSpace: 'nowrap',
+  };
 }

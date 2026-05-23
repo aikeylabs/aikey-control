@@ -1,10 +1,16 @@
 /**
- * User Cost page — /user/cost
+ * User Performance page — /user/performance
  *
- * 2026-05-06: extracted "Usage by key today" card from /user/overview into its
- * own page (sidebar entry under Insights). Same data hooks (usageApi.personalByKeyTotal),
- * card style aligned with /user/usage-ledger's `.chart-card` idiom (chart-title +
- * chart-sub + legend) so the two Insights pages read as a coherent set.
+ * Originally extracted as "Cost" on 2026-05-06; renamed to "Performance"
+ * on 2026-05-21 (sidebar label) and the route + internal identifiers
+ * (directory, function, CSS class) followed later the same day. Cross-app
+ * menu trailer ID stays `personal-cost` and icon name stays `cost` —
+ * those are stable cross-version match keys consumed by peer apps still
+ * on the old binary; renaming them would break A↔B menu reconciliation.
+ *
+ * Data hooks (usageApi.personalByKeyTotal) and card style aligned with
+ * /user/usage-ledger's `.chart-card` idiom (chart-title + chart-sub +
+ * legend) so the two Insights pages read as a coherent set.
  */
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -45,7 +51,7 @@ function deriveKeyLabel(k: { alias?: string; identity?: string; virtual_key_id: 
   return id;
 }
 
-export default function UserCostPage() {
+export default function UserPerformancePage() {
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
 
   // Same usage-identity logic as Overview (see overview/index.tsx for rationale).
@@ -61,7 +67,7 @@ export default function UserCostPage() {
   // 7-day timeline only as fallback driver for activeDate (today / latest active day);
   // not displayed as a chart on this page.
   const usageTimeline = useQuery({
-    queryKey: ['user-cost-timeline', usageIdentityKey],
+    queryKey: ['user-performance-timeline', usageIdentityKey],
     queryFn: () => usageApi.personalTimeline(usageIdentity!, daysAgoStr(6), todayDate),
     enabled: !!usageIdentity,
     refetchInterval: 60_000,
@@ -80,14 +86,14 @@ export default function UserCostPage() {
   const isShowingToday = activeDate === todayDate;
 
   const byKeyRecent = useQuery({
-    queryKey: ['user-cost-by-key', usageIdentityKey, activeDate],
+    queryKey: ['user-performance-by-key', usageIdentityKey, activeDate],
     queryFn: () => usageApi.personalByKeyTotal(usageIdentity!, activeDate, activeDate),
     enabled: !!usageIdentity,
     refetchInterval: 60_000,
   });
 
   const byModelRecent = useQuery({
-    queryKey: ['user-cost-by-model', usageIdentityKey, activeDate],
+    queryKey: ['user-performance-by-model', usageIdentityKey, activeDate],
     queryFn: () => usageApi.personalByModelTotal(usageIdentity!, activeDate, activeDate),
     enabled: !!usageIdentity,
     refetchInterval: 60_000,
@@ -190,7 +196,7 @@ export default function UserCostPage() {
     : null;
 
   return (
-    <div className="cost-page p-6">
+    <div className="performance-page p-6">
       <style>{COST_CSS}</style>
 
       {/* Title row — mirrors usage-ledger's PageHeader idiom: lg bold mono
@@ -198,8 +204,8 @@ export default function UserCostPage() {
           single-day-scoped (today, or latest active day fallback). */}
       <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
         <div>
-          <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--foreground)' }}>
-            Cost
+          <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--display-foreground)' }}>
+            Performance
           </h1>
           <p className="text-[11.5px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
             Per-key token usage breakdown for the active day
@@ -484,13 +490,13 @@ export default function UserCostPage() {
 // (or extract both into a shared CSS module — only worth it once a third
 // page joins).
 const COST_CSS = `
-.cost-page .chart-card {
+.performance-page .chart-card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1rem 1.1rem;
 }
-.cost-page .chart-title {
+.performance-page .chart-title {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 700;
@@ -498,7 +504,7 @@ const COST_CSS = `
   text-transform: uppercase;
   color: var(--muted-foreground);
 }
-.cost-page .chart-sub {
+.performance-page .chart-sub {
   font-family: monospace;
   font-size: 12px;
   color: var(--muted-foreground);
@@ -506,48 +512,48 @@ const COST_CSS = `
   margin-top: 1px;
 }
 
-.cost-page .legend {
+.performance-page .legend {
   display: inline-flex; align-items: center; gap: 1rem;
   font-family: monospace;
   font-size: 11.5px;
   color: var(--muted-foreground);
   flex-wrap: wrap;
 }
-.cost-page .legend .item { display: inline-flex; align-items: center; gap: 0.4rem; }
-.cost-page .legend .dot {
+.performance-page .legend .item { display: inline-flex; align-items: center; gap: 0.4rem; }
+.performance-page .legend .dot {
   width: 9px; height: 9px; border-radius: 2px; display: inline-block;
   flex-shrink: 0;
 }
 
-.cost-page .live-dot {
+.performance-page .live-dot {
   display: inline-block;
   width: 7px; height: 7px;
   margin-right: 6px;
   border-radius: 50%;
   background: #ca8a04;
   box-shadow: 0 0 6px rgba(250, 204, 21, 0.6);
-  animation: cost-live-pulse 1.6s ease-in-out infinite;
+  animation: performance-live-pulse 1.6s ease-in-out infinite;
   vertical-align: middle;
 }
-@keyframes cost-live-pulse {
+@keyframes performance-live-pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.35; }
 }
 
-.cost-page .key-row {
+.performance-page .key-row {
   display: grid;
   grid-template-columns: minmax(140px, 260px) 1fr auto;
   align-items: center;
   gap: 0.75rem;
 }
-.cost-page .key-bar {
+.performance-page .key-bar {
   position: relative;
   height: 10px;
   border-radius: 3px;
   background: rgba(255,255,255,0.04);
   overflow: hidden;
 }
-.cost-page .key-bar > .key-bar-fill {
+.performance-page .key-bar > .key-bar-fill {
   position: absolute;
   inset: 0 auto 0 0;
   height: 100%;
@@ -556,39 +562,39 @@ const COST_CSS = `
   overflow: hidden;
   transition: width 200ms ease;
 }
-.cost-page .key-bar-fill > span {
+.performance-page .key-bar-fill > span {
   display: block;
   height: 100%;
   transition: width 200ms ease;
 }
-.cost-page .key-bar-fill > .seg-uncached {
+.performance-page .key-bar-fill > .seg-uncached {
   background: #ca8a04;
   box-shadow: 0 0 8px rgba(250, 204, 21, 0.3);
 }
-.cost-page .key-bar-fill > .seg-creation { background: rgba(202, 138, 4, 0.7); }
-.cost-page .key-bar-fill > .seg-cached   { background: rgba(202, 138, 4, 0.45); }
-.cost-page .key-bar-fill > .seg-output   { background: rgba(202, 138, 4, 0.2); }
+.performance-page .key-bar-fill > .seg-creation { background: rgba(202, 138, 4, 0.7); }
+.performance-page .key-bar-fill > .seg-cached   { background: rgba(202, 138, 4, 0.45); }
+.performance-page .key-bar-fill > .seg-output   { background: rgba(202, 138, 4, 0.2); }
 
-.cost-page .key-stats {
+.performance-page .key-stats {
   display: inline-flex;
   align-items: center;
   gap: 0.85rem;
   color: var(--muted-foreground);
   text-align: right;
 }
-.cost-page .stat { display: inline-flex; align-items: center; }
-.cost-page .stat-dot {
+.performance-page .stat { display: inline-flex; align-items: center; }
+.performance-page .stat-dot {
   display: inline-block;
   width: 7px; height: 7px;
   border-radius: 2px;
   margin-right: 5px;
   flex-shrink: 0;
 }
-.cost-page .stat-dot.stat-uncached { background: #ca8a04; }
-.cost-page .stat-dot.stat-creation { background: rgba(202, 138, 4, 0.7); }
-.cost-page .stat-dot.stat-cached   { background: rgba(202, 138, 4, 0.45); }
-.cost-page .stat-dot.stat-output   { background: rgba(202, 138, 4, 0.2); }
-.cost-page .stat-total {
+.performance-page .stat-dot.stat-uncached { background: #ca8a04; }
+.performance-page .stat-dot.stat-creation { background: rgba(202, 138, 4, 0.7); }
+.performance-page .stat-dot.stat-cached   { background: rgba(202, 138, 4, 0.45); }
+.performance-page .stat-dot.stat-output   { background: rgba(202, 138, 4, 0.2); }
+.performance-page .stat-total {
   margin-left: 0.35rem;
   padding-left: 0.85rem;
   border-left: 1px solid var(--border);

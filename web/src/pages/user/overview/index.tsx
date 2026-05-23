@@ -495,7 +495,7 @@ export default function UserOverviewPage() {
               {initial}
             </div>
             <div className="min-w-0">
-              <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--foreground)' }}>
+              <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>
                 Hi, {emailDisplay}
               </div>
               <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
@@ -1044,8 +1044,8 @@ export default function UserOverviewPage() {
                   <th className="px-4 py-2.5">When</th>
                   <th className="px-4 py-2.5">Provider · Model</th>
                   <th className="px-4 py-2.5">Key</th>
-                  <th className="px-4 py-2.5 text-right">Tokens</th>
-                  <th className="px-4 py-2.5 text-right">Status</th>
+                  <th className="px-4 py-2.5 text-left">Tokens</th>
+                  <th className="px-4 py-2.5 text-left">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -1082,10 +1082,15 @@ export default function UserOverviewPage() {
                         <td className="px-4 py-2.5 font-mono text-[11px]" style={{ color: 'var(--muted-foreground)' }} title={rr.virtual_key_id}>
                           {shortVkId(rr.virtual_key_id) || '—'}
                         </td>
-                        <td className="px-4 py-2.5 text-right font-mono text-[12px]" style={{ color: 'var(--foreground)' }}>
-                          {rr.total_tokens.toLocaleString()}
+                        <td className="px-4 py-2.5 text-left font-mono text-[12px] tabular-nums" style={{ color: 'var(--foreground)' }} title={`${rr.total_tokens.toLocaleString()} tokens`}>
+                          {/* fmtTok 统一用 K/M 单位 + tabular-nums 锁定数字等宽 —
+                              避免 toLocaleString 的 "12,345" / "123,456" 在右
+                              对齐下因长度差异看起来跳动。原始精确值留到 title
+                              tooltip,鼠标悬停可看。其他卡片(donut total / chart
+                              avg)早就走 fmtTok,这里曾漏掉单位 + 列对齐。 */}
+                          {fmtTok(rr.total_tokens)}
                         </td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="px-4 py-2.5 text-left">
                           <span
                             className="chip font-mono text-[11px]"
                             style={{

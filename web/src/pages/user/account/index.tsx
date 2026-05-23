@@ -73,7 +73,7 @@ export default function MyAccountPage() {
           used across master pages (same component also used by other
           user pages like /referrals, /pending-keys). */}
       <div className="mb-6">
-        <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--foreground)' }}>
+        <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--display-foreground)' }}>
           My Account
         </h1>
         <p

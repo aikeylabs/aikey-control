@@ -112,7 +112,7 @@ export default function UserInvitesPage() {
       >
         <div
           className="absolute top-0 left-0 w-1 h-full"
-          style={{ backgroundColor: 'var(--primary)', boxShadow: '0 0 10px rgba(250, 204, 21,0.5)' }}
+          style={{ backgroundColor: 'var(--primary-dim)', boxShadow: '0 0 10px rgba(202, 138, 4, 0.5)' }}
         />
         <h2 className="text-xs font-mono font-bold tracking-wider uppercase mb-3" style={{ color: 'var(--muted-foreground)' }}>
           Generate Invite Link
@@ -126,8 +126,12 @@ export default function UserInvitesPage() {
           disabled={generating}
           className="btn btn-outline text-[11px] px-4 py-2"
           style={{
-            color: 'var(--primary)',
-            borderColor: 'rgba(250,204,21,0.4)',
+            // Dim-amber outline button — same single-source-of-truth
+            // token (--primary-dim) as the topbar divider, trust-check
+            // Run checks button, and the left-rail accent above on this
+            // same card. Bright --primary reserved for hover/active.
+            color: 'var(--primary-dim)',
+            borderColor: 'rgba(202, 138, 4, 0.4)',
             opacity: generating ? 0.6 : 1,
           }}
         >

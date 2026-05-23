@@ -19,8 +19,11 @@ import type { VerifyRecord } from './api';
 import type { StatusBand, TrustRow } from './derive';
 import { ScanIcon, SpinDotInline } from './icons';
 
+/**
+ * Per-row verify failure modes. M6 decision 3.1 removed the 24h
+ * 'rate_limited' lane; manual path is unlimited.
+ */
 export type VerifyErrorState =
-  | { kind: 'rate_limited'; message: string; nextEligibleAt: number | null }
   | { kind: 'verify_terminal'; status: string; message: string }
   | { kind: 'generic'; message: string };
 
@@ -102,25 +105,12 @@ export function SourceTable({
                       <button type="button" className="tc-btn tc-btn-primary" disabled>
                         <SpinDotInline /> Checking
                       </button>
-                    ) : err?.kind === 'rate_limited' ? (
-                      <button
-                        type="button"
-                        className="tc-btn"
-                        onClick={() => void onCheck(row, { force: true })}
-                        title={`Last verify under 24h. Click to retry now (force=true).${
-                          err.nextEligibleAt
-                            ? ` Auto-eligible at ${formatEpoch(err.nextEligibleAt)}.`
-                            : ''
-                        }`}
-                      >
-                        <ScanIcon /> Retry now
-                      </button>
                     ) : (
                       <button
                         type="button"
                         className="tc-btn"
                         onClick={() => void onCheck(row)}
-                        title="Trigger a fresh cascade verify (POST /v1/verify)"
+                        title="Trigger a fresh Check run (POST /v1/verify) — manual is unlimited per M6 decision 3.1"
                       >
                         <ScanIcon /> Check
                       </button>
@@ -175,26 +165,36 @@ export function ScorePill({
 
 // ---------------------------------------------------------------------------
 // VerifyErrorChip — small inline status pill rendered under the Check
-// button when a verify fails or hits the 24h rate limit. Kept inline
-// (vs a toast) because the failure is per-row and the user needs to
-// see WHICH row is stuck.
+// button when a verify fails or is inconclusive. Kept inline (vs a
+// toast) because the failure is per-row and the user needs to see
+// WHICH row is stuck.
+//
+// M6 decision 3.1: rate-limited path removed (manual is unlimited).
+// VerifyErrorState.kind has only 'verify_terminal' | 'generic' now.
 // ---------------------------------------------------------------------------
 
 export function VerifyErrorChip({ err }: { err: VerifyErrorState }) {
-  if (err.kind === 'rate_limited') {
-    return (
-      <span className="tc-err-chip tc-err-rate-limited" title={err.message}>
-        24h limit · retry with force
-      </span>
-    );
-  }
   if (err.kind === 'verify_terminal') {
+    // 2026-05-22: Stage 2.6 surfaced `'error'` (upstream / config
+    // failures, distinct from `fail` / `inconclusive`). Map each
+    // explicit terminal status to its own variant + chip label so the
+    // operator can tell "cascade hit an Anthropic 429" apart from
+    // "Anthropic returned content that scored as fail".
+    const variant =
+      err.status === 'fail' || err.status === 'failed'
+        ? 'fail'
+        : err.status === 'error'
+          ? 'error'
+          : 'inconclusive';
+    const label =
+      variant === 'fail'
+        ? 'Verify failed'
+        : variant === 'error'
+          ? 'Upstream error'
+          : 'Inconclusive';
     return (
-      <span
-        className={`tc-err-chip tc-err-${err.status === 'fail' ? 'fail' : 'inconclusive'}`}
-        title={err.message}
-      >
-        {err.status === 'fail' ? 'Verify failed' : 'Inconclusive'}
+      <span className={`tc-err-chip tc-err-${variant}`} title={err.message}>
+        {label}
       </span>
     );
   }

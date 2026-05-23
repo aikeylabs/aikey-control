@@ -23,6 +23,13 @@ func TestWriteErr_StatusMap(t *testing.T) {
 		{"I_STDIN_INVALID_JSON", 400},
 		{"I_CREDENTIAL_CONFLICT", 400},
 		{ErrCliNotFound, 503},
+		// Bugfix 20260523-test-connection-proxy-down-shows-local-server-error.md
+		// pin: I_PROXY_NOT_RUNNING must NOT fall through to 500. The Vault
+		// "Test connection" popup treats 5xx as "Local server is unavailable"
+		// and steers users at `aikey service restart web` — wrong target when
+		// the real fix is `aikey service start proxy`. 503 puts it in the
+		// "dependency not running" family alongside ErrCliNotFound.
+		{"I_PROXY_NOT_RUNNING", 503},
 		{ErrCliTimeout, 504},
 		// Phase 3B (2026-05-11) regression pin: team-key business-state
 		// errors must NOT fall through to 500. Web UI shows

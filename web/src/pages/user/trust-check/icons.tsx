@@ -72,10 +72,25 @@ export function GaugeIcon() {
 }
 
 export function SpinDotInline() {
+  // lucide "loader-2" arc — 270° open ring. Inlined (not via SvgIcon)
+  // because we need to attach `className="tc-spin-svg"` for the
+  // rotation animation; the shared SvgIcon helper doesn't accept
+  // a className prop. Animation defined in trust-check-css.ts.
   return (
-    <SvgIcon>
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="tc-spin-svg"
+      aria-hidden="true"
+    >
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </SvgIcon>
+    </svg>
   );
 }
 

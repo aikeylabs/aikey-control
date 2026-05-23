@@ -44,17 +44,47 @@ var PersonalMenu = []Entry{
 		Icon:       "chart",
 	},
 	// Phase 3B R15 (2026-05-11): Cost added so B's sidebar (which has
-	// Cost as personalOnly) finds a cross-app match and renders a link
-	// to A's local /user/cost page (B has no own /user/cost route — A
-	// is the canonical owner). Without this entry the Cost item was
-	// silently filtered out on B.
+	// Performance as personalOnly) finds a cross-app match and renders
+	// a link to A's local /user/performance page (B has no own
+	// /user/performance route — A is the canonical owner). Without
+	// this entry the Performance item was silently filtered out on B.
+	// 2026-05-21: Label renamed Cost → Performance, URL renamed
+	// /user/cost → /user/performance. Trailer ID kept as
+	// "personal-cost" so A↔B menu reconciliation across versions
+	// (peers still on the old binary) stays matched. Icon name kept
+	// as "cost" for the same backward-compat reason.
 	{
 		ID:         "personal-cost",
 		Group:      GroupInsights,
-		Label:      "Cost",
-		Path:       "/user/cost",
+		Label:      "Performance",
+		Path:       "/user/performance",
 		Visibility: VisibilityAlways,
 		Icon:       "cost",
+	},
+	// Phase 4 阶段 3 (2026-05-21): Connected Apps. Same shape as the
+	// other personalOnly entries — published here so B's sidebar can
+	// surface a cross-app link back to A's /user/apps page.
+	// /api/user/apps/* lives on A's local-server; B has no own
+	// /user/apps route.
+	{
+		ID:         "personal-apps",
+		Group:      GroupInsights,
+		Label:      "Apps",
+		Path:       "/user/apps",
+		Visibility: VisibilityAlways,
+		Icon:       "apps",
+	},
+	// M5 (2026-05-21): degrade-detector Trust Check. Sits in the new
+	// QUALITY group (added 2026-05-21 in types.go). Peers on older
+	// binaries don't know QUALITY → matchesGroup() drops the entry
+	// silently; harmless until peer upgrades.
+	{
+		ID:         "personal-trust-check",
+		Group:      GroupQuality,
+		Label:      "Trust Check",
+		Path:       "/user/trust-check",
+		Visibility: VisibilityAlways,
+		Icon:       "trust-check",
 	},
 	// Phase 3B R16 (2026-05-11): Account intentionally NOT exposed via
 	// cross-app — both A and B have local /user/account routes showing

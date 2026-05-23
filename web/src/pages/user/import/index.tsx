@@ -1526,10 +1526,10 @@ export default function UserBulkImportPage() {
           The unlocked banner sits below this block (look for `{unlocked && …`).
        */}
       {!unlocked && !initialized && (
-        <div className="unlock-banner px-6 py-3 flex items-center justify-between flex-shrink-0">
+        <div className="unlock-banner px-6 py-2.5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 pl-3">
             <LockIcon />
-            <span className="font-mono text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--foreground)' }}>Vault Not Set Up</span>
+            <span className="font-mono text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--soft-foreground)' }}>Vault Not Set Up</span>
             <span className="text-xs font-sans" style={{ color: 'var(--muted-foreground)' }}>— Set a master password to start importing credentials</span>
           </div>
           <div className="flex items-center gap-3">
@@ -1572,10 +1572,10 @@ export default function UserBulkImportPage() {
         </div>
       )}
       {!unlocked && initialized && (
-        <div className="unlock-banner px-6 py-3 flex items-center justify-between flex-shrink-0">
+        <div className="unlock-banner px-6 py-2.5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 pl-3">
             <LockIcon />
-            <span className="font-mono text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--foreground)' }}>Vault Locked</span>
+            <span className="font-mono text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--soft-foreground)' }}>Vault Locked</span>
             <span className="text-xs font-sans" style={{ color: 'var(--muted-foreground)' }}>— Unlock with Master Password to import credentials</span>
           </div>
           <div className="flex items-center gap-3">
@@ -1738,7 +1738,7 @@ export default function UserBulkImportPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden pl-6">
         {/* LEFT pane: textarea (empty) or readonly source (working/done) */}
         <section className="w-[42%] flex flex-col" style={{ background: 'rgba(0,0,0,0.15)' }}>
-          <div className="h-10 px-5 flex items-center justify-between flex-shrink-0" style={{ background: 'rgba(0,0,0,0.25)', borderBottom: '1px solid var(--border)' }}>
+          <div className="h-10 px-5 flex items-center justify-between flex-shrink-0" style={{ background: 'rgba(23, 23, 25, 0.2)', borderBottom: '1px solid rgba(244, 244, 245, 0.04)' }}>
             <span className="pane-header">{state === 'empty' ? 'Source · Paste or Add' : state === 'working' ? `Source · ${parseResp?.candidates.length ?? 0} detected` : 'Source · archived'}</span>
             <div className="flex items-center gap-3">
               {/* v4.2: working 态显式 Edit 按钮 —— 把 edit-mode 入口和 "click 行联动右侧"
@@ -2425,7 +2425,7 @@ function WorkingDrafts({
         )}
       </div>
       {orphans.length > 0 && (
-        <div className="px-5 py-2.5 flex items-center gap-2 flex-wrap flex-shrink-0" style={{ background: 'rgba(0,0,0,0.25)', borderTop: '1px solid var(--border)' }}>
+        <div className="px-5 py-2.5 flex items-center gap-2 flex-wrap flex-shrink-0" style={{ background: 'rgba(23, 23, 25, 0.2)', borderTop: '1px solid rgba(244, 244, 245, 0.04)' }}>
           <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'var(--muted-foreground)' }}>Orphans</span>
           {orphans.map((o, i) => (<span key={i} className="orphan-chip">{typeof o === 'string' ? o : o.value}</span>))}
         </div>

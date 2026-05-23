@@ -38,6 +38,12 @@ const (
 	GroupKeys     Group = "KEYS"
 	GroupInsights Group = "INSIGHTS"
 	GroupAccount  Group = "ACCOUNT"
+	// QUALITY added 2026-05-21 to support the degrade-detector
+	// "Trust Check" entry that lives in A's sidebar Quality group.
+	// Peers on older binaries don't know QUALITY → matchesGroup()
+	// will skip the entry; harmless graceful degradation (the link
+	// just doesn't show until peer upgrades).
+	GroupQuality Group = "QUALITY"
 )
 
 // Visibility is the sentinel each side maps to its own runtime predicate.

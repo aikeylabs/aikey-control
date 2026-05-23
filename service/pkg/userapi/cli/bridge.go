@@ -70,6 +70,27 @@ func (b *Bridge) Invoke(
 	requestID string,
 	payload any,
 ) (*Result, error) {
+	return b.InvokeWithTimeout(ctx, subcommand, action, vaultKeyHex, requestID, payload, b.Timeout)
+}
+
+// InvokeWithTimeout is like Invoke but uses the supplied per-call deadline
+// instead of the Bridge default. Use for actions that may legitimately run
+// longer than the default (e.g. `vault-op test` runs the connectivity
+// suite, which probes upstream providers and can take 10-30s on a slow
+// network). Passing timeout <= 0 falls back to b.Timeout so callers can't
+// accidentally disable the deadline.
+func (b *Bridge) InvokeWithTimeout(
+	ctx context.Context,
+	subcommand string,
+	action string,
+	vaultKeyHex string,
+	requestID string,
+	payload any,
+	timeout time.Duration,
+) (*Result, error) {
+	if timeout <= 0 {
+		timeout = b.Timeout
+	}
 	if err := b.resolveBinary(); err != nil {
 		return nil, &InvokeError{Code: ErrCliNotFound, Msg: err.Error()}
 	}
@@ -89,7 +110,7 @@ func (b *Bridge) Invoke(
 		return nil, &InvokeError{Code: ErrBadRequest, Msg: "marshal envelope: " + err.Error()}
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, b.Timeout)
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// --stdin-json is the mandatory IPC mode for every _internal subcommand.
@@ -103,7 +124,7 @@ func (b *Bridge) Invoke(
 		if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
 			return nil, &InvokeError{
 				Code: ErrCliTimeout,
-				Msg:  fmt.Sprintf("cli did not respond within %s", b.Timeout),
+				Msg:  fmt.Sprintf("cli did not respond within %s", timeout),
 			}
 		}
 		// Non-zero exit without a valid envelope on stdout = spawn-level failure.

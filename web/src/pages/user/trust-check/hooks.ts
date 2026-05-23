@@ -8,7 +8,7 @@
  */
 
 import { useMemo } from 'react';
-import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   trustLocalApi,
@@ -22,6 +22,35 @@ import { deriveMetrics, summaryToRow, type TrustRow, type TrustMetrics } from '.
 const STATUS_REFETCH_INTERVAL = 30_000; // 30s — matches kickoff §7.2
 const VERIFY_POLL_INTERVAL = 1_500; // 1.5s — fast enough for spinner, low enough to spare CPU
 const DETAIL_STALE_MS = 5_000; // detail drawer: short stale window so re-opening the same row inside 5s reuses the cache
+
+/**
+ * useStartTrustLocalService — POST /api/internal/services/trust-local/start
+ *
+ * Backs the "Start service" button on the offline banner. The endpoint
+ * lives on aikey-local-server (8090), NOT trust-local (8801) — that's
+ * the whole point, trust-local is dead and we ask its supervisor to
+ * relaunch it. On success the page's 30s refetch picks up the new
+ * live data, so we don't manually invalidate here.
+ *
+ * NOTE: empty `''` baseURL is intentional — when the SPA is served
+ * from 8090, fetch('/api/...') is same-origin; if a dev runs Vite
+ * on 5173 with VITE_AUTH_MODE=local_bypass, this still works because
+ * Vite proxies /api → 8090.
+ */
+export function useStartTrustLocalService() {
+  return useMutation<{ ok: boolean; detail?: string }, Error, void>({
+    mutationFn: async () => {
+      const resp = await fetch('/api/internal/services/trust-local/start', {
+        method: 'POST',
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok || body?.ok === false) {
+        throw new Error(body?.detail || `start failed (HTTP ${resp.status})`);
+      }
+      return body;
+    },
+  });
+}
 
 export function useTrustStatus() {
   return useQuery({
@@ -146,6 +175,72 @@ export function useVerifyDetail(verifyId: string | null) {
     retry: (failureCount, error) => {
       if (error instanceof TrustLocalUnavailableError) return false;
       return failureCount < 2;
+    },
+  });
+}
+
+/**
+ * useRealtimeDetection — reads + mutates the real-time D-rule scoring
+ * toggle on trust-local. The toggle propagates to the proxy via a 5s
+ * polling loop (see degrade-detector/proxy-plugin/rhythm/
+ * settings_poller.go), so flips here take up to 5s to affect actual
+ * chat traffic; the UI shows a hint reflecting that.
+ *
+ * staleTime 30s — toggle doesn't change often; we still refetch on
+ * window focus to catch changes the user made in another tab.
+ */
+const REALTIME_SETTING_KEY = ['trust-local', 'settings', 'realtime-detection'] as const;
+
+export function useRealtimeDetection() {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: REALTIME_SETTING_KEY,
+    queryFn: () => trustLocalApi.getRealtimeDetection(),
+    staleTime: 30_000,
+    retry: (failureCount, error) => {
+      if (error instanceof TrustLocalUnavailableError) return false;
+      return failureCount < 2;
+    },
+  });
+  const setEnabled = useMutation<
+    { enabled: boolean; updated_at: number; updated_by: string },
+    Error,
+    boolean
+  >({
+    mutationFn: (enabled) => trustLocalApi.setRealtimeDetection(enabled),
+    onSuccess: (data) => {
+      // Write-through: avoid a refetch round-trip for the UI's own flip.
+      qc.setQueryData(REALTIME_SETTING_KEY, data);
+    },
+  });
+  return { query, setEnabled };
+}
+
+/**
+ * useResetTracking — POST /v1/status/{alias}/reset-tracking.
+ *
+ * Wipes the alias's degrade-detection history (events + state) on
+ * trust-local; vault credential stays intact. On success the
+ * `['trust-local', 'status']` and per-alias detail queries are
+ * invalidated so the table + drawer reflect the cleared state
+ * without forcing a manual refresh.
+ *
+ * Why expose as a hook (not call api directly from the drawer):
+ * keeps the loading / error model identical to the page's other
+ * mutations (Check button) and gives us cache invalidation through
+ * the shared QueryClient instead of bespoke event plumbing.
+ */
+export function useResetTracking() {
+  const qc = useQueryClient();
+  return useMutation<
+    { ok: true; alias_name: string; cleared_events: number; cleared_state: number },
+    Error,
+    string
+  >({
+    mutationFn: (alias) => trustLocalApi.resetTracking(alias),
+    onSuccess: (_data, alias) => {
+      qc.invalidateQueries({ queryKey: ['trust-local', 'status'] });
+      qc.removeQueries({ queryKey: ['trust-local', 'detail', alias] });
     },
   });
 }

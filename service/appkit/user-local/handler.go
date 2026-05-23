@@ -280,6 +280,17 @@ func NewHandler(cfg Config) http.Handler {
 		mux.HandleFunc("GET /system/team-jwt", handleTeamJWT(cfg.ReadTeamJWT, logger))
 	}
 
+	// /api/internal/services/<name>/<action> — service-control endpoint
+	// for the trust-check page's "Start service" button (M5 Day 5
+	// follow-up Z6). Whitelisted to trust-local only (web/proxy are
+	// in the CLI but not here — see service_handler.go header).
+	//
+	// localhost-only by virtue of local-server's bind; no CORS wrap
+	// because the only caller is the SPA served from the same origin.
+	// Uses Go 1.22+ pattern placeholders so the SPA catch-all doesn't
+	// shadow this route.
+	mux.HandleFunc("POST /api/internal/services/{name}/{action}", HandleServiceAction(logger))
+
 	return mux
 }
 

@@ -27,9 +27,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/app"
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/cli"
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/hook"
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/intake"
+	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/oauth"
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/vault"
 )
 
@@ -76,6 +78,13 @@ type Handlers struct {
 	// Only mounted on local-user / trial-full editions — see RegisterHook.
 	// Per 20260507-web-hook-rc-modal-自动注入.md.
 	Hook *hook.Handlers
+
+	// App hosts the Phase 4 third-party Agent management endpoints
+	// (/api/user/apps/*) — list / get / route / revoke / pause / resume /
+	// rotate. All endpoints subprocess to aikey-cli `_internal app.<action>`
+	// via the shared Bridge. Mounted by Register() under the unlock-gated
+	// authMW path (vault session required for all routes, including list).
+	App *app.Handlers
 }
 
 // NewHandlers constructs the user-facing Handlers bundle. A nil cfg triggers
@@ -105,6 +114,7 @@ func NewHandlers(cfg *Config, logger *slog.Logger) *Handlers {
 		VaultCRUD: vault.NewCRUDHandlers(store, bridge),
 		Import:    &intake.ImportHandlers{Bridge: bridge, VKCache: vkCache},
 		Hook:      hook.NewHandlers(bridge, logger),
+		App:       app.NewHandlers(store, bridge),
 	}
 }
 
@@ -124,6 +134,11 @@ func NewHandlers(cfg *Config, logger *slog.Logger) *Handlers {
 //	POST   /api/user/vault/entry         -> VaultCRUD.EntryAddHandler    (requires unlock)
 //	DELETE /api/user/vault/entry         -> VaultCRUD.EntryDeleteHandler (requires unlock)
 //	POST   /api/user/vault/use           -> VaultCRUD.UseHandler         (requires unlock)
+//	POST   /api/user/vault/test          -> VaultCRUD.TestHandler        (no unlock required — probe metadata only)
+//	POST   /api/user/vault/test-raw      -> VaultCRUD.TestRawHandler     (no unlock required — pre-save probe, plaintext in body)
+//	POST   /api/user/oauth/login         -> oauth.LoginHandler           (no unlock; forwards to aikey-proxy broker)
+//	GET    /api/user/oauth/status        -> oauth.StatusHandler          (no unlock; broker session poll for Codex auth_code)
+//	POST   /api/user/oauth/poll          -> oauth.PollHandler            (no unlock; broker Device-Code poll for Kimi)
 //	POST   /api/user/import/parse        -> Import.ParseHandler
 //	POST   /api/user/import/confirm      -> Import.ConfirmHandler        (requires unlock)
 //	GET    /api/user/import/rules        -> Import.RulesHandler          (unauthed)
@@ -206,6 +221,38 @@ func (h *Handlers) Register(
 		// 2026-05-12 design realization, see 20260511 doc decision 8.
 		mux.Handle("POST /api/user/vault/use",
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.VaultCRUD.UseHandler))))
+
+		// Vault connectivity probe (2026-05-22). NOT gated behind
+		// RequireUnlock — the underlying CLI action doesn't verify
+		// vault_key_hex and doesn't read ciphertext columns; the probe
+		// itself runs through aikey-proxy which decrypts server-side.
+		// Same stance as `record_usage`: telemetry-class writes shouldn't
+		// require the user to type their master password. authMW still
+		// gates on the session cookie so only the logged-in owner can
+		// trigger probes against their own keys.
+		mux.Handle("POST /api/user/vault/test",
+			authMW(http.HandlerFunc(h.VaultCRUD.TestHandler)))
+		// Pre-save Run-test for Add Key Guided flow (spec §3.1 / §5.1).
+		// Same auth posture as /test: session-authenticated owner only;
+		// no master-password unlock because the secret comes from the
+		// request body and the probe never touches the vault.
+		mux.Handle("POST /api/user/vault/test-raw",
+			authMW(http.HandlerFunc(h.VaultCRUD.TestRawHandler)))
+
+		// Web-side OAuth Broker forwarding (spec §6). Web browsers
+		// can't speak directly to aikey-proxy:27200 (CORS + different
+		// origin), so local-server stands in as a same-origin relay
+		// to the broker's POST /oauth/login / GET /oauth/status /
+		// POST /oauth/poll endpoints. authMW gates by session cookie
+		// only — no master-password unlock required because the
+		// broker writes refreshed tokens through aikey-proxy which
+		// already holds the vault key (Plan D).
+		mux.Handle("POST /api/user/oauth/login",
+			authMW(http.HandlerFunc(oauth.LoginHandler)))
+		mux.Handle("GET /api/user/oauth/status",
+			authMW(http.HandlerFunc(oauth.StatusHandler)))
+		mux.Handle("POST /api/user/oauth/poll",
+			authMW(http.HandlerFunc(oauth.PollHandler)))
 	}
 
 	// Import endpoints. ConfirmHandler needs an unlocked session.
@@ -213,6 +260,40 @@ func (h *Handlers) Register(
 	mux.Handle("POST /api/user/import/confirm",
 		authMW(http.HandlerFunc(h.Store.RequireUnlock(h.Import.ConfirmHandler))))
 	mux.HandleFunc("GET /api/user/import/rules", h.Import.RulesHandler)
+
+	// Phase 4 third-party Agent management endpoints (/api/user/apps/*).
+	//
+	// Unlock policy (revised 2026-05-21 per dashboard-UX vs vault-leak
+	// trade-off):
+	//   - list / get        — NO unlock. The data is registration
+	//     metadata only (slug / name / vendor / upstreams / app_kind /
+	//     binding alias references / timestamps). No ciphertext, no
+	//     bearer values. Requiring unlock for a daily-monitoring page
+	//     was over-gating; binding alias references like "my-claude"
+	//     are not sensitive enough to justify the friction.
+	//   - route / revoke / pause / resume / rotate — REQUIRE unlock.
+	//     These mutate security-relevant state (re-binding a key,
+	//     killing a bearer, issuing a new bearer in rotate's case).
+	//
+	// All flow through subprocess `aikey _internal app.<action>` via
+	// Bridge → JSON response. See pkg/userapi/app/handlers.go for the
+	// per-handler shape.
+	if h.App != nil {
+		mux.Handle("GET /api/user/apps/list",
+			authMW(http.HandlerFunc(h.App.ListHandler)))
+		mux.Handle("POST /api/user/apps/get",
+			authMW(http.HandlerFunc(h.App.GetHandler)))
+		mux.Handle("POST /api/user/apps/route",
+			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.RouteHandler))))
+		mux.Handle("POST /api/user/apps/revoke",
+			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.RevokeHandler))))
+		mux.Handle("POST /api/user/apps/pause",
+			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.PauseHandler))))
+		mux.Handle("POST /api/user/apps/resume",
+			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.ResumeHandler))))
+		mux.Handle("POST /api/user/apps/rotate",
+			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.RotateHandler))))
+	}
 }
 
 // RegisterHook mounts POST /api/user/hook/install behind authMW.

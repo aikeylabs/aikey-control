@@ -29,10 +29,15 @@ import { importApi, type ProviderRoute } from '@/shared/api/user/import';
 import { formatRelativeTime } from '@/shared/utils/datetime-intl';
 import {
   vaultApi,
+  oauthApi,
   pickHookReadiness,
   type VaultRecord,
   type PersonalVaultRecord,
   type OAuthVaultRecord,
+  type VaultExtra,
+  type VaultLastTest,
+  type TestResponse,
+  type OAuthSession,
 } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
@@ -40,6 +45,7 @@ import {
   HookWireRcModal,
   useHookWireRcModal,
 } from '@/shared/components/HookWireRcModal';
+import { friendlyTestError } from './friendlyTestError';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
 import { ENTRY_BY_FAMILY } from '@/shared/generated/provider-registry';
@@ -52,7 +58,7 @@ import type { TeamFetchError } from '@/shared/api/team/managed-keys';
 // ── Derived types ────────────────────────────────────────────────────────
 
 type TypeFilter = 'all' | 'personal' | 'team' | 'oauth';
-type SortKey = 'created' | 'last_used' | 'alias';
+type SortKey = 'created' | 'last_test' | 'alias';
 
 // ── Team-row adapter ─────────────────────────────────────────────────────
 //
@@ -96,6 +102,15 @@ interface TeamRowRecord {
   use_count: number; // 0 (same)
   status: 'active' | 'inactive'; // mirrors effective_status for the chip
   in_use_for?: string[]; // empty in 3A; populated in 3B when Active wires up
+  /**
+   * Generic extension blob (2026-05-22) — see VaultExtra in
+   * shared/api/user/vault.ts. Surfaced uniformly for all three
+   * target kinds (personal / oauth / team) as of 2026-05-22 — the
+   * managed_virtual_keys_cache upsert was refactored from INSERT OR
+   * REPLACE to ON CONFLICT DO UPDATE specifically so this field
+   * survives every `aikey key sync`.
+   */
+  extra?: VaultExtra | null;
 }
 
 /** Row union for the unified vault table — broader than `VaultRecord`
@@ -220,6 +235,145 @@ function formatRelative(unix: number | null | undefined): string {
   const diffSec = Date.now() / 1000 - unix;
   if (diffSec >= 30 * 86400) return formatCreatedShort(unix);
   return formatRelativeTime(unix * 1000) || 'never';
+}
+
+/**
+ * Two-line table cell for the "Last test" column (2026-05-22 v3).
+ * Three vertical signal-bar segments (Ping / API / Chat, left → right)
+ * + relative timestamp underneath. No labels — shape alone carries the
+ * meaning, like cellular signal bars.
+ *
+ * Colour rule per user-spec ("一个图形就能够表示了吧 ... 通了的显示绿色,
+ * 未通的显示黄色, 没有测试到的直接显示红色"):
+ *
+ *   stage passed                     → GREEN  (this layer is healthy)
+ *   stage itself failed              → AMBER  (this layer is what broke)
+ *   stage never ran (predecessor     → RED    (didn't even get a chance)
+ *     already failed)
+ *
+ * Walk left→right; the first stage that fails paints amber, every
+ * stage after it paints red (suite stops at the first hard fail in
+ * the user's mental model even if the backend actually probed all
+ * three — what they care about is "where did the chain break?").
+ *
+ * Legacy snapshots (pre-2026-05-22) carry only `status` (pass/fail).
+ * Treat undefined phase booleans as `status === 'pass'` so old rows
+ * render sensibly until re-tested.
+ */
+// Health score derived from the same Ping → API → Chat signal-chain the
+// LastTestCell renders. Higher = healthier. Powers the within-group sort
+// when the user clicks the "Last test" column header.
+//   4 = all three stages passed              (green / green / green)
+//   3 = ping + api passed, chat broke        (chat is deepest layer)
+//   2 = ping passed, api broke
+//   1 = ping broke                           (cannot even reach upstream)
+//   0 = no test recorded yet                 (unknown — bottom of list)
+// Legacy snapshots carry only `status`; treat pass as all-green (4) and
+// fail as ping-broken (1) — same fallback the cell uses.
+function lastTestHealthScore(lt: VaultLastTest | null | undefined): number {
+  if (!lt) return 0;
+  const legacyPass = lt.status === 'pass';
+  const phases = [
+    lt.ping_ok ?? legacyPass,
+    lt.api_ok  ?? legacyPass,
+    lt.chat_ok ?? legacyPass,
+  ];
+  const firstFailIdx = phases.findIndex((ok) => !ok);
+  if (firstFailIdx === -1) return 4;
+  return firstFailIdx + 1; // ping fail → 1, api fail → 2, chat fail → 3
+}
+
+function LastTestCell(props: { value: VaultLastTest | null }) {
+  const lt = props.value;
+  if (!lt) {
+    return (
+      <div
+        className="text-[12px]"
+        style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}
+      >
+        —
+      </div>
+    );
+  }
+  const legacyPass = lt.status === 'pass';
+  const phases: Array<{ name: string; ok: boolean }> = [
+    { name: 'Ping', ok: lt.ping_ok ?? legacyPass },
+    { name: 'API',  ok: lt.api_ok  ?? legacyPass },
+    { name: 'Chat', ok: lt.chat_ok ?? legacyPass },
+  ];
+  // Locate the first failing stage. Once a stage fails, everything to
+  // its right is treated as "didn't get to run" (red), regardless of
+  // its own boolean — that's the user's signal-chain mental model.
+  const firstFailIdx = phases.findIndex(p => !p.ok);
+  const okColor    = 'var(--success, #22c55e)';
+  const failColor  = '#f59e0b';                       // amber — this stage broke
+  const downstream = 'var(--destructive, #ef4444)';   // red — never got a chance
+
+  const segmentColor = (i: number): string => {
+    if (firstFailIdx === -1) return okColor;        // all green
+    if (i < firstFailIdx)    return okColor;        // upstream of break: passed
+    if (i === firstFailIdx)  return failColor;      // the broken link
+    return downstream;                              // chain broken — never tested
+  };
+
+  // Tooltip carries the human-readable detail (per-phase status + when
+  // the probe ran). The cell itself is pure shape — no text — so the
+  // column stays visually quiet at scale (16+ rows). Hover gives anyone
+  // who needs the timestamp / phase names access without committing
+  // pixels to it.
+  const tooltip = [
+    ...phases.map((p, i) => {
+      const state = firstFailIdx === -1 || i < firstFailIdx
+        ? 'ok'
+        : i === firstFailIdx ? 'failed' : 'not reached';
+      return `${p.name}: ${state}`;
+    }),
+    `Tested ${formatRelative(lt.at)}`,
+  ].join(' · ');
+
+  // Wi-Fi-style ascending bars: short → medium → tall, bottom-aligned.
+  // The growing height mirrors the suite's stage progression — Ping is
+  // the shallowest reach (TCP), API is one layer deeper (HTTP auth),
+  // Chat is the deepest (full model round-trip). Reading left→right
+  // tracks how far the connection actually got. Bottom-aligned so the
+  // baseline of the icon stays steady regardless of which bar is lit.
+  //
+  // Geometry refreshed 2026-05-23 to match the v1 mockup
+  // (.superdesign/design_iterations/vault_original_refine_1.html
+  //  `.signal-bars`): thinner bars (4→3px), slightly taller stack
+  // (14→15px max), and most importantly border-radius 1→999px so each
+  // bar reads as a rounded pill instead of a flat-top rectangle. The
+  // pill ends are the v1 signature "premium" touch.
+  const BAR_HEIGHTS = [7, 11, 15];   // short / medium / tall (px)
+  const BAR_WIDTH   = 3;             // thinner — matches v1 signal-bars
+  const BAR_GAP     = 2;             // tight spacing reads as one icon
+  const ICON_HEIGHT = BAR_HEIGHTS[BAR_HEIGHTS.length - 1];
+
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        gap: BAR_GAP,
+        alignItems: 'flex-end',     // bottom-align so bars grow upward
+        height: ICON_HEIGHT,
+      }}
+      title={tooltip}
+    >
+      {phases.map((_, i) => (
+        <span
+          key={i}
+          aria-hidden="true"
+          style={{
+            display: 'inline-block',
+            width: BAR_WIDTH,
+            height: BAR_HEIGHTS[i],
+            borderRadius: 999,
+            background: segmentColor(i),
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 /** "expires in 27d" / "expires in 4h" / "expired" / null when unknown. */
@@ -548,10 +702,18 @@ export default function UserVaultPage() {
           const bb = (b.alias ?? '').toLowerCase();
           return aa.localeCompare(bb);
         }
-        case 'last_used': {
-          const aa = a.last_used_at ?? 0;
-          const bb = b.last_used_at ?? 0;
-          return bb - aa;
+        case 'last_test': {
+          // Sort by the persisted connectivity-test timestamp (Vault page
+          // "Last test" column). Records without a recorded test fall to
+          // the bottom (treated as 0). Tie-breaker: pass before fail at
+          // identical timestamps so a passing key never gets buried under
+          // a same-second failure when the user is scanning health.
+          const at = a.extra?.last_test?.at ?? 0;
+          const bt = b.extra?.last_test?.at ?? 0;
+          if (bt !== at) return bt - at;
+          const aPass = a.extra?.last_test?.status === 'pass' ? 1 : 0;
+          const bPass = b.extra?.last_test?.status === 'pass' ? 1 : 0;
+          return bPass - aPass;
         }
         case 'created':
         default:
@@ -658,6 +820,22 @@ export default function UserVaultPage() {
   const [justSwitchedIds, setJustSwitchedIds] = useState<Set<string>>(() => new Set());
   const [switchingIds, setSwitchingIds] = useState<Set<string>>(() => new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+
+  // ── Test Connection popup (2026-05-22) ────────────────────────────────
+  // Page-level state so the popup survives a closed drawer (the user can
+  // collapse the drawer to keep an eye on the list while a slow probe
+  // runs). The record reference is the *adapter row*, not just an id, so
+  // the popup header can render the alias / provider chip immediately
+  // without re-resolving from the list. `null` = popup hidden.
+  const [testPopupRecord, setTestPopupRecord] = useState<VaultRowRecord | null>(null);
+  // `testPhase` is the popup's state machine:
+  //   'running' — request in flight; popup shows spinner + "Probing X"
+  //   'done'    — backend returned a result; popup shows last_test + suite_results
+  //   'error'   — request failed (network / timeout / I_PROXY_NOT_RUNNING);
+  //               popup shows the error code + suggested next step
+  const [testPhase, setTestPhase] = useState<'running' | 'done' | 'error'>('running');
+  const [testResult, setTestResult] = useState<TestResponse | null>(null);
+  const [testError, setTestError] = useState<{ code?: string; httpStatus?: number; message: string } | null>(null);
 
   const switchMut = useMutation({
     mutationFn: vaultApi.use,
@@ -853,6 +1031,89 @@ export default function UserVaultPage() {
         },
       },
     );
+  }
+
+  // ── Test Connection orchestration (2026-05-22) ─────────────────────────
+  //
+  // Open the popup, fire POST /api/user/vault/test, await the result,
+  // optimistically patch the row's `extra.last_test` so the "Last test"
+  // column updates without a full list refetch (the backend already
+  // persisted to vault — we just mirror the change in cached state).
+  // Errors surface to the popup, NOT a toast, so the user can see why a
+  // probe failed without losing the popup context.
+  //
+  // Why no useMutation: the test endpoint is per-row, fire-and-show; we
+  // don't need queryClient invalidation (the optimistic patch above is
+  // enough), and the popup wants its own loading state distinct from
+  // mutation pending. Plain async fn is the smaller hammer.
+  function runTest(target: VaultRowRecord) {
+    setTestPopupRecord(target);
+    setTestPhase('running');
+    setTestResult(null);
+    setTestError(null);
+    vaultApi
+      .test({ target: target.target, id: target.id })
+      .then((res) => {
+        setTestResult(res);
+        setTestPhase('done');
+        if (!res.persisted) return;
+        // 2026-05-22 fix (2nd attempt): the list query's actual key
+        // includes the unlocked flag (`['vault-list', 'unlocked' |
+        // 'locked']`). Earlier I hardcoded `['vault-list']` which wrote
+        // a ghost cache entry no consumer reads. Then I tried
+        // invalidateQueries but the column still didn't refresh in
+        // practice — most likely because invalidate respects staleTime
+        // and React Query 5's default behaviour didn't trigger an
+        // immediate refetch for our setup. Belt-and-braces here:
+        //   1) Optimistic setQueryData on BOTH possible keys (the
+        //      page is currently in one state but the other cache
+        //      entry may still get read if the user toggles lock
+        //      state quickly).
+        //   2) refetchQueries to force a network round-trip and
+        //      reconcile with the source-of-truth (vault DB).
+        const patch = (rec: VaultRowRecord): VaultRowRecord => {
+          if (rec.target === target.target && rec.id === target.id) {
+            const nextExtra: VaultExtra = {
+              ...(rec.extra ?? {}),
+              last_test: res.last_test,
+            };
+            return { ...rec, extra: nextExtra } as VaultRowRecord;
+          }
+          return rec;
+        };
+        for (const lockState of ['unlocked', 'locked'] as const) {
+          qc.setQueryData<{ records: VaultRowRecord[] } & Record<string, unknown> | undefined>(
+            ['vault-list', lockState],
+            (old) => {
+              if (!old || !Array.isArray(old.records)) return old;
+              return { ...old, records: old.records.map(patch) };
+            },
+          );
+        }
+        // Force a fresh fetch so the next render reconciles with the
+        // vault DB even if optimistic patch missed (e.g. a future
+        // schema change adds a third cache key).
+        qc.refetchQueries({ queryKey: ['vault-list'] });
+      })
+      .catch((err: Error & { code?: string; response?: { status?: number } }) => {
+        // Surface the raw HTTP status alongside the (CLI / axios) error
+        // code so the popup's friendly-text mapping can branch on
+        // 5xx-class failures without re-inspecting the thrown object.
+        const httpStatus = err.response?.status;
+        setTestError({
+          code: err.code,
+          httpStatus,
+          message: err.message || 'Test failed for an unknown reason',
+        });
+        setTestPhase('error');
+      });
+  }
+
+  function closeTestPopup() {
+    setTestPopupRecord(null);
+    setTestPhase('running');
+    setTestResult(null);
+    setTestError(null);
   }
 
   // Group filtered records by every protocol family they support, preserving
@@ -1134,8 +1395,9 @@ export default function UserVaultPage() {
   );
 
   return (
-    <div className="vault-page h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
+    <div className="vault-page vault-skin-v1 h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
       <style>{VAULT_CSS}</style>
+      <style>{VAULT_PAGE_SKIN_V1}</style>
 
       {/* The shell already draws breadcrumb / Invite; we render the 3.1
           content stack inside the scroll region. */}
@@ -1161,7 +1423,7 @@ export default function UserVaultPage() {
             error={teamError}
             onRetry={() => { void teamRefresh(); }}
           />
-          <IdentityStrip counts={counts} onRefresh={() => refetchVault()} updatedAgo={updatedAgo} />
+          <IdentityStrip onRefresh={() => refetchVault()} updatedAgo={updatedAgo} />
 
           <UnlockBanner
             unlocked={unlocked}
@@ -1243,13 +1505,14 @@ export default function UserVaultPage() {
                         {sortKey === 'created' && <span className="th-sort-arrow">↓</span>}
                       </th>
                       <th
-                        style={{ width: '16%' }}
-                        className={`th-sortable ${sortKey === 'last_used' ? 'active' : ''}`}
-                        onClick={() => setSortKey('last_used')}
-                        aria-sort={sortKey === 'last_used' ? 'descending' : 'none'}
+                        style={{ width: '16%', textAlign: 'center' }}
+                        className={`th-sortable ${sortKey === 'last_test' ? 'active' : ''}`}
+                        onClick={() => setSortKey('last_test')}
+                        aria-sort={sortKey === 'last_test' ? 'descending' : 'none'}
+                        title="Most recent connectivity test result. Run a test via the drawer Test Connection button."
                       >
-                        Last used
-                        {sortKey === 'last_used' && <span className="th-sort-arrow">↓</span>}
+                        Last test
+                        {sortKey === 'last_test' && <span className="th-sort-arrow">↓</span>}
                       </th>
                       <th style={{ width: 130, textAlign: 'right' }}>Actions</th>
                     </tr>
@@ -1260,21 +1523,36 @@ export default function UserVaultPage() {
                       const personalCount = g.records.filter((r) => r.target === 'personal').length;
                       const oauthCount = g.records.filter((r) => r.target === 'oauth').length;
                       const teamCount = g.records.filter((r) => r.target === 'team').length;
-                      // Within-group sort (Phase 3A-2 design decision 4):
-                      // Personal → Team → OAuth, preserving relative order
-                      // inside each bucket. Team rows are read-only and
-                      // visually quieter, so wedging them between Personal
-                      // (the user's own keys, top of mind) and OAuth (less
-                      // frequently touched) keeps the most-used surfaces
-                      // visually adjacent without burying team rows below.
+                      // Within-group sort:
+                      //   - sortKey='last_test' → sort purely by health desc
+                      //     (most-healthy first, untested last), tiebreaker
+                      //     by recency. Group order itself is NOT affected
+                      //     (user spec 2026-05-23: 组顺序不要改, only re-rank
+                      //     rows within each provider group).
+                      //   - other sortKeys → keep the Phase 3A-2 design
+                      //     decision 4 layout: Personal → Team → OAuth,
+                      //     preserving the global sort order inside each
+                      //     bucket. Team rows are read-only and visually
+                      //     quieter, so wedging them between Personal (top
+                      //     of mind) and OAuth (less touched) keeps the
+                      //     most-used surfaces visually adjacent.
                       const targetOrder: Record<string, number> = {
                         personal: 0,
                         team: 1,
                         oauth: 2,
                       };
-                      const sortedRecords = [...g.records].sort(
-                        (a, b) => (targetOrder[a.target] ?? 9) - (targetOrder[b.target] ?? 9),
-                      );
+                      const sortedRecords = sortKey === 'last_test'
+                        ? [...g.records].sort((a, b) => {
+                            const aScore = lastTestHealthScore(a.extra?.last_test);
+                            const bScore = lastTestHealthScore(b.extra?.last_test);
+                            if (bScore !== aScore) return bScore - aScore;
+                            const at = a.extra?.last_test?.at ?? 0;
+                            const bt = b.extra?.last_test?.at ?? 0;
+                            return bt - at;
+                          })
+                        : [...g.records].sort(
+                            (a, b) => (targetOrder[a.target] ?? 9) - (targetOrder[b.target] ?? 9),
+                          );
                       return (
                         <React.Fragment key={g.provider}>
                           <GroupHeaderRow
@@ -1326,6 +1604,13 @@ export default function UserVaultPage() {
                                 switchPending={switchingIds.has(k)}
                                 justSwitched={justSwitchedIds.has(k)}
                                 onSwitch={() => switchTo(r, g.provider)}
+                                onTest={() => runTest(r)}
+                                testRunning={
+                                  testPhase === 'running'
+                                  && !!testPopupRecord
+                                  && testPopupRecord.target === r.target
+                                  && testPopupRecord.id === r.id
+                                }
                               />
                             );
                           })}
@@ -1383,10 +1668,24 @@ export default function UserVaultPage() {
           // group context (drawer is opened from a row that already lives
           // in exactly one protocol group, so family is unambiguous).
           onUse={() => switchTo(drawerRecord, drawerRecord.protocol_family ?? 'unknown')}
+          // Test connection moved to the row Actions column 2026-05-22;
+          // popup state is still owned at page level so the popup
+          // overlays the page rather than the drawer.
           inUse={recordInUseForGroup(drawerRecord, drawerRecord.protocol_family ?? 'unknown')}
           switchPending={switchingIds.has(rowKey(drawerRecord))}
           hostToRoute={hostToRoute}
           providerToRoute={providerToRoute}
+        />
+      )}
+
+      {testPopupRecord && (
+        <TestConnectionPopup
+          record={testPopupRecord}
+          phase={testPhase}
+          result={testResult}
+          error={testError}
+          onClose={closeTestPopup}
+          onRetry={() => runTest(testPopupRecord)}
         />
       )}
 
@@ -1398,45 +1697,27 @@ export default function UserVaultPage() {
 // ── Identity strip ───────────────────────────────────────────────────────
 
 function IdentityStrip({
-  counts,
   onRefresh,
   updatedAgo,
 }: {
-  counts: { personal: number; oauth: number; team: number; total: number };
   onRefresh: () => void;
   updatedAgo: string;
 }) {
   return (
     <section className="flex items-center justify-between flex-wrap gap-3">
-      <div className="flex items-center gap-3 min-w-0">
-        <div
-          className="w-9 h-9 rounded flex items-center justify-center flex-shrink-0"
-          style={{
-            background: 'var(--surface-2)',
-            border: '1px solid var(--border)',
-          }}
-        >
-          <ShieldIcon className="w-4 h-4" style={{ color: 'var(--primary)' }} />
-        </div>
-        <div className="min-w-0">
-          <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--foreground)' }}>My Vault</div>
-          <div
-            className="flex items-center gap-2 text-[11px] font-mono"
-            style={{ color: 'var(--muted-foreground)' }}
-          >
-            <span>{counts.total} KEYS</span>
-            <span className="opacity-40">·</span>
-            <span>{counts.personal} PERSONAL</span>
-            {counts.team > 0 && (
-              <>
-                <span className="opacity-40">·</span>
-                <span>{counts.team} TEAM</span>
-              </>
-            )}
-            <span className="opacity-40">·</span>
-            <span>{counts.oauth} OAUTH</span>
-          </div>
-        </div>
+      {/* Minimal page header — just the title text on the left, the
+          refresh status + button on the right. The redundant "N KEYS ·
+          N PERSONAL · N OAUTH" subtitle was dropped because the same
+          counts are already surfaced by:
+            - the CardHeader chips ("N stored / N active / N error")
+              just below this strip on the Vault card itself, and
+            - the FilterStrip filter pills ("All N / Key N / OAuth N").
+          A leading shield icon was also removed; identity is carried
+          by the topbar breadcrumb + sidebar active rail. Aligns with
+          the icon-less, subtitle-less H1 used on Trust Check /
+          Performance / Usage / Account / Usage Ledger. */}
+      <div className="min-w-0">
+        <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>My Vault</div>
       </div>
       <div className="flex items-center gap-2">
         <span
@@ -1530,7 +1811,7 @@ function UnlockBanner(props: {
         <span className="flex-1 flex items-center gap-2 min-w-0">
           <span
             className="font-mono text-sm font-bold uppercase tracking-wider"
-            style={{ color: 'var(--foreground)' }}
+            style={{ color: 'var(--soft-foreground)' }}
           >
             Vault Not Set Up
           </span>
@@ -1661,7 +1942,7 @@ function UnlockBanner(props: {
       <span className="flex-1 flex items-center gap-2 min-w-0">
         <span
           className="font-mono text-sm font-bold uppercase tracking-wider"
-          style={{ color: 'var(--foreground)' }}
+          style={{ color: 'var(--soft-foreground)' }}
         >
           Vault Locked
         </span>
@@ -1733,11 +2014,12 @@ function UnlockBanner(props: {
 }
 
 
-function formatCompactNumber(n: number): string {
-  if (n < 1000) return String(n);
-  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}K`;
-  return `${(n / 1_000_000).toFixed(1)}M`;
-}
+// formatCompactNumber removed 2026-05-22 — its only consumer was the
+// per-row "12K uses" sub-line in the "Last used" column, which was
+// itself replaced by the new "Last test" column (status pill + latency).
+// `use_count` is still surfaced inside the drawer's Meta section as a
+// raw integer so the count remains visible for power users; the K/M
+// abbreviation isn't needed there.
 
 // ── Card header ──────────────────────────────────────────────────────────
 
@@ -2223,6 +2505,17 @@ const Row = React.memo(function Row(props: {
    *  after a successful switch (600ms). Parent sets then clears this prop. */
   justSwitched?: boolean;
   onSwitch?: () => void;
+  /** Test connection icon button (2026-05-22) — runs the connectivity
+   *  probe against this row's credential and persists the result to
+   *  `extra.$.last_test`. Moved from the drawer to the row to match the
+   *  other inline actions; an icon-only button keeps the column width
+   *  unchanged. Same handler the drawer used to dispatch; nothing about
+   *  the popup state machine changes. */
+  onTest?: () => void;
+  /** True while a probe is in flight for this specific row. Disables
+   *  the icon + shows a tooltip so the user can see the click was
+   *  picked up. */
+  testRunning?: boolean;
   /** The provider code of the group this row is rendered under. Drives
    *  per-(record, provider) `in_use` derivation via recordInUseForGroup —
    *  see the helper's doc-comment for the regression history. Required so
@@ -2415,31 +2708,21 @@ const Row = React.memo(function Row(props: {
         {formatCreatedShort(r.created_at)}
       </td>
 
-      <td>
-        {/* Last-used telemetry isn't wired up yet (v1.0 ships without
-            per-key usage tracking), so every row currently ends up as
-            "never / 0 uses" which reads as noise. Until the feature
-            lands, collapse the cell to a single muted em-dash when
-            there's no real signal — keeps the column present for
-            future expansion but stops shouting placeholder text. */}
-        {r.last_used_at ? (
-          <>
-            <div className="text-[12px]">{formatRelative(r.last_used_at)}</div>
-            <div
-              className="text-[11px] font-mono"
-              style={{ color: 'var(--muted-foreground)' }}
-            >
-              {r.use_count > 0 ? `${formatCompactNumber(r.use_count)} uses` : '0 uses'}
-            </div>
-          </>
-        ) : (
-          <div
-            className="text-[12px]"
-            style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}
-          >
-            —
-          </div>
-        )}
+      <td style={{ textAlign: 'center' }}>
+        {/* Last connectivity test (2026-05-22). Replaced the prior
+            "Last used" column (last_used_at + use_count) — that
+            telemetry is still collected on the row record and surfaced
+            in the drawer Meta section, but this column now shows the
+            health signal users actually care about ("is this key
+            working right now?"). Em-dash placeholder until the user
+            has run a test on this key. Applies uniformly to personal
+            / oauth / team — the 2026-05-22 upsert refactor made team
+            rows safe to persist too.
+            Cell center-aligned 2026-05-23: the LastTestCell renders as
+            a tiny 13×15px signal-bars icon — left-aligned it floats
+            against the wide column and reads as disconnected from the
+            header. Centering anchors header + cell to the same axis. */}
+        <LastTestCell value={r.extra?.last_test ?? null} />
       </td>
 
       <td style={{ textAlign: 'right' }}>
@@ -2548,6 +2831,26 @@ const Row = React.memo(function Row(props: {
             >
               <EyeIcon className="w-3.5 h-3.5" />
             </button>
+            {/* Test connection (2026-05-22). Icon-only inline action that
+                opens the popup + runs the probe + persists to vault.
+                Always enabled — the probe itself doesn't need the vault
+                unlocked (decryption happens server-side in aikey-proxy).
+                If the proxy is down the popup surfaces an actionable
+                error rather than the button being mysteriously greyed. */}
+            {props.onTest && (
+              <button
+                className="icon-btn"
+                title={props.testRunning ? 'Probe in progress…' : 'Test connection'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onTest?.();
+                }}
+                disabled={!!props.testRunning}
+                aria-label="Test connection"
+              >
+                <ActivityIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
               className="icon-btn primary"
               title={lockedTitle ?? 'Rename alias'}
@@ -2589,6 +2892,10 @@ const Row = React.memo(function Row(props: {
   if (prev.isGroupCollapsed !== next.isGroupCollapsed) return false;
   if (prev.switchPending !== next.switchPending) return false;
   if (prev.justSwitched !== next.justSwitched) return false;
+  // testRunning toggles the inline Test connection button's disabled
+  // state — without this compare the spinner state goes stale and a
+  // second click during a long probe looks like nothing happened.
+  if (prev.testRunning !== next.testRunning) return false;
   // editDraft only matters when this row is the one being edited.
   if (next.isEditing && prev.editDraft !== next.editDraft) return false;
   return true;
@@ -2794,6 +3101,8 @@ function DetailDrawer(props: {
    *  action is "route via this key" — same single-source-of-truth as the
    *  inline row Use button. */
   onUse: () => void;
+  // (Test connection moved to the row Actions column 2026-05-22 — no
+  // onTest prop on the drawer anymore.)
   /** True when this record is the active binding for its protocol family.
    *  Drawer hides the Use button + shows an "IN USE" chip when true. */
   inUse: boolean;
@@ -2931,6 +3240,19 @@ function DetailDrawer(props: {
                 <span className="k">Alias</span>
                 <span className="v">
                   <span className={isMonoAlias(team.alias) ? 'mono' : ''}>{team.alias}</span>
+                  <button
+                    type="button"
+                    className="copy-btn"
+                    title={`Copy ${team.alias}`}
+                    aria-label="Copy alias"
+                    onClick={() => copyField('alias', team.alias)}
+                  >
+                    {copiedField === 'alias' ? (
+                      <CheckIcon className="w-3 h-3" />
+                    ) : (
+                      <ClipboardIcon className="w-3 h-3" />
+                    )}
+                  </button>
                 </span>
               </div>
               <div className="drawer-field">
@@ -3090,6 +3412,19 @@ function DetailDrawer(props: {
                   <MailIcon className="w-3 h-3" />
                 )}
                 {alias}
+                <button
+                  type="button"
+                  className="copy-btn"
+                  title={`Copy ${alias}`}
+                  aria-label="Copy alias"
+                  onClick={() => copyField('alias', alias)}
+                >
+                  {copiedField === 'alias' ? (
+                    <CheckIcon className="w-3 h-3" />
+                  ) : (
+                    <ClipboardIcon className="w-3 h-3" />
+                  )}
+                </button>
                 <span className="ro-pill">EDITABLE</span>
               </span>
             </div>
@@ -3626,6 +3961,12 @@ function DetailDrawer(props: {
               {/* "Reveal & copy" button removed 2026-04-24 — the drawer's
                   "Get via CLI" copyable command is now the single plaintext
                   path. No in-browser reveal exists. */}
+              {/* Test connection moved to the row Actions column 2026-05-22
+                  (icon-only). The drawer keeps Rename + Delete; the probe
+                  is per-credential and reads better as an inline row
+                  action next to View / Use / Rename / Delete than as a
+                  drawer-level button that requires opening the drawer
+                  first. */}
               <button
                 type="button"
                 className="action-btn"
@@ -3667,7 +4008,7 @@ function DetailDrawer(props: {
               (last_model / fingerprint / 7D usage from the template)
               are omitted here until the proxy telemetry pipeline
               lands. */}
-          <div className="drawer-section">
+          <div className="drawer-section drawer-section--meta">
             <div className="drawer-section-title">
               <InfoIcon className="w-3 h-3" />
               Meta
@@ -3781,6 +4122,655 @@ function DetailDrawer(props: {
   );
 }
 
+// ── Test Connection popup ───────────────────────────────────────────────
+//
+// Modal driven by the drawer's Test Connection button (2026-05-22). Lives
+// alongside the drawer rather than inside it so the drawer can stay open
+// after the user fires a probe — the popup overlays the row context the
+// drawer already provides.
+//
+// Phases:
+//   running — request in flight; status row shows spinner and we hide
+//             the suite table to avoid layout flicker (no rows yet).
+//   done    — render the aggregate status pill + latency + error code
+//             (when fail) + the per-target suite table. "Run again"
+//             button calls onRetry so the user can re-probe without
+//             closing.
+//   error   — request failed before producing a result (network /
+//             timeout / proxy not running). Show the error_code +
+//             message and a Retry button.
+//
+// Why no stepped progress bars: the backend doesn't stream — it returns
+// a single envelope when the suite finishes. Building a fake stepped
+// progress UI would lie about what's happening. A spinner with the
+// alias being probed reads as honest.
+// `friendlyTestError` moved to ./friendlyTestError.tsx — extracted so the
+// fence test can import the pure logic without dragging the whole page
+// module (page-level imports pull http-client → runtime.ts which touches
+// `window` at module init and fails under vitest's node env). See bugfix
+// 20260523-test-connection-proxy-down-shows-local-server-error.md.
+
+function TestConnectionPopup(props: {
+  record: VaultRowRecord;
+  phase: 'running' | 'done' | 'error';
+  result: TestResponse | null;
+  error: { code?: string; httpStatus?: number; message: string } | null;
+  onClose: () => void;
+  onRetry: () => void;
+}) {
+  const { record, phase, result, error, onClose, onRetry } = props;
+  const lt = result?.last_test ?? null;
+  const persistedAt = phase === 'done' && lt ? lt : null;
+  const isPass = persistedAt?.status === 'pass';
+  // Pull the display alias the same way the drawer does so the popup
+  // header lines up visually when both are open.
+  const headerLabel = record.target === 'oauth'
+    ? ((record as OAuthVaultRecord).alias ?? (record as OAuthVaultRecord).display_identity ?? record.id)
+    : record.alias;
+
+  return (
+    <>
+      <div
+        className="drawer-overlay"
+        data-open="true"
+        style={{ zIndex: 60 }}
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Connectivity test result"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          margin: 'auto',
+          zIndex: 70,
+          width: 'min(640px, calc(100vw - 32px))',
+          maxHeight: 'calc(100vh - 64px)',
+          height: 'fit-content',
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          boxShadow: '0 25px 60px rgba(0,0,0,0.55)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            padding: '14px 18px',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <ActivityIcon className="w-4 h-4" />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Test connection</div>
+              <div
+                className="font-mono"
+                style={{
+                  fontSize: 11,
+                  color: 'var(--muted-foreground)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+                title={headerLabel ?? record.id}
+              >
+                {record.target.toUpperCase()} · {headerLabel ?? record.id}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="drawer-close"
+            onClick={onClose}
+            title="Close (Esc)"
+            aria-label="Close popup"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div style={{ padding: 18, overflowY: 'auto' }}>
+          {phase === 'running' && (
+            <div
+              style={{
+                padding: '36px 0',
+                textAlign: 'center',
+                color: 'var(--muted-foreground)',
+              }}
+            >
+              {/* Spinner: a plain div with `.aikey-spinner` class. The
+                  class lives in the global keys-page-css.ts stylesheet
+                  (search for `@keyframes aikey-spin`) — unscoped so it
+                  reaches the popup even though the popup is a fixed
+                  overlay outside .vault-page's subtree. Switched from
+                  SVG <animateTransform> 2026-05-22: SMIL animates fine
+                  live but reads as static in screenshots / screen
+                  recordings, which kept getting reported as a bug. CSS
+                  animation behaves identically in both live and
+                  captured frames. */}
+              <div
+                className="aikey-spinner"
+                style={{ display: 'block', margin: '0 auto 12px' }}
+                aria-hidden="true"
+              />
+              <div style={{ fontSize: 13 }}>Probing through aikey-proxy…</div>
+              <div className="font-mono" style={{ fontSize: 11, marginTop: 6 }}>
+                This can take 5-30 seconds depending on provider count.
+              </div>
+            </div>
+          )}
+
+          {phase === 'error' && error && (() => {
+            // Map raw (code, httpStatus) → user-readable text. Two
+            // dimensions here: WHY-it-failed wording (the title) and
+            // WHAT-to-do-next (the suggestion). Falls through to the
+            // raw axios message for codes we haven't classified, so
+            // we never hide real backend errors — just paper over the
+            // most common transient ones.
+            const friendly = friendlyTestError(error);
+            return (
+              <div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '12px 14px',
+                    background: 'rgba(220, 38, 38, 0.08)',
+                    border: '1px solid rgba(220, 38, 38, 0.35)',
+                    borderRadius: 8,
+                    marginBottom: 12,
+                  }}
+                >
+                  <span
+                    className="status-dot error"
+                    style={{ width: 8, height: 8, background: 'var(--destructive)' }}
+                  />
+                  <span style={{ color: 'var(--destructive)', fontWeight: 600, fontSize: 13 }}>
+                    {friendly.title}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
+                  {friendly.detail}
+                </div>
+                {friendly.action && (
+                  <div className="font-mono" style={{ marginTop: 12, fontSize: 11 }}>
+                    {friendly.action}
+                  </div>
+                )}
+                {/* Raw error info kept in a muted footer for ops /
+                    debugging — small + monospace so it doesn't compete
+                    with the friendly message above. */}
+                <div
+                  className="font-mono"
+                  style={{
+                    marginTop: 14,
+                    fontSize: 10,
+                    color: 'var(--muted-foreground)',
+                    opacity: 0.55,
+                  }}
+                >
+                  {error.httpStatus ? `HTTP ${error.httpStatus} · ` : ''}
+                  {error.code ?? 'no-code'}
+                  {error.message && error.message !== friendly.detail ? ` · ${error.message}` : ''}
+                </div>
+              </div>
+            );
+          })()}
+
+          {phase === 'done' && lt && persistedAt && (
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '12px 14px',
+                  background: isPass ? 'rgba(34, 197, 94, 0.08)' : 'rgba(220, 38, 38, 0.08)',
+                  border: `1px solid ${isPass ? 'rgba(34, 197, 94, 0.35)' : 'rgba(220, 38, 38, 0.35)'}`,
+                  borderRadius: 8,
+                  marginBottom: 12,
+                }}
+              >
+                <span
+                  className="status-dot"
+                  style={{
+                    width: 10,
+                    height: 10,
+                    background: isPass ? 'var(--success)' : 'var(--destructive)',
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: isPass ? 'var(--success)' : 'var(--destructive)',
+                  }}
+                >
+                  {isPass ? 'Connection healthy' : 'Connection failed'}
+                </span>
+                {persistedAt.latency_ms != null && (
+                  <span className="font-mono" style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+                    · {persistedAt.latency_ms}ms
+                  </span>
+                )}
+                {persistedAt.error_code && (
+                  <span className="font-mono" style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+                    · {persistedAt.error_code}
+                  </span>
+                )}
+              </div>
+              {/* Top banner used to dump the raw error_message JSON here.
+                  Removed 2026-05-22: the FailureDetails section below
+                  already parses the same body into (type chip + message),
+                  so showing the raw JSON twice was just visual clutter.
+                  Banner stays a one-line status summary; per-provider
+                  detail is FailureDetails' job. */}
+              {result && !result.persisted && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--muted-foreground)',
+                    fontStyle: 'italic',
+                    marginBottom: 12,
+                  }}
+                >
+                  Note — vault write didn't affect any row (the key may have been deleted just now). The Last test column won't update.
+                </div>
+              )}
+              {Array.isArray(persistedAt.suite_results) && persistedAt.suite_results.length > 0 && (
+                <>
+                  <SuiteResultsTable rows={persistedAt.suite_results} />
+                  <FailureDetails rows={persistedAt.suite_results} />
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            padding: '12px 18px',
+            borderTop: '1px solid var(--border)',
+            display: 'flex',
+            gap: 8,
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+          }}
+        >
+          {phase !== 'running' && (
+            <button
+              type="button"
+              onClick={onRetry}
+              title="Run the probe again"
+              style={POPUP_BTN_STYLE}
+            >
+              <RefreshIcon className="w-3.5 h-3.5" />
+              <span>Run again</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            style={POPUP_BTN_PRIMARY_STYLE}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Compact per-target breakdown of the suite. Each row is a separate
+// probe (e.g. a personal key bound to anthropic + openai produces two
+// rows). Status comes straight from the CLI's run_connectivity_suite
+// JSON output — see SuiteOutcome.json_results.
+function SuiteResultsTable(props: { rows: unknown[] }) {
+  const rows = props.rows as Array<Record<string, unknown>>;
+  if (!rows.length) return null;
+  return (
+    <div
+      style={{
+        border: '1px solid var(--border)',
+        borderRadius: 6,
+        overflow: 'hidden',
+      }}
+    >
+      <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+        <thead>
+          <tr style={{ background: 'var(--muted)' }}>
+            <th style={cellHeadStyle}>Provider</th>
+            <th style={cellHeadStyle}>Ping</th>
+            <th style={cellHeadStyle}>API</th>
+            <th style={cellHeadStyle}>Chat</th>
+            <th style={cellHeadStyle}>Latency</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => {
+            const label = String(row.label ?? row.provider ?? '—');
+            const pingOk = row.ping_ok === true;
+            const apiOk = row.api_ok === true;
+            const chatOk = row.chat_ok === true;
+            const apiStatus = typeof row.api_status === 'number' ? row.api_status : null;
+            const chatStatus = typeof row.chat_status === 'number' ? row.chat_status : null;
+            const apiMs = typeof row.api_ms === 'number' ? row.api_ms : null;
+            const chatMs = typeof row.chat_ms === 'number' ? row.chat_ms : null;
+            // Latency = chat_ms preferred (it's the end-to-end signal),
+            // fall back to api_ms when chat hasn't run / failed.
+            const latencyMs = chatOk && chatMs != null ? chatMs : apiMs;
+            // Per-phase fail colour: Ping fail = red (network gone),
+            // API/Chat fail = amber (reach worked, downstream rejected).
+            const pingFailColor = 'var(--destructive, #ef4444)';
+            const stageFailColor = '#f59e0b';
+            return (
+              <tr key={i} style={{ borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
+                <td style={cellStyle}>{label}</td>
+                <td style={cellStyle}>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: pingOk ? 'var(--success)' : pingFailColor,
+                    }}
+                  />{' '}
+                  {pingOk ? 'OK' : 'FAIL'}
+                </td>
+                <td style={cellStyle}>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: apiOk ? 'var(--success)' : stageFailColor,
+                    }}
+                  />{' '}
+                  {apiOk ? 'OK' : apiStatus != null ? `HTTP ${apiStatus}` : 'FAIL'}
+                </td>
+                <td style={cellStyle}>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: chatOk ? 'var(--success)' : stageFailColor,
+                    }}
+                  />{' '}
+                  {chatOk ? 'OK' : chatStatus != null ? `HTTP ${chatStatus}` : 'FAIL'}
+                </td>
+                <td style={cellStyle} className="font-mono">
+                  {latencyMs != null ? `${latencyMs}ms` : '—'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Per-row error detail panel, rendered under SuiteResultsTable when any
+// row has a non-OK API or Chat status. Surfaces the actual upstream
+// response body so users diagnosing a 401 / 400 / 429 see the JSON
+// reason — not just the bare status code. Skipped silently for fully-
+// passing suites so the popup stays compact in the happy path.
+//
+// Why a separate panel rather than expanding the table cell:
+//   - Body snippets are ~280-400 chars, too wide for an inline cell;
+//   - Status code in the cell stays scannable (PASS/FAIL/HTTP 401);
+//   - The detail section reads top-to-bottom like a stack trace, which
+//     matches the "first thing that failed" mental model.
+/**
+ * Best-effort parse of an upstream provider's error response body into
+ * a `(type, message)` pair. Tries the three shapes that account for ~all
+ * provider responses we see:
+ *
+ *   Anthropic: { "type": "error", "error": { "type": "...", "message": "..." }, "request_id": "..." }
+ *   OpenAI:    { "error": { "message": "...", "type": "...", "code": "..." } }
+ *   Aggregator/proxy front-ends: { "error": "free-form string" }
+ *
+ * If the body isn't valid JSON, or none of the known shapes match, we
+ * surface the raw body as `message` and leave `type` null — never lose
+ * the underlying signal, just stop dumping it as monospace JSON.
+ */
+function parseProviderErrorBody(body: string | null): {
+  type: string | null;
+  message: string;
+} {
+  if (!body) return { type: null, message: '' };
+  const trimmed = body.trim();
+  if (!trimmed) return { type: null, message: '' };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return { type: null, message: trimmed };
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return { type: null, message: trimmed };
+  }
+  const obj = parsed as Record<string, unknown>;
+  // Shape A — { error: { type, message } } (Anthropic, OpenAI, ...)
+  const inner = obj.error;
+  if (inner && typeof inner === 'object') {
+    const iobj = inner as Record<string, unknown>;
+    const t = typeof iobj.type === 'string' ? iobj.type : null;
+    const m = typeof iobj.message === 'string' ? iobj.message : '';
+    if (t || m) return { type: t, message: m || trimmed };
+  }
+  // Shape B — { error: "free-form string" }
+  if (typeof inner === 'string') {
+    return { type: null, message: inner };
+  }
+  // Shape C — { type, message } at the top level
+  if (typeof obj.message === 'string') {
+    return {
+      type: typeof obj.type === 'string' ? obj.type : null,
+      message: obj.message,
+    };
+  }
+  return { type: null, message: trimmed };
+}
+
+function FailureDetails(props: { rows: unknown[] }) {
+  const rows = props.rows as Array<Record<string, unknown>>;
+  type FailEntry = {
+    provider: string;
+    stage: 'API' | 'Chat';
+    status: number | null;
+    body: string | null;
+  };
+  const failures: FailEntry[] = [];
+  for (const row of rows) {
+    const provider = String(row.label ?? row.provider ?? '—');
+    // A stage failed AND has data only when it actually ran. The CLI
+    // short-circuits later stages on earlier failure (e.g. API 404 → skip
+    // Chat, leaving chat_status=null/body=null/chat_ms=0). Those
+    // skipped stages would otherwise show up as empty cards in the
+    // details panel — "anthropic · Chat" with nothing under it — which
+    // adds noise without adding signal. The Wi-Fi bars already show
+    // "downstream skipped" via the red segment, so suppress the empty
+    // detail card here.
+    const apiRan = row.api_status != null || typeof row.api_body_snippet === 'string';
+    if (row.api_ok !== true && apiRan) {
+      failures.push({
+        provider,
+        stage: 'API',
+        status: typeof row.api_status === 'number' ? row.api_status : null,
+        body: typeof row.api_body_snippet === 'string' ? row.api_body_snippet : null,
+      });
+    }
+    const chatRan = row.chat_status != null || typeof row.chat_body_snippet === 'string';
+    if (row.chat_ok !== true && chatRan) {
+      failures.push({
+        provider,
+        stage: 'Chat',
+        status: typeof row.chat_status === 'number' ? row.chat_status : null,
+        body: typeof row.chat_body_snippet === 'string' ? row.chat_body_snippet : null,
+      });
+    }
+  }
+  if (failures.length === 0) return null;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'var(--muted-foreground)',
+          textTransform: 'uppercase',
+          letterSpacing: 0.4,
+          marginBottom: 8,
+        }}
+      >
+        Failure details ({failures.length})
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {failures.map((f, i) => {
+          const parsed = parseProviderErrorBody(f.body);
+          return (
+            <div
+              key={i}
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: '10px 12px',
+                background: 'rgba(245, 158, 11, 0.06)',
+              }}
+            >
+              {/* Header row: dot · provider · stage · HTTP status · type chip */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  marginBottom: parsed.message ? 6 : 0,
+                  fontSize: 11,
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: '#f59e0b',
+                  }}
+                />
+                <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>
+                  {f.provider}
+                </span>
+                <span style={{ color: 'var(--muted-foreground)' }}>·</span>
+                <span style={{ color: 'var(--muted-foreground)' }}>{f.stage}</span>
+                {f.status != null && (
+                  <>
+                    <span style={{ color: 'var(--muted-foreground)' }}>·</span>
+                    <span className="font-mono" style={{ color: '#f59e0b' }}>
+                      HTTP {f.status}
+                    </span>
+                  </>
+                )}
+                {parsed.type && (
+                  <span
+                    className="font-mono"
+                    style={{
+                      display: 'inline-block',
+                      padding: '1px 7px',
+                      borderRadius: 999,
+                      background: 'rgba(245, 158, 11, 0.18)',
+                      border: '1px solid rgba(245, 158, 11, 0.45)',
+                      color: '#f59e0b',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: 0.2,
+                    }}
+                  >
+                    {parsed.type}
+                  </span>
+                )}
+              </div>
+              {/* Message: plain prose, NOT a monospace JSON dump. Long
+                  upstream messages wrap naturally; we cap height so a
+                  pathological 2 KB rant doesn't eat the popup. */}
+              {parsed.message && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                    color: 'var(--foreground)',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    maxHeight: 160,
+                    overflowY: 'auto',
+                  }}
+                >
+                  {parsed.message}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Popup footer button styles. Defined inline (rather than as a CSS
+// class on .vault-page) because the popup is rendered as a portal-like
+// fixed overlay; its descendants sit *outside* the .vault-page subtree
+// when you look at the DOM through the React tree, so vault-page-
+// scoped class selectors like `.vault-page .action-btn` were not
+// matching them and the buttons rendered as unstyled text. Using inline
+// styles keeps the rule co-located with the popup and avoids touching
+// the shared VAULT_CSS for a one-place visual.
+const POPUP_BTN_STYLE: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '7px 14px',
+  fontSize: 12,
+  fontWeight: 500,
+  borderRadius: 6,
+  border: '1px solid var(--border)',
+  background: 'transparent',
+  color: 'var(--foreground)',
+  cursor: 'pointer',
+  lineHeight: 1.2,
+};
+const POPUP_BTN_PRIMARY_STYLE: React.CSSProperties = {
+  ...POPUP_BTN_STYLE,
+  background: 'var(--muted)',
+  borderColor: 'var(--border)',
+};
+
+const cellHeadStyle: React.CSSProperties = {
+  textAlign: 'left',
+  padding: '6px 10px',
+  fontWeight: 600,
+  fontSize: 11,
+  color: 'var(--muted-foreground)',
+};
+const cellStyle: React.CSSProperties = {
+  padding: '6px 10px',
+  fontSize: 11,
+  verticalAlign: 'middle',
+};
+
 // ── Add Key modal ────────────────────────────────────────────────────────
 
 type AddKind = 'api' | 'oauth';
@@ -3891,6 +4881,49 @@ function AddKeyModal(props: {
   // ~1.2s so the user can retry without manually dismissing the flash.
   const [flashField, setFlashField] = useState<AddKeyField | null>(null);
 
+  // ── Guided flow state (2026-05-23) ─────────────────────────────────
+  // mode: guided two-page wizard vs simple single-page form.
+  //   default = guided (spec §2 — most users benefit from connectivity
+  //   feedback before save). 'simple' for power users who want speed.
+  // page: only used when (mode === 'guided' && kind === 'api');
+  //   1 = Add credential, 2 = Test + name.
+  // The other three combinations (Simple+API, *+OAuth) skip the wizard
+  // and render the existing single-page body, so we keep the
+  // simple/oauth UX untouched.
+  const [mode, setMode] = useState<'guided' | 'simple'>('guided');
+  const [page, setPage] = useState<1 | 2>(1);
+  // Page-2 testRaw state machine. 'idle' = no test yet; 'running' =
+  // probe in flight; 'done' = result available; 'error' = transport /
+  // backend failure (separate from "probe ran but chat failed", which
+  // is testResult.status === 'fail').
+  const [testState, setTestState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [testResult, setTestResult] = useState<VaultLastTest | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  // OAuth flow terminal state, surfaced from the OAuthBrokerCard. When
+  // true the broker has written the token to vault and the modal can
+  // advance to page 2 (Test + name) per spec §4.4 / §5. We also keep
+  // the broker's provider_account_id (needed to drive `vaultApi.test`
+  // against the new OAuth row) and display_identity (default alias).
+  const [oauthConnected, setOauthConnected] = useState(false);
+  const [oauthAccountId, setOauthAccountId] = useState<string | null>(null);
+  const [oauthIdentity, setOauthIdentity] = useState<string | null>(null);
+  useEffect(() => {
+    // Reset on kind / oauthProvider change so a switched provider
+    // doesn't ghost the previous session's account_id.
+    setOauthConnected(false);
+    setOauthAccountId(null);
+    setOauthIdentity(null);
+  }, [kind, oauthProvider]);
+
+  // useGuided gates the two-page wizard shell. For API kind both pages
+  // are used; for OAuth kind only page 1 is meaningful (page 2's
+  // pre-save Run-test is API-only — OAuth tokens are minted by the
+  // broker, not pasted) but the Guided shell still drives the new
+  // OAuthBrokerCard 3-step UI that replaces the old "go run aikey
+  // auth login" CLI hint. Simple mode for OAuth still shows the CLI
+  // hint (OAuthGuide) — that's the power-user / scripted path.
+  const useGuided = mode === 'guided';
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') props.onClose();
@@ -3906,9 +4939,131 @@ function AddKeyModal(props: {
     return () => clearTimeout(t);
   }, [flashField]);
 
+  // Spec §12 — input changes invalidate the previous test result. The
+  // user just changed something material; the green/yellow/red dots
+  // they're staring at no longer describe what they have. Reset to
+  // 'idle' so the probe table re-renders waiting.
+  useEffect(() => {
+    setTestState('idle');
+    setTestResult(null);
+    setTestError(null);
+  }, [secret, providers, baseUrl, kind]);
+
+  // Spec §11 — mode / kind changes always reset to page 1 so the user
+  // doesn't land on an empty page 2 after switching from OAuth to API.
+  useEffect(() => {
+    setPage(1);
+  }, [mode, kind]);
+
+  /**
+   * Run a pre-save connectivity probe via the testRaw endpoint. Reuses
+   * the same aggregator (`aggregate_test_outcome`) that the post-save
+   * `vaultApi.test` uses, so the popup's status / phase booleans /
+   * error_code render identically here vs the Vault page Last test
+   * column — internal-command-reuses-public-core principle.
+   *
+   * Errors:
+   *   - Transport / 5xx failures go to testState='error' with a
+   *     human message (proxy not running, server restarting, etc.).
+   *   - Probe "ran but failed" (status='fail') goes to testState='done'
+   *     with testResult.status='fail' — the user sees the colored row
+   *     and the repair card guidance.
+   */
+  async function runTest() {
+    // OAuth kind: the broker already wrote the row to vault, so we use
+    // the post-save vaultApi.test (by account_id) instead of testRaw
+    // (which is the pre-save plaintext-secret path). Per spec §5.1 we
+    // run the same 4-phase probe — only the entry point differs.
+    if (kind === 'oauth') {
+      if (!oauthAccountId) {
+        setTestError('OAuth session has no account id yet — finish step 3 on page 1 first.');
+        setTestState('error');
+        return;
+      }
+      setTestState('running');
+      setTestError(null);
+      try {
+        const res = await vaultApi.test({ target: 'oauth', id: oauthAccountId });
+        setTestResult(res.last_test);
+        setTestState('done');
+      } catch (e) {
+        const err = e as { code?: string; message?: string; response?: { status?: number } };
+        const status = err?.response?.status;
+        let msg = err?.message || 'Test failed for an unknown reason';
+        if (typeof status === 'number' && status >= 500) {
+          msg = 'Local server is restarting. Try `aikey service restart web` and retry.';
+        } else if (err?.code === 'ERR_NETWORK') {
+          msg = 'Local server unreachable. Run `aikey service start web` and retry.';
+        }
+        setTestError(msg);
+        setTestState('error');
+      }
+      return;
+    }
+    // API-key kind: pre-save testRaw path (plaintext secret in body).
+    if (!secret.trim() || providers.length === 0) {
+      setTestError('Need a secret and at least one protocol to test.');
+      setTestState('error');
+      return;
+    }
+    setTestState('running');
+    setTestError(null);
+    try {
+      const aliasHint = alias.trim() || `add-key-${providers[0] || 'probe'}`;
+      const res = await vaultApi.testRaw({
+        providers,
+        secret: secret.trim(),
+        alias_hint: aliasHint,
+        base_url: baseUrl.trim() || undefined,
+      });
+      setTestResult(res.last_test);
+      setTestState('done');
+    } catch (e) {
+      // Map axios / network errors to one-line guidance. The Add-Key
+      // modal has less screen real-estate than the standalone Test
+      // Connection popup, so we keep this terser than friendlyTestError.
+      const err = e as { code?: string; message?: string; response?: { status?: number } };
+      const status = err?.response?.status;
+      let msg = err?.message || 'Test failed for an unknown reason';
+      if (typeof status === 'number' && status >= 500) {
+        msg = 'Local server is restarting. Try `aikey service restart web` and retry.';
+      } else if (err?.code === 'ERR_NETWORK') {
+        msg = 'Local server unreachable. Run `aikey service start web` and retry.';
+      }
+      setTestError(msg);
+      setTestState('error');
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
+    // OAuth kind: the row was minted by the broker during step 3 on
+    // page 1. Save here means: optionally rename the local_alias (if
+    // the user typed something other than the default detected
+    // identity), then close the modal. The vault list refetch is
+    // already wired through the react-query invalidation in the
+    // page-level mutation handlers.
+    if (kind === 'oauth') {
+      if (!oauthAccountId) {
+        setErr('OAuth session has no account id — finish step 3 on page 1 first.');
+        return;
+      }
+      const newAlias = alias.trim();
+      // Only call rename when the user actually changed the alias —
+      // an empty input means "keep the default (detected identity)",
+      // which is what's already set on the row.
+      if (newAlias && newAlias !== (oauthIdentity || '').trim()) {
+        try {
+          await vaultApi.rename({ target: 'oauth', id: oauthAccountId, new_value: newAlias });
+        } catch (e2) {
+          setErr((e2 as Error).message);
+          return;
+        }
+      }
+      props.onClose();
+      return;
+    }
     if (kind !== 'api') return;
     // Client-side validation. Mirrors the CLI core's `validate_alias`
     // (non-empty / ≤128 chars / no control chars, see
@@ -3947,6 +5102,23 @@ function AddKeyModal(props: {
         payload.provider = providers[0];
       }
       await props.onSubmitPersonal(payload);
+      // Spec §5.1 + Sub-1B follow-up persistence: the user just saw a
+      // testRaw result on page 2. Fire (best-effort) a vaultApi.test()
+      // by the now-existing alias so the same byte-shape lands in the
+      // new row's `extra.$.last_test`, making the Vault page "Last
+      // test" column light up immediately instead of waiting until the
+      // user manually clicks the row's Test connection button.
+      //
+      // Why fire-and-forget: createPersonal already succeeded so the
+      // row is committed. A test failure here is a UX nicety miss, not
+      // a data correctness problem — the user can always re-run Test
+      // connection from the row to repopulate.
+      if (useGuided && testState === 'done' && testResult) {
+        const finalAlias = alias.trim() || aliasPlaceholder(providers);
+        vaultApi
+          .test({ target: 'personal', id: finalAlias })
+          .catch(() => { /* best-effort sync — see comment above */ });
+      }
     } catch (e2) {
       setErr((e2 as Error).message);
     }
@@ -3960,7 +5132,7 @@ function AddKeyModal(props: {
         if (e.target === e.currentTarget) props.onClose();
       }}
     >
-      <div className="modal-panel">
+      <div className="modal-panel modal-panel-guided">
         <div className="modal-header">
           <span className="inline-flex items-center gap-2 font-semibold text-[13.5px]">
             <PlusCircleIcon className="w-4 h-4" style={{ color: 'var(--primary)' }} />
@@ -3972,206 +5144,191 @@ function AddKeyModal(props: {
               · stored locally, never leaves device
             </span>
           </span>
-          <button
-            className="icon-btn"
-            title="Close"
-            onClick={props.onClose}
-            aria-label="Close"
-          >
-            <XIcon className="w-4 h-4" />
-          </button>
-        </div>
-        <form onSubmit={submit} className="contents">
-          <div className="modal-body">
-            <div className="form-row">
-              <span className="form-label">
-                <ShapesIcon className="w-3 h-3" />
-                Kind
-              </span>
-              <div className="seg">
-                <button
-                  type="button"
-                  className={kind === 'api' ? 'active' : ''}
-                  onClick={() => setKind('api')}
-                >
-                  <KeyIcon className="w-3 h-3" />
-                  API Key
-                </button>
-                <button
-                  type="button"
-                  className={kind === 'oauth' ? 'active' : ''}
-                  onClick={() => setKind('oauth')}
-                >
-                  <UserCheckIcon className="w-3 h-3" />
-                  OAuth
-                </button>
-              </div>
-              <span className="form-help">
-                API Key = paste a secret you already have. OAuth = sign in through the CLI and we'll store the session.
-              </span>
-            </div>
-
-            {kind === 'api' ? (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="form-row">
-                    <label className="form-label" htmlFor="add-alias">
-                      <TagIcon className="w-3 h-3" />
-                      Alias <span className="req">*</span>
-                    </label>
-                    <input
-                      id="add-alias"
-                      type="text"
-                      className={`field-input${flashField === 'alias' ? ' field-input-flash' : ''}`}
-                      placeholder="e.g. openai-prod"
-                      autoFocus
-                      value={alias}
-                      onChange={(e) => setAlias(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-row">
-                    <label className="form-label">
-                      <GlobeIcon className="w-3 h-3" />
-                      Protocols <span className="req">*</span>
-                    </label>
-                    {/* v4.2: 统一使用 shared ProviderMultiSelect (同 import 页),
-                        带品牌别名搜索 (输入 "GLM" 找 zhipu / "豆包" 找 doubao) +
-                        portal-based dropdown (不再被弹窗底栏裁剪)。 */}
-                    <ProviderMultiSelect
-                      values={providers}
-                      onChange={setProviders}
-                      placeholder="Search or add protocol…"
-                    />
-                    <span className="form-help">
-                      Search a family (e.g. "anthropic", "openai", "gemini") or type a custom name. Aggregator gateways (openrouter / yunwu / 0011) aren't in the list — pick the underlying protocol they expose.
-                    </span>
-                  </div>
-                </div>
-                <div className="form-row">
-                  <label className="form-label" htmlFor="add-secret">
-                    <KeyIcon className="w-3 h-3" />
-                    Plaintext secret <span className="req">*</span>
-                  </label>
-                  <span className="field-input-wrap">
-                    <input
-                      id="add-secret"
-                      type={revealSecret ? 'text' : 'password'}
-                      className={`field-input${secret.length > 0 ? ' field-input-has-reveal' : ''}${flashField === 'secret' ? ' field-input-flash' : ''}`}
-                      placeholder="sk-..."
-                      autoComplete="off"
-                      spellCheck={false}
-                      value={secret}
-                      onChange={(e) => setSecret(e.target.value)}
-                    />
-                    {secret.length > 0 && (
-                      <button
-                        type="button"
-                        className="field-reveal-btn"
-                        onClick={() => setRevealSecret((r) => !r)}
-                        title={revealSecret ? 'Hide value' : 'Reveal value'}
-                        aria-label={revealSecret ? 'Hide secret' : 'Reveal secret'}
-                      >
-                        {revealSecret ? <EyeOffIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
-                      </button>
-                    )}
-                  </span>
-                  <span className="form-help">
-                    Encrypted with your master key on save — we never send it to our servers.
-                  </span>
-                </div>
-                <div className="form-row">
-                  <label className="form-label" htmlFor="add-baseurl">
-                    <LinkIcon className="w-3 h-3" />
-                    base_url{' '}
-                    <span
-                      className="normal-case tracking-normal"
-                      style={{ color: 'var(--muted-foreground)' }}
-                    >
-                      · optional
-                    </span>
-                  </label>
-                  {/*
-                    2026-05-08: placeholder is the protocol's official
-                    base_url (looked up via providerToRoute, single source
-                    of truth = provider_fingerprint.yaml). Switching
-                    protocol updates the hint without ever touching the
-                    input value — user input is always authoritative.
-                    Empty input = backend uses provider default
-                    (matches the placeholder); typed input = custom.
-                  */}
-                  <span className="field-input-wrap">
-                    <input
-                      id="add-baseurl"
-                      type="text"
-                      className={`field-input${baseUrl.length > 0 ? ' field-input-has-reveal' : ''}${flashField === 'baseUrl' ? ' field-input-flash' : ''}`}
-                      placeholder={(() => {
-                        const first = providers[0];
-                        const route = first ? props.providerToRoute?.get(first) : undefined;
-                        return route
-                          ? `${route.base_url}${route.version}`
-                          : 'https://api.openai.com/v1';
-                      })()}
-                      value={baseUrl}
-                      onChange={(e) => setBaseUrl(e.target.value)}
-                    />
-                    {baseUrl.length > 0 && (
-                      // X clear button — only when user typed something.
-                      // Empty state shows placeholder hint of the protocol
-                      // default; clearing returns to that default (backend
-                      // applies it on submit when base_url is empty/undef).
-                      <button
-                        type="button"
-                        className="field-reveal-btn"
-                        onClick={() => setBaseUrl('')}
-                        title="Clear base_url (use provider default)"
-                        aria-label="Clear base_url"
-                      >
-                        <XIcon className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </span>
-                  <span className="form-help">
-                    Custom gateway URL if you route through your own proxy. Leave blank for provider default.
-                  </span>
-                </div>
-                {err && (
-                  <span className="text-[12px] font-mono" style={{ color: '#fca5a5' }}>
-                    {err}
-                  </span>
-                )}
-              </>
-            ) : (
-              <OAuthGuide provider={oauthProvider} onProviderChange={setOauthProvider} />
-            )}
-          </div>
-          <div className="modal-footer">
-            <span
-              className="text-[10px] font-mono uppercase tracking-widest inline-flex items-center gap-1"
-              style={{ color: 'var(--muted-foreground)' }}
-            >
-              <ShieldCheckIcon className="w-3 h-3" style={{ color: 'var(--success)' }} />
-              Encrypted with master key on save
-            </span>
-            <div className="flex items-center gap-2">
+          <div className="header-controls inline-flex items-center gap-2">
+            {/* Mode switch (spec §2). Always rendered so the user has
+                a consistent control surface regardless of kind. */}
+            <div className="mode-switch" aria-label="Mode switch">
               <button
                 type="button"
-                className="btn btn-ghost text-[11px] px-3 py-1.5"
+                className={mode === 'guided' ? 'active' : ''}
+                onClick={() => setMode('guided')}
+              >
+                Guided
+              </button>
+              <button
+                type="button"
+                className={mode === 'simple' ? 'active' : ''}
+                onClick={() => setMode('simple')}
+              >
+                Simple
+              </button>
+            </div>
+            <button
+              className="icon-btn"
+              title="Close"
+              onClick={props.onClose}
+              aria-label="Close"
+            >
+              <XIcon className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <form onSubmit={submit} className="contents">
+          {useGuided ? (
+            <GuidedBody
+              page={page}
+              setPage={setPage}
+              mode={mode}
+              kind={kind}
+              setKind={setKind}
+              alias={alias}
+              setAlias={setAlias}
+              providers={providers}
+              setProviders={setProviders}
+              oauthProvider={oauthProvider}
+              setOauthProvider={setOauthProvider}
+              secret={secret}
+              setSecret={setSecret}
+              revealSecret={revealSecret}
+              setRevealSecret={setRevealSecret}
+              baseUrl={baseUrl}
+              setBaseUrl={setBaseUrl}
+              flashField={flashField}
+              err={err}
+              providerToRoute={props.providerToRoute}
+              testState={testState}
+              testResult={testResult}
+              testError={testError}
+              onRunTest={runTest}
+              oauthAccountId={oauthAccountId}
+              onOauthConnectedChange={(connected, info) => {
+                setOauthConnected(connected);
+                if (connected) {
+                  setOauthAccountId(info?.providerAccountId ?? null);
+                  setOauthIdentity(info?.displayIdentity ?? null);
+                  // Spec §13.6: OAuth alias default = detected identity
+                  // (the email / handle the broker pulled). Auto-fill
+                  // only when the user hasn't typed anything yet.
+                  if (!alias.trim() && info?.displayIdentity) {
+                    setAlias(info.displayIdentity);
+                  }
+                } else {
+                  setOauthAccountId(null);
+                  setOauthIdentity(null);
+                }
+              }}
+              aliasPlaceholder={
+                kind === 'oauth' && oauthIdentity
+                  ? oauthIdentity
+                  : aliasPlaceholder(providers, props.providerToRoute)
+              }
+              baseUrlPlaceholder={baseUrlPlaceholder(providers, props.providerToRoute)}
+            />
+          ) : (
+            <SimpleBody
+              kind={kind}
+              setKind={setKind}
+              alias={alias}
+              setAlias={setAlias}
+              providers={providers}
+              setProviders={setProviders}
+              oauthProvider={oauthProvider}
+              setOauthProvider={setOauthProvider}
+              secret={secret}
+              setSecret={setSecret}
+              revealSecret={revealSecret}
+              setRevealSecret={setRevealSecret}
+              baseUrl={baseUrl}
+              setBaseUrl={setBaseUrl}
+              flashField={flashField}
+              err={err}
+              providerToRoute={props.providerToRoute}
+              baseUrlPlaceholder={baseUrlPlaceholder(providers, props.providerToRoute)}
+              onOauthConnectedChange={(connected, info) => {
+                setOauthConnected(connected);
+                if (connected) {
+                  setOauthAccountId(info?.providerAccountId ?? null);
+                  setOauthIdentity(info?.displayIdentity ?? null);
+                  if (!alias.trim() && info?.displayIdentity) {
+                    setAlias(info.displayIdentity);
+                  }
+                } else {
+                  setOauthAccountId(null);
+                  setOauthIdentity(null);
+                }
+              }}
+            />
+          )}
+          <div className="modal-footer">
+            <span
+              className={useGuided
+                ? 'trust inline-flex items-center gap-1'
+                : 'text-[10px] font-mono uppercase tracking-widest inline-flex items-center gap-1'
+              }
+              style={useGuided ? undefined : { color: 'var(--muted-foreground)' }}
+            >
+              <ShieldCheckIcon className="w-3 h-3" style={{ color: 'var(--success)' }} />
+              {useGuided ? 'encrypted with master key on save' : 'Encrypted with master key on save'}
+            </span>
+            <div className="actions flex items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-ghost btn-md text-[11px] px-3 py-1.5"
                 onClick={props.onClose}
               >
-                Cancel
+                {/* spec §11: "Not now" hints at draft semantics on
+                    guided page 2; falls back to "Cancel" otherwise. */}
+                {useGuided && page === 2 ? 'Not now' : 'Cancel'}
               </button>
-              {kind === 'api' && (
+              {useGuided && page === 2 && (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-md text-[11px] px-3 py-1.5 flex items-center gap-1"
+                  onClick={() => setPage(1)}
+                >
+                  <ChevronLeftIcon className="w-3 h-3" />
+                  Back
+                </button>
+              )}
+              {/* Next button visibility (spec §4.4 + §5):
+                  - API kind: always available on page 1 (user is going
+                    to page 2's pre-save Run-test).
+                  - OAuth kind: only after the broker has minted the
+                    session (oauthConnected) — before that, there's no
+                    account_id to drive vaultApi.test on page 2. */}
+              {useGuided && page === 1 && (kind === 'api' || (kind === 'oauth' && oauthConnected)) && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-md text-[11px] px-4 py-1.5 flex items-center gap-1"
+                  onClick={() => setPage(2)}
+                >
+                  Next
+                  <ChevronRightIcon className="w-3 h-3" />
+                </button>
+              )}
+              {/* Save key on page 2 (or simple mode for API kind).
+                  For OAuth kind, "Save key" means "rename the new row
+                  to the typed alias and close" — the secret is already
+                  in vault. */}
+              {((!useGuided || page === 2)) && (kind === 'api' || (kind === 'oauth' && oauthConnected)) && (
                 <button
                   type="submit"
-                  className="btn btn-primary btn-primary-dim text-[11px] px-4 py-1.5 flex items-center gap-1"
+                  className="btn btn-primary btn-primary-dim btn-md text-[11px] px-4 py-1.5 flex items-center gap-1"
                   disabled={props.pending}
                 >
-                  {props.pending ? (
-                    'Saving…'
-                  ) : (
+                  {props.pending ? 'Saving…' : (
                     <>
                       <CheckIcon className="w-3 h-3" />
-                      Save key
+                      {/* spec §14.1: Save anyway keeps btn-primary
+                          (gold), NEVER demoted to outline — the user
+                          actively chose to save a failed-test key.
+                          Only surface "Save anyway" in Guided mode —
+                          Simple mode doesn't display test context, so
+                          showing "Save anyway" there would baffle the
+                          user (no visible failure to disclaim). */}
+                      {useGuided && testState === 'done' && testResult?.status === 'fail'
+                        ? 'Save anyway'
+                        : 'Save key'}
                     </>
                   )}
                 </button>
@@ -4179,6 +5336,1054 @@ function AddKeyModal(props: {
             </div>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Add Key body components (2026-05-23) ─────────────────────────────
+//
+// SimpleBody = the legacy single-page form (kept byte-for-byte from
+// the pre-Guided refactor so the simple/OAuth UX stays unchanged).
+// GuidedBody = the new two-page wizard (spec §1-§5). The two share
+// internal AddKeyField helpers (renderApiFields / renderKindSeg) so
+// the input markup doesn't drift between modes.
+
+type AddKeyFieldShared = {
+  kind: AddKind;
+  setKind: (k: AddKind) => void;
+  alias: string;
+  setAlias: (s: string) => void;
+  providers: string[];
+  setProviders: (s: string[]) => void;
+  oauthProvider: string;
+  setOauthProvider: (s: string) => void;
+  secret: string;
+  setSecret: (s: string) => void;
+  revealSecret: boolean;
+  setRevealSecret: (b: boolean | ((p: boolean) => boolean)) => void;
+  baseUrl: string;
+  setBaseUrl: (s: string) => void;
+  flashField: AddKeyField | null;
+  err: string | null;
+  providerToRoute?: Map<string, { base_url: string; version: string }>;
+  baseUrlPlaceholder: string;
+};
+
+// Compute the alias placeholder per spec §13.6:
+//   API kind: `<protocol>-prod` (e.g. "openai-prod")
+//   OAuth:    `<provider>-account` (no identity in pre-save UI yet)
+function aliasPlaceholder(
+  providers: string[],
+  _providerToRoute?: Map<string, { base_url: string; version: string }>,
+): string {
+  const first = providers[0] || 'openai';
+  return `${first}-prod`;
+}
+
+// Compute the base_url placeholder from providerToRoute (single source
+// of truth = provider_fingerprint.yaml). Switching protocol updates the
+// hint without ever touching the input value — user input is
+// authoritative; empty = backend uses provider default.
+function baseUrlPlaceholder(
+  providers: string[],
+  providerToRoute?: Map<string, { base_url: string; version: string }>,
+): string {
+  const first = providers[0];
+  const route = first ? providerToRoute?.get(first) : undefined;
+  return route ? `${route.base_url}${route.version}` : 'https://api.openai.com/v1';
+}
+
+function KindSeg(props: { kind: AddKind; setKind: (k: AddKind) => void; helpHidden?: boolean }) {
+  return (
+    <div className="form-row">
+      <span className="form-label">
+        <ShapesIcon className="w-3 h-3" />
+        Kind
+      </span>
+      <div className="seg">
+        <button
+          type="button"
+          className={props.kind === 'api' ? 'active' : ''}
+          onClick={() => props.setKind('api')}
+        >
+          <KeyIcon className="w-3 h-3" />
+          API Key
+        </button>
+        <button
+          type="button"
+          className={props.kind === 'oauth' ? 'active' : ''}
+          onClick={() => props.setKind('oauth')}
+        >
+          <UserCheckIcon className="w-3 h-3" />
+          OAuth
+        </button>
+      </div>
+      {!props.helpHidden && (
+        <span className="form-help">
+          Paste an existing key, or sign in with OAuth.
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ApiFields renders the secret + base_url block, and optionally the
+// alias + protocols pair. showAlias=false skips alias (Guided mode
+// shows it on page 2's name-strip instead — spec §19.1).
+function ApiFields(props: AddKeyFieldShared & { showAlias: boolean; aliasPlaceholder?: string }) {
+  const aliasPh = props.aliasPlaceholder || aliasPlaceholder(props.providers);
+  return (
+    <>
+      <div className={props.showAlias ? 'grid grid-cols-2 gap-3' : ''}>
+        {props.showAlias && (
+          <div className="form-row">
+            <label className="form-label" htmlFor="add-alias-simple">
+              <TagIcon className="w-3 h-3" />
+              Alias <span className="req">*</span>
+            </label>
+            <input
+              id="add-alias-simple"
+              type="text"
+              className={`field-input${props.flashField === 'alias' ? ' field-input-flash' : ''}`}
+              placeholder={aliasPh}
+              autoFocus
+              value={props.alias}
+              onChange={(e) => props.setAlias(e.target.value)}
+            />
+          </div>
+        )}
+        <div className="form-row">
+          <label className="form-label">
+            <GlobeIcon className="w-3 h-3" />
+            Protocols <span className="req">*</span>
+          </label>
+          <ProviderMultiSelect
+            values={props.providers}
+            onChange={props.setProviders}
+            placeholder="Search or add protocol…"
+          />
+          <span className="form-help">
+            Pick the API protocol (e.g. anthropic, openai). For aggregators, choose the underlying one.
+          </span>
+        </div>
+      </div>
+      <div className="form-row">
+        <label className="form-label" htmlFor="add-secret">
+          <KeyIcon className="w-3 h-3" />
+          Plaintext secret <span className="req">*</span>
+        </label>
+        <span className="field-input-wrap">
+          <input
+            id="add-secret"
+            type={props.revealSecret ? 'text' : 'password'}
+            className={`field-input${props.secret.length > 0 ? ' field-input-has-reveal' : ''}${props.flashField === 'secret' ? ' field-input-flash' : ''}`}
+            placeholder="sk-..."
+            autoComplete="off"
+            spellCheck={false}
+            value={props.secret}
+            onChange={(e) => props.setSecret(e.target.value)}
+          />
+          {props.secret.length > 0 && (
+            <button
+              type="button"
+              className="field-reveal-btn"
+              onClick={() => props.setRevealSecret((r: boolean) => !r)}
+              title={props.revealSecret ? 'Hide value' : 'Reveal value'}
+              aria-label={props.revealSecret ? 'Hide secret' : 'Reveal secret'}
+            >
+              {props.revealSecret ? <EyeOffIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
+            </button>
+          )}
+        </span>
+        <span className="form-help">
+          Encrypted locally; never uploaded.
+        </span>
+      </div>
+      <div className="form-row">
+        <label className="form-label" htmlFor="add-baseurl">
+          <LinkIcon className="w-3 h-3" />
+          base_url{' '}
+          <span
+            className="normal-case tracking-normal"
+            style={{ color: 'var(--muted-foreground)' }}
+          >
+            · optional
+          </span>
+        </label>
+        <span className="field-input-wrap">
+          <input
+            id="add-baseurl"
+            type="text"
+            className={`field-input${props.baseUrl.length > 0 ? ' field-input-has-reveal' : ''}${props.flashField === 'baseUrl' ? ' field-input-flash' : ''}`}
+            placeholder={props.baseUrlPlaceholder}
+            value={props.baseUrl}
+            onChange={(e) => props.setBaseUrl(e.target.value)}
+          />
+          {props.baseUrl.length > 0 && (
+            <button
+              type="button"
+              className="field-reveal-btn"
+              onClick={() => props.setBaseUrl('')}
+              title="Clear base_url (use provider default)"
+              aria-label="Clear base_url"
+            >
+              <XIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </span>
+        <span className="form-help">
+          Override gateway. Blank = provider default.
+        </span>
+      </div>
+      {props.err && (
+        <span className="text-[12px] font-mono" style={{ color: '#fca5a5' }}>
+          {props.err}
+        </span>
+      )}
+    </>
+  );
+}
+
+function SimpleBody(props: AddKeyFieldShared & {
+  /** Forwarded to OAuthBrokerCard. Save button is gated on
+   *  oauthConnected (parent state), so this must propagate. */
+  onOauthConnectedChange?: (
+    connected: boolean,
+    info?: { providerAccountId?: string; displayIdentity?: string },
+  ) => void;
+}) {
+  return (
+    <div className="modal-body">
+      <KindSeg kind={props.kind} setKind={props.setKind} />
+      {props.kind === 'api' ? (
+        <ApiFields {...props} showAlias={true} />
+      ) : (
+        <>
+          {/* Simple-mode OAuth uses the same browser broker flow as Guided
+              — no CLI hint. After the token lands the parent's Save button
+              writes the user-typed alias and closes. */}
+          <OAuthBrokerCard
+            provider={props.oauthProvider}
+            onProviderChange={props.setOauthProvider}
+            onConnectedChange={props.onOauthConnectedChange}
+          />
+          <div className="form-row">
+            <label className="form-label" htmlFor="add-alias-oauth-simple">
+              <TagIcon className="w-3 h-3" />
+              Alias <span style={{ color: 'var(--muted-foreground)' }}>· optional</span>
+            </label>
+            <input
+              id="add-alias-oauth-simple"
+              type="text"
+              className={`field-input${props.flashField === 'alias' ? ' field-input-flash' : ''}`}
+              placeholder="Detected identity used if blank"
+              value={props.alias}
+              onChange={(e) => props.setAlias(e.target.value)}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Spec §5.1: 4 probe phases with fixed "What it proves" copy.
+const PROBE_PHASES: ReadonlyArray<{ id: 'ping' | 'proxy' | 'api' | 'chat'; label: string; proves: string }> = [
+  { id: 'ping',  label: 'Ping(D)', proves: 'upstream reachable' },
+  { id: 'proxy', label: 'Proxy',   proves: 'proxy route alive' },
+  { id: 'api',   label: 'API',     proves: 'credential accepted' },
+  { id: 'chat',  label: 'Chat',    proves: 'completion works' },
+];
+
+// Map (phase, testState, testResult) → (tone, status text, latency text).
+//   tone: '' (waiting) | 'good' (green) | 'warn' (yellow) | 'bad' (red)
+// testRaw never goes through proxy (show_proxy_row=false), so Proxy row
+// always renders as "skipped" — pre-save can't validate the route.
+function probeRowState(
+  phase: 'ping' | 'proxy' | 'api' | 'chat',
+  testState: 'idle' | 'running' | 'done' | 'error',
+  testResult: VaultLastTest | null,
+): { tone: '' | 'good' | 'warn' | 'bad'; status: string; latency: string } {
+  if (testState === 'idle' || testState === 'error') {
+    return { tone: '', status: 'waiting', latency: '-' };
+  }
+  if (testState === 'running') {
+    return { tone: '', status: '…', latency: '-' };
+  }
+  if (!testResult) {
+    return { tone: '', status: 'waiting', latency: '-' };
+  }
+  if (phase === 'proxy') {
+    // Pre-save bypasses the proxy by design (no vault row to route).
+    return { tone: '', status: 'skipped', latency: '-' };
+  }
+  // Pull per-phase booleans from the aggregated record.
+  const okMap = {
+    ping: testResult.ping_ok,
+    api:  testResult.api_ok,
+    chat: testResult.chat_ok,
+  } as const;
+  const ok = okMap[phase];
+  // Extract per-phase latency from suite_results (raw probe JSON).
+  // testRaw produces one row per provider; for multi-provider keys we
+  // take the first row's timing — it's representative for the dot/text
+  // pair the user sees on this page (full per-provider breakdown is
+  // out of scope for the Add-Key card, only the standalone Test
+  // Connection popup digs that deep).
+  const msField = { ping: 'ping_ms', api: 'api_ms', chat: 'chat_ms' }[phase];
+  const sr = (testResult.suite_results || [])[0] as Record<string, unknown> | undefined;
+  let latency = '-';
+  if (sr) {
+    const v = sr[msField];
+    if (typeof v === 'number' && v > 0) latency = `${Math.round(v)} ms`;
+  }
+  if (ok) {
+    return { tone: 'good', status: 'ok', latency };
+  }
+  // Failure phase: use destructive red for ping/api (hard failures),
+  // warn for chat (model-policy rejection — auth + network are fine,
+  // user can still save and retest later).
+  const tone: 'warn' | 'bad' = phase === 'chat' ? 'warn' : 'bad';
+  // Per-phase status code lives in suite_results, not in the aggregated
+  // error_code (which is first-failing-phase only). Each phase gets its
+  // own HTTP status so the user can read API vs Chat results side-by-
+  // side instead of always seeing the same code in two rows.
+  let status = 'fail';
+  if (sr) {
+    const phaseStatus = sr[phase === 'ping' ? 'ping_ok' : `${phase}_status`];
+    if (typeof phaseStatus === 'number') status = `${phaseStatus}`;
+  }
+  return { tone, status, latency };
+}
+
+// Map testResult → health card title/copy/tone + repair card content.
+// Spec §5.1 + §10.5: first-failing-phase chain (Ping → API → Chat).
+function healthFromResult(
+  testState: 'idle' | 'running' | 'done' | 'error',
+  testResult: VaultLastTest | null,
+  testError: string | null,
+): { title: string; copy: string; tone: '' | 'good' | 'warn' | 'bad'; repair: { tone: '' | 'good' | 'warn' | 'bad'; text: string } } {
+  if (testState === 'idle') {
+    return {
+      title: 'Not tested', copy: 'Run now, or save and test later.', tone: '',
+      repair: { tone: '', text: 'Not tested yet. Failed tests can still be saved.' },
+    };
+  }
+  if (testState === 'running') {
+    return {
+      title: 'Probing…', copy: 'Five to thirty seconds per provider.', tone: '',
+      repair: { tone: '', text: 'Running probes against each protocol.' },
+    };
+  }
+  if (testState === 'error') {
+    // Distinguish client-side validation (user hasn't filled all required
+    // inputs yet) from infrastructure failures (aikey-proxy down, etc.).
+    // Showing "check aikey-proxy" when the real issue is an empty secret
+    // confuses the user; the repair card has to point them back to page 1
+    // instead.
+    const isValidationErr = !!testError && /Need a secret|at least one protocol/i.test(testError);
+    return {
+      title: isValidationErr ? 'Missing input' : 'Probe could not run',
+      copy: testError || 'Unknown error.',
+      tone: 'bad',
+      repair: {
+        tone: 'bad',
+        text: isValidationErr
+          ? 'Go back to page 1 and fill in the missing field, then return here.'
+          : 'Check that aikey-proxy and the local server are running, then retry.',
+      },
+    };
+  }
+  // done
+  if (!testResult) {
+    return {
+      title: 'No result', copy: '', tone: '',
+      repair: { tone: '', text: '' },
+    };
+  }
+  if (testResult.status === 'pass') {
+    return {
+      title: 'Healthy', copy: 'All probes passed.', tone: 'good',
+      repair: { tone: 'good', text: 'Ready to save and use.' },
+    };
+  }
+  // Fail — pick first failing phase per spec.
+  if (!testResult.ping_ok) {
+    return {
+      title: 'Upstream unreachable', copy: 'Direct ping failed. Check base_url or your network/proxy.', tone: 'bad',
+      repair: { tone: 'bad', text: 'Verify base_url is correct and that your network can reach the provider.' },
+    };
+  }
+  // Provider error bodies are JSON ({"error":{"message":"..."}}). Dumping
+  // them raw into health-copy makes the card balloon to 5+ lines of
+  // unreadable braces — parseProviderErrorBody extracts the human bit
+  // and falls back to the raw string if shape doesn't match. Same helper
+  // the standalone Test connection popup uses, so error formatting is
+  // consistent across both surfaces.
+  const rawMsg = typeof testResult.error_message === 'string' ? testResult.error_message : '';
+  const parsed = parseProviderErrorBody(rawMsg);
+  if (!testResult.api_ok) {
+    return {
+      title: 'Credential rejected', copy: parsed.message || 'Authentication failed.', tone: 'bad',
+      repair: { tone: 'bad', text: 'The provider returned an HTTP error for your secret. Double-check the value.' },
+    };
+  }
+  // !chat_ok only
+  return {
+    title: 'Chat probe failed', copy: parsed.message || 'Chat probe failed.', tone: 'warn',
+    repair: { tone: 'warn', text: 'Auth works, but the chat probe was rejected (often model-policy). You can still save.' },
+  };
+}
+
+function GuidedBody(props: AddKeyFieldShared & {
+  page: 1 | 2;
+  setPage: (p: 1 | 2) => void;
+  mode: 'guided' | 'simple';
+  testState: 'idle' | 'running' | 'done' | 'error';
+  testResult: VaultLastTest | null;
+  testError: string | null;
+  onRunTest: () => void;
+  /** Drives the page-2 "Test connectivity" enabled-state when kind ===
+   *  'oauth' — without an account_id from the broker, there's nothing
+   *  to test against. */
+  oauthAccountId?: string | null;
+  /** Forwarded to OAuthBrokerCard so the parent can advance to page 2
+   *  (Test + name) once the broker writes the OAuth session to vault.
+   *  Info carries the new row's account_id + display_identity, used by
+   *  page 2 to drive vaultApi.test(target='oauth') and default the
+   *  alias placeholder. */
+  onOauthConnectedChange?: (
+    connected: boolean,
+    info?: { providerAccountId?: string; displayIdentity?: string },
+  ) => void;
+  aliasPlaceholder: string;
+}) {
+  const health = healthFromResult(props.testState, props.testResult, props.testError);
+  return (
+    <div className={`body-shell${props.mode === 'simple' ? ' simple-mode' : ''}`}>
+      <aside className="rail">
+        <div className="rail-kicker">Guided setup</div>
+        <button
+          type="button"
+          className={`step${props.page === 1 ? ' active' : ''}`}
+          onClick={() => props.setPage(1)}
+          title="Back to step 1"
+        >
+          <span className="step-num">1</span>
+          <div className="step-body">
+            <strong>Add credential</strong>
+            <span>API key or browser OAuth.</span>
+          </div>
+        </button>
+        <button
+          type="button"
+          className={`step${props.page === 2 ? ' active' : ''}`}
+          onClick={() => {
+            // Same gate as the footer Next button: page 2 requires a
+            // credential to test against. Going back from 2→1 always OK.
+            const canAdvance = props.kind === 'api'
+              ? (props.secret.length > 0 && props.providers.length > 0)
+              : !!props.oauthAccountId;
+            if (canAdvance) props.setPage(2);
+          }}
+          title={
+            props.kind === 'api'
+              ? 'Fill secret + protocol first'
+              : (props.oauthAccountId ? 'Go to test' : 'Finish OAuth first')
+          }
+        >
+          <span className="step-num">2</span>
+          <div className="step-body">
+            <strong>Test and name</strong>
+            <span>Check health, then save.</span>
+          </div>
+        </button>
+        <div className="rail-note">Test first, or save and fix later.</div>
+      </aside>
+      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Page 1 — Add credential. */}
+        <section className={`page${props.page === 1 ? ' active' : ''}`}>
+          <div className="page-head">
+            <div>
+              <h1 className="page-title">Add credential.</h1>
+              <p className="page-copy">Choose API Key or OAuth. We will test it next.</p>
+            </div>
+            <span className="status-chip">
+              <ShapesIcon className="w-3 h-3" />
+              page 1 of 2
+            </span>
+          </div>
+          <KindSeg kind={props.kind} setKind={props.setKind} />
+          {props.kind === 'api' ? (
+            <ApiFields {...props} showAlias={false} />
+          ) : (
+            <OAuthBrokerCard
+              provider={props.oauthProvider}
+              onProviderChange={props.setOauthProvider}
+              onConnectedChange={props.onOauthConnectedChange}
+            />
+          )}
+        </section>
+        {/* Page 2 — Test, then name. */}
+        <section className={`page${props.page === 2 ? ' active' : ''}`}>
+          <div className="page-head">
+            <div>
+              <h1 className="page-title">Test, then name.</h1>
+              <p className="page-copy">Runs Ping(D), Proxy, API, and Chat.</p>
+            </div>
+            <span className="status-chip">
+              <ActivityIcon className="w-3 h-3" />
+              page 2 of 2
+            </span>
+          </div>
+          <div className="card">
+            <div className="connectivity-top">
+              <div>
+                <div className="card-label">
+                  <ActivityIcon className="w-3 h-3" />
+                  Connectivity
+                </div>
+                <p className={`health-title${health.tone ? ' ' + health.tone : ''}`}>{health.title}</p>
+                <p className="health-copy">{health.copy}</p>
+              </div>
+              {(() => {
+                // Disable Test connectivity when the inputs can't
+                // possibly produce a meaningful probe. Gating differs
+                // by kind:
+                //   - API key: needs a secret + at least one protocol.
+                //   - OAuth:   needs the broker to have minted an
+                //              account_id (state='connected') first;
+                //              there's no plaintext secret in this flow.
+                const isOauth = props.kind === 'oauth';
+                const missingSecret = !isOauth && !props.secret.trim();
+                const missingProtocols = !isOauth && props.providers.length === 0;
+                const cannotRun = isOauth
+                  ? !props.oauthAccountId
+                  : (missingSecret || missingProtocols);
+                const blockReason = isOauth
+                  ? (props.oauthAccountId ? '' : 'Finish OAuth on page 1 first.')
+                  : missingSecret && missingProtocols
+                    ? 'Fill in secret and protocol on page 1 first.'
+                    : missingSecret
+                      ? 'Fill in the secret on page 1 first.'
+                      : missingProtocols
+                        ? 'Pick at least one protocol on page 1 first.'
+                        : '';
+                return (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm flex items-center gap-1"
+                    onClick={props.onRunTest}
+                    disabled={props.testState === 'running' || cannotRun}
+                    title={cannotRun ? blockReason : undefined}
+                  >
+                    {props.testState === 'running' ? (
+                      <>
+                        <span className="aikey-spinner" style={{ width: 12, height: 12 }} />
+                        Testing
+                      </>
+                    ) : props.testState === 'done' || props.testState === 'error' ? (
+                      <>
+                        <RefreshIcon className="w-3 h-3" />
+                        Test again
+                      </>
+                    ) : (
+                      <>
+                        <ActivityIcon className="w-3 h-3" />
+                        Test connectivity
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+          <div className="probe-table" aria-label="Connectivity phases">
+            <div className="probe-head">
+              <div>Phase</div>
+              <div>Status</div>
+              <div>Latency</div>
+              <div>What it proves</div>
+            </div>
+            {PROBE_PHASES.map((p) => {
+              const row = probeRowState(p.id, props.testState, props.testResult);
+              return (
+                <div key={p.id} className={`probe-row${row.tone ? ' ' + row.tone : ''}`} data-phase={p.id}>
+                  <div className="probe-phase"><span className="result-dot" />{p.label}</div>
+                  <div className="mono">{row.status}</div>
+                  <div className="mono">{row.latency}</div>
+                  <div className="mono">{p.proves}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div className={`repair${health.repair.tone ? ' ' + health.repair.tone : ''}`}>
+            <LifeBuoyIcon className="w-3.5 h-3.5" />
+            <span>{health.repair.text}</span>
+          </div>
+          <div className="name-strip">
+            <div className="form-row">
+              <label className="form-label" htmlFor="credential-name">
+                <TagIcon className="w-3 h-3" />
+                Alias (Name shown in Vault)
+              </label>
+              <input
+                id="credential-name"
+                type="text"
+                className={`field-input${props.flashField === 'alias' ? ' field-input-flash' : ''}`}
+                placeholder={props.aliasPlaceholder}
+                value={props.alias}
+                onChange={(e) => props.setAlias(e.target.value)}
+              />
+              <span className="form-help">Blank uses the generated alias.</span>
+              {props.testState === 'done' && props.testResult?.status === 'fail' && (
+                <span className="risk-line show">
+                  <InfoIcon className="w-3 h-3" />
+                  Test did not pass. You can save anyway.
+                </span>
+              )}
+            </div>
+          </div>
+          {props.err && (
+            <span className="text-[12px] font-mono" style={{ color: '#fca5a5' }}>
+              {props.err}
+            </span>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+// ── OAuthBrokerCard (2026-05-23) ─────────────────────────────────────
+// Web-driven OAuth login flow (spec §6 + §13.2). Replaces the legacy
+// "go run aikey auth login <provider>" CLI hint in the Guided modal so
+// users can finish OAuth without leaving the browser.
+//
+// State machine — five states per spec §10:
+//   idle      — waiting for user to click Open <provider> auth
+//   opening   — POST /oauth/login Phase-1 in flight
+//   awaiting  — auth_url ready; user is authorizing in another tab
+//                (Claude: also accepts paste in this state)
+//   polling   — Codex auth_code / Kimi device_code; we poll the broker
+//                until completed (the user just waits)
+//   connected — token landed; provider_account_id + display_identity
+//                populated; modal can advance to page 2 / save
+//   failed    — terminal; user sees error + can click "Try again"
+//
+// Provider differential — three flow_types, three step-3 UIs:
+//   claude (setup_token): user pastes <code>#<state>, 900ms debounce
+//                         submits to POST /oauth/login Phase-2
+//   codex  (auth_code):   broker hosts localhost:1455 callback;
+//                         web polls GET /oauth/status until completed
+//   kimi   (device_code): broker returns user_code + verification_url;
+//                         web polls POST /oauth/poll periodically
+//
+// Why a single component rather than three sibling components: the three
+// flows share the rail-step structure and only differ in step-3 widget.
+// Branching inside one component keeps the state machine in one place
+// and makes "switch provider mid-flow" cheap (resetState() handles it).
+//
+// Why we DON'T persist anything until the broker says "completed": OAuth
+// tokens never live in the browser. The broker writes to vault on its
+// own via aikey-proxy (Plan D). Web only displays the result.
+
+const CLAUDE_PASTE_DEBOUNCE_MS = 900; // spec §10.3
+const POLL_INTERVAL_MS = 2_000; // Codex / Kimi
+const MAX_POLL_ATTEMPTS = 90; // ~3 minutes total
+
+type BrokerState =
+  | 'idle'
+  | 'opening'
+  | 'awaiting'
+  | 'polling'
+  | 'connected'
+  | 'failed';
+
+type CodeStatus = 'waiting' | 'submitting' | 'accepted' | 'failed';
+
+function OAuthBrokerCard(props: {
+  provider: string;
+  onProviderChange: (v: string) => void;
+  /**
+   * Fired whenever the internal state machine crosses into / out of the
+   * 'connected' terminal. Parent uses it to surface a footer "Next"
+   * button once the broker has written the token to vault, so the user
+   * can advance to page 2 (Test + name) per spec §4.4 / §5.
+   *
+   * The second arg carries the broker's `provider_account_id` (the
+   * vault row id we just minted) + `display_identity` (the detected
+   * email / handle the broker pulled from the OAuth provider). Page 2
+   * uses the account_id to drive `vaultApi.test({target:'oauth', id})`,
+   * and the identity as the default alias placeholder (spec §13.6).
+   */
+  onConnectedChange?: (
+    connected: boolean,
+    info?: { providerAccountId?: string; displayIdentity?: string },
+  ) => void;
+}) {
+  const [state, setState] = useState<BrokerState>('idle');
+  const [session, setSession] = useState<OAuthSession | null>(null);
+  const [errorText, setErrorText] = useState<string | null>(null);
+  // Claude paste flow.
+  const [codeInput, setCodeInput] = useState('');
+  const [codeStatus, setCodeStatus] = useState<CodeStatus>('waiting');
+  const [codeHelp, setCodeHelp] = useState('Auto-submit starts after paste.');
+
+  // Per-provider flow descriptor (spec §13.2). Centralised so step
+  // titles / button labels / state text stay in one place when we
+  // wire up additional providers later.
+  const flowMeta = useMemo(() => {
+    const map: Record<string, {
+      title: string;
+      pill: string;
+      step2Title: string;
+      step3Title: string;
+      openButton: string;
+      initialState: string;
+      showCodeInput: boolean;
+    }> = {
+      claude: {
+        title: 'Claude setup token',
+        pill: 'setup_token',
+        step2Title: 'Get Claude auth URL.',
+        step3Title: 'Paste code.',
+        openButton: 'Open Claude auth',
+        initialState: 'Request an auth URL from local broker.',
+        showCodeInput: true,
+      },
+      codex: {
+        title: 'Codex auth code',
+        pill: 'auth_code',
+        step2Title: 'Get Codex auth URL.',
+        step3Title: 'Wait for callback.',
+        openButton: 'Open Codex auth',
+        initialState: 'Request an auth URL from local broker.',
+        showCodeInput: false,
+      },
+      kimi: {
+        title: 'Kimi device code',
+        pill: 'device_code',
+        step2Title: 'Get Kimi device URL.',
+        step3Title: 'Approve device code.',
+        openButton: 'Open Kimi device page',
+        initialState: 'Request device code from local broker.',
+        showCodeInput: false,
+      },
+    };
+    return map[props.provider] || map.claude;
+  }, [props.provider]);
+
+  // Reset everything on provider change — spec §12: switching provider
+  // invalidates any in-flight session because broker state is tied to
+  // a (provider, session_id) pair.
+  useEffect(() => {
+    setState('idle');
+    setSession(null);
+    setErrorText(null);
+    setCodeInput('');
+    setCodeStatus('waiting');
+    setCodeHelp('Auto-submit starts after paste.');
+  }, [props.provider]);
+
+  // Tell the parent whenever we cross into / out of 'connected'. The
+  // token is already in vault at this point — parent uses the signal to
+  // surface page 2 (Test + name) per spec §4.4 / §5. We forward the
+  // broker's provider_account_id + display_identity so page 2 can drive
+  // vaultApi.test by id and default the alias placeholder.
+  useEffect(() => {
+    const info = state === 'connected'
+      ? {
+          providerAccountId: session?.account_id,
+          displayIdentity: session?.display_identity,
+        }
+      : undefined;
+    props.onConnectedChange?.(state === 'connected', info);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, session?.account_id, session?.display_identity]);
+
+  // Polling loop for Codex (auth_code) / Kimi (device_code).
+  useEffect(() => {
+    if (state !== 'polling' || !session?.id) return;
+    let attempts = 0;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const next = props.provider === 'kimi'
+          ? await oauthApi.poll({ session_id: session.id })
+          : await oauthApi.status(session.id);
+        if (cancelled) return;
+        if (next.status === 'completed' && next.account_id) {
+          setSession(next);
+          setState('connected');
+          return;
+        }
+        if (next.status === 'failed' || next.error) {
+          setSession(next);
+          setErrorText(next.error?.message || 'Authorization failed.');
+          setState('failed');
+          return;
+        }
+        // pending — schedule the next tick
+        if (attempts < MAX_POLL_ATTEMPTS) {
+          setTimeout(tick, POLL_INTERVAL_MS);
+        } else {
+          setErrorText('Timed out waiting for authorization. Please retry.');
+          setState('failed');
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setErrorText((e as Error).message || 'Polling failed.');
+        setState('failed');
+      }
+    };
+    const timer = setTimeout(tick, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [state, session?.id, props.provider]);
+
+  // Claude code paste — debounced auto-submit per spec §10.3 (900ms).
+  useEffect(() => {
+    if (props.provider !== 'claude') return;
+    if (!session?.id) return;
+    const trimmed = codeInput.trim();
+    if (!trimmed) {
+      setCodeStatus('waiting');
+      setCodeHelp('Auto-submit starts after paste.');
+      return;
+    }
+    setCodeStatus('submitting');
+    setCodeHelp('Submitting code to local broker...');
+    const timer = setTimeout(async () => {
+      // Validation: code must contain a # separator (`<code>#<state>`).
+      // Spec §19.5 — only check for #, not length / charset (real codes
+      // contain `_` and `-`).
+      if (!trimmed.includes('#')) {
+        setCodeStatus('failed');
+        setCodeHelp('Paste the full code#state value.');
+        return;
+      }
+      try {
+        const next = await oauthApi.submitCode({
+          session_id: session.id,
+          provider: props.provider,
+          code: trimmed,
+        });
+        setSession(next);
+        if (next.error || next.status === 'failed') {
+          setCodeStatus('failed');
+          setCodeHelp(next.error?.message || 'Broker rejected the code.');
+          setErrorText(next.error?.message || 'Authorization failed.');
+          setState('failed');
+        } else {
+          setCodeStatus('accepted');
+          setCodeHelp('OAuth session saved locally.');
+          setState('connected');
+        }
+      } catch (e) {
+        setCodeStatus('failed');
+        const msg = (e as Error).message || 'Submission failed.';
+        setCodeHelp(msg);
+      }
+    }, CLAUDE_PASTE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [codeInput, session?.id, props.provider]);
+
+  async function startOAuth() {
+    setState('opening');
+    setErrorText(null);
+    try {
+      const next = await oauthApi.start({ provider: props.provider });
+      setSession(next);
+      // Open the auth URL in a new tab so the user doesn't lose the
+      // modal state. Browsers may block popups when the click handler
+      // isn't on the synchronous path — but we got here directly from
+      // a click, so this should land. If it doesn't, the user can hit
+      // Copy URL to paste manually.
+      const url = next.auth_url || next.verification_url;
+      if (url) {
+        window.open(url, '_blank', 'noopener');
+      }
+      // Pick polling vs paste based on flow_type.
+      if (next.flow_type === 'setup_token') {
+        setState('awaiting'); // user will paste; effect handles submission
+      } else {
+        setState('polling'); // Codex / Kimi: web polls broker
+      }
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      setErrorText(err.message || 'Failed to start OAuth.');
+      setState('failed');
+    }
+  }
+
+  function copyAuthUrl() {
+    const url = session?.auth_url || session?.verification_url;
+    if (!url) return;
+    navigator.clipboard?.writeText(url).catch(() => {
+      // Fallback for non-clipboard contexts — silently ignore.
+    });
+  }
+
+  // OAuth pulse colour (spec §10.4): warning while in-progress, success
+  // on connected, destructive on failed. Drives the dot beside Step 2's
+  // state text.
+  const pulseColor = state === 'connected'
+    ? 'var(--success)'
+    : state === 'failed'
+      ? 'var(--destructive, #ef4444)'
+      : 'var(--warning)';
+
+  // Step-2 state text. Drives the "Ready to start…" → "Creating session…"
+  // → "Paste code…" / "Waiting for callback" / "Polling device authorization"
+  // → "OAuth connected" copy.
+  let stateText = flowMeta.initialState;
+  if (state === 'opening') stateText = 'Creating session and opening auth.';
+  else if (state === 'awaiting') stateText = 'Paste code#state after authorization.';
+  else if (state === 'polling' && props.provider === 'codex') stateText = 'Waiting for localhost callback.';
+  else if (state === 'polling' && props.provider === 'kimi') stateText = 'Polling device authorization.';
+  else if (state === 'connected') stateText = 'OAuth connected. Continue to test.';
+  else if (state === 'failed') stateText = errorText || 'Authorization failed.';
+
+  // Open-button label tri-state (spec §13.4).
+  let openButtonLabel = flowMeta.openButton;
+  if (state === 'opening') openButtonLabel = 'Opening';
+  else if (state === 'awaiting' || state === 'polling') openButtonLabel = props.provider === 'kimi' ? 'Open device page again' : 'Open auth again';
+  else if (state === 'connected') openButtonLabel = 'OAuth connected';
+
+  // Identity field follows spec §13.5.
+  let identity = 'waiting for browser sign-in';
+  if (state === 'opening' || state === 'awaiting' || state === 'polling') identity = 'detecting identity...';
+  else if (state === 'connected' && session?.display_identity) identity = session.display_identity;
+
+  return (
+    <div className="oauth-broker-card">
+      <div className="oauth-flow-title">
+        <strong>{flowMeta.title}</strong>
+        <span className="flow-pill">{flowMeta.pill}</span>
+      </div>
+      <div className="flow-steps">
+        {/* Step 1 — Choose provider */}
+        <div className="flow-step">
+          <span>1</span>
+          <div className="flow-step-body">
+            <div className="flow-step-title">Choose OAuth provider.</div>
+            <div className="flow-step-control">
+              <select
+                className="field-select"
+                value={props.provider}
+                onChange={(e) => props.onProviderChange(e.target.value)}
+              >
+                <option value="claude">claude</option>
+                <option value="codex">codex</option>
+                <option value="kimi">kimi</option>
+              </select>
+              <span className="form-help">Supported by the local broker.</span>
+            </div>
+          </div>
+        </div>
+        {/* Step 2 — Open auth URL */}
+        <div className="flow-step">
+          <span>2</span>
+          <div className="flow-step-body">
+            <div className="flow-step-title">{flowMeta.step2Title}</div>
+            <div className="inline-state">
+              <span className="pulse" style={{ background: pulseColor }} />
+              <span>{stateText}</span>
+            </div>
+            <div className="flow-step-control" style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-md btn-outline flex items-center gap-1"
+                onClick={startOAuth}
+                disabled={state === 'opening' || state === 'connected'}
+              >
+                {state === 'opening' ? (
+                  <span className="aikey-spinner" style={{ width: 12, height: 12 }} />
+                ) : state === 'connected' ? (
+                  <CheckIcon className="w-3 h-3" />
+                ) : (
+                  <UploadIcon className="w-3 h-3" />
+                )}
+                {openButtonLabel}
+              </button>
+              {(state === 'awaiting' || state === 'polling') && (session?.auth_url || session?.verification_url) && (
+                <button
+                  type="button"
+                  className="copy-auth-url"
+                  onClick={copyAuthUrl}
+                  title="Copy authorization URL"
+                >
+                  <ClipboardIcon className="w-3 h-3" />
+                  Copy URL
+                </button>
+              )}
+            </div>
+            {props.provider === 'kimi' && state !== 'idle' && session?.user_code && (
+              <div className="form-help" style={{ marginTop: 4 }}>
+                Device user code: <span className="font-mono">{session.user_code}</span>
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Step 3 — paste / wait / approve */}
+        <div className="flow-step">
+          <span>3</span>
+          <div className="flow-step-body">
+            <div className="flow-step-title">{flowMeta.step3Title}</div>
+            {flowMeta.showCodeInput && (state === 'awaiting' || state === 'polling' || state === 'failed' || state === 'connected') && (
+              <>
+                <div className="oauth-code-input show">
+                  <input
+                    type="text"
+                    className="field-input mono"
+                    placeholder="paste code#state from Claude"
+                    value={codeInput}
+                    onChange={(e) => setCodeInput(e.target.value)}
+                    disabled={state === 'connected'}
+                  />
+                  <span className={`code-status ${codeStatus === 'submitting' ? 'loading' : codeStatus === 'accepted' ? 'success' : codeStatus === 'failed' ? 'error' : ''}`}>
+                    {codeStatus === 'submitting' && <span className="aikey-spinner" style={{ width: 10, height: 10 }} />}
+                    {codeStatus === 'accepted' && <CheckIcon className="w-3 h-3" />}
+                    {codeStatus === 'failed' && <XIcon className="w-3 h-3" />}
+                    {codeStatus}
+                  </span>
+                </div>
+                <span className="form-help">{codeHelp}</span>
+              </>
+            )}
+            {!flowMeta.showCodeInput && state === 'polling' && (
+              <span className="form-help">
+                {props.provider === 'codex'
+                  ? 'After you authorize in the browser, the local callback completes the flow automatically.'
+                  : 'Approve the device code on the provider page. We will detect it.'}
+              </span>
+            )}
+            {state === 'connected' && (
+              <span className="form-help" style={{ color: 'var(--success)' }}>
+                OAuth session saved locally. Continue to page 2 to test.
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="form-row">
+        <label className="form-label">
+          <MailIcon className="w-3 h-3" />
+          Detected identity
+        </label>
+        <input
+          className="field-input"
+          value={identity}
+          readOnly
+          tabIndex={-1}
+        />
+        <span className="form-help">Detection starts after auth opens.</span>
       </div>
     </div>
   );
@@ -4344,8 +6549,6 @@ const ICON_LOCK =
   'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z';
 const ICON_LOCK_OPEN =
   'M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z';
-const ICON_SHIELD =
-  'M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z';
 const ICON_SHIELD_CHECK =
   'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z';
 const ICON_SEARCH =
@@ -4387,6 +6590,11 @@ const ICON_GLOBE =
   'M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418';
 const ICON_LINK =
   'M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244';
+// Lucide-style ECG/heartbeat line — used for the "Test connection"
+// action so the icon reads as "live signal / health probe" without
+// inventing new visual language.
+const ICON_ACTIVITY =
+  'M22 12h-4l-3 9L9 3l-3 9H2';
 
 function EyeIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_EYE} {...p} />; }
 function EyeOffIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_EYE_OFF} {...p} />; }
@@ -4402,7 +6610,6 @@ function KeyRoundIcon(p: { className?: string; style?: React.CSSProperties }) { 
 function KeyIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_KEY} {...p} />; }
 function LockIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_LOCK} {...p} />; }
 function LockOpenIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_LOCK_OPEN} {...p} />; }
-function ShieldIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_SHIELD} {...p} />; }
 function ShieldCheckIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_SHIELD_CHECK} {...p} />; }
 function SearchIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_SEARCH} {...p} />; }
 function PlusIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_PLUS} {...p} />; }
@@ -4423,6 +6630,7 @@ function ShapesIcon(p: { className?: string; style?: React.CSSProperties }) { re
 function TagIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_TAG} {...p} />; }
 function GlobeIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_GLOBE} {...p} />; }
 function LinkIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_LINK} {...p} />; }
+function ActivityIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_ACTIVITY} {...p} />; }
 
 // ── CSS ──────────────────────────────────────────────────────────────────
 // Phase 3B (2026-05-11): VAULT_CSS extracted to a shared module so the
@@ -4431,4 +6639,5 @@ function LinkIcon(p: { className?: string; style?: React.CSSProperties }) { retu
 // `.vault-page` on its outer wrapper and rendering the same <style>.
 // Source of truth: pages/user/_shared/keys-page-css.ts.
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
+import { VAULT_PAGE_SKIN_V1 } from '../_shared/vault-page-skin';
 const VAULT_CSS = KEYS_PAGE_CSS;

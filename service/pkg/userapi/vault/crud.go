@@ -33,9 +33,18 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/cli"
 )
+
+// testConnectivityTimeout is the upper bound for one `vault-op test`
+// invocation. The connectivity suite runs ping + API probes against
+// upstream providers via aikey-proxy; a single Personal key bound to
+// 5 providers can take 5×4=20s in the worst case (4s per probe is the
+// proxy's default per-target deadline). 45s gives headroom for slow
+// networks without letting a hung probe block the request indefinitely.
+const testConnectivityTimeout = 45 * time.Second
 
 // CRUDHandlers bundles the User-Vault-page endpoints. Depends on
 // Store + cli.Bridge already built by the orchestrator.
@@ -601,6 +610,127 @@ func (h *CRUDHandlers) UseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.Bridge.Invoke(r.Context(), "vault-op", "use", hex, "", req)
+	if err != nil {
+		cli.WriteInvokeError(w, err)
+		return
+	}
+	cli.WriteEnvelope(w, res)
+}
+
+// ============================================================================
+// POST /api/user/vault/test
+// ============================================================================
+
+// testRequest is the wire shape from the Web Test Connection button.
+// `target` is "personal" | "oauth" | "team"; `id` is the alias / provider
+// account id / virtual key id depending on target. Mirrors the CLI's
+// `vault-op test` action payload — see aikey-cli vault_op.rs::handle_test.
+type testRequest struct {
+	Target string `json:"target"`
+	ID     string `json:"id"`
+}
+
+// TestHandler: POST /api/user/vault/test.
+//
+// Runs a connectivity probe for a single Personal / OAuth / Team key via
+// aikey-proxy and returns the aggregated result. Side-effect: persists
+// the result to the vault at `extra.$.last_test` so the Vault page's
+// "Last test" column reflects this run (Team rows currently skip
+// persistence — see VirtualKeyCacheEntry in storage_platform.rs).
+//
+// Why no unlock requirement: the underlying CLI action does not verify
+// `vault_key_hex` and never reads ciphertext columns. The probe traffic
+// goes through aikey-proxy which decrypts server-side; the Web only
+// sees pass/fail + latency + error code.
+//
+// Why a longer per-call timeout (testConnectivityTimeout): the default
+// Bridge.Timeout (15s) is sized for vault SQL ops which return in
+// milliseconds. Connectivity probes do real upstream I/O that can take
+// 20-30s for a multi-provider key. We use Bridge.InvokeWithTimeout so
+// the override is contained to this endpoint — fast vault ops keep their
+// snappy default.
+func (h *CRUDHandlers) TestHandler(w http.ResponseWriter, r *http.Request) {
+	var req testRequest
+	if err := decodeBody(r, &req); err != nil {
+		cli.WriteErr(w, cli.ErrBadRequest, err.Error())
+		return
+	}
+	if req.ID == "" {
+		cli.WriteErr(w, cli.ErrBadRequest, "id must be non-empty")
+		return
+	}
+	switch req.Target {
+	case "personal", "oauth", "team":
+	default:
+		cli.WriteErr(w, cli.ErrUnknownTarget, "target must be personal|oauth|team")
+		return
+	}
+
+	res, err := h.Bridge.InvokeWithTimeout(
+		r.Context(), "vault-op", "test", "", "", req, testConnectivityTimeout,
+	)
+	if err != nil {
+		cli.WriteInvokeError(w, err)
+		return
+	}
+	cli.WriteEnvelope(w, res)
+}
+
+// ============================================================================
+// POST /api/user/vault/test-raw
+// ============================================================================
+
+// testRawRequest is the wire shape from the Web Add Key Guided flow's
+// pre-save Run-test button (spec §3.1 / §5.1). Differs from testRequest
+// in that the credential has not been written to the vault yet, so we
+// take the plaintext secret + provider list directly. Mirrors the CLI's
+// `vault-op test_raw` action payload — see aikey-cli vault_op.rs::
+// handle_test_raw.
+//
+// AliasHint is purely a label that appears in the result's source_ref
+// field (used by the popup's per-provider breakdown). It is NOT a vault
+// alias and does not get written anywhere — the CLI action defaults to
+// "_pre_save_probe" when empty.
+type testRawRequest struct {
+	Providers []string `json:"providers"`
+	Secret    string   `json:"secret"`
+	AliasHint string   `json:"alias_hint,omitempty"`
+	BaseURL   string   `json:"base_url,omitempty"`
+}
+
+// TestRawHandler: POST /api/user/vault/test-raw.
+//
+// Runs a connectivity probe against unsaved credentials. The user is
+// expected to follow up with POST /api/user/vault (add) if they choose
+// Save / Save anyway. This split lets the Add Key flow show real
+// Ping(D) / API / Chat results BEFORE persistence — spec §3.1
+// "pre-save test 走本地 CLI / broker 能力".
+//
+// Why no unlock requirement: same as TestHandler — the CLI action does
+// not touch ciphertext columns. The plaintext secret is provided in
+// this request body and never lands on disk.
+//
+// Why share testConnectivityTimeout: probe traffic profile is identical
+// (direct upstream HTTP per provider) — keeping one timeout budget for
+// both test variants simplifies tuning.
+func (h *CRUDHandlers) TestRawHandler(w http.ResponseWriter, r *http.Request) {
+	var req testRawRequest
+	if err := decodeBody(r, &req); err != nil {
+		cli.WriteErr(w, cli.ErrBadRequest, err.Error())
+		return
+	}
+	if len(req.Providers) == 0 {
+		cli.WriteErr(w, cli.ErrBadRequest, "providers must be non-empty")
+		return
+	}
+	if req.Secret == "" {
+		cli.WriteErr(w, cli.ErrBadRequest, "secret must be non-empty")
+		return
+	}
+
+	res, err := h.Bridge.InvokeWithTimeout(
+		r.Context(), "vault-op", "test_raw", "", "", req, testConnectivityTimeout,
+	)
 	if err != nil {
 		cli.WriteInvokeError(w, err)
 		return
