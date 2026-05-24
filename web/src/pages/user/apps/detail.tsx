@@ -34,6 +34,7 @@ import {
   Info,
   Repeat2,
   Asterisk,
+  Trash2,
 } from 'lucide-react';
 import {
   ComposedChart,
@@ -147,6 +148,21 @@ export default function UserAppDetailPage() {
     mutationFn: () => appsApi.rotate(slug),
     onSuccess: invalidate,
   });
+  // 2026-05-23 uninstall — paired with default-install flip. Bypasses
+  // the mutationLockedSlugs revoke/rotate guard because uninstall is
+  // whole-system (service stops BEFORE bearer is wiped). On success the
+  // detail query returns 404, so we navigate back to the list rather
+  // than re-rendering this page with stale data.
+  const uninstallM = useMutation({
+    mutationFn: () => appsApi.uninstall(slug),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['user-apps-list'] });
+      qc.removeQueries({ queryKey: ['user-apps-detail', slug] });
+      // Send user back to apps list so they don't get a "this app no
+      // longer exists" 404 immediately after their own uninstall.
+      window.location.assign('/user/apps');
+    },
+  });
 
   // --- Per-app usage (Stage C) -----------------------------------------
   const [usageRange, setUsageRange] = useState<RangeKey>(30);
@@ -247,7 +263,8 @@ export default function UserAppDetailPage() {
 
   const data = detailQuery.data!;
   const isMutating =
-    pauseM.isPending || resumeM.isPending || revokeM.isPending || rotateM.isPending;
+    pauseM.isPending || resumeM.isPending || revokeM.isPending || rotateM.isPending ||
+    uninstallM.isPending;
   const hasActiveKey = data.active_keys.length > 0;
 
   // 2026-05-23 policy: degrade-detector is wired into trust-local +
@@ -404,6 +421,37 @@ export default function UserAppDetailPage() {
                 >
                   <Ban size={14} /> Revoke
                 </button>
+                {mutationLocked && (
+                  // Locked-slug exception (only first-party apps in
+                  // `mutationLockedSlugs` get here): Revoke/Rotate are
+                  // disabled because they'd leave the AiKey-internal
+                  // pipeline half-broken, but full Uninstall is fine
+                  // — service stops before bearer is wiped, so there's
+                  // no half-state. Surfaces as a Trash-icon danger
+                  // button so users have a single click to opt out
+                  // after the rc.5 default-install flip.
+                  <button
+                    type="button"
+                    className="cap-btn cap-btn-danger"
+                    disabled={isMutating || vaultLocked}
+                    title={
+                      vaultLocked
+                        ? 'Unlock vault first'
+                        : `Whole-system uninstall: stops the ${data.app.name} service, removes its binary, and wipes its vault rows. Reversible via 'aikey app install ${data.app.slug}' later.`
+                    }
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Uninstall "${data.app.name}"?\n\nThis will:\n  • Stop the ${data.app.name} service (launchd / systemd)\n  • Remove the binary from ~/.aikey/bin/\n  • Delete all of its vault rows (app_keys, bindings, app_record)\n\nReversible: re-install any time with 'aikey app install ${data.app.slug}'.`,
+                        )
+                      ) {
+                        uninstallM.mutate();
+                      }
+                    }}
+                  >
+                    <Trash2 size={14} /> Uninstall
+                  </button>
+                )}
               </div>
             </div>
           </section>

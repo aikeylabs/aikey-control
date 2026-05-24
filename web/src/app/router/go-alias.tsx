@@ -31,6 +31,12 @@ export const GO_TARGETS: Record<string, string> = {
   account: '/user/account',
   usage: '/user/usage-ledger',
   referrals: '/user/referrals',
+  // Degrade-detector M5 trust-check page (Personal-only at the sidebar
+  // level; on Trial / Production the redirect lands on the page but it
+  // may render empty / hidden state — same UX as accessing the URL
+  // directly). Added 2026-05-24 after user surfaced `aikey web
+  // trust-check` errored "Unknown page" despite the route existing.
+  'trust-check': '/user/trust-check',
 
   // Historical / alternate names the CLI may still send. Keep them
   // mapped so older binaries or muscle-memory commands don't break.
@@ -41,6 +47,8 @@ export const GO_TARGETS: Record<string, string> = {
   // Common spellings for the personal credential vault.
   secrets: '/user/vault',
   'my-vault': '/user/vault',
+  // Short alias for trust-check (`aikey web trust`).
+  trust: '/user/trust-check',
   // Phase 3B R7 (2026-05-11): team-keys / virtual-keys / keys aliases
   // previously pointed at A's local /user/virtual-keys stub. The
   // canonical Team Keys page now lives on B (the team server) and the

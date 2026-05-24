@@ -13,6 +13,7 @@
 //	POST /api/user/apps/pause          — pause active keys (body: {slug})
 //	POST /api/user/apps/resume         — resume paused keys (body: {slug})
 //	POST /api/user/apps/rotate         — atomic revoke + reissue with same bindings (body: {slug})
+//	POST /api/user/apps/uninstall      — stop service + wipe vault rows (body: {slug}) — added 2026-05-23 alongside default-install flip
 //
 // Unlock policy (revised 2026-05-21):
 //   - list / get        — public read; no unlock required. The data is
@@ -246,6 +247,22 @@ func (h *Handlers) ResumeHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) RotateHandler(w http.ResponseWriter, r *http.Request) {
 	h.slugOnlyAction(w, r, "rotate")
+}
+
+// UninstallHandler whole-system removal: stops the plugin's service +
+// wipes vault rows. Added 2026-05-23 alongside the rc.5 default-install
+// flip for degrade-detector — users who got the service auto-installed
+// need a UI button to opt out cleanly.
+//
+// Important: uninstall INTENTIONALLY bypasses the `mutationLockedSlugs`
+// revoke/rotate guard. The lock exists to prevent a half-state where
+// the bearer is gone but the agent process is still running and
+// 401-ing. Uninstall is whole-system — the CLI side (handle_uninstall
+// in commands_app/install.rs) stops the service FIRST via the plugin's
+// install_service.sh --uninstall, THEN wipes vault rows. No partial
+// failure surface.
+func (h *Handlers) UninstallHandler(w http.ResponseWriter, r *http.Request) {
+	h.slugOnlyAction(w, r, "uninstall")
 }
 
 // Apps whose bearer is wired into an AiKey-internal pipeline. Revoke /

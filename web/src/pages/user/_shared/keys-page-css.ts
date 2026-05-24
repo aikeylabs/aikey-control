@@ -427,7 +427,17 @@ export const KEYS_PAGE_CSS = `
   width: 32px;
   height: 32px;
   border: 3px solid var(--border, #2a2a2a);
-  border-top-color: var(--accent, #3b82f6);
+  /* Was var(--accent, #3b82f6) — looked correct in isolation, but in
+     this codebase --accent is defined in index.css as #3f3f46 (same
+     hex as --border). Result: the highlighted "leading segment" of the
+     ring rendered the EXACT same gray as the other 3 quadrants, so the
+     ring was visually uniform and looked static even though the
+     animation was running (chrome-devtools MCP confirmed playState
+     "running" + non-identity transform matrix at sample time). Switched
+     to --primary (amber) — clearly distinct from the gray ring, and in
+     family with the rest of the app's accent color story.
+     (2026-05-23) */
+  border-top-color: var(--primary, #facc15);
   border-radius: 50%;
   animation: aikey-spin 0.9s linear infinite;
   /* GPU-promoted layer so the rotation transform compositor-paints in

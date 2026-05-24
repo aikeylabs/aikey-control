@@ -269,6 +269,14 @@ export interface AppRotateResponse {
   base_url: string;          // http://127.0.0.1:27200/apps/<slug>/v1
 }
 
+/** Response for POST /api/user/apps/uninstall (2026-05-23, paired with
+ *  the rc.5 default-install flip). Whole-system removal — service down,
+ *  binary gone, vault rows wiped. */
+export interface AppUninstallResponse {
+  slug: string;
+  status: 'uninstalled';
+}
+
 // ── API client ──────────────────────────────────────────────────────────
 //
 // Each function does ONE Bridge → CLI subprocess round-trip. The CLI is
@@ -363,6 +371,27 @@ export const appsApi = {
     callWithErrorExtraction(() =>
       httpClient.post<OkEnvelope<AppRotateResponse> | ErrEnvelope>(
         '/api/user/apps/rotate',
+        { slug },
+      ),
+    ),
+
+  /**
+   * Whole-system uninstall: stops the plugin's service, removes the
+   * binary, and wipes vault rows (app_keys + bindings + app_records).
+   * Added 2026-05-23 alongside the rc.5 default-install flip — users
+   * who got degrade-detector auto-installed need a single UI button to
+   * opt out cleanly.
+   *
+   * Bypasses the mutationLockedSlugs revoke/rotate guard because
+   * uninstall is whole-system: the service goes down FIRST (via the
+   * plugin's install_service.sh --uninstall), THEN the bearer is
+   * removed. There's no half-state where a running agent has no
+   * bearer (the failure mode the revoke lock guards against).
+   */
+  uninstall: (slug: string): Promise<AppUninstallResponse> =>
+    callWithErrorExtraction(() =>
+      httpClient.post<OkEnvelope<AppUninstallResponse> | ErrEnvelope>(
+        '/api/user/apps/uninstall',
         { slug },
       ),
     ),

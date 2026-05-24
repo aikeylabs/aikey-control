@@ -293,6 +293,8 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.ResumeHandler))))
 		mux.Handle("POST /api/user/apps/rotate",
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.RotateHandler))))
+		mux.Handle("POST /api/user/apps/uninstall",
+			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.UninstallHandler))))
 	}
 }
 
