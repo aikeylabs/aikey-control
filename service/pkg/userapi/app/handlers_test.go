@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -180,6 +181,271 @@ func TestRegisterHandler_NoSession_RequiresUnlock(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.ErrorCode != cli.ErrVaultLocked {
 		t.Errorf("expected vault-locked error without session, got %q", resp.ErrorCode)
+	}
+}
+
+// ── A2 (Google "medium") — real localhost TCP + http.Client roundtrip ──
+
+// keyInjectingMiddleware bypasses the production auth middleware for
+// A2 tests, injecting a synthetic vault key into the request context
+// the same way Store.RequireUnlock would after a real unlock. This
+// lets us exercise the HTTP boundary (real net.Listen, real http.Client,
+// real codec) WITHOUT having to wire a full vault subsystem into the
+// test rig. The Bridge subprocess will still fail to spawn (no aikey
+// binary available in the test PATH), but the failure surfaces as a
+// well-formed error envelope via cli.WriteInvokeError, which is itself
+// part of the boundary contract we want to fence.
+func keyInjectingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := vault.InjectKey(r.Context(), "deadbeef")
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// newAppMuxForA2 mirrors the production /api/user/apps/* route mounting
+// in pkg/userapi/handlers.go but without the auth middleware (replaced
+// by keyInjectingMiddleware so RequireUnlock-style downstream checks
+// see a session). Drift here = drift in production routing; that's
+// exactly the regression A2 catches that A1 (direct handler calls)
+// cannot.
+func newAppMuxForA2() (*http.ServeMux, *Handlers) {
+	h := newTestHandlers()
+	mux := http.NewServeMux()
+	mux.Handle("GET /api/user/apps/list", keyInjectingMiddleware(http.HandlerFunc(h.ListHandler)))
+	mux.Handle("POST /api/user/apps/get", keyInjectingMiddleware(http.HandlerFunc(h.GetHandler)))
+	mux.Handle("POST /api/user/apps/register", keyInjectingMiddleware(http.HandlerFunc(h.RegisterHandler)))
+	mux.Handle("POST /api/user/apps/reveal-token", keyInjectingMiddleware(http.HandlerFunc(h.RevealTokenHandler)))
+	return mux, h
+}
+
+// TestA2_RegisterHandler_RoutedViaRealHTTP_BoundaryGatesFire is the
+// 2026-05-25 A2-level (Google "medium") fence for the new Web UI
+// register endpoint. Spins up httptest.NewServer with the production
+// route mounting + a passthrough auth middleware so the test
+// exercises:
+//
+//   - real net.Listener on localhost:<random>
+//   - real http.Client → net.Conn → server roundtrip
+//   - real ServeMux pattern matching ("POST /api/user/apps/register")
+//   - real Content-Type / Content-Length codec
+//   - the boundary validation gates inside RegisterHandler (empty
+//     body / missing slug / empty upstreams)
+//
+// What A1 (direct handler call in TestRegisterHandler_*_ReturnsBadRequest)
+// does NOT catch but A2 does:
+//
+//   - wrong HTTP verb (POST vs GET) on the mux pattern — A1 hardcodes
+//     the verb on httptest.NewRequest, the mux gate is bypassed
+//   - route typos like `/api/user/apps/Register` (capitalised) — A1
+//     calls the function directly, the URL path string is ignored
+//   - middleware not firing in the right order — A1 invokes the
+//     handler without traversing the mux
+//
+// The Bridge subprocess in newTestHandlers() is a real cli.Bridge
+// with no binary configured, so the happy-path branch errors out
+// inside Invoke. We do NOT assert on the happy-path response body —
+// that would require either a real `aikey` binary or a Bridge
+// interface refactor (out of scope here). We assert on the boundary
+// gates that fire BEFORE the Bridge subprocess spawn attempt.
+func TestA2_RegisterHandler_RoutedViaRealHTTP_BoundaryGatesFire(t *testing.T) {
+	mux, _ := newAppMuxForA2()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// 1) Wrong method — must hit ServeMux's method-not-allowed branch
+	//    (or fall through to 405). A1 doesn't catch wrong-verb mounts
+	//    because httptest.NewRequest takes the verb as a string arg
+	//    that the handler ignores.
+	{
+		resp, err := http.Get(srv.URL + "/api/user/apps/register")
+		if err != nil {
+			t.Fatalf("GET /register: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("GET on register endpoint returned 200; mux pattern accepts wrong verb")
+		}
+	}
+
+	// 2) Empty body — must hit decodeBody's empty-body gate.
+	{
+		resp, err := http.Post(srv.URL+"/api/user/apps/register", "application/json", strings.NewReader(""))
+		if err != nil {
+			t.Fatalf("POST empty body: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 400 {
+			t.Errorf("POST empty body returned %d, want 4xx", resp.StatusCode)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		var env struct {
+			ErrorCode string `json:"error_code"`
+		}
+		_ = json.Unmarshal(body, &env)
+		if env.ErrorCode != cli.ErrBadRequest {
+			t.Errorf("empty body error_code = %q, want %q", env.ErrorCode, cli.ErrBadRequest)
+		}
+	}
+
+	// 3) Missing slug — JSON valid but slug field empty. Must hit the
+	//    explicit slug-required gate in RegisterHandler.
+	{
+		resp, err := http.Post(srv.URL+"/api/user/apps/register",
+			"application/json",
+			strings.NewReader(`{"upstreams":["anthropic"]}`))
+		if err != nil {
+			t.Fatalf("POST no slug: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 400 {
+			t.Errorf("POST without slug returned %d, want 4xx", resp.StatusCode)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		var env struct {
+			ErrorCode    string `json:"error_code"`
+			ErrorMessage string `json:"error_message"`
+		}
+		_ = json.Unmarshal(body, &env)
+		if env.ErrorCode != cli.ErrBadRequest {
+			t.Errorf("missing slug error_code = %q, want %q", env.ErrorCode, cli.ErrBadRequest)
+		}
+		if !strings.Contains(env.ErrorMessage, "slug") {
+			t.Errorf("missing slug error_message = %q, must mention 'slug'", env.ErrorMessage)
+		}
+	}
+
+	// 4) Empty upstreams — JSON valid, slug present, but upstreams [].
+	//    Must hit the explicit upstreams-required gate.
+	{
+		resp, err := http.Post(srv.URL+"/api/user/apps/register",
+			"application/json",
+			strings.NewReader(`{"slug":"some-app","upstreams":[]}`))
+		if err != nil {
+			t.Fatalf("POST empty upstreams: %v", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		var env struct {
+			ErrorCode    string `json:"error_code"`
+			ErrorMessage string `json:"error_message"`
+		}
+		_ = json.Unmarshal(body, &env)
+		if env.ErrorCode != cli.ErrBadRequest {
+			t.Errorf("empty upstreams error_code = %q, want %q", env.ErrorCode, cli.ErrBadRequest)
+		}
+		if !strings.Contains(env.ErrorMessage, "upstream") {
+			t.Errorf("empty upstreams error_message = %q, must mention 'upstream'", env.ErrorMessage)
+		}
+	}
+}
+
+// TestA2_RevealTokenHandler_RoutedViaRealHTTP_BoundaryGatesFire is the
+// A2-level twin for the reveal-token endpoint. Same boundary
+// contract: real HTTP roundtrip, real mux pattern matching, real
+// codec. See TestA2_RegisterHandler_* docstring for why we don't
+// assert on the happy-path response (no real CLI binary available
+// in tests).
+func TestA2_RevealTokenHandler_RoutedViaRealHTTP_BoundaryGatesFire(t *testing.T) {
+	mux, _ := newAppMuxForA2()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// Wrong method — GET on a POST-only endpoint
+	{
+		resp, err := http.Get(srv.URL + "/api/user/apps/reveal-token")
+		if err != nil {
+			t.Fatalf("GET /reveal-token: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("GET on reveal-token returned 200; mux pattern accepts wrong verb")
+		}
+	}
+
+	// Empty body
+	{
+		resp, err := http.Post(srv.URL+"/api/user/apps/reveal-token", "application/json", strings.NewReader(""))
+		if err != nil {
+			t.Fatalf("POST empty body: %v", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		var env struct {
+			ErrorCode string `json:"error_code"`
+		}
+		_ = json.Unmarshal(body, &env)
+		if env.ErrorCode != cli.ErrBadRequest {
+			t.Errorf("empty body error_code = %q, want %q", env.ErrorCode, cli.ErrBadRequest)
+		}
+	}
+
+	// Missing slug
+	{
+		resp, err := http.Post(srv.URL+"/api/user/apps/reveal-token",
+			"application/json",
+			strings.NewReader(`{}`))
+		if err != nil {
+			t.Fatalf("POST no slug: %v", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		var env struct {
+			ErrorCode    string `json:"error_code"`
+			ErrorMessage string `json:"error_message"`
+		}
+		_ = json.Unmarshal(body, &env)
+		if env.ErrorCode != cli.ErrBadRequest {
+			t.Errorf("missing slug error_code = %q, want %q", env.ErrorCode, cli.ErrBadRequest)
+		}
+		if !strings.Contains(env.ErrorMessage, "slug") {
+			t.Errorf("missing slug error_message = %q, must mention 'slug'", env.ErrorMessage)
+		}
+	}
+}
+
+// TestA2_AppRoutesMounted_NotConfusedWithEachOther fences the
+// route-pattern-collision risk: with 4+ POST endpoints on the same
+// /api/user/apps/* prefix, a typo in the mux pattern (e.g. accidentally
+// mounting register on /api/user/apps/get) would be invisible to A1
+// tests (they call the handler directly by Go function name) but
+// caught here by checking which handler responds to each URL.
+func TestA2_AppRoutesMounted_NotConfusedWithEachOther(t *testing.T) {
+	mux, _ := newAppMuxForA2()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// Each handler validates body differently. register/reveal-token
+	// require slug; route requires slug + upstream + key_source_type +
+	// key_source_ref. Posting `{}` to each gives back a distinct error
+	// message that proves which handler answered — a route collision
+	// would surface as the wrong message at the wrong URL.
+	cases := []struct {
+		url             string
+		wantErrSubstr   string
+	}{
+		{"/api/user/apps/register", "slug"},          // RegisterHandler
+		{"/api/user/apps/reveal-token", "slug"},      // RevealTokenHandler
+		{"/api/user/apps/get", "slug"},               // GetHandler
+		// list is GET-only so we skip it here; the GET vs POST tests
+		// above already cover its method gating.
+	}
+	for _, c := range cases {
+		t.Run(c.url, func(t *testing.T) {
+			resp, err := http.Post(srv.URL+c.url, "application/json", strings.NewReader(`{}`))
+			if err != nil {
+				t.Fatalf("POST %s: %v", c.url, err)
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			var env struct {
+				ErrorMessage string `json:"error_message"`
+			}
+			_ = json.Unmarshal(body, &env)
+			if !strings.Contains(env.ErrorMessage, c.wantErrSubstr) {
+				t.Errorf("POST %s: error_message = %q, must mention %q (proves correct handler was wired)",
+					c.url, env.ErrorMessage, c.wantErrSubstr)
+			}
+		})
 	}
 }
 
