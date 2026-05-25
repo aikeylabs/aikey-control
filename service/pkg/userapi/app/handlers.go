@@ -8,12 +8,13 @@
 //
 //	GET  /api/user/apps/list           — list all registered apps with their bindings
 //	POST /api/user/apps/get            — fetch detail for one app (body: {slug})
+//	POST /api/user/apps/register       — self-service registration from Web UI (body: {slug, name, vendor?, upstreams[], requested_permissions?[]}) — added 2026-05-25; CLI `aikey app register` remains the canonical vendor-installer path
 //	POST /api/user/apps/route          — set per-upstream binding (body: {slug, upstream, key_source_type, key_source_ref})
 //	POST /api/user/apps/revoke         — revoke all active keys for slug (body: {slug})
 //	POST /api/user/apps/pause          — pause active keys (body: {slug})
 //	POST /api/user/apps/resume         — resume paused keys (body: {slug})
 //	POST /api/user/apps/rotate         — atomic revoke + reissue with same bindings (body: {slug})
-//	POST /api/user/apps/uninstall      — stop service + wipe vault rows (body: {slug}) — added 2026-05-23 alongside default-install flip
+//	POST /api/user/apps/uninstall      — stop service (first-party) OR remove identity (third-party) + revoke / wipe vault rows (body: {slug}) — third-party support added 2026-05-25
 //
 // Unlock policy (revised 2026-05-21):
 //   - list / get        — public read; no unlock required. The data is
@@ -180,6 +181,71 @@ func (h *Handlers) GetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, ok := h.invokeBridgeNoVault(w, r, "get", req)
+	if !ok {
+		return
+	}
+	cli.WriteEnvelope(w, res)
+}
+
+// ---------------------------------------------------------------------------
+// register — POST /api/user/apps/register
+//
+// Self-service Web UI registration for third-party apps (claude-mem / Cline /
+// Roo Cline / etc.). Added 2026-05-25 as a second path next to the existing
+// CLI / vendor-installer flow.
+//
+// CLI-vs-Web invariants enforced server-side (NOT trusted from client):
+//   - app_kind is ALWAYS "third-party". The CLI `_internal app.register`
+//     hardcodes first_party=false / follow_user_active=false / rotate_bearer=false
+//     for this code path, and rejects reserved first-party slugs early
+//     with I_FIRST_PARTY_SLUG_RESERVED.
+//   - Reserved slug rejection: any slug in `FIRST_PARTY_SLUGS`
+//     (currently {degrade-detector}) returns 409 with code
+//     FIRST_PARTY_SLUG_RESERVED.
+//
+// Response includes the one-time `route_token` plaintext + base_url —
+// the Web UI shows this in a token-reveal modal with a Copy button and a
+// "this will not be shown again" warning. If the user loses the token,
+// the recovery path is `aikey app rotate <slug>` (or the Rotate button
+// in the detail page).
+// ---------------------------------------------------------------------------
+
+// registerReq is the POST body for /api/user/apps/register. The shape
+// intentionally omits app_kind / first_party / follow_user_active —
+// those are server-controlled invariants for the Web path. See
+// commands_internal/app.rs::handle_register for the matching CLI side.
+type registerReq struct {
+	Slug                  string   `json:"slug"`
+	Name                  string   `json:"name,omitempty"`   // optional; CLI side defaults to slug when empty
+	Vendor                string   `json:"vendor,omitempty"` // optional free-text owner tag
+	Upstreams             []string `json:"upstreams"`        // at least one required (e.g. ["anthropic"])
+	RequestedPermissions  []string `json:"requested_permissions,omitempty"`
+}
+
+// RegisterHandler creates a new third-party app + issues a bearer + snapshots
+// `aikey use` selections into the per-app binding. This is the Web UI
+// equivalent of `aikey app register --slug X --name Y --upstreams Z`.
+//
+// Validation happens in two layers: this handler checks that required
+// fields are non-empty (so the user gets a clean 400 with a clear
+// "what's missing" message), and the CLI side runs the deeper checks
+// (slug shape, upstream whitelist, reserved-slug policy).
+func (h *Handlers) RegisterHandler(w http.ResponseWriter, r *http.Request) {
+	var req registerReq
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if req.Slug == "" {
+		cli.WriteErr(w, cli.ErrBadRequest, "slug required")
+		return
+	}
+	if len(req.Upstreams) == 0 {
+		cli.WriteErr(w, cli.ErrBadRequest,
+			"upstreams list cannot be empty — pick at least one provider (e.g. \"anthropic\")")
+		return
+	}
+
+	res, ok := h.invokeBridge(w, r, "register", req)
 	if !ok {
 		return
 	}

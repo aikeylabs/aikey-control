@@ -283,6 +283,13 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(h.App.ListHandler)))
 		mux.Handle("POST /api/user/apps/get",
 			authMW(http.HandlerFunc(h.App.GetHandler)))
+		// register: Web UI self-service path (added 2026-05-25). Requires
+		// unlock because it issues a fresh bearer + writes app_records /
+		// app_keys / user_profile_provider_bindings rows. See
+		// commands_internal/app.rs::handle_register for the server-side
+		// invariants (forces app_kind=third-party, blocks reserved slugs).
+		mux.Handle("POST /api/user/apps/register",
+			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.RegisterHandler))))
 		mux.Handle("POST /api/user/apps/route",
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.RouteHandler))))
 		mux.Handle("POST /api/user/apps/revoke",

@@ -103,6 +103,86 @@ func TestRouteHandler_MissingFields_ReturnsBadRequest(t *testing.T) {
 	}
 }
 
+// TestRegisterHandler_MissingFields_ReturnsBadRequest pins the boundary
+// validation for the 2026-05-25 Web UI self-service registration path.
+// The handler must reject empty slug + empty upstreams before reaching
+// Bridge so the user gets a clean error message ("upstreams cannot be
+// empty…") instead of a Bridge subprocess crash.
+func TestRegisterHandler_MissingSlug_ReturnsBadRequest(t *testing.T) {
+	h := newTestHandlers()
+	ctx := vault.InjectKey(context.Background(), "deadbeef")
+	body := bytes.NewReader([]byte(`{"upstreams":["anthropic"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/user/apps/register", body).WithContext(ctx)
+	w := httptest.NewRecorder()
+	h.RegisterHandler(w, req)
+	if w.Code < 400 {
+		t.Fatalf("expected 4xx for missing slug, got %d", w.Code)
+	}
+	var resp struct {
+		ErrorCode    string `json:"error_code"`
+		ErrorMessage string `json:"error_message"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.ErrorCode != cli.ErrBadRequest {
+		t.Errorf("error_code = %q, want %q", resp.ErrorCode, cli.ErrBadRequest)
+	}
+	if !strings.Contains(resp.ErrorMessage, "slug") {
+		t.Errorf("error_message %q must mention 'slug'", resp.ErrorMessage)
+	}
+}
+
+// TestRegisterHandler_EmptyUpstreams_ReturnsBadRequest pins the explicit
+// non-empty check on the upstreams array. The CLI side also rejects
+// empty upstreams with I_NO_UPSTREAMS, but the boundary check here
+// gives the Web user a clean message without spawning a CLI subprocess.
+func TestRegisterHandler_EmptyUpstreams_ReturnsBadRequest(t *testing.T) {
+	h := newTestHandlers()
+	ctx := vault.InjectKey(context.Background(), "deadbeef")
+	body := bytes.NewReader([]byte(`{"slug":"some-app","upstreams":[]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/user/apps/register", body).WithContext(ctx)
+	w := httptest.NewRecorder()
+	h.RegisterHandler(w, req)
+	if w.Code < 400 {
+		t.Fatalf("expected 4xx for empty upstreams, got %d", w.Code)
+	}
+	var resp struct {
+		ErrorCode    string `json:"error_code"`
+		ErrorMessage string `json:"error_message"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.ErrorCode != cli.ErrBadRequest {
+		t.Errorf("error_code = %q, want %q", resp.ErrorCode, cli.ErrBadRequest)
+	}
+	if !strings.Contains(resp.ErrorMessage, "upstream") {
+		t.Errorf("error_message %q must mention 'upstream'", resp.ErrorMessage)
+	}
+}
+
+// TestRegisterHandler_NoSession_RequiresUnlock pins the unlock policy
+// for the Web registration path. Unlike list / get (which are public
+// reads of registration metadata), register WRITES — it issues a new
+// bearer + snapshots bindings — so it must require an unlocked vault
+// session.
+func TestRegisterHandler_NoSession_RequiresUnlock(t *testing.T) {
+	// Note: this test exercises the handler directly. Production route
+	// mounting wraps RegisterHandler in Store.RequireUnlock, which would
+	// reject before the handler runs. Calling the handler directly with
+	// no session context exercises the safety-net branch inside
+	// invokeBridge (cli.ErrVaultLocked when KeyFrom(ctx) returns false).
+	h := newTestHandlers()
+	body := bytes.NewReader([]byte(`{"slug":"x","upstreams":["anthropic"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/user/apps/register", body)
+	w := httptest.NewRecorder()
+	h.RegisterHandler(w, req)
+	var resp struct {
+		ErrorCode string `json:"error_code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.ErrorCode != cli.ErrVaultLocked {
+		t.Errorf("expected vault-locked error without session, got %q", resp.ErrorCode)
+	}
+}
+
 // TestSlugOnlyHandlers_DegradeDetectorMutationLocked pins the
 // 2026-05-23 policy: revoke / rotate on degrade-detector must be
 // blocked at the HTTP boundary BEFORE the Bridge fires (so we never
