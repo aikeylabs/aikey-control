@@ -9,17 +9,31 @@
  * The modal doesn't expose a "switch all" because the keys aren't
  * interchangeable across providers.
  *
- * MVP key source coverage:
- *   - Personal vault aliases (vaultApi.list, target='personal')
+ * Key source coverage (2026-05-25 expanded to all three sources):
+ *   - Personal vault aliases (vault.list, target='personal'), matched by
+ *     `provider_code === upstream`. key_source_type = 'personal',
+ *     key_source_ref = alias.
+ *   - OAuth accounts (vault.list, target='oauth'), matched by
+ *     `protocol_family === upstream` (the canonical post-mapping value;
+ *     broker-vocabulary `provider` like "claude"/"codex" is irrelevant
+ *     here because CLI side stores upstream by canonical short form).
+ *     key_source_type = 'personal_oauth_account',
+ *     key_source_ref = provider_account_id.
+ *   - Team-managed virtual keys (delivery.allKeys, filtered by
+ *     `provider_code === upstream` AND `key_status === 'active'`).
+ *     key_source_type = 'managed_virtual_key', key_source_ref =
+ *     virtual_key_id. Team-keys query gracefully no-ops on Personal
+ *     edition (no team backend) — empty result simply omits team
+ *     candidates from the picker.
  *
- * Future (deferred to a follow-up turn so this PR stays scoped):
- *   - OAuth accounts (target='oauth') — needs filtering by provider_code
- *   - Team-managed virtual keys — needs the team-keys API; B-side data
+ * Each source is bucketed in the picker (Personal / OAuth / Team) so the
+ * user sees groupings rather than a flat list mixing types.
  */
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { appsApi } from '@/shared/api/user/apps';
+import { appsApi, type KeySourceType } from '@/shared/api/user/apps';
+import { deliveryApi } from '@/shared/api/user/delivery';
 import { importApi } from '@/shared/api/user/import';
 import { vaultApi } from '@/shared/api/user/vault';
 
@@ -34,11 +48,11 @@ export interface SwitchKeyModalProps {
 }
 
 interface CandidateRow {
-  id: string;          // vault record id (== alias for personal)
-  label: string;       // user-friendly display
-  source: 'personal'; // MVP: personal only; OAuth/team later
-  ref: string;         // value sent as key_source_ref
-  detail?: string;     // small subline (e.g., last-4 of secret)
+  id: string;                                  // vault record id (alias / provider_account_id / virtual_key_id)
+  label: string;                               // user-friendly display
+  source: 'personal' | 'oauth' | 'team';       // drives key_source_type at switch time
+  ref: string;                                 // value sent as key_source_ref
+  detail?: string;                             // small subline (e.g., last-4 / oauth identity / team alias)
 }
 
 export function SwitchKeyModal({
@@ -81,9 +95,13 @@ export function SwitchKeyModal({
     onError: (e: Error) => setUnlockError(e.message),
   });
 
-  // Fetch vault records; we filter to those whose provider matches the
-  // upstream. The vault list endpoint returns personal + OAuth merged,
-  // but for MVP we limit to personal rows (see file header).
+  // Fetch vault records; the list endpoint returns merged
+  // personal + oauth (+ team but team is out of scope here). Filter per
+  // upstream by the matching field for each target type:
+  //   - personal → provider_code
+  //   - oauth    → protocol_family
+  // Both are canonical short forms (CLI normalises via
+  // oauth_provider_to_canonical at write time), so direct equality holds.
   //
   // Disabled while vault is locked — vault.list requires unlock and
   // would just 401. We render the inline unlock branch instead.
@@ -93,38 +111,98 @@ export function SwitchKeyModal({
     enabled: !vaultLocked,
   });
 
+  // Team-managed virtual keys live on a separate API (not vault.list).
+  // On Personal edition the backend has no team server so this 404s
+  // (or returns empty) — caught by retry: false + the error branch
+  // simply contributes zero candidates. We don't surface an error
+  // banner for a graceful-empty case.
+  const teamKeysQuery = useQuery({
+    queryKey: ['user-team-keys-for-switch'],
+    queryFn: deliveryApi.allKeys,
+    enabled: !vaultLocked,
+    retry: false,
+  });
+
   const candidates = useMemo<CandidateRow[]>(() => {
     const records = vaultQuery.data?.records ?? [];
     const out: CandidateRow[] = [];
     for (const r of records) {
-      if (r.target !== 'personal') continue;
-      // Personal records carry `provider_code` (the canonical short
-      // form, e.g. "anthropic"). The CLI side stores upstream by the
-      // same canonical short form (handled by oauth_provider_to_canonical
-      // at write time), so a direct equality check suffices.
-      if (r.provider_code !== upstream) continue;
+      if (r.target === 'personal') {
+        if (r.provider_code !== upstream) continue;
+        out.push({
+          id: r.id,
+          label: r.alias,
+          source: 'personal',
+          ref: r.alias,
+          detail: r.secret_suffix
+            ? `personal · …${r.secret_suffix}`
+            : 'personal',
+        });
+        continue;
+      }
+      if (r.target === 'oauth') {
+        if (r.protocol_family !== upstream) continue;
+        // Label: prefer effective alias (local_alias || display_identity);
+        // fall back to provider_account_id when neither is present (very
+        // old vault rows with no email captured).
+        const label = r.alias ?? r.display_identity ?? r.provider_account_id;
+        // Detail line surfaces the upstream identity (typically email)
+        // even when the user renamed the account, so two OAuth accounts
+        // with similar local labels stay distinguishable.
+        const identity = r.display_identity ?? r.provider_account_id;
+        const detail = r.alias && r.alias !== identity
+          ? `oauth · ${identity}`
+          : `oauth · ${r.provider} · ${r.account_tier ?? 'tier-?'}`;
+        out.push({
+          id: r.id,
+          label,
+          source: 'oauth',
+          ref: r.provider_account_id,
+          detail,
+        });
+        continue;
+      }
+      // r.target === 'team' is intentionally ignored here — team keys
+      // come from deliveryApi.allKeys below, not vault.list.
+    }
+    // Team-managed virtual keys. Filter by exact provider_code match
+    // (canonical short form, same as personal). Skip non-active VKs —
+    // expired/revoked keys would just 401 at request time, no point
+    // letting the user pick them.
+    const teamKeys = teamKeysQuery.data ?? [];
+    for (const k of teamKeys) {
+      if (k.provider_code !== upstream) continue;
+      if (k.key_status !== 'active') continue;
       out.push({
-        id: r.id,
-        label: r.alias,
-        source: 'personal',
-        ref: r.alias,
-        detail: r.secret_suffix
-          ? `personal · …${r.secret_suffix}`
-          : 'personal',
+        id: k.virtual_key_id,
+        label: k.alias,
+        source: 'team',
+        ref: k.virtual_key_id,
+        detail: `team · vk:${k.virtual_key_id.slice(0, 8)}…`,
       });
     }
     return out;
-  }, [vaultQuery.data, upstream]);
+  }, [vaultQuery.data, teamKeysQuery.data, upstream]);
 
   const switchM = useMutation({
     mutationFn: () => {
       if (!selectedRef) {
         return Promise.reject(new Error('Select a key first'));
       }
+      // Derive key_source_type from the chosen candidate's source so
+      // OAuth and team selections write the correct discriminator (the
+      // resolver uses this to know which vault table to read at runtime).
+      const selectedCand = candidates.find((c) => c.ref === selectedRef);
+      const keySourceType: KeySourceType =
+        selectedCand?.source === 'oauth'
+          ? 'personal_oauth_account'
+          : selectedCand?.source === 'team'
+          ? 'managed_virtual_key'
+          : 'personal';
       return appsApi.route({
         slug,
         upstream,
-        key_source_type: 'personal',
+        key_source_type: keySourceType,
         key_source_ref: selectedRef,
       });
     },
@@ -284,15 +362,21 @@ export function SwitchKeyModal({
                 color: 'var(--muted-foreground)',
               }}
             >
-              No personal keys found for upstream{' '}
+              No keys found for upstream{' '}
               <span className="font-mono" style={{ color: 'var(--foreground)' }}>
                 {upstream}
               </span>
-              . Add a key first via{' '}
-              <span className="font-mono" style={{ color: 'var(--foreground)' }}>
-                aikey add &lt;alias&gt; --provider {upstream}
-              </span>{' '}
-              or use the Vault page.
+              . Options:
+              <ul className="list-disc list-inside mt-2 space-y-0.5">
+                <li>
+                  Personal API key:{' '}
+                  <span className="font-mono" style={{ color: 'var(--foreground)' }}>
+                    aikey add &lt;alias&gt; --provider {upstream}
+                  </span>
+                </li>
+                <li>OAuth account: log in via the Vault page</li>
+                <li>Team key: ask your org admin to share a virtual key for {upstream}</li>
+              </ul>
             </div>
           ) : (
             <div role="radiogroup" aria-label="Available keys" className="flex flex-col gap-2">
