@@ -35,9 +35,12 @@ import {
   bindingTypeLabel,
   type AppListRow,
   type AppBinding,
+  type AppRegisterResponse,
 } from '@/shared/api/user/apps';
 import { importApi } from '@/shared/api/user/import';
 import { VaultStatusPill } from '../_shared/VaultStatusPill';
+import { AddAppModal } from './AddAppModal';
+import { TokenRevealModal } from './TokenRevealModal';
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -160,6 +163,18 @@ export default function UserAppsListPage() {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [providerFilter, setProviderFilter] = useState<string>('all');
+
+  // Add flow state machine:
+  //   null  → no modal open (default)
+  //   'add' → AddAppModal mounted (user is filling the form)
+  //   { kind: 'reveal', payload } → TokenRevealModal mounted with the
+  //      register response. Switching from 'add' to 'reveal' atomically
+  //      replaces one modal with the other (no flicker, no double-modal).
+  type AddFlow =
+    | null
+    | { kind: 'add' }
+    | { kind: 'reveal'; payload: AppRegisterResponse };
+  const [addFlow, setAddFlow] = useState<AddFlow>(null);
 
   const appsQuery = useQuery({
     queryKey: ['user-apps-list'],
@@ -303,7 +318,21 @@ export default function UserAppsListPage() {
               These apps can call AI providers through AiKey. They never receive your real provider keys.
             </p>
           </div>
-          <VaultStatusPill invalidateOnUnlock={[['user-apps-list']]} />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAddFlow({ kind: 'add' })}
+              className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider"
+              style={{
+                background: '#ca8a04',
+                color: 'var(--primary-foreground, #18181b)',
+              }}
+              title="Register a third-party app — get an env block + a one-time bearer."
+            >
+              + Add App
+            </button>
+            <VaultStatusPill invalidateOnUnlock={[['user-apps-list']]} />
+          </div>
         </header>
 
         <div
@@ -323,7 +352,9 @@ export default function UserAppsListPage() {
             className="mt-2 text-[13px] max-w-[520px] mx-auto"
             style={{ color: 'var(--muted-foreground)' }}
           >
-            Apps appear here after they register with AiKey. Registration runs from a vendor installer or directly from your terminal — not from this page.
+            Apps appear here once they register with AiKey. Click <strong>+ Add App</strong> above
+            to register a third-party agent (e.g. <span className="font-mono">claude-mem</span>),
+            or run the CLI command below from your terminal — vendor installers also call this.
           </p>
           <div
             className="mt-4 inline-block rounded px-3 py-2 font-mono text-[12px]"
@@ -335,6 +366,22 @@ export default function UserAppsListPage() {
             aikey app register --slug &lt;name&gt; --upstreams &lt;list&gt;
           </div>
         </div>
+
+        {/* Modals (same machine as the populated state — kept identical
+            so behaviour matches regardless of whether the user starts
+            with zero apps or already has some). */}
+        {addFlow?.kind === 'add' ? (
+          <AddAppModal
+            onClose={() => setAddFlow(null)}
+            onRegistered={(payload) => setAddFlow({ kind: 'reveal', payload })}
+          />
+        ) : null}
+        {addFlow?.kind === 'reveal' ? (
+          <TokenRevealModal
+            result={addFlow.payload}
+            onClose={() => setAddFlow(null)}
+          />
+        ) : null}
       </section>
     );
   }
@@ -358,7 +405,21 @@ export default function UserAppsListPage() {
             Third-party agents authorized to use your AiKey-managed keys. They never receive your real provider keys.
           </p>
         </div>
-        <VaultStatusPill invalidateOnUnlock={[['user-apps-list']]} />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setAddFlow({ kind: 'add' })}
+            className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider"
+            style={{
+              background: '#ca8a04',
+              color: 'var(--primary-foreground, #18181b)',
+            }}
+            title="Register a third-party app — get an env block + a one-time bearer."
+          >
+            + Add App
+          </button>
+          <VaultStatusPill invalidateOnUnlock={[['user-apps-list']]} />
+        </div>
       </header>
 
       {/* Metrics */}
@@ -706,6 +767,23 @@ export default function UserAppsListPage() {
           Last action failed:{' '}
           {(pauseM.error || resumeM.error || revokeM.error)?.message ?? 'unknown'}
         </div>
+      ) : null}
+
+      {/* Add → Reveal modal state machine. AddAppModal closes itself on
+          Cancel; on success it calls onRegistered which swaps the
+          state to 'reveal' (TokenRevealModal mounts in its place).
+          TokenRevealModal's Done button closes the flow entirely. */}
+      {addFlow?.kind === 'add' ? (
+        <AddAppModal
+          onClose={() => setAddFlow(null)}
+          onRegistered={(payload) => setAddFlow({ kind: 'reveal', payload })}
+        />
+      ) : null}
+      {addFlow?.kind === 'reveal' ? (
+        <TokenRevealModal
+          result={addFlow.payload}
+          onClose={() => setAddFlow(null)}
+        />
       ) : null}
     </section>
   );

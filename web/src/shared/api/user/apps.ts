@@ -277,6 +277,61 @@ export interface AppUninstallResponse {
   status: 'uninstalled';
 }
 
+// ── Web UI self-service registration (2026-05-25) ──────────────────────
+//
+// Pairs with POST /api/user/apps/register. Per the plan doc
+// (roadmap20260320/技术实现/update/2026-05-25-third-party-app-web-ui-add.md
+// §4.4), the Web path is locked to third-party — the backend hardcodes
+// app_kind=third-party and rejects FIRST_PARTY_SLUGS, so this request
+// shape intentionally omits app_kind / first_party / follow_user_active.
+
+export interface AppRegisterRequest {
+  slug: string;                                // kebab-case, 3-64 chars; `[a-z][a-z0-9-]*`
+  name?: string;                               // optional; backend defaults to slug
+  vendor?: string;                             // optional free-text owner tag
+  upstreams: string[];                         // required, non-empty
+  requested_permissions?: string[];            // reserved; not enforced at runtime yet
+}
+
+/**
+ * Bindings the backend snapshotted into the new app's profile from the
+ * user's current `aikey use` selection. The Web UI shows this as the
+ * "Will use" preview in the TokenRevealModal so the user sees which
+ * provider key the new bearer will route to before they paste the token
+ * into their agent.
+ */
+export interface AppRegisterBindingPreview {
+  upstream: string;
+  key_source_type: string;
+  key_source_ref: string;
+}
+
+/**
+ * Response payload for the register endpoint. `route_token` is the
+ * one-time plaintext bearer — the UI MUST display it in the token-reveal
+ * modal with a Copy button + "won't be shown again" warning. The token
+ * is NOT recoverable later; the recovery path is rotate.
+ */
+export interface AppRegisterResponse {
+  slug: string;
+  name: string;
+  vendor: string;
+  upstreams: string[];
+  app_kind: 'third-party';                          // always — backend hardcodes
+  follow_user_active: false;                        // always — backend hardcodes
+  requested_permissions: string[];
+  action: 'inserted' | 'updated';                   // updated = idempotent re-register
+  key_id: string;                                   // UUIDv4
+  /** One-time plaintext bearer. Show, let user copy, then drop. */
+  route_token: string;
+  base_url: string;                                 // http://127.0.0.1:27200/apps/<slug>/v1
+  base_url_protocol: string;                        // first upstream's protocol family
+  bearer_was_new: boolean;                          // false if re-register reused an existing bearer
+  snapshotted_bindings: AppRegisterBindingPreview[]; // bindings copied from default profile
+  preserved_bindings: AppRegisterBindingPreview[];   // bindings the prior `aikey app route` had set
+  missing_upstreams_for_aikey_use: string[];        // upstreams where `aikey use` has no selection — warn
+}
+
 // ── API client ──────────────────────────────────────────────────────────
 //
 // Each function does ONE Bridge → CLI subprocess round-trip. The CLI is
@@ -393,6 +448,28 @@ export const appsApi = {
       httpClient.post<OkEnvelope<AppUninstallResponse> | ErrEnvelope>(
         '/api/user/apps/uninstall',
         { slug },
+      ),
+    ),
+
+  /**
+   * Self-service registration from the Web UI Add modal (2026-05-25). The
+   * backend hardcodes app_kind=third-party + rejects FIRST_PARTY_SLUGS,
+   * so this client deliberately does not accept those fields. Returns
+   * the one-time `route_token` — the caller (AddAppModal) MUST hand it
+   * straight to the TokenRevealModal and never persist it.
+   *
+   * Error codes the UI is likely to surface (all via err.code):
+   *   - I_INVALID_SLUG                 — bad slug shape (must be [a-z][a-z0-9-]{2,63})
+   *   - I_FIRST_PARTY_SLUG_RESERVED    — slug clashes with a built-in app
+   *   - I_NO_UPSTREAMS                 — empty upstreams array
+   *   - I_VAULT_LOCKED                 — needs unlock; modal already shows the unlock prompt
+   *   - I_APP_REGISTER_FAILED          — generic backend failure; show err.message
+   */
+  register: (req: AppRegisterRequest): Promise<AppRegisterResponse> =>
+    callWithErrorExtraction(() =>
+      httpClient.post<OkEnvelope<AppRegisterResponse> | ErrEnvelope>(
+        '/api/user/apps/register',
+        req,
       ),
     ),
 };
