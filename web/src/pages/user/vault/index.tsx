@@ -5629,15 +5629,21 @@ function SimpleBody(props: AddKeyFieldShared & {
 // Spec §5.1: 4 probe phases with fixed "What it proves" copy.
 const PROBE_PHASES: ReadonlyArray<{ id: 'ping' | 'proxy' | 'api' | 'chat'; label: string; proves: string }> = [
   { id: 'ping',  label: 'Ping(D)', proves: 'upstream reachable' },
-  { id: 'proxy', label: 'Proxy',   proves: 'proxy route alive' },
+  // 2026-05-26 Phase 2.E: proxy phase now exercises the real "this key →
+  // local proxy → upstream provider" chain via aikey_probe_raw_*.
+  { id: 'proxy', label: 'Proxy',   proves: 'proxy + this key → provider' },
   { id: 'api',   label: 'API',     proves: 'credential accepted' },
   { id: 'chat',  label: 'Chat',    proves: 'completion works' },
 ];
 
 // Map (phase, testState, testResult) → (tone, status text, latency text).
 //   tone: '' (waiting) | 'good' (green) | 'warn' (yellow) | 'bad' (red)
-// testRaw never goes through proxy (show_proxy_row=false), so Proxy row
-// always renders as "skipped" — pre-save can't validate the route.
+//
+// 2026-05-26 Phase 2.E (spec: roadmap20260320/技术实现/update/20260526-pre-
+// save-proxy-probe-raw.md §6.1): Proxy row now reads real proxy_* fields off
+// testResult, populated by the Rust aggregator from outcome.proxy after CLI
+// flipped vault_op::test_raw to probe_raw mode. Pre-Phase-2.E it was
+// hard-coded to "skipped" because the old aikey_active_* path was misleading.
 function probeRowState(
   phase: 'ping' | 'proxy' | 'api' | 'chat',
   testState: 'idle' | 'running' | 'done' | 'error',
@@ -5653,8 +5659,34 @@ function probeRowState(
     return { tone: '', status: 'waiting', latency: '-' };
   }
   if (phase === 'proxy') {
-    // Pre-save bypasses the proxy by design (no vault row to route).
-    return { tone: '', status: 'skipped', latency: '-' };
+    // Read CLI's proxy probe result. Three render branches:
+    //   1. proxy_ok=true → green "ok"
+    //   2. proxy_error_code set (PROXY_TOO_OLD_NO_PROBE_RAW etc) → bad "fail" with hint
+    //   3. proxy_ok absent (older CLI / proxy off) → "skipped" (legacy fallback)
+    const rec = testResult as unknown as {
+      proxy_ok?: boolean;
+      proxy_ms?: number;
+      proxy_status?: number;
+      proxy_status_hint?: string;
+      proxy_error_code?: string;
+    };
+    if (typeof rec.proxy_ok !== 'boolean') {
+      // Backward compat: aggregator didn't set proxy_* (old CLI / proxy not
+      // running on this run). Keep the legacy "skipped" UX rather than empty row.
+      return { tone: '', status: 'skipped', latency: '-' };
+    }
+    const latency = typeof rec.proxy_ms === 'number' && rec.proxy_ms > 0
+      ? `${Math.round(rec.proxy_ms)} ms`
+      : '-';
+    if (rec.proxy_ok) {
+      return { tone: 'good', status: 'ok', latency };
+    }
+    // proxy_ok=false → error path. Use proxy_error_code (when present) as the
+    // status label so user sees "PROXY_TOO_OLD..." not just "fail"; full hint
+    // text is shown in the friendly-error mapping below the table.
+    const status = rec.proxy_error_code
+      || (typeof rec.proxy_status === 'number' ? String(rec.proxy_status) : 'fail');
+    return { tone: 'bad', status, latency };
   }
   // Pull per-phase booleans from the aggregated record.
   const okMap = {

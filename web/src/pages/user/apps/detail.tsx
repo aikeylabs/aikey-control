@@ -780,12 +780,6 @@ export default function UserAppDetailPage() {
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <div className="cap-mono-label">Consumption trend</div>
-                          <h3
-                            className="mt-2 mb-0 text-lg font-medium tracking-tight"
-                            style={{ color: 'var(--muted-foreground)' }}
-                          >
-                            Daily tokens with request count overlay
-                          </h3>
                         </div>
                         <div
                           className="flex gap-4 text-[11px]"
