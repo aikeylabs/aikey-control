@@ -715,7 +715,7 @@ export default function UserUsageLedgerPage() {
           ) : (
             <ul className="mt-4 space-y-2.5">
               {appRows.map((a) => (
-                <li key={a.key} className="key-row">
+                <li key={a.key} className="app-row">
                   <span
                     className="font-mono text-[11.5px] truncate flex items-center gap-1.5"
                     title={
@@ -901,6 +901,20 @@ const USAGE_CSS = `
 .usage-page .key-row {
   display: grid;
   grid-template-columns: minmax(140px, 260px) 1fr 90px;
+  align-items: center;
+  gap: 0.75rem;
+}
+/* app-row is structurally the same as key-row but the right column
+ * holds THREE values (tokens · share · request count) instead of two,
+ * so it needs more horizontal room. 2026-05-25: discovered the
+ * default 90px right column was clipping "147 req" on the right edge
+ * of the Usage By App section — widening to 160px restores the
+ * intended layout. Label column is slightly narrower (240px max vs
+ * 260px) to claw back the extra width without forcing the bar to
+ * collapse. */
+.usage-page .app-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 240px) 1fr 160px;
   align-items: center;
   gap: 0.75rem;
 }
