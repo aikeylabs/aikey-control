@@ -1644,6 +1644,17 @@ export default function UserVaultPage() {
           onSubmitPersonal={(payload) =>
             addMut.mutateAsync(payload).then(() => setAddOpen(false))
           }
+          // BR (2026-05-25 vault-oauth-add-no-list-refresh): when the
+          // OAuth broker inside AddKeyModal reports `connected=true`,
+          // the token has just landed in vault — invalidate the
+          // vault-list cache so the new row appears without a manual
+          // page refresh. Personal API key adds invalidate via
+          // `addMut.onSuccess` (line 796); OAuth doesn't go through
+          // addMut (broker is its own state machine) so we wire this
+          // separate signal in.
+          onOAuthConnected={() =>
+            qc.invalidateQueries({ queryKey: ['vault-list'] })
+          }
           pending={addMut.isPending}
           providerToRoute={providerToRoute}
         />
@@ -4845,6 +4856,22 @@ function AddKeyModal(props: {
     providers?: string[];
     base_url?: string;
   }) => Promise<unknown>;
+  /**
+   * Fired when the OAuth broker reports a fresh `connected` state — i.e.
+   * the broker just wrote a new OAuth token to the vault. Parent uses
+   * this to invalidate the vault-list React Query so the new row shows
+   * up without a manual page refresh. Bugfix
+   * 20260525-vault-oauth-add-no-list-refresh.md.
+   *
+   * Why a callback instead of having the modal call `useQueryClient()`
+   * itself: the query key (`['vault-list']`) lives in the parent
+   * component along with the actual `useQuery({ queryKey: ... })`
+   * declaration, so keeping invalidation in the parent avoids a key
+   * literal leaking into the modal (and forming a second source of
+   * truth that could drift). Same pattern as `onSubmitPersonal` →
+   * `addMut.mutateAsync().onSuccess` for Personal API key adds.
+   */
+  onOAuthConnected?: () => void;
   pending: boolean;
   /**
    * Single source of truth: provider id → ProviderRoute (host, base_url,
@@ -5212,6 +5239,12 @@ function AddKeyModal(props: {
                   if (!alias.trim() && info?.displayIdentity) {
                     setAlias(info.displayIdentity);
                   }
+                  // BR (2026-05-25 vault-oauth-add-no-list-refresh): the
+                  // broker has just written a new OAuth token to vault, so
+                  // the cached vault-list query is stale. Fire the parent's
+                  // invalidate so the new row shows up immediately —
+                  // before this, users had to manually refresh the page.
+                  props.onOAuthConnected?.();
                 } else {
                   setOauthAccountId(null);
                   setOauthIdentity(null);
@@ -5252,6 +5285,11 @@ function AddKeyModal(props: {
                   if (!alias.trim() && info?.displayIdentity) {
                     setAlias(info.displayIdentity);
                   }
+                  // BR (2026-05-25 vault-oauth-add-no-list-refresh):
+                  // broker wrote token to vault → invalidate parent's
+                  // vault-list cache so new row appears without manual
+                  // refresh. Mirror of the GuidedBody branch above.
+                  props.onOAuthConnected?.();
                 } else {
                   setOauthAccountId(null);
                   setOauthIdentity(null);

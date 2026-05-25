@@ -510,6 +510,27 @@ export const TRUST_CHECK_CSS = `
   background: linear-gradient(90deg, var(--tc-risk), var(--tc-suspect) 50%, var(--tc-trust) 100%);
   border-radius: inherit;
 }
+
+/* weakest-layer subtitle — surfaces the L? <80 signal the headline
+   harmonic-mean score hides. Set in table.tsx when any single layer
+   falls below the trust band (<80). See derive.ts::summaryToRow for
+   the layer selection logic. */
+.trust-check-page .tc-score-weakest {
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tc-suspect, #f59e0b);
+  letter-spacing: 0.02em;
+  cursor: help;
+}
+.trust-check-page .tc-score-weakest-icon {
+  font-size: 12px;
+  line-height: 1;
+}
 .trust-check-page .tc-mono {
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 12px;

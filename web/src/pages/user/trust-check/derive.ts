@@ -27,6 +27,23 @@ export interface TrustRow {
   score: number;
   band: StatusBand;
   band_label: string;
+  /** Weakest layer subtitle for the score pill — surfaces real signal
+   *  the headline ``score`` (harmonic mean) hides. Set only when the
+   *  weakest layer is < 80; null when all layers are 80+ (no hidden
+   *  weakness worth flagging) or when no layer scores landed yet.
+   *
+   *  Why this exists: the headline ``score`` is ``s_display`` (harmonic
+   *  mean of L1/L2/L3) which for e.g. L1=70 / L2=100 / L3=95 evaluates
+   *  to ~86 — practically indistinguishable from a clean 88. The
+   *  third-party-vs-official discrimination signal (a 15-point L1 drop)
+   *  gets averaged away. We surface it explicitly below the headline
+   *  so users see "L1 70 ⚠" beside the 86 and know to inspect.
+   *
+   *  Spec source: 2026-05-25 BR analysis where 0011-test1 (aicoding.2233.ai
+   *  third-party gateway) and the official OAuth account both rendered
+   *  as ~TRUSTED 86/88 despite a real 15-point L1 gap. See drawer
+   *  "by-layer breakdown" for the full layer view. */
+  weakest_layer: { name: string; score: number } | null;
   checked: string;
   /** Day 3 will set this from a verify-id polling map; Day 2 always
    *  false because we don't trigger verifies yet. */
@@ -227,6 +244,25 @@ export function summaryToRow(s: TrustSummary): TrustRow {
   const { label: use_label, kind: use_kind } = deriveUseLabel(s);
   const { name: source_name, meta: source_meta } = deriveSourceLabels(s.alias_name);
 
+  // Identify the weakest layer when at least one layer is below the
+  // trust threshold (80). The L2-composite (`s_l2`) reads as the
+  // canonical L2 number — we deliberately ignore the sub-components
+  // (s_l2_content / s_l2_crowd) here because the table is the
+  // overview surface; the drawer shows the full breakdown.
+  const layers: Array<{ name: string; score: number | null }> = [
+    { name: 'L1', score: s.s_l1 ?? null },
+    { name: 'L2', score: s.s_l2 ?? null },
+    { name: 'L3', score: s.s_l3 ?? null },
+  ];
+  let weakest: { name: string; score: number } | null = null;
+  for (const layer of layers) {
+    if (typeof layer.score === 'number' && layer.score < 80) {
+      if (weakest == null || layer.score < weakest.score) {
+        weakest = { name: layer.name, score: Math.round(layer.score) };
+      }
+    }
+  }
+
   return {
     alias_name: s.alias_name,
     use_label,
@@ -238,6 +274,7 @@ export function summaryToRow(s: TrustSummary): TrustRow {
     score,
     band,
     band_label: deriveBandLabel(band),
+    weakest_layer: weakest,
     checked: formatTimeSince(s.last_verified_at),
     // Passthrough server flags. The merge that decides these lives in
     // trust-local's services/in_use.py — web doesn't recompute.

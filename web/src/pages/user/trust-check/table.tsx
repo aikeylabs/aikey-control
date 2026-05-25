@@ -85,7 +85,12 @@ export function SourceTable({
                   secondary={row.provider}
                 />
                 <td>
-                  <ScorePill score={row.score} band={row.band} label={row.band_label} />
+                  <ScorePill
+                    score={row.score}
+                    band={row.band}
+                    label={row.band_label}
+                    weakestLayer={row.weakest_layer}
+                  />
                 </td>
                 <td>
                   {running ? (
@@ -142,10 +147,12 @@ export function ScorePill({
   score,
   band,
   label,
+  weakestLayer,
 }: {
   score: number;
   band: StatusBand;
   label: string;
+  weakestLayer?: { name: string; score: number } | null;
 }) {
   return (
     <div className="tc-score-wrap">
@@ -159,6 +166,17 @@ export function ScorePill({
           style={{ ['--score' as string]: `${Math.max(0, Math.min(100, score))}%` }}
         />
       </div>
+      {weakestLayer && (
+        <div
+          className="tc-score-weakest"
+          title={`Headline score is harmonic mean of L1/L2/L3. Hidden weak signal: ${weakestLayer.name}=${weakestLayer.score}. Click row for full by-layer breakdown.`}
+        >
+          <span className="tc-score-weakest-icon" aria-hidden="true">
+            ⚠
+          </span>
+          {weakestLayer.name} {weakestLayer.score}
+        </div>
+      )}
     </div>
   );
 }

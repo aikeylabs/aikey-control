@@ -50,7 +50,7 @@ func newFakeMainSite(t *testing.T) *fakeMainSite {
 	f := &fakeMainSite{
 		t:         t,
 		canStatus: http.StatusOK,
-		canResp:   []byte(`{"code":"ABCDE12345","url":"https://aikeylabs.com/i/inv/ABCDE12345","created_at":"2026-05-18T12:00:00Z"}`),
+		canResp:   []byte(`{"code":"ABCDE12345","url":"https://aikeylabs.com/invite/ABCDE12345","created_at":"2026-05-18T12:00:00Z"}`),
 	}
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.requestCount.Add(1)
@@ -165,7 +165,7 @@ func TestInviteLocalAPI_Create_RelaysUpstreamBody(t *testing.T) {
 	if !strings.Contains(body, `"code":"ABCDE12345"`) {
 		t.Errorf("response should pass main-site body verbatim, got: %s", body)
 	}
-	if !strings.Contains(body, `"url":"https://aikeylabs.com/i/inv/ABCDE12345"`) {
+	if !strings.Contains(body, `"url":"https://aikeylabs.com/invite/ABCDE12345"`) {
 		t.Errorf("response should include url, got: %s", body)
 	}
 }
