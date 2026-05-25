@@ -174,6 +174,12 @@ export default function UserAppDetailPage() {
   // by design, no secret in the URL itself) and also copy it.
   const baseUrl = `http://127.0.0.1:27200/apps/${slug}/v1`;
   const [copiedBaseUrl, setCopiedBaseUrl] = useState(false);
+  // Copy-feedback state for the bearer token. Mirrors copiedBaseUrl —
+  // flashes "Copied" on the button for 2s after a successful clipboard
+  // write, so the user gets the same visual confirmation they get
+  // everywhere else (the TokenRevealModal post-register uses an
+  // identical pattern).
+  const [copiedToken, setCopiedToken] = useState(false);
   // 2026-05-23 uninstall — paired with default-install flip. Bypasses
   // the mutationLockedSlugs revoke/rotate guard because uninstall is
   // whole-system (service stops BEFORE bearer is wiped). On success the
@@ -1164,7 +1170,11 @@ export default function UserAppDetailPage() {
                               {/* Copy: fetch (if not already fetched)
                                   and write to clipboard. Doesn't
                                   toggle visibility — user may want to
-                                  copy without exposing on screen. */}
+                                  copy without exposing on screen. The
+                                  button label flips to "Copied" for 2s
+                                  on success so the user gets the same
+                                  visual confirmation as the base_url
+                                  Copy and the TokenRevealModal. */}
                               <button
                                 type="button"
                                 disabled={vaultLocked || revealM.isPending}
@@ -1177,6 +1187,8 @@ export default function UserAppDetailPage() {
                                   }
                                   try {
                                     await navigator.clipboard.writeText(value);
+                                    setCopiedToken(true);
+                                    window.setTimeout(() => setCopiedToken(false), 2000);
                                   } catch {
                                     // Clipboard write can fail in non-
                                     // secure contexts; the token is
@@ -1187,11 +1199,11 @@ export default function UserAppDetailPage() {
                                 }}
                                 className="rounded px-2 py-1 text-[11px] font-mono uppercase tracking-wider disabled:opacity-50"
                                 style={{
-                                  background: '#ca8a04',
+                                  background: copiedToken ? 'var(--success, #16a34a)' : '#ca8a04',
                                   color: 'var(--primary-foreground, #18181b)',
                                 }}
                               >
-                                Copy
+                                {copiedToken ? 'Copied' : 'Copy'}
                               </button>
                             </div>
                           ) : (
