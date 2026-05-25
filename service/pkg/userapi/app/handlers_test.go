@@ -183,6 +183,50 @@ func TestRegisterHandler_NoSession_RequiresUnlock(t *testing.T) {
 	}
 }
 
+// TestRevealTokenHandler_NoSession_RequiresUnlock pins the
+// 2026-05-25 reveal-token endpoint's unlock policy. The handler is
+// wrapped by Store.RequireUnlock at the route layer, but the in-handler
+// vault.KeyFrom check provides defence-in-depth: a direct call with no
+// session context must still respond with I_VAULT_LOCKED rather than
+// silently spawning a CLI subprocess without auth.
+func TestRevealTokenHandler_NoSession_RequiresUnlock(t *testing.T) {
+	h := newTestHandlers()
+	body := bytes.NewReader([]byte(`{"slug":"some-app"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/user/apps/reveal-token", body)
+	w := httptest.NewRecorder()
+	h.RevealTokenHandler(w, req)
+	var resp struct {
+		ErrorCode string `json:"error_code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.ErrorCode != cli.ErrVaultLocked {
+		t.Errorf("expected vault-locked error without session, got %q", resp.ErrorCode)
+	}
+}
+
+// TestRevealTokenHandler_MissingSlug_ReturnsBadRequest pins the body
+// validation gate. Empty / missing slug is rejected at the HTTP
+// boundary so we don't spawn a CLI subprocess that would itself error
+// — cheaper failure path + cleaner error message for the UI.
+func TestRevealTokenHandler_MissingSlug_ReturnsBadRequest(t *testing.T) {
+	h := newTestHandlers()
+	ctx := vault.InjectKey(context.Background(), "deadbeef")
+	body := bytes.NewReader([]byte(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/user/apps/reveal-token", body).WithContext(ctx)
+	w := httptest.NewRecorder()
+	h.RevealTokenHandler(w, req)
+	if w.Code < 400 {
+		t.Fatalf("expected 4xx for missing slug, got %d", w.Code)
+	}
+	var resp struct {
+		ErrorCode string `json:"error_code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.ErrorCode != cli.ErrBadRequest {
+		t.Errorf("error_code = %q, want %q", resp.ErrorCode, cli.ErrBadRequest)
+	}
+}
+
 // TestSlugOnlyHandlers_DegradeDetectorMutationLocked pins the
 // 2026-05-23 policy: revoke / rotate on degrade-detector must be
 // blocked at the HTTP boundary BEFORE the Bridge fires (so we never

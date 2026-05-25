@@ -148,6 +148,24 @@ export default function UserAppDetailPage() {
     mutationFn: () => appsApi.rotate(slug),
     onSuccess: invalidate,
   });
+
+  // 2026-05-25 reveal-token: stored ONLY in component state so it
+  // disappears on unmount / navigation away — explicitly NOT in React
+  // Query cache (which would persist the plaintext across page nav
+  // until a manual invalidate). Show/Hide toggles visibility of the
+  // stored value; clicking Show again after Hide re-fetches so we
+  // never keep stale plaintext in JS heap longer than needed.
+  const [revealedToken, setRevealedToken] = useState<string | null>(null);
+  const revealM = useMutation({
+    mutationFn: () => appsApi.revealToken(slug),
+    onSuccess: (res) => setRevealedToken(res.route_token),
+  });
+  // Track which key_id row is "active" in the user's perception so the
+  // reveal UI only renders Show/Copy controls on the matched row.
+  // active_keys is ORDER BY created_at DESC server-side; index 0 is the
+  // freshly issued one (which is what reveal-token returns).
+  const activeKeyIdForReveal: string | null =
+    detailQuery.data?.active_keys?.[0]?.key_id ?? null;
   // 2026-05-23 uninstall — paired with default-install flip. Bypasses
   // the mutationLockedSlugs revoke/rotate guard because uninstall is
   // whole-system (service stops BEFORE bearer is wiped). On success the
@@ -764,7 +782,7 @@ export default function UserAppDetailPage() {
                           <div className="cap-mono-label">Consumption trend</div>
                           <h3
                             className="mt-2 mb-0 text-lg font-medium tracking-tight"
-                            style={{ color: 'var(--foreground)' }}
+                            style={{ color: 'var(--muted-foreground)' }}
                           >
                             Daily tokens with request count overlay
                           </h3>
@@ -1025,36 +1043,135 @@ export default function UserAppDetailPage() {
                 </div>
               ) : (
                 <div className="grid gap-2.5">
-                  {data.active_keys.map((k) => (
-                    <div key={k.key_id} className="cap-row cap-row-bearer">
-                      <div className="min-w-0">
+                  {data.active_keys.map((k) => {
+                    // Show the reveal controls only on the row whose
+                    // key_id matches what the backend's reveal-token
+                    // endpoint will actually return (most-recently
+                    // created active row). For multi-active rotation
+                    // windows the older row stays read-only — its
+                    // plaintext is no longer accessible by design.
+                    const isRevealTarget = k.key_id === activeKeyIdForReveal;
+                    const tokenIsShown = isRevealTarget && revealedToken !== null;
+                    return (
+                      <div key={k.key_id} className="cap-row cap-row-bearer">
+                        <div className="min-w-0">
+                          <div
+                            className="font-semibold truncate"
+                            style={{
+                              fontFamily: 'var(--font-mono)',
+                              color: 'var(--foreground)',
+                            }}
+                          >
+                            {k.key_id}
+                          </div>
+                          {isRevealTarget ? (
+                            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                              <code
+                                className="px-2 py-1 rounded text-[12px]"
+                                style={{
+                                  background: 'var(--secondary, #3f3f46)',
+                                  color: 'var(--foreground)',
+                                  fontFamily: 'var(--font-mono)',
+                                  wordBreak: 'break-all',
+                                }}
+                                aria-label={tokenIsShown ? 'Bearer token (revealed)' : 'Bearer token (masked)'}
+                              >
+                                {tokenIsShown
+                                  ? revealedToken
+                                  : 'aikey_app_••••••••••••••••••••••••••••••••••••••••••••••••••••••••'}
+                              </code>
+                              {/* Show / Hide toggle. Hides without a
+                                  fresh fetch — the stored value is
+                                  dropped, next Show re-fetches. */}
+                              <button
+                                type="button"
+                                disabled={vaultLocked || revealM.isPending}
+                                title={vaultLocked ? 'Unlock vault first' : undefined}
+                                onClick={() => {
+                                  if (tokenIsShown) {
+                                    setRevealedToken(null);
+                                  } else {
+                                    revealM.mutate();
+                                  }
+                                }}
+                                className="rounded border px-2 py-1 text-[11px] font-mono uppercase tracking-wider disabled:opacity-50"
+                                style={{
+                                  background: 'transparent',
+                                  color: 'var(--foreground)',
+                                  borderColor: 'var(--border)',
+                                }}
+                              >
+                                {revealM.isPending && !tokenIsShown
+                                  ? 'Loading…'
+                                  : tokenIsShown
+                                  ? 'Hide'
+                                  : 'Show'}
+                              </button>
+                              {/* Copy: fetch (if not already fetched)
+                                  and write to clipboard. Doesn't
+                                  toggle visibility — user may want to
+                                  copy without exposing on screen. */}
+                              <button
+                                type="button"
+                                disabled={vaultLocked || revealM.isPending}
+                                title={vaultLocked ? 'Unlock vault first' : 'Copy token to clipboard'}
+                                onClick={async () => {
+                                  let value = revealedToken;
+                                  if (value === null) {
+                                    const res = await revealM.mutateAsync();
+                                    value = res.route_token;
+                                  }
+                                  try {
+                                    await navigator.clipboard.writeText(value);
+                                  } catch {
+                                    // Clipboard write can fail in non-
+                                    // secure contexts; the token is
+                                    // already visible (via revealedToken
+                                    // state) so the user can copy by
+                                    // hand. Silent — no toast lib yet.
+                                  }
+                                }}
+                                className="rounded px-2 py-1 text-[11px] font-mono uppercase tracking-wider disabled:opacity-50"
+                                style={{
+                                  background: '#ca8a04',
+                                  color: 'var(--primary-foreground, #18181b)',
+                                }}
+                              >
+                                Copy
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              className="mt-1 text-xs"
+                              style={{ color: 'var(--muted-foreground)' }}
+                            >
+                              Older active row (kept during rotation window). The plaintext
+                              for this key_id is no longer accessible — only the most
+                              recent active row is revealable.
+                            </div>
+                          )}
+                          {isRevealTarget && revealM.error ? (
+                            <div
+                              className="mt-1 text-[11px] font-mono"
+                              style={{ color: 'var(--destructive, #ef4444)' }}
+                              role="alert"
+                            >
+                              Reveal failed: {(revealM.error as Error).message}
+                            </div>
+                          ) : null}
+                        </div>
                         <div
-                          className="font-semibold truncate"
+                          className="text-right text-xs"
                           style={{
+                            color: 'var(--muted-foreground)',
                             fontFamily: 'var(--font-mono)',
-                            color: 'var(--foreground)',
                           }}
                         >
-                          {k.key_id}
-                        </div>
-                        <div
-                          className="mt-1 text-xs"
-                          style={{ color: 'var(--muted-foreground)' }}
-                        >
-                          Plaintext is only shown at register or rotate time and is not re-readable here.
+                          issued {relativeTime(k.created_at)} · last used {relativeTime(k.last_used_at)}
                         </div>
                       </div>
-                      <div
-                        className="text-right text-xs"
-                        style={{
-                          color: 'var(--muted-foreground)',
-                          fontFamily: 'var(--font-mono)',
-                        }}
-                      >
-                        issued {relativeTime(k.created_at)} · last used {relativeTime(k.last_used_at)}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

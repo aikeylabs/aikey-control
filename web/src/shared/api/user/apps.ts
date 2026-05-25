@@ -277,6 +277,18 @@ export interface AppUninstallResponse {
   status: 'uninstalled';
 }
 
+/** Response for POST /api/user/apps/reveal-token (2026-05-25). Carries
+ *  the plaintext bearer + its key_id + the proxy base_url. Detail
+ *  page renders the value with a masked-by-default toggle + Copy
+ *  button; the value is NOT persisted in React Query cache (kept in
+ *  component state, dropped on unmount). */
+export interface AppRevealTokenResponse {
+  slug: string;
+  key_id: string;
+  route_token: string;
+  base_url: string;
+}
+
 // ── Web UI self-service registration (2026-05-25) ──────────────────────
 //
 // Pairs with POST /api/user/apps/register. Per the plan doc
@@ -447,6 +459,28 @@ export const appsApi = {
     callWithErrorExtraction(() =>
       httpClient.post<OkEnvelope<AppUninstallResponse> | ErrEnvelope>(
         '/api/user/apps/uninstall',
+        { slug },
+      ),
+    ),
+
+  /**
+   * Re-read the currently-active bearer plaintext for a slug
+   * (2026-05-25). Caller is the detail page's ISSUED BEARER section,
+   * which keeps the value in component state (NOT React Query cache —
+   * cache lifetime is unbounded and persistent across page nav, which
+   * is exactly what we don't want for a token reveal).
+   *
+   * Failure modes the UI handles:
+   *   - I_NO_ACTIVE_TOKEN — slug has no active key (revoked or never
+   *     registered). UI should show "No active token to reveal — register
+   *     or rotate first."
+   *   - I_VAULT_LOCKED    — needs unlock; UI re-prompts inline.
+   *   - I_APP_REVEAL_FAILED — generic backend failure; show err.message.
+   */
+  revealToken: (slug: string): Promise<AppRevealTokenResponse> =>
+    callWithErrorExtraction(() =>
+      httpClient.post<OkEnvelope<AppRevealTokenResponse> | ErrEnvelope>(
+        '/api/user/apps/reveal-token',
         { slug },
       ),
     ),

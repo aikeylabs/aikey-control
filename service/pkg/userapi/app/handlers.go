@@ -15,6 +15,7 @@
 //	POST /api/user/apps/resume         — resume paused keys (body: {slug})
 //	POST /api/user/apps/rotate         — atomic revoke + reissue with same bindings (body: {slug})
 //	POST /api/user/apps/uninstall      — stop service (first-party) OR remove identity (third-party) + revoke / wipe vault rows (body: {slug}) — third-party support added 2026-05-25
+//	POST /api/user/apps/reveal-token   — re-read the active bearer plaintext for a slug (body: {slug}) — added 2026-05-25 to spare users a Rotate when they only lost the token, not the app
 //
 // Unlock policy (revised 2026-05-21):
 //   - list / get        — public read; no unlock required. The data is
@@ -313,6 +314,30 @@ func (h *Handlers) ResumeHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) RotateHandler(w http.ResponseWriter, r *http.Request) {
 	h.slugOnlyAction(w, r, "rotate")
+}
+
+// RevealTokenHandler re-reads the active bearer plaintext for an
+// already-registered app. Added 2026-05-25 to address the "I lost the
+// token from the register modal, my only recovery is Rotate which
+// breaks the running agent" UX gap.
+//
+// Trade-off intentionally made: the token IS stored plaintext in
+// `app_keys.route_token` (UNIQUE + indexed for the proxy registry's
+// byToken lookup); any process that can read the vault DB file can
+// already retrieve it. Hiding it from the Web UI was security theater
+// against the much simpler `sqlite3 vault.db` attack. The reveal
+// endpoint instead leans on the genuine gate: vault unlock — which
+// covers both this endpoint and the CLI `aikey app reveal-token`.
+//
+// Why a dedicated endpoint instead of folding into /get: the existing
+// /get endpoint is UNLOCK-FREE by design (metadata only, no
+// ciphertext). Putting the token there would either require flipping
+// /get to require unlock (breaking change for callers that probe
+// without a session) or leaking the token to unauthenticated callers.
+// The dedicated endpoint preserves the /get policy and explicitly
+// requires unlock.
+func (h *Handlers) RevealTokenHandler(w http.ResponseWriter, r *http.Request) {
+	h.slugOnlyAction(w, r, "reveal-token")
 }
 
 // UninstallHandler whole-system removal: stops the plugin's service +

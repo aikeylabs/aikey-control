@@ -302,6 +302,15 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.RotateHandler))))
 		mux.Handle("POST /api/user/apps/uninstall",
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.UninstallHandler))))
+		// reveal-token: re-read the active bearer plaintext. Requires
+		// unlock because the response carries the token. Added
+		// 2026-05-25 to address the "I lost the token, my only
+		// recovery is Rotate which disrupts the agent" UX gap. See
+		// pkg/userapi/app/handlers.go::RevealTokenHandler for the
+		// design rationale on why a dedicated endpoint vs. folding
+		// into /get.
+		mux.Handle("POST /api/user/apps/reveal-token",
+			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.RevealTokenHandler))))
 	}
 }
 
