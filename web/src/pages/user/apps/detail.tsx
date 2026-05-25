@@ -166,6 +166,14 @@ export default function UserAppDetailPage() {
   // freshly issued one (which is what reveal-token returns).
   const activeKeyIdForReveal: string | null =
     detailQuery.data?.active_keys?.[0]?.key_id ?? null;
+
+  // base_url is deterministic from the slug + the proxy's fixed port —
+  // every code path that emits it (register / rotate / reveal-token) uses
+  // the same hardcoded format. Compute it once at the component level so
+  // we can show it always (no vault unlock required — base_url is public
+  // by design, no secret in the URL itself) and also copy it.
+  const baseUrl = `http://127.0.0.1:27200/apps/${slug}/v1`;
+  const [copiedBaseUrl, setCopiedBaseUrl] = useState(false);
   // 2026-05-23 uninstall — paired with default-install flip. Bypasses
   // the mutationLockedSlugs revoke/rotate guard because uninstall is
   // whole-system (service stops BEFORE bearer is wiped). On success the
@@ -1019,6 +1027,58 @@ export default function UserAppDetailPage() {
               </button>
             </div>
             <div className="cap-section-body">
+              {/* Base URL — always visible, not behind unlock (it's public by
+                  design; the token is the secret half of the env block).
+                  Pairs visually with the masked token below so users see the
+                  full env block needed by their agent. */}
+              <div className="cap-row cap-row-bearer mb-2.5">
+                <div className="min-w-0 flex-1">
+                  <div
+                    className="text-[11px] uppercase tracking-wider"
+                    style={{
+                      color: 'var(--muted-foreground)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    OPENAI_BASE_URL
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <code
+                      className="px-2 py-1 rounded text-[12px]"
+                      style={{
+                        background: 'var(--secondary, #3f3f46)',
+                        color: 'var(--foreground)',
+                        fontFamily: 'var(--font-mono)',
+                        wordBreak: 'break-all',
+                      }}
+                    >
+                      {baseUrl}
+                    </code>
+                    <button
+                      type="button"
+                      title="Copy base URL to clipboard"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(baseUrl);
+                          setCopiedBaseUrl(true);
+                          window.setTimeout(() => setCopiedBaseUrl(false), 2000);
+                        } catch {
+                          // Clipboard API may be blocked in non-secure
+                          // contexts. The text is selectable in the code
+                          // block, so users can copy by hand. Silent.
+                        }
+                      }}
+                      className="rounded px-2 py-1 text-[11px] font-mono uppercase tracking-wider"
+                      style={{
+                        background: copiedBaseUrl ? 'var(--success, #16a34a)' : '#ca8a04',
+                        color: 'var(--primary-foreground, #18181b)',
+                      }}
+                    >
+                      {copiedBaseUrl ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              </div>
               {data.active_keys.length === 0 ? (
                 <div className="text-[13px]" style={{ color: 'var(--muted-foreground)' }}>
                   No active bearer. Re-register via CLI:{' '}
