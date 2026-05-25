@@ -365,37 +365,69 @@ export default function UserTrustCheckPage() {
         </div>
       </header>
 
-      {isOffline && (
-        <div className="tc-banner tc-banner-offline" role="status">
-          <span className="tc-banner-dot" />
-          <div className="tc-banner-body">
-            <div>
-              <strong>trust-local is offline.</strong>{' '}
-              {startService.isError ? (
-                <span className="tc-banner-err">
-                  Couldn't start it: {startService.error?.message}. Try{' '}
-                  <code>aikey service restart trust-local</code> in a terminal.
-                </span>
-              ) : (
-                <>
-                  Click <strong>Start service</strong> to relaunch it,
-                  or run <code>aikey service start trust-local</code> in
-                  a terminal. The page auto-recovers on next 30s tick.
-                </>
-              )}
+      {isOffline && (() => {
+        // Two distinct cold states share the `isOffline` flag, but the
+        // user-facing remediation differs and we MUST differentiate —
+        // pointing a not-installed user at `aikey service restart` is
+        // misleading and steers them away from the actual fix
+        // (`aikey app install`). Bugfix:
+        // 20260525-trust-check-web-uninstalled-vs-offline-confusion.md.
+        //
+        // The error code comes from the console envelope which forwards
+        // the CLI's `{"ok":false, "error":"TRUST_LOCAL_NOT_INSTALLED"}`
+        // JSON. See hooks.ts::StartServiceError for the typed shape.
+        const notInstalled =
+          startService.isError &&
+          startService.error?.errorCode === 'TRUST_LOCAL_NOT_INSTALLED';
+        return (
+          <div className="tc-banner tc-banner-offline" role="status">
+            <span className="tc-banner-dot" />
+            <div className="tc-banner-body">
+              <div>
+                {notInstalled ? (
+                  <>
+                    <strong>Trust Check is not installed.</strong>{' '}
+                    Run{' '}
+                    <code>aikey app install degrade-detector</code> in a
+                    terminal to install the trust-local service
+                    (~23MB binary, runs on 127.0.0.1:8801).
+                  </>
+                ) : (
+                  <>
+                    <strong>trust-local is offline.</strong>{' '}
+                    {startService.isError ? (
+                      <span className="tc-banner-err">
+                        Couldn't start it: {startService.error?.detail}.
+                        Try <code>aikey service restart trust-local</code>{' '}
+                        in a terminal.
+                      </span>
+                    ) : (
+                      <>
+                        Click <strong>Start service</strong> to relaunch
+                        it, or run{' '}
+                        <code>aikey service start trust-local</code> in
+                        a terminal. The page auto-recovers on next 30s
+                        tick.
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
+            {!notInstalled && (
+              <button
+                type="button"
+                className="tc-btn tc-btn-primary tc-banner-action"
+                onClick={() => startService.mutate()}
+                disabled={startService.isPending}
+                title="POST /api/internal/services/trust-local/start (local-server shells out to launchctl)"
+              >
+                {startService.isPending ? 'Starting…' : 'Start service'}
+              </button>
+            )}
           </div>
-          <button
-            type="button"
-            className="tc-btn tc-btn-primary tc-banner-action"
-            onClick={() => startService.mutate()}
-            disabled={startService.isPending}
-            title="POST /api/internal/services/trust-local/start (local-server shells out to launchctl)"
-          >
-            {startService.isPending ? 'Starting…' : 'Start service'}
-          </button>
-        </div>
-      )}
+        );
+      })()}
 
       <HealthOverviewPanel isLoading={isLoading} summaries={summaries} />
 

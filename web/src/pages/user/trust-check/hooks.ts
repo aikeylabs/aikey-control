@@ -36,18 +36,48 @@ const DETAIL_STALE_MS = 5_000; // detail drawer: short stale window so re-openin
  * from 8090, fetch('/api/...') is same-origin; if a dev runs Vite
  * on 5173 with VITE_AUTH_MODE=local_bypass, this still works because
  * Vite proxies /api → 8090.
+ *
+ * Error envelope (preserved from console's JSON response):
+ *   `{ ok: false, error: "TRUST_LOCAL_NOT_INSTALLED" | "...", detail: "..." }`
+ *
+ * Why we throw a typed `StartServiceError` (not bare `Error`): the
+ * banner needs to distinguish "not installed" (point user at
+ * `aikey app install degrade-detector`) from "installed but launch
+ * failed" (point user at `aikey service restart`). Bugfix:
+ * 20260525-trust-check-web-uninstalled-vs-offline-confusion.md.
  */
+export class StartServiceError extends Error {
+  errorCode: string;
+  detail: string;
+  constructor(errorCode: string, detail: string) {
+    super(detail);
+    this.name = 'StartServiceError';
+    this.errorCode = errorCode;
+    this.detail = detail;
+  }
+}
+
 export function useStartTrustLocalService() {
-  return useMutation<{ ok: boolean; detail?: string }, Error, void>({
+  return useMutation<
+    { ok: boolean; detail?: string },
+    StartServiceError,
+    void
+  >({
     mutationFn: async () => {
       const resp = await fetch('/api/internal/services/trust-local/start', {
         method: 'POST',
       });
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok || body?.ok === false) {
-        throw new Error(body?.detail || `start failed (HTTP ${resp.status})`);
+      const body = await resp.json().catch(() => ({} as Record<string, unknown>));
+      if (!resp.ok || (body as { ok?: boolean })?.ok === false) {
+        const errorCode =
+          ((body as { error?: string })?.error) ||
+          (resp.status === 0 ? 'NETWORK_ERROR' : `HTTP_${resp.status}`);
+        const detail =
+          ((body as { detail?: string })?.detail) ||
+          `start failed (HTTP ${resp.status})`;
+        throw new StartServiceError(errorCode, detail);
       }
-      return body;
+      return body as { ok: boolean; detail?: string };
     },
   });
 }
