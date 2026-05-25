@@ -54,6 +54,38 @@ function providerColor(name: string): string {
 // scheme when we can't map back to a provider.
 const KEY_PALETTE = ['#ca8a04', '#71717a', '#52525b', '#a1a1aa', '#3f3f46', '#d4d4d8'];
 
+// First-party app slugs hardcoded for the "INTERNAL" badge on the "Usage
+// By App" chart (2026-05-25). MUST stay in sync with the Rust source of
+// truth `aikey-cli/src/commands_app/mod.rs::FIRST_PARTY_SLUGS`. Frontend
+// can't fetch the list dynamically because /api/user/apps/list might be
+// gated by auth in some editions; hardcoding mirrors the same trade-off
+// that ProviderMultiSelect makes for the protocol catalog.
+const FIRST_PARTY_SLUGS = new Set(['degrade-detector']);
+
+// Direct /v1/... traffic (app_slug == '') gets a friendly CLI tool name
+// derived from the provider_code per the 2026-05-25 spec ("claude / codex
+// / kimi 等作为 app 名称"). When provider doesn't map, the raw
+// provider_code is used so we never silently bucket unknown values.
+//
+// Kimi family stays split (moonshot vs kimi_code shown separately) per
+// user decision 2026-05-25 — matches the chip convention in
+// `shared/ui/ProviderMultiSelect.tsx::KNOWN_PROTOCOLS`.
+function providerToToolName(providerCode: string): string {
+  const lc = (providerCode || '').toLowerCase();
+  switch (lc) {
+    case 'anthropic':       return 'claude';
+    case 'openai':          return 'codex';
+    case 'moonshot':        return 'kimi(moonshot)';
+    case 'kimi_code':       return 'kimi(kimi-code)';
+    case 'google_gemini':   return 'gemini';
+    case 'deepseek':        return 'deepseek';
+    case 'xai_grok':        return 'grok';
+    case 'zhipu':           return 'glm';
+    case 'doubao':          return 'doubao';
+    default:                return providerCode || '(direct)';
+  }
+}
+
 type RangeKey = 7 | 14 | 30 | 90;
 
 function formatTokens(n: number): string {
@@ -142,6 +174,14 @@ export default function UserUsageLedgerPage() {
     queryFn: () => usageApi.personalByKeyTotal(identity!, startDate, endDate),
     enabled: hasIdentity,
   });
+  // 2026-05-25 "Usage By App" ranking — same identity + range as the
+  // other personal queries so a single range chip change refetches
+  // everything together.
+  const byApp = useQuery({
+    queryKey: ['user-usage-by-app', identityKey, range],
+    queryFn: () => usageApi.personalByAppTotal(identity!, startDate, endDate),
+    enabled: hasIdentity,
+  });
 
   // Derive friendly key labels (F2 landed).
   //   1. `alias`                    — personal keys + named team keys
@@ -213,6 +253,53 @@ export default function UserUsageLedgerPage() {
       color: KEY_PALETTE[i % KEY_PALETTE.length],
     }));
   }, [keyData]);
+
+  // "Usage By App" rows (2026-05-25): same shape as keyRows so we can
+  // reuse the .key-row / .key-bar CSS without duplicating. Two row
+  // kinds — server returns (app_slug, provider_code) tuples and we
+  // derive the display label here:
+  //
+  //   - app_slug non-empty → label = app_slug ("claude-mem"). First-
+  //     party slugs (FIRST_PARTY_SLUGS) get the "INTERNAL" badge so
+  //     the user can tell their own agents apart from AiKey's pipeline.
+  //   - app_slug empty → label = providerToToolName(provider_code)
+  //     ("claude" / "codex" / "kimi(moonshot)" …). The "(direct)"
+  //     subtitle indicates these aren't a registered app, just CLI
+  //     traffic.
+  //
+  // Sorted server-side already (ORDER BY SUM(total_tokens) DESC);
+  // we just slice to top 10 + drop 0-token rows (same hygiene as
+  // keyRows). barPct = relative to the top row; sharePct = absolute
+  // share of the grand total — both rendered in the bar cell.
+  const appRows = useMemo(() => {
+    const all = (byApp.data ?? []).filter((r) => r.total_tokens > 0);
+    const top = all[0]?.total_tokens ?? 1;
+    const grand = all.reduce((s, r) => s + r.total_tokens, 0) || 1;
+    return all.slice(0, 10).map((r) => {
+      const isRegistered = r.app_slug !== '';
+      const isFirstParty = isRegistered && FIRST_PARTY_SLUGS.has(r.app_slug);
+      const label = isRegistered
+        ? r.app_slug
+        : providerToToolName(r.provider_code);
+      // Color reuses providerColor() so the chip color is consistent with
+      // the protocol stack chart above (anthropic = gold, kimi family =
+      // sky, openai = violet). For registered apps without a clear
+      // provider_code we'd fall back to IDLE, but the SQL always returns
+      // provider_code for non-empty app rows.
+      const color = providerColor(r.provider_code);
+      return {
+        key: `${r.app_slug}|${r.provider_code}`,
+        label,
+        kind: isRegistered ? (isFirstParty ? ('first-party' as const) : ('third-party' as const)) : ('direct' as const),
+        provider_code: r.provider_code,
+        total_tokens: r.total_tokens,
+        request_count: r.request_count,
+        barPct: (r.total_tokens / top) * 100,
+        sharePct: (r.total_tokens / grand) * 100,
+        color,
+      };
+    });
+  }, [byApp.data]);
 
   if (!hasIdentity && !seats.isLoading) {
     return (
@@ -595,6 +682,94 @@ export default function UserUsageLedgerPage() {
                     <span style={{ color: 'var(--foreground)' }}>{formatTokens(k.total_tokens)}</span>
                     <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
                       {k.sharePct < 1 ? '<1%' : `${Math.round(k.sharePct)}%`}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* ── Usage By App (2026-05-25) ──────────────────────────────
+            Ranks traffic by Connected App. Registered apps (claude-mem,
+            degrade-detector) show by their slug; direct /v1/... traffic
+            shows by CLI tool name (claude, codex, kimi…) derived from
+            the provider_code. INTERNAL badge marks first-party apps so
+            the user can distinguish their own agents from AiKey's
+            built-in pipeline noise. Reuses .key-row / .key-bar CSS for
+            visual consistency with the "Usage by key" section above. */}
+        <section className="chart-card">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <div className="chart-title">Usage by app</div>
+              <div className="chart-sub">
+                Top connected apps · {range}D token consumption · direct CLI calls bucketed by tool name
+              </div>
+            </div>
+          </div>
+
+          {byApp.isLoading ? (
+            <div className="mt-6"><Placeholder>Loading...</Placeholder></div>
+          ) : appRows.length === 0 ? (
+            <div className="mt-6"><Placeholder>No app usage in this range</Placeholder></div>
+          ) : (
+            <ul className="mt-4 space-y-2.5">
+              {appRows.map((a) => (
+                <li key={a.key} className="key-row">
+                  <span
+                    className="font-mono text-[11.5px] truncate flex items-center gap-1.5"
+                    title={
+                      a.kind === 'direct'
+                        ? `direct /v1/... calls bucketed by ${a.provider_code}`
+                        : `${a.label} (${a.provider_code})`
+                    }
+                    style={{ color: 'var(--foreground)' }}
+                  >
+                    <span className="truncate">{a.label}</span>
+                    {a.kind === 'first-party' ? (
+                      <span
+                        className="text-[9px] font-mono uppercase tracking-wider px-1 py-0 rounded"
+                        style={{
+                          background: '#ca8a04',
+                          color: 'var(--primary-foreground, #18181b)',
+                          flexShrink: 0,
+                        }}
+                        title="Built-in AiKey component — your own tokens, but the traffic originates from an internal pipeline (e.g., Trust Check probes)."
+                      >
+                        INTERNAL
+                      </span>
+                    ) : a.kind === 'direct' ? (
+                      <span
+                        className="text-[9px] font-mono uppercase tracking-wider px-1 py-0 rounded"
+                        style={{
+                          background: 'transparent',
+                          color: 'var(--muted-foreground)',
+                          border: '1px solid var(--border)',
+                          flexShrink: 0,
+                        }}
+                        title="Direct /v1/... CLI traffic — no Connected App context. The label is the CLI tool inferred from the provider; proxy can't tell which actual binary called."
+                      >
+                        DIRECT
+                      </span>
+                    ) : null}
+                  </span>
+                  <div className="key-bar">
+                    <span
+                      style={{
+                        width: `${Math.max(a.barPct, 0.5)}%`,
+                        background: a.color,
+                        boxShadow:
+                          a.color === '#ca8a04' ? '0 0 8px rgba(250, 204, 21,0.3)' : undefined,
+                      }}
+                    />
+                  </div>
+                  <span className="font-mono text-[11.5px] text-right whitespace-nowrap">
+                    <span style={{ color: 'var(--foreground)' }}>{formatTokens(a.total_tokens)}</span>
+                    <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
+                      {a.sharePct < 1 ? '<1%' : `${Math.round(a.sharePct)}%`}
+                    </span>
+                    <span className="ml-2" style={{ color: 'var(--muted-foreground)' }}>
+                      {a.request_count} req
                     </span>
                   </span>
                 </li>

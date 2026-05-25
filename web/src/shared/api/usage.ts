@@ -36,6 +36,34 @@ export interface ProtocolTotal {
   request_count: number;
 }
 
+/**
+ * One row of the 2026-05-25 "Usage By App" ranking on /user/usage-ledger.
+ *
+ * Two row shapes coexist:
+ *
+ *   - **Registered app row** (`app_slug` non-empty): traffic that went
+ *     through `/apps/<slug>/v1/...` — a Connected App (first-party like
+ *     `degrade-detector` or third-party like `claude-mem`). The frontend
+ *     shows `app_slug` directly as the label; for first-party slugs it
+ *     also renders an "INTERNAL" badge so the user can tell apart their
+ *     own agents from AiKey's built-in pipeline noise.
+ *
+ *   - **Direct row** (`app_slug` empty): default `/v1/...` traffic with no
+ *     app context — typically the user running `claude` / `codex` / `kimi`
+ *     CLI tools against their `aikey use` selection. The proxy can't
+ *     distinguish CLI tools (claude vs. curl-to-anthropic both look the
+ *     same on the wire), so we use `provider_code` as the proxy for "tool
+ *     name" and map anthropic→claude, openai→codex, etc. on the client.
+ */
+export interface AppTotal {
+  /** Empty string for direct-traffic rows; non-empty for registered apps. */
+  app_slug: string;
+  /** Canonical short form (anthropic / openai / moonshot / kimi_code / ...). */
+  provider_code: string;
+  total_tokens: number;
+  request_count: number;
+}
+
 /** Phase 3B R23 (2026-05-11) — raw recent request row surfaced by the
  *  Overview "Recent Requests" card. Sourced from `usage_event_ods`
  *  directly so canary probes can be filtered (DWD aggregates strip
@@ -191,6 +219,20 @@ export const usageApi = {
   personalByKeyTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<KeyTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const res = await httpClient.get<KeyTotal[]>('/v1/usage/personal/by-key/total', {
+      params: { ...personalParams(id), ...range, tz: browserTZ() },
+    });
+    return res.data;
+  },
+
+  /**
+   * 2026-05-25 — "Usage By App" ranking. Server returns rows grouped by
+   * (app_slug, provider_code); see `AppTotal` for the two row shapes.
+   * Sorted by `total_tokens DESC` server-side; client just renders in
+   * order (and may slice to top N for display).
+   */
+  personalByAppTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<AppTotal[]> => {
+    const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
+    const res = await httpClient.get<AppTotal[]>('/v1/usage/personal/by-app/total', {
       params: { ...personalParams(id), ...range, tz: browserTZ() },
     });
     return res.data;
