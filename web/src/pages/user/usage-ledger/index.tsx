@@ -111,28 +111,96 @@ function normProto(s: string) {
 
 // Derive a human label for a usage-by-key row.
 //
-// Why the OAuth-session normalisation runs *before* the alias check: for
-// OAuth sessions the backend populates `alias` with the raw session id
-// (e.g. `oauth:session_<long-hex>`), which is unreadable in a list. If we
-// trust the alias blindly we render the raw hex; if we trust the identity
-// first (email), we get a clean label only for rows where ODS still has
-// the identity row joined in. Collapsing any `(oauth:)?session_<hex>` form
-// — in alias OR virtual_key_id — to `OAuth · <hex8>…` gives a consistent
-// readable label across all variants, and `identity` still wins when
-// present so the email ("user@example.com") takes precedence.
+// Label dimension: the vk_id prefix encodes WHAT was called (app slug,
+// probe alias, personal key alias, OAuth session). Identity encodes WHO
+// invoked it (the user's email). For most row types the user wants WHAT;
+// only OAuth direct calls want WHO (because the "what" is an opaque
+// session_<hex> meaningless to a human).
+//
+// Priority by vk_id prefix:
+//   - `app:<slug>`       → slug (the app name — what was called)
+//   - `probe:<alias>`    → alias (the probe — what was called)
+//   - `oauth:session_*`  → identity (email) if present, else `OAuth · <hex8>…`
+//                          (identity is the only readable signal for OAuth)
+//   - `personal:<alias>` → alias from `k.alias`, else stripped vk_id
+//   - other (team, no prefix) → alias, else vk_id verbatim
+//
+// 2026-05-26 (bugfix continuation): the original "identity first" rule
+// from the 2026-04-22 F2 patch caused app rows where ODS happened to
+// carry oauth_identity (proxy attaches OAuthIdentity to app events when
+// the underlying binding is OAuth-backed) to render with the user's
+// email instead of the app name. The current per-prefix dispatch keeps
+// the F2 OAuth fix without leaking identity into non-OAuth labels.
 function deriveKeyLabel(k: { alias?: string; identity?: string; virtual_key_id: string }): string {
-  if (k.identity && k.identity.trim()) return k.identity;
-  const oauthRe = /^(?:oauth:)?session_([a-f0-9]+)/i;
-  const aliasStr = (k.alias ?? '').trim();
-  const aliasOAuth = aliasStr.match(oauthRe);
-  if (aliasOAuth) return `OAuth · ${aliasOAuth[1].slice(0, 8)}…`;
-  if (aliasStr) return aliasStr;
   const id = (k.virtual_key_id || '').trim();
+  const aliasStr = (k.alias ?? '').trim();
+
+  if (id.startsWith('app:'))    return id.slice('app:'.length);
+  if (id.startsWith('probe:'))  return id.slice('probe:'.length);
+
+  // OAuth-session normalisation: backend may surface the raw session id
+  // in `alias` OR `virtual_key_id`. Identity (email) wins when present;
+  // otherwise collapse the hex to `OAuth · <hex8>…` for readability.
+  const oauthRe = /^(?:oauth:)?session_([a-f0-9]+)/i;
+  if (id.startsWith('oauth:')) {
+    if (k.identity && k.identity.trim()) return k.identity.trim();
+    const idOAuth = id.match(oauthRe);
+    if (idOAuth) return `OAuth · ${idOAuth[1].slice(0, 8)}…`;
+    return id.slice('oauth:'.length) || 'OAuth';
+  }
+
+  // personal / team / no-prefix: prefer the human alias, fall back to a
+  // stripped vk_id. Identity is intentionally NOT consulted — those row
+  // types are owner-keyed by alias, not session.
+  if (aliasStr) {
+    const aliasOAuth = aliasStr.match(oauthRe);
+    if (aliasOAuth) return `OAuth · ${aliasOAuth[1].slice(0, 8)}…`;
+    return aliasStr;
+  }
   if (!id) return 'unlabeled';
-  const idOAuth = id.match(oauthRe);
-  if (idOAuth) return `OAuth · ${idOAuth[1].slice(0, 8)}…`;
   if (id.startsWith('personal:')) return id.slice('personal:'.length);
   return id;
+}
+
+// Map a row's (app_slug, identity) tuple to the human-readable subtitle
+// shown under the primary key label in the "Usage by Key" list. Three
+// cases per spec R3:
+//   1. app_slug non-empty                → label per slug
+//      (UA-derived on new OAuth rows, registered on app rows)
+//   2. app_slug empty AND identity non-empty (legacy OAuth row that
+//      predates the 2026-05-26 UA attribution fix; ODS row was projected
+//      with NULL app_slug) → "Unknown App". Honest about the gap rather
+//      than silently dropping the dimension.
+//   3. app_slug empty AND identity empty (Personal CLI / team direct
+//      call) → no subtitle. Per spec R5 these paths intentionally do
+//      not carry an app dimension.
+//
+// Slugs themselves are coined in:
+//   aikey-proxy/internal/proxy/uaattribution/fingerprint.yaml
+// Display text pinned in:
+//   workflow/CI/requirements/2026-05-26-usage-by-key-app-attribution.md
+function deriveAppSubtitle(slug: string | undefined, identity: string | undefined): string {
+  const s = (slug ?? '').trim();
+  const id = (identity ?? '').trim();
+  if (!s) {
+    // Legacy OAuth row with no projected app_slug — honor spec by
+    // surfacing "Unknown App". Personal/team rows fall through and
+    // get no subtitle.
+    return id ? 'Unknown App' : '';
+  }
+  switch (s) {
+    case 'claude-code': return 'Claude Code';
+    case 'unknown-app': return 'Unknown App';
+    case 'cursor':      return 'Cursor';
+    case 'cline':       return 'Cline';
+    case 'continue':    return 'Continue';
+    case 'codex':       return 'Codex';
+  }
+  // Title-case fallback for slugs we haven't curated yet.
+  return s
+    .split('-')
+    .map((p) => (p.length === 0 ? p : p[0].toUpperCase() + p.slice(1)))
+    .join(' ');
 }
 
 export default function UserUsageLedgerPage() {
@@ -190,7 +258,15 @@ export default function UserUsageLedgerPage() {
   //   4. `personal:` prefix         — strip it
   //   5. `session_<hex>`            — bare session → `OAuth · <hex8>…`
   //   6. raw id / empty             — fallback
-  const keyData = (byKey.data ?? []).map((k) => ({ ...k, label: deriveKeyLabel(k) }));
+  const keyData = (byKey.data ?? []).map((k) => ({
+    ...k,
+    label: deriveKeyLabel(k),
+    // App attribution subtitle (2026-05-26). Empty string suppresses the
+    // subtitle row; non-empty renders the small grey caption under the
+    // primary label. Keeps OAuth multi-session rows distinguishable when
+    // the same email shows up under different clients.
+    appSubtitle: deriveAppSubtitle(k.app_slug, k.identity),
+  }));
 
   const totalTokens = timeline.data?.reduce((s, p) => s + p.total_tokens, 0) ?? 0;
   const totalRequests = timeline.data?.reduce((s, p) => s + p.request_count, 0) ?? 0;
@@ -660,14 +736,29 @@ export default function UserUsageLedgerPage() {
           ) : (
             <ul className="mt-4 space-y-2.5">
               {keyRows.map((k) => (
-                <li key={k.virtual_key_id} className="key-row">
-                  <span
-                    className="font-mono text-[11.5px] truncate"
-                    title={k.label}
-                    style={{ color: 'var(--foreground)' }}
-                  >
-                    {k.label}
-                  </span>
+                // React key is `${identity_or_vk}|${app_slug}` to mirror
+                // the new SQL aggregation tuple — virtual_key_id alone is
+                // no longer a stable per-row identity after OAuth
+                // sessions collapse per (email, app).
+                <li key={`${k.identity || k.virtual_key_id}|${k.app_slug ?? ''}`} className="key-row">
+                  <div className="flex flex-col min-w-0">
+                    <span
+                      className="font-mono text-[11.5px] truncate"
+                      title={k.label}
+                      style={{ color: 'var(--foreground)' }}
+                    >
+                      {k.label}
+                    </span>
+                    {k.appSubtitle ? (
+                      <span
+                        className="font-mono text-[10px] truncate"
+                        title={k.appSubtitle}
+                        style={{ color: 'var(--muted-foreground)' }}
+                      >
+                        {k.appSubtitle}
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="key-bar">
                     <span
                       style={{

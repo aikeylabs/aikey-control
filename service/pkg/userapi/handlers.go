@@ -311,6 +311,12 @@ func (h *Handlers) Register(
 		// into /get.
 		mux.Handle("POST /api/user/apps/reveal-token",
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.RevealTokenHandler))))
+		// Health: in-memory "last call status per slug" snapshot from the
+		// local proxy. Public read (no unlock) because the response carries
+		// only status codes + timestamps, no credentials or app keys.
+		// Drives the /user/apps list page's Health column. Added 2026-05-26.
+		mux.Handle("GET /api/user/apps/health",
+			authMW(http.HandlerFunc(app.HealthHandler)))
 	}
 }
 

@@ -241,6 +241,32 @@ export interface AppListData {
   apps: AppListRow[];
 }
 
+/**
+ * One entry in the GET /api/user/apps/health response. Sourced from the
+ * local proxy's in-memory cache of "most recent app pipeline call per
+ * app_slug" — volatile (lost on proxy restart, not persisted). The UI
+ * uses it to classify each app row into 4 buckets:
+ *   - OK     status_code in [200, 300)
+ *   - Warn   status_code in [400, 500)
+ *   - Error  status_code >= 500  OR  error_type is non-empty
+ *   - Never  slug not present in the response (no entry in cache)
+ *
+ * last_call_at is ISO-8601 (Go time.Time JSON default). Frontend converts
+ * to a relative "5min ago" via relativeTime() at render time.
+ */
+export interface AppHealth {
+  app_slug: string;
+  last_call_at: string;     // ISO-8601 timestamp
+  status_code: number;
+  error_type?: string;      // empty for 2xx; provider error type or proxy-side category otherwise
+}
+
+/** Response for GET /api/user/apps/health.
+ *  `apps` is sorted by app_slug for deterministic snapshot tests. */
+export interface AppHealthData {
+  apps: AppHealth[];
+}
+
 export interface AppRouteResponse {
   slug: string;
   upstream: string;
@@ -315,7 +341,19 @@ export interface AppRegisterRequest {
 export interface AppRegisterBindingPreview {
   upstream: string;
   key_source_type: string;
+  /** Stable storage identifier (alias / virtual_key_id / provider_account_id).
+   *  Used by follow-up calls like `aikey app route`. */
   key_source_ref: string;
+  /**
+   * Friendly display string resolved by the CLI:
+   * - personal → same as `key_source_ref`
+   * - team → `local_alias` (or server `alias` if not renamed)
+   * - personal_oauth_account → email / local_alias / external_id
+   *   (falls back to `provider_account_id` only if nothing else exists)
+   * Optional for forwards compat — UI MUST fall back to `key_source_ref`
+   * when absent (older CLI builds didn't emit this field).
+   */
+  key_source_label?: string;
 }
 
 /**
@@ -505,5 +543,20 @@ export const appsApi = {
         '/api/user/apps/register',
         req,
       ),
+    ),
+
+  /**
+   * Read the proxy's in-memory "most recent call per app_slug" snapshot.
+   * Drives the /user/apps list page Health column. Returns an empty
+   * `apps` array when no traffic has been observed (e.g. immediately
+   * after proxy restart — the cache is process-memory only).
+   *
+   * Error codes the UI may surface:
+   *   - PROXY_UNREACHABLE        — aikey-proxy is not running
+   *   - HEALTH_NOT_AVAILABLE     — proxy returned non-200 (older build, cache not wired)
+   */
+  health: (): Promise<AppHealthData> =>
+    callWithErrorExtraction(() =>
+      httpClient.get<OkEnvelope<AppHealthData> | ErrEnvelope>('/api/user/apps/health'),
     ),
 };

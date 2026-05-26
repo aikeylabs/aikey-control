@@ -35,6 +35,7 @@ import {
   bindingTypeLabel,
   type AppListRow,
   type AppBinding,
+  type AppHealth,
   type AppRegisterResponse,
 } from '@/shared/api/user/apps';
 import { importApi } from '@/shared/api/user/import';
@@ -52,6 +53,48 @@ function relativeTime(unixSeconds: number | null): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+/** Same as relativeTime but takes an ISO-8601 string (the shape the
+ *  /api/user/apps/health proxy snapshot returns — Go time.Time JSON). */
+function relativeTimeISO(iso: string | undefined): string {
+  if (!iso) return '—';
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return '—';
+  return relativeTime(Math.floor(ms / 1000));
+}
+
+/** 4-bucket classification of the most recent app call (see backend
+ *  apppipe/health.go for the data source). Drives the Health column's
+ *  icon + colour on /user/apps. Centralised so the bucket boundaries
+ *  match the docs exactly — changing them here updates every render. */
+type HealthBucket = 'ok' | 'warn' | 'error' | 'never';
+
+function healthBucket(h: AppHealth | undefined): HealthBucket {
+  if (!h) return 'never';
+  if (h.error_type) return 'error';
+  if (h.status_code >= 500) return 'error';
+  if (h.status_code >= 400) return 'warn';
+  if (h.status_code >= 200 && h.status_code < 300) return 'ok';
+  // Unrecognised status code (3xx, weird values) → treat as warn so the
+  // user sees something is off without us asserting "broken".
+  return 'warn';
+}
+
+/** Icon + colour pair for a bucket. Icons are single Unicode glyphs to
+ *  match the existing column compactness (table cell is ~110px wide); a
+ *  proper Lucide icon would dominate the row visually. */
+function healthGlyph(b: HealthBucket): { glyph: string; color: string; label: string } {
+  switch (b) {
+    case 'ok':
+      return { glyph: '✓', color: 'var(--success, #16a34a)', label: 'OK' };
+    case 'warn':
+      return { glyph: '⚠', color: '#ca8a04', label: 'Warn' };
+    case 'error':
+      return { glyph: '✗', color: 'var(--destructive, #ef4444)', label: 'Error' };
+    case 'never':
+      return { glyph: '—', color: 'var(--muted-foreground)', label: 'No recent calls' };
+  }
 }
 
 type RowStatus = 'active' | 'inactive';
@@ -181,6 +224,32 @@ export default function UserAppsListPage() {
     queryFn: appsApi.list,
     refetchInterval: 30_000,
   });
+
+  // Health snapshot — separate query so the apps list renders
+  // immediately and the Health column flashes a loading skeleton
+  // briefly before populating. Same refresh cadence as the list to
+  // avoid drift; a missed refresh just leaves the stale bucket
+  // showing for one cycle, which is fine for "list page badge".
+  //
+  // The endpoint is intentionally PROXY-LOCAL (Personal/Trial path
+  // only). On Production where the Web UI may live on a different
+  // machine than the proxy the request will 502 → query enters
+  // `error` state → we render every row's bucket as "never" with a
+  // header banner explaining the proxy is unreachable. See decision
+  // 2026-05-26.
+  const healthQuery = useQuery({
+    queryKey: ['user-apps-health'],
+    queryFn: appsApi.health,
+    refetchInterval: 30_000,
+    // Don't retry aggressively — if the proxy is down a single failure
+    // is enough signal; spinning on it would clobber the network log.
+    retry: 1,
+  });
+  const healthBySlug = useMemo(() => {
+    const m = new Map<string, AppHealth>();
+    (healthQuery.data?.apps ?? []).forEach((h) => m.set(h.app_slug, h));
+    return m;
+  }, [healthQuery.data]);
 
   // Vault status — drives mutation-button gating (locked → disabled +
   // tooltip "Unlock vault first"). The VaultStatusPill in the header
@@ -506,7 +575,12 @@ export default function UserAppsListPage() {
               <th className="px-4 py-3 font-normal">App</th>
               <th className="px-4 py-3 font-normal">Status</th>
               <th className="px-4 py-3 font-normal">Provider bindings</th>
-              <th className="px-4 py-3 font-normal">Last call</th>
+              <th
+                className="px-4 py-3 font-normal"
+                title="Most recent app pipeline call. ✓ OK (2xx) · ⚠ Warn (4xx) · ✗ Error (5xx or upstream error) · — never called since proxy started. Data is in-memory only; restarting aikey-proxy resets the column to '—' until traffic resumes."
+              >
+                Health
+              </th>
               <th className="px-4 py-3 font-normal text-right">Actions</th>
             </tr>
           </thead>
@@ -627,14 +701,56 @@ export default function UserAppsListPage() {
                       )}
                     </td>
 
-                    {/* Last call */}
+                    {/* Health — 4-bucket badge (OK / Warn / Error / Never)
+                        sourced from the local proxy's in-memory snapshot.
+                        Loading: first paint while healthQuery is pending —
+                        show a thin skeleton bar so the column doesn't jump
+                        layout when data arrives. */}
                     <td className="px-4 py-3 align-top">
-                      <span
-                        className="font-mono text-[12px]"
-                        style={{ color: 'var(--foreground)' }}
-                      >
-                        {relativeTime(app.last_used_at)}
-                      </span>
+                      {healthQuery.isLoading ? (
+                        <span
+                          aria-label="Loading health"
+                          className="inline-block rounded"
+                          style={{
+                            background: 'var(--secondary, #3f3f46)',
+                            opacity: 0.4,
+                            height: 12,
+                            width: 64,
+                          }}
+                        />
+                      ) : (() => {
+                        const h = healthBySlug.get(app.slug);
+                        const bucket = healthBucket(h);
+                        const meta = healthGlyph(bucket);
+                        const detail =
+                          bucket === 'never'
+                            ? meta.label
+                            : `${meta.label} · HTTP ${h?.status_code ?? '?'}${h?.error_type ? ` (${h.error_type})` : ''}`;
+                        return (
+                          <span
+                            className="inline-flex items-center gap-2 font-mono text-[12px]"
+                            title={detail}
+                            style={{ color: 'var(--foreground)' }}
+                          >
+                            <span
+                              aria-hidden="true"
+                              style={{ color: meta.color, fontSize: 14, lineHeight: 1 }}
+                            >
+                              {meta.glyph}
+                            </span>
+                            <span
+                              style={{
+                                color:
+                                  bucket === 'never'
+                                    ? 'var(--muted-foreground)'
+                                    : 'var(--foreground)',
+                              }}
+                            >
+                              {bucket === 'never' ? '—' : relativeTimeISO(h?.last_call_at)}
+                            </span>
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     {/* Actions */}

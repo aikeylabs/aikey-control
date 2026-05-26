@@ -341,18 +341,43 @@ func (h *Handlers) RevealTokenHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // UninstallHandler whole-system removal: stops the plugin's service +
-// wipes vault rows. Added 2026-05-23 alongside the rc.5 default-install
-// flip for degrade-detector — users who got the service auto-installed
-// need a UI button to opt out cleanly.
+// wipes vault rows. Originally added 2026-05-23 alongside the rc.5
+// default-install flip for degrade-detector — users who got the
+// service auto-installed needed a UI button to opt out.
 //
-// Important: uninstall INTENTIONALLY bypasses the `mutationLockedSlugs`
-// revoke/rotate guard. The lock exists to prevent a half-state where
-// the bearer is gone but the agent process is still running and
-// 401-ing. Uninstall is whole-system — the CLI side (handle_uninstall
-// in commands_app/install.rs) stops the service FIRST via the plugin's
-// install_service.sh --uninstall, THEN wipes vault rows. No partial
-// failure surface.
+// **Policy change 2026-05-26**: first-party apps (those in
+// `mutationLockedSlugs`) now reject Web-UI uninstall too. The rc.5
+// carve-out (uninstall bypassing the lock) was a UX shortcut that
+// turned out to be a footgun — accidentally removing Trust Check via
+// the Web UI silently breaks the internal pipeline until next CLI
+// startup re-asserts the bearer. The CLI path
+// (`aikey app uninstall <slug>`) remains the supported channel for
+// users who genuinely want to remove a first-party component;
+// mirroring `aikey app install <slug>` as the symmetric counterpart.
+//
+// Web-UI uninstall is still allowed for third-party apps, where the
+// CLI side does AiKey-side identity removal only and never touches a
+// user-managed binary.
+//
+// See workflow/CI/bugfix/20260526-first-party-uninstall-blocked.md.
 func (h *Handlers) UninstallHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Slug string `json:"slug"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if req.Slug == "" {
+		cli.WriteErr(w, cli.ErrBadRequest, "slug required")
+		return
+	}
+	if _, locked := mutationLockedSlugs[req.Slug]; locked {
+		cli.WriteErr(w, cli.ErrAppMutationDenied,
+			"app '"+req.Slug+"' is a first-party AiKey component; uninstall is not "+
+				"available from the Web UI. Run `aikey app uninstall "+req.Slug+"` "+
+				"from the terminal if you really need to remove it.")
+		return
+	}
 	h.slugOnlyAction(w, r, "uninstall")
 }
 

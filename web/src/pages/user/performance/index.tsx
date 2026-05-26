@@ -24,6 +24,20 @@ function fmtTok(n: number): string {
   return String(n);
 }
 
+/** Format a cache hit ratio (0..1) as the percentage shown in the
+ *  by-key / by-model row tail. Rules pinned by reviewer feedback:
+ *   - exactly 0  → "0%"      (explicit "no cache used at all")
+ *   - 0..1%      → "<1%"     (avoid the rounded-down "0%" lie for tiny hits)
+ *   - else       → rounded integer percent (e.g. "85%")
+ *  Single decimal point would look noisy at this font size and the user
+ *  reads this number for a quick at-a-glance signal, not auditing. */
+function formatHitRate(ratio: number): string {
+  if (!isFinite(ratio) || ratio <= 0) return '0%';
+  const pct = ratio * 100;
+  if (pct < 1) return '<1%';
+  return `${Math.round(pct)}%`;
+}
+
 /** YYYY-MM-DD in user's local timezone — see overview/index.tsx for the
  *  rationale (UTC slice would desync near midnight in non-UTC tz). */
 function daysAgoStr(n: number): string {
@@ -101,6 +115,13 @@ export default function UserPerformancePage() {
 
   // 4-segment bar (uncached / creation / cached / output) per account, share-of-day.
   // Math mirrors the proxy's anthropic.go totalInput() so segments sum to total_tokens.
+  //
+  // hitRate (2026-05-26): cached / input_tokens. The denominator is the full
+  // INPUT side (uncached + creation + cached) — output is excluded because
+  // it's a generation cost, not a cache-eligible read. Range 0..1 per row;
+  // grandHitRate uses the sum-of-numerators / sum-of-denominators form
+  // (NOT the arithmetic mean of per-row rates) so large-traffic rows weigh
+  // proportionally — small "100% hit" probe rows don't drag the average up.
   const todayKeyRows = useMemo(() => {
     const data = (byKeyRecent.data ?? []).map((k) => ({ ...k, label: deriveKeyLabel(k) }));
     const nonZero = data.filter((k) => k.total_tokens > 0);
@@ -110,6 +131,7 @@ export default function UserPerformancePage() {
     const grandReqs = sorted.reduce((s, k) => s + k.request_count, 0);
     const grandCached = sorted.reduce((s, k) => s + (k.cached_input_tokens ?? 0), 0);
     const grandCreation = sorted.reduce((s, k) => s + (k.cache_creation_input_tokens ?? 0), 0);
+    const grandInput = sorted.reduce((s, k) => s + (k.input_tokens ?? 0), 0);
     return {
       rows: sorted.map((k) => {
         const inputAll = k.input_tokens ?? 0;
@@ -134,12 +156,15 @@ export default function UserPerformancePage() {
           outputPctOfRow: (output / denom) * 100,
           barPct: (k.total_tokens / top) * 100,
           sharePct: (k.total_tokens / grand) * 100,
+          hitRate: inputAll > 0 ? cappedCached / inputAll : 0,
         };
       }),
       grandTotal: sorted.reduce((s, k) => s + k.total_tokens, 0),
       grandCached,
       grandCreation,
+      grandInput,
       grandReqs,
+      grandHitRate: grandInput > 0 ? grandCached / grandInput : 0,
       keyCount: sorted.length,
     };
   }, [byKeyRecent.data]);
@@ -157,6 +182,7 @@ export default function UserPerformancePage() {
     const grandReqs = sorted.reduce((s, m) => s + m.request_count, 0);
     const grandCached = sorted.reduce((s, m) => s + (m.cached_input_tokens ?? 0), 0);
     const grandCreation = sorted.reduce((s, m) => s + (m.cache_creation_input_tokens ?? 0), 0);
+    const grandInput = sorted.reduce((s, m) => s + (m.input_tokens ?? 0), 0);
     return {
       rows: sorted.map((m) => {
         const inputAll = m.input_tokens ?? 0;
@@ -181,12 +207,15 @@ export default function UserPerformancePage() {
           outputPctOfRow: (output / denom) * 100,
           barPct: (m.total_tokens / top) * 100,
           sharePct: (m.total_tokens / grand) * 100,
+          hitRate: inputAll > 0 ? cappedCached / inputAll : 0,
         };
       }),
       grandTotal: sorted.reduce((s, m) => s + m.total_tokens, 0),
       grandCached,
       grandCreation,
+      grandInput,
       grandReqs,
+      grandHitRate: grandInput > 0 ? grandCached / grandInput : 0,
       modelCount: sorted.length,
     };
   }, [byModelRecent.data]);
@@ -302,6 +331,16 @@ export default function UserPerformancePage() {
                         <span className="stat-dot stat-output" />{fmtTok(k.output)}
                       </span>
                     )}
+                    {/* Cache hit rate — the headline number for this chart.
+                        Rendered in accent gold + bold + larger font so it
+                        pops vs the muted segment stats. Tooltip shows the
+                        raw numerator / denominator for forensic clarity. */}
+                    <span
+                      className="hit-rate"
+                      title={`cache hit rate = cached / input · ${k.cached.toLocaleString()} / ${(k.input_tokens ?? 0).toLocaleString()}`}
+                    >
+                      {formatHitRate(k.hitRate)}
+                    </span>
                     <span className="stat-total">
                       <span style={{ color: 'var(--foreground)' }}>{fmtTok(k.total_tokens)}</span>
                       <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
@@ -336,6 +375,21 @@ export default function UserPerformancePage() {
                     {' · '}
                     <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandCached)}</span>
                     {' cached'}
+                  </>
+                )}
+                {/* Weighted aggregate cache hit rate. Same accent treatment
+                    as per-row hit-rate so the eye can scan vertically and
+                    land on the total without a context switch. */}
+                {todayKeyRows.grandInput > 0 && (
+                  <>
+                    {' · '}
+                    <span
+                      className="hit-rate"
+                      title={`weighted cache hit rate = ${todayKeyRows.grandCached.toLocaleString()} / ${todayKeyRows.grandInput.toLocaleString()}`}
+                    >
+                      {formatHitRate(todayKeyRows.grandHitRate)}
+                    </span>
+                    {' hit rate'}
                   </>
                 )}
                 {' · '}
@@ -436,6 +490,14 @@ export default function UserPerformancePage() {
                         <span className="stat-dot stat-output" />{fmtTok(m.output)}
                       </span>
                     )}
+                    {/* Cache hit rate — same prominent treatment as by-key.
+                        See the by-key block above for rationale. */}
+                    <span
+                      className="hit-rate"
+                      title={`cache hit rate = cached / input · ${m.cached.toLocaleString()} / ${(m.input_tokens ?? 0).toLocaleString()}`}
+                    >
+                      {formatHitRate(m.hitRate)}
+                    </span>
                     <span className="stat-total">
                       <span style={{ color: 'var(--foreground)' }}>{fmtTok(m.total_tokens)}</span>
                       <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
@@ -470,6 +532,18 @@ export default function UserPerformancePage() {
                     {' · '}
                     <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayModelRows.grandCached)}</span>
                     {' cached'}
+                  </>
+                )}
+                {todayModelRows.grandInput > 0 && (
+                  <>
+                    {' · '}
+                    <span
+                      className="hit-rate"
+                      title={`weighted cache hit rate = ${todayModelRows.grandCached.toLocaleString()} / ${todayModelRows.grandInput.toLocaleString()}`}
+                    >
+                      {formatHitRate(todayModelRows.grandHitRate)}
+                    </span>
+                    {' hit rate'}
                   </>
                 )}
                 {' · '}
@@ -598,5 +672,23 @@ const COST_CSS = `
   margin-left: 0.35rem;
   padding-left: 0.85rem;
   border-left: 1px solid var(--border);
+}
+/* Cache hit rate — the headline number per row + per chart-total.
+ * Visual treatment chosen to "pop" without breaking the muted-stats grid:
+ *   - bold + +1px font size vs the muted .stat siblings
+ *   - accent gold (#facc15) matching the chart's primary segment color
+ *   - subtle glow + left divider keeps it tied to the row, not floating
+ *   - cursor:help signals the title-tooltip with raw num/den breakdown
+ * Why no background pill: we tried it in design review; the pill made
+ * every row look "noisy". Plain colored bold is enough at 12px mono. */
+.performance-page .hit-rate {
+  margin-left: 0.35rem;
+  padding-left: 0.85rem;
+  border-left: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #facc15;
+  text-shadow: 0 0 6px rgba(250, 204, 21, 0.35);
+  cursor: help;
 }
 `;

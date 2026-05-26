@@ -70,9 +70,12 @@ func WriteErr(w http.ResponseWriter, code, msg string) {
 		// 403: the operation is valid protocol-wise but intentionally denied
 		// by policy. UI should stop trying.
 		//   - ErrOAuthAddViaCLI: OAuth add flow lives in CLI, not Web.
-		//   - ErrAppMutationDenied: revoke / rotate blocked for protected
-		//     first-party apps (e.g. degrade-detector — destroying its
-		//     bearer would break the trust-local data pipeline).
+		//   - ErrAppMutationDenied: revoke / rotate / uninstall blocked for
+		//     protected first-party apps (e.g. degrade-detector — Web-UI
+		//     mutation would either break the internal pipeline outright
+		//     [revoke / rotate] or be silently auto-recreated on next CLI
+		//     startup [uninstall]). 2026-05-26: uninstall added to this
+		//     gate per user policy; CLI remains the supported channel.
 		status = http.StatusForbidden
 	case ErrUnknownTarget:
 		// 400: client sent an unknown target ("team" is valid in the protocol

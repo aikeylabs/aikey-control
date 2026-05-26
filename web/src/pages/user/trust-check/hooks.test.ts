@@ -28,10 +28,10 @@ import { StartServiceError, useStartTrustLocalService } from './hooks';
 // Tiny inline fetch stub — we don't need MSW for two assertions.
 let originalFetch: typeof fetch;
 beforeEach(() => {
-  originalFetch = global.fetch;
+  originalFetch = globalThis.fetch;
 });
 afterEach(() => {
-  global.fetch = originalFetch;
+  globalThis.fetch = originalFetch;
 });
 
 /** Helper: build a Response-like object that resp.json() resolves to. */
@@ -68,7 +68,7 @@ describe('useStartTrustLocalService — error code preservation', () => {
   // → error-code contract.
 
   it('throws StartServiceError with errorCode="TRUST_LOCAL_NOT_INSTALLED" on console 502', async () => {
-    global.fetch = vi.fn().mockResolvedValue(
+    globalThis.fetch = vi.fn().mockResolvedValue(
       mockResponse(502, {
         ok: false,
         error: 'TRUST_LOCAL_NOT_INSTALLED',
@@ -107,7 +107,7 @@ describe('useStartTrustLocalService — error code preservation', () => {
   });
 
   it('falls back to HTTP_<status> errorCode when console response omits error field', async () => {
-    global.fetch = vi.fn().mockResolvedValue(
+    globalThis.fetch = vi.fn().mockResolvedValue(
       mockResponse(500, { ok: false, detail: 'unexpected upstream failure' })
     );
 

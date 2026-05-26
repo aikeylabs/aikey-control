@@ -28,38 +28,52 @@ export interface TokenRevealModalProps {
   onClose: () => void;
 }
 
-export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
-  const [copied, setCopied] = useState(false);
+type CopiedSdk = 'openai' | 'anthropic' | null;
 
-  // Reset the "Copied!" pill back to "Copy" after ~2s so the button is
-  // always actionable. Avoid Date.now() time arithmetic; a single
-  // setTimeout suffices.
+export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
+  const [copied, setCopied] = useState<CopiedSdk>(null);
+
+  // Reset the "Copied" pill back to default after ~2s so the button is
+  // always actionable.
   useEffect(() => {
     if (!copied) return;
-    const t = window.setTimeout(() => setCopied(false), 2000);
+    const t = window.setTimeout(() => setCopied(null), 2000);
     return () => window.clearTimeout(t);
   }, [copied]);
 
-  // The env block we ask the user to paste into their agent's config.
-  // Format chosen to match `aikey app register`'s CLI output so the docs
-  // can use the same wording either way ("set OPENAI_API_KEY and
-  // OPENAI_BASE_URL"). The variable NAMES are OpenAI-shaped because the
-  // proxy auto-detects the wire format at request time; the upstream
-  // protocol (anthropic / openai / kimi) is decided by body.model not
-  // by env var names.
-  const envBlock = [
+  // Each SDK family reads a different env var name AND appends a
+  // different request path, so base_url must be shaped per-SDK:
+  //
+  //   OpenAI-style SDK   →   OPENAI_BASE_URL  =  .../apps/<slug>/v1
+  //                          SDK appends /chat/completions
+  //
+  //   Anthropic SDK      →   ANTHROPIC_BASE_URL  =  .../apps/<slug>
+  //                          SDK appends /v1/messages
+  //
+  // A user pasting the OpenAI-shaped URL into ANTHROPIC_BASE_URL would
+  // produce /apps/<slug>/v1/v1/messages on the wire and trip the
+  // BASE_URL_MISCONFIGURED 400 guard in the proxy. Showing both blocks
+  // here avoids that footgun (matches the Agent-Quickstart docs).
+  const openaiBaseUrl = result.base_url;
+  const anthropicBaseUrl = result.base_url.replace(/\/v1$/, '');
+
+  const openaiEnvBlock = [
     `OPENAI_API_KEY=${result.route_token}`,
-    `OPENAI_BASE_URL=${result.base_url}`,
+    `OPENAI_BASE_URL=${openaiBaseUrl}`,
+  ].join('\n');
+  const anthropicEnvBlock = [
+    `ANTHROPIC_API_KEY=${result.route_token}`,
+    `ANTHROPIC_BASE_URL=${anthropicBaseUrl}`,
   ].join('\n');
 
-  const handleCopy = async () => {
+  const handleCopy = (sdk: Exclude<CopiedSdk, null>, text: string) => async () => {
     try {
-      await navigator.clipboard.writeText(envBlock);
-      setCopied(true);
+      await navigator.clipboard.writeText(text);
+      setCopied(sdk);
     } catch {
       // Older browsers / non-secure-context — fall back to a manual
       // select. Modal still shows the text so the user can copy by hand.
-      setCopied(false);
+      setCopied(null);
     }
   };
 
@@ -130,37 +144,89 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
             </p>
           </div>
 
-          {/* Env block */}
-          <div>
-            <div
-              className="flex items-center justify-between mb-1"
+          {/* Env blocks — one per SDK family. The note below the header
+              tells the user to pick the block that matches their agent;
+              the docs (Agent-Quickstart) carry the full SDK→block table. */}
+          <div className="space-y-3">
+            <p
+              className="text-[12px]"
               style={{ color: 'var(--muted-foreground)' }}
             >
-              <span className="text-[12px] font-mono uppercase tracking-wider">
-                Agent env block
-              </span>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="rounded px-2 py-1 text-[11px] font-mono uppercase tracking-wider"
+              Pick the block matching your agent's SDK. The two URL forms
+              differ — the SDK appends its own path suffix.
+            </p>
+
+            {/* OpenAI SDK block */}
+            <div>
+              <div
+                className="flex items-center justify-between mb-1"
+                style={{ color: 'var(--muted-foreground)' }}
+              >
+                <span className="text-[12px] font-mono uppercase tracking-wider">
+                  OpenAI SDK · openai-python · OpenCode · LangChain
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopy('openai', openaiEnvBlock)}
+                  className="rounded px-2 py-1 text-[11px] font-mono uppercase tracking-wider"
+                  style={{
+                    background:
+                      copied === 'openai'
+                        ? 'var(--success, #16a34a)'
+                        : '#ca8a04',
+                    color: 'var(--primary-foreground, #18181b)',
+                  }}
+                >
+                  {copied === 'openai' ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <pre
+                className="rounded border p-3 text-[12px] font-mono overflow-x-auto whitespace-pre-wrap break-all"
                 style={{
-                  background: copied ? 'var(--success, #16a34a)' : '#ca8a04',
-                  color: 'var(--primary-foreground, #18181b)',
+                  background: 'var(--secondary, #3f3f46)',
+                  color: 'var(--foreground)',
+                  borderColor: 'var(--border)',
                 }}
               >
-                {copied ? 'Copied' : 'Copy env block'}
-              </button>
+{openaiEnvBlock}
+              </pre>
             </div>
-            <pre
-              className="rounded border p-3 text-[12px] font-mono overflow-x-auto whitespace-pre-wrap break-all"
-              style={{
-                background: 'var(--secondary, #3f3f46)',
-                color: 'var(--foreground)',
-                borderColor: 'var(--border)',
-              }}
-            >
-{envBlock}
-            </pre>
+
+            {/* Anthropic SDK block */}
+            <div>
+              <div
+                className="flex items-center justify-between mb-1"
+                style={{ color: 'var(--muted-foreground)' }}
+              >
+                <span className="text-[12px] font-mono uppercase tracking-wider">
+                  Anthropic SDK · Claude Code · anthropic-python
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopy('anthropic', anthropicEnvBlock)}
+                  className="rounded px-2 py-1 text-[11px] font-mono uppercase tracking-wider"
+                  style={{
+                    background:
+                      copied === 'anthropic'
+                        ? 'var(--success, #16a34a)'
+                        : '#ca8a04',
+                    color: 'var(--primary-foreground, #18181b)',
+                  }}
+                >
+                  {copied === 'anthropic' ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <pre
+                className="rounded border p-3 text-[12px] font-mono overflow-x-auto whitespace-pre-wrap break-all"
+                style={{
+                  background: 'var(--secondary, #3f3f46)',
+                  color: 'var(--foreground)',
+                  borderColor: 'var(--border)',
+                }}
+              >
+{anthropicEnvBlock}
+              </pre>
+            </div>
           </div>
 
           {/* Snapshotted bindings — what the new bearer will actually
@@ -191,7 +257,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                   >
                     <span style={{ color: '#ca8a04' }}>{b.upstream}</span>
                     <span style={{ color: 'var(--muted-foreground)' }}>→</span>
-                    <span>{b.key_source_ref}</span>
+                    <span>{b.key_source_label ?? b.key_source_ref}</span>
                     <span
                       className="text-[10px] uppercase tracking-wider"
                       style={{ color: 'var(--muted-foreground)' }}
@@ -208,7 +274,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                   >
                     <span style={{ color: '#ca8a04' }}>{b.upstream}</span>
                     <span style={{ color: 'var(--muted-foreground)' }}>→</span>
-                    <span>{b.key_source_ref}</span>
+                    <span>{b.key_source_label ?? b.key_source_ref}</span>
                     <span
                       className="text-[10px] uppercase tracking-wider"
                       style={{ color: 'var(--muted-foreground)' }}

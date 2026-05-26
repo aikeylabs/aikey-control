@@ -167,13 +167,14 @@ export default function UserAppDetailPage() {
   const activeKeyIdForReveal: string | null =
     detailQuery.data?.active_keys?.[0]?.key_id ?? null;
 
-  // base_url is deterministic from the slug + the proxy's fixed port —
-  // every code path that emits it (register / rotate / reveal-token) uses
-  // the same hardcoded format. Compute it once at the component level so
-  // we can show it always (no vault unlock required — base_url is public
-  // by design, no secret in the URL itself) and also copy it.
-  const baseUrl = `http://127.0.0.1:27200/apps/${slug}/v1`;
-  const [copiedBaseUrl, setCopiedBaseUrl] = useState(false);
+  // base_url is deterministic from the slug + the proxy's fixed port.
+  // Two SDK families read different env names AND want different URL
+  // shapes (Anthropic SDK appends /v1/messages on its own — its
+  // base_url must NOT end in /v1 or the proxy 400's with
+  // BASE_URL_MISCONFIGURED). Compute both so the user can copy either.
+  const baseUrlOpenAI = `http://127.0.0.1:27200/apps/${slug}/v1`;
+  const baseUrlAnthropic = `http://127.0.0.1:27200/apps/${slug}`;
+  const [copiedBaseUrl, setCopiedBaseUrl] = useState<'openai' | 'anthropic' | null>(null);
   // Copy-feedback state for the bearer token. Mirrors copiedBaseUrl —
   // flashes "Copied" on the button for 2s after a successful clipboard
   // write, so the user gets the same visual confirmation they get
@@ -453,15 +454,32 @@ export default function UserAppDetailPage() {
                 >
                   <Ban size={14} /> Revoke
                 </button>
-                {mutationLocked && (
-                  // Locked-slug exception (only first-party apps in
-                  // `mutationLockedSlugs` get here): Revoke/Rotate are
-                  // disabled because they'd leave the AiKey-internal
-                  // pipeline half-broken, but full Uninstall is fine
-                  // — service stops before bearer is wiped, so there's
-                  // no half-state. Surfaces as a Trash-icon danger
-                  // button so users have a single click to opt out
-                  // after the rc.5 default-install flip.
+                {data.app.app_kind === 'third-party' && (
+                  // Uninstall is third-party ONLY. First-party apps (e.g.
+                  // Trust Check / degrade-detector) intentionally have no
+                  // Web-UI uninstall path:
+                  //
+                  //   - Their bearer + app_record row are re-asserted by
+                  //     ensure_first_party_app_keys self-heal on the next
+                  //     CLI startup (see aikey-cli migrations.rs §self-heal),
+                  //     so a UI uninstall would 401 the running plugin for
+                  //     a few seconds and then auto-recreate — disruptive
+                  //     AND ineffective.
+                  //
+                  //   - The intended way to fully remove a first-party app
+                  //     is to uninstall the plugin itself from the CLI
+                  //     (`aikey app uninstall <slug>`), which stops the
+                  //     service before wiping vault rows. That path is not
+                  //     reachable from this page on purpose — exposing it
+                  //     here was a rc.5 "default-install flip" carve-out
+                  //     (mutationLocked branch) that we removed 2026-05-26
+                  //     per user direction "内置 APP 不支持 uninstall，需要屏蔽".
+                  //
+                  // Backend dispatches between first-party / third-party
+                  // uninstall paths by slug membership in TRUSTED_APPS —
+                  // see commands_app::install::handle_uninstall. The
+                  // third-party path deletes app_records + bindings and
+                  // flips app_keys.status to 'revoked' (history retained).
                   <button
                     type="button"
                     className="cap-btn cap-btn-danger"
@@ -469,12 +487,12 @@ export default function UserAppDetailPage() {
                     title={
                       vaultLocked
                         ? 'Unlock vault first'
-                        : `Whole-system uninstall: stops the ${data.app.name} service, removes its binary, and wipes its vault rows. Reversible via 'aikey app install ${data.app.slug}' later.`
+                        : `Remove ${data.app.name} from your list. Deletes the app record + key bindings; previously issued tokens are kept (revoked) for audit. Re-register the same slug to restore.`
                     }
                     onClick={() => {
                       if (
                         window.confirm(
-                          `Uninstall "${data.app.name}"?\n\nThis will:\n  • Stop the ${data.app.name} service (launchd / systemd)\n  • Remove the binary from ~/.aikey/bin/\n  • Delete all of its vault rows (app_keys, bindings, app_record)\n\nReversible: re-install any time with 'aikey app install ${data.app.slug}'.`,
+                          `Uninstall "${data.app.name}"?\n\nThis will:\n  • Remove the app from your list\n  • Delete the app record and its key bindings\n  • Retain previously issued tokens (status: revoked) for audit history\n  • Your agent's own binary is NOT touched — you manage it\n\nThe agent will return 401 on its next request. To restore, re-register the same slug — a new bearer will be issued.`,
                         )
                       ) {
                         uninstallM.mutate();
@@ -488,7 +506,13 @@ export default function UserAppDetailPage() {
             </div>
           </section>
 
-          {/* Rotate result surface — bearer shown once on rotate success. */}
+          {/* Rotate result surface — bearer shown once on rotate success.
+              Two env blocks side-by-side because OpenAI-style SDKs and
+              the Anthropic SDK read different env names AND want different
+              base_url shapes (the Anthropic SDK appends /v1/messages on
+              its own — if its base_url also ends in /v1 the proxy trips
+              BASE_URL_MISCONFIGURED). Pasting from the wrong block is the
+              biggest support footgun, so we show both. */}
           {rotateM.data ? (
             <div
               className="cap-surface mb-5 p-4"
@@ -496,21 +520,59 @@ export default function UserAppDetailPage() {
             >
               <strong style={{ color: '#ca8a04' }}>New bearer issued.</strong>
               <p className="text-[12px] mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                Update the agent's env with these two values and restart it. This is shown once.
+                Copy the block matching your agent's SDK and restart it. This is shown once.
               </p>
-              <div
-                className="mt-3 rounded p-2 break-all"
-                style={{
-                  background: 'var(--background)',
-                  color: 'var(--foreground)',
-                  border: '1px solid var(--border)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 12,
-                }}
-              >
-                OPENAI_API_KEY={rotateM.data.api_key}
-                <br />
-                OPENAI_BASE_URL={rotateM.data.base_url}
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <div
+                    className="text-[11px] uppercase tracking-wider mb-1"
+                    style={{
+                      color: 'var(--muted-foreground)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    OpenAI SDK
+                  </div>
+                  <div
+                    className="rounded p-2 break-all"
+                    style={{
+                      background: 'var(--background)',
+                      color: 'var(--foreground)',
+                      border: '1px solid var(--border)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 12,
+                    }}
+                  >
+                    OPENAI_API_KEY={rotateM.data.api_key}
+                    <br />
+                    OPENAI_BASE_URL={rotateM.data.base_url}
+                  </div>
+                </div>
+                <div>
+                  <div
+                    className="text-[11px] uppercase tracking-wider mb-1"
+                    style={{
+                      color: 'var(--muted-foreground)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    Anthropic SDK · Claude Code
+                  </div>
+                  <div
+                    className="rounded p-2 break-all"
+                    style={{
+                      background: 'var(--background)',
+                      color: 'var(--foreground)',
+                      border: '1px solid var(--border)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 12,
+                    }}
+                  >
+                    ANTHROPIC_API_KEY={rotateM.data.api_key}
+                    <br />
+                    ANTHROPIC_BASE_URL={rotateM.data.base_url.replace(/\/v1$/, '')}
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}
@@ -1035,56 +1097,68 @@ export default function UserAppDetailPage() {
             <div className="cap-section-body">
               {/* Base URL — always visible, not behind unlock (it's public by
                   design; the token is the secret half of the env block).
-                  Pairs visually with the masked token below so users see the
-                  full env block needed by their agent. */}
-              <div className="cap-row cap-row-bearer mb-2.5">
-                <div className="min-w-0 flex-1">
-                  <div
-                    className="text-[11px] uppercase tracking-wider"
-                    style={{
-                      color: 'var(--muted-foreground)',
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                  >
-                    OPENAI_BASE_URL
-                  </div>
-                  <div className="mt-1 flex items-center gap-2 flex-wrap">
-                    <code
-                      className="px-2 py-1 rounded text-[12px]"
+                  Two rows because OpenAI-style SDKs and the Anthropic SDK
+                  need different env var names AND different URL shapes —
+                  Anthropic SDK appends /v1/messages on its own, so its
+                  base_url must NOT end in /v1 (else the proxy 400's with
+                  BASE_URL_MISCONFIGURED). */}
+              {([
+                { sdk: 'openai' as const, envName: 'OPENAI_BASE_URL', url: baseUrlOpenAI, label: 'OpenAI SDK' },
+                { sdk: 'anthropic' as const, envName: 'ANTHROPIC_BASE_URL', url: baseUrlAnthropic, label: 'Anthropic SDK · Claude Code' },
+              ]).map((row) => (
+                <div key={row.sdk} className="cap-row cap-row-bearer mb-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className="text-[11px] uppercase tracking-wider flex items-center gap-2 flex-wrap"
                       style={{
-                        background: 'var(--secondary, #3f3f46)',
-                        color: 'var(--foreground)',
+                        color: 'var(--muted-foreground)',
                         fontFamily: 'var(--font-mono)',
-                        wordBreak: 'break-all',
                       }}
                     >
-                      {baseUrl}
-                    </code>
-                    <button
-                      type="button"
-                      title="Copy base URL to clipboard"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(baseUrl);
-                          setCopiedBaseUrl(true);
-                          window.setTimeout(() => setCopiedBaseUrl(false), 2000);
-                        } catch {
-                          // Clipboard API may be blocked in non-secure
-                          // contexts. The text is selectable in the code
-                          // block, so users can copy by hand. Silent.
-                        }
-                      }}
-                      className="rounded px-2 py-1 text-[11px] font-mono uppercase tracking-wider"
-                      style={{
-                        background: copiedBaseUrl ? 'var(--success, #16a34a)' : '#ca8a04',
-                        color: 'var(--primary-foreground, #18181b)',
-                      }}
-                    >
-                      {copiedBaseUrl ? 'Copied' : 'Copy'}
-                    </button>
+                      <span>{row.envName}</span>
+                      <span style={{ opacity: 0.6 }}>· {row.label}</span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 flex-wrap">
+                      <code
+                        className="px-2 py-1 rounded text-[12px]"
+                        style={{
+                          background: 'var(--secondary, #3f3f46)',
+                          color: 'var(--foreground)',
+                          fontFamily: 'var(--font-mono)',
+                          wordBreak: 'break-all',
+                        }}
+                      >
+                        {row.url}
+                      </code>
+                      <button
+                        type="button"
+                        title={`Copy ${row.envName} to clipboard`}
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(row.url);
+                            setCopiedBaseUrl(row.sdk);
+                            window.setTimeout(() => setCopiedBaseUrl(null), 2000);
+                          } catch {
+                            // Clipboard API may be blocked in non-secure
+                            // contexts. The text is selectable in the code
+                            // block, so users can copy by hand. Silent.
+                          }
+                        }}
+                        className="rounded px-2 py-1 text-[11px] font-mono uppercase tracking-wider"
+                        style={{
+                          background:
+                            copiedBaseUrl === row.sdk
+                              ? 'var(--success, #16a34a)'
+                              : '#ca8a04',
+                          color: 'var(--primary-foreground, #18181b)',
+                        }}
+                      >
+                        {copiedBaseUrl === row.sdk ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ))}
               {data.active_keys.length === 0 ? (
                 <div className="text-[13px]" style={{ color: 'var(--muted-foreground)' }}>
                   No active bearer. Re-register via CLI:{' '}

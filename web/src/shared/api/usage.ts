@@ -102,6 +102,13 @@ export interface KeyTotal {
   virtual_key_id: string;
   alias?: string;    // human-readable label (personal / team BYOK)
   identity?: string; // email / display_identity (OAuth sessions; added 2026-04-22)
+  // app_slug: client app attribution for the row's bucket.
+  //   - registered Connected Apps → server-issued slug (authoritative)
+  //   - OAuth direct calls        → UA-derived slug ("claude-code" / "cursor" /
+  //                                  "cline" / "unknown-app"); spoofable, display-only.
+  // Added 2026-05-26 to disambiguate multi-session OAuth rows under the same
+  // email — see the usage-ledger row rendering for the subtitle treatment.
+  app_slug?: string;
   // Anthropic prompt-caching tuple — all optional so non-Anthropic providers
   // and pre-v1.0.5 servers serialise without them.
   //   - input_tokens         = total prompt input (already includes cached + creation;
