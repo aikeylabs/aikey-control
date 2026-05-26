@@ -98,6 +98,27 @@ export interface ModelTotal {
   request_count: number;
 }
 
+/** 2026-05-26 — Performance Top N sessions chart row.
+ * SessionID can be "" meaning "no session header detected" (the
+ * collapsed bucket for curl / generic SDKs / legacy events). All
+ * sample_* fields are picked via MAX/MIN aggregates from rows that
+ * contributed — they give the FE enough context to label the row
+ * without a per-session JOIN.
+ */
+export interface SessionTotal {
+  session_id: string;
+  sample_virtual_key_id?: string;
+  sample_alias?: string;
+  sample_identity?: string;     // email when an OAuth session contributed
+  sample_app_slug?: string;     // representative app_slug (UA-derived or registered)
+  input_tokens?: number;
+  cached_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  output_tokens?: number;
+  total_tokens: number;
+  request_count: number;
+}
+
 export interface KeyTotal {
   virtual_key_id: string;
   alias?: string;    // human-readable label (personal / team BYOK)
@@ -223,11 +244,11 @@ export const usageApi = {
     return res.data;
   },
 
-  personalByKeyTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<KeyTotal[]> => {
+  personalByKeyTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string, sessionId?: string): Promise<KeyTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const res = await httpClient.get<KeyTotal[]>('/v1/usage/personal/by-key/total', {
-      params: { ...personalParams(id), ...range, tz: browserTZ() },
-    });
+    const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
+    if (sessionId) params.session_id = sessionId;
+    const res = await httpClient.get<KeyTotal[]>('/v1/usage/personal/by-key/total', { params });
     return res.data;
   },
 
@@ -252,11 +273,29 @@ export const usageApi = {
    *
    * `appSlug` — see `personalTimeline` doc; same semantics.
    */
-  personalByModelTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string, appSlug?: string): Promise<ModelTotal[]> => {
+  personalByModelTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string, appSlug?: string, sessionId?: string): Promise<ModelTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
     if (appSlug) params.app_slug = appSlug;
+    if (sessionId) params.session_id = sessionId;
     const res = await httpClient.get<ModelTotal[]>('/v1/usage/personal/by-model/total', { params });
+    return res.data;
+  },
+
+  /**
+   * 2026-05-26 — "Top N sessions" ranking on /user/performance.
+   * Server groups by session_id (NULL/'' coalesced into one "no session"
+   * bucket), sorts by total_tokens DESC, caps at `limit` (default 10).
+   *
+   * Note: this endpoint deliberately IGNORES any session_id filter —
+   * selecting a session in the UI shouldn't shrink the ranking to one
+   * row (see design doc §5.3 for the rationale).
+   */
+  personalBySessionTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string, limit?: number): Promise<SessionTotal[]> => {
+    const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
+    const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
+    if (limit) params.limit = String(limit);
+    const res = await httpClient.get<SessionTotal[]>('/v1/usage/personal/by-session/total', { params });
     return res.data;
   },
 

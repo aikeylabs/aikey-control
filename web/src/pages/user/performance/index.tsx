@@ -12,10 +12,10 @@
  * /user/usage-ledger's `.chart-card` idiom (chart-title + chart-sub +
  * legend) so the two Insights pages read as a coherent set.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { userAccountsApi } from '@/shared/api/user/accounts';
-import { usageApi, type TimelinePoint } from '@/shared/api/usage';
+import { usageApi, type TimelinePoint, type SessionTotal } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
 
 function fmtTok(n: number): string {
@@ -87,28 +87,54 @@ export default function UserPerformancePage() {
     refetchInterval: 60_000,
   });
 
-  // activeDate: latest day with non-zero usage in the 7D window. If today already
-  // has usage we show "today"; if not (early morning / fresh install) fall back to
-  // the most recent active day so the card has something to display.
-  const activeDate = useMemo(() => {
+  // pinnedDate / pinnedSession (2026-05-26): user-controlled drill-down
+  // state. null = "use defaults" (latest-active-day for date, all-sessions
+  // for session). When the user clicks a 7-day chart bar or a session row,
+  // we pin that value here; the chip + Reset UI lets them clear it.
+  //
+  // We pin instead of just calling setActiveDate directly because:
+  //   - default for date is derived from data (latest active day), not
+  //     fixed — keeping pin separate lets "default" follow new data
+  //   - chip needs to know "pinned vs derived" to decide whether to
+  //     render at all (no chip when nothing's been clicked)
+  const [pinnedDate, setPinnedDate] = useState<string | null>(null);
+  const [pinnedSession, setPinnedSession] = useState<string | null>(null);
+
+  // derivedDate: latest day with non-zero usage in the 7D window. If today
+  // already has usage we show "today"; if not (early morning / fresh
+  // install) fall back to the most recent active day so the card has
+  // something to display by default.
+  const derivedDate = useMemo(() => {
     const tl: TimelinePoint[] = usageTimeline.data ?? [];
     for (let i = tl.length - 1; i >= 0; i--) {
       if (tl[i].total_tokens > 0) return tl[i].date;
     }
     return todayDate;
   }, [usageTimeline.data, todayDate]);
-  const isShowingToday = activeDate === todayDate;
+  const activeDate = pinnedDate ?? derivedDate;
+  const isShowingToday = activeDate === todayDate && !pinnedDate;
 
   const byKeyRecent = useQuery({
-    queryKey: ['user-performance-by-key', usageIdentityKey, activeDate],
-    queryFn: () => usageApi.personalByKeyTotal(usageIdentity!, activeDate, activeDate),
+    queryKey: ['user-performance-by-key', usageIdentityKey, activeDate, pinnedSession],
+    queryFn: () => usageApi.personalByKeyTotal(usageIdentity!, activeDate, activeDate, pinnedSession ?? undefined),
     enabled: !!usageIdentity,
     refetchInterval: 60_000,
   });
 
   const byModelRecent = useQuery({
-    queryKey: ['user-performance-by-model', usageIdentityKey, activeDate],
-    queryFn: () => usageApi.personalByModelTotal(usageIdentity!, activeDate, activeDate),
+    queryKey: ['user-performance-by-model', usageIdentityKey, activeDate, pinnedSession],
+    queryFn: () => usageApi.personalByModelTotal(usageIdentity!, activeDate, activeDate, undefined, pinnedSession ?? undefined),
+    enabled: !!usageIdentity,
+    refetchInterval: 60_000,
+  });
+
+  // Top N sessions for the active day. Deliberately NOT filtered by
+  // pinnedSession (see design doc §5.3): clicking a session shouldn't
+  // shrink the ranking to one row — user needs to see siblings to
+  // switch between sessions without going through Reset.
+  const bySessionRecent = useQuery({
+    queryKey: ['user-performance-by-session', usageIdentityKey, activeDate],
+    queryFn: () => usageApi.personalBySessionTotal(usageIdentity!, activeDate, activeDate, 10),
     enabled: !!usageIdentity,
     refetchInterval: 60_000,
   });
@@ -224,6 +250,83 @@ export default function UserPerformancePage() {
     ? new Date(byKeyRecent.dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null;
 
+  // 7-day trend rows — read from the existing usageTimeline query (no new
+  // fetch). One bar per day in the 7D window; height proportional to that
+  // day's total_tokens vs the window max. Click → pin date.
+  //
+  // Padding (2026-05-26): the timeline API returns rows only for days
+  // with at least one event, but the chart promises 7 columns the user
+  // can click — including empty days, so drill-down to those is still
+  // possible (Top N + by-key + by-model all switch to the empty state,
+  // which is informative). We pad the missing dates with zero rows; the
+  // rendered bar height is capped to a 1% minimum so clickable tappable
+  // area exists even at zero tokens.
+  const trend7d = useMemo(() => {
+    const byDate = new Map<string, TimelinePoint>();
+    for (const p of usageTimeline.data ?? []) {
+      byDate.set(p.date, p);
+    }
+    // Build the canonical 7-day window from today back, oldest first.
+    const allSeven: TimelinePoint[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = daysAgoStr(i);
+      const found = byDate.get(d);
+      allSeven.push(found ?? { date: d, total_tokens: 0, request_count: 0 });
+    }
+    const max = allSeven.reduce((m, p) => Math.max(m, p.total_tokens), 0) || 1;
+    return allSeven.map((p) => ({
+      date: p.date,
+      total_tokens: p.total_tokens,
+      request_count: p.request_count,
+      heightPct: (p.total_tokens / max) * 100,
+      isActive: p.date === activeDate,
+      isToday: p.date === todayDate,
+    }));
+  }, [usageTimeline.data, activeDate, todayDate]);
+
+  // Top N session rows — compute label + bar percentages. Mirror of
+  // todayKeyRows minus the cache segmentation (sessions don't need the
+  // 4-segment split; one bar per session is enough).
+  const sessionRows = useMemo(() => {
+    const data: SessionTotal[] = bySessionRecent.data ?? [];
+    const nonZero = data.filter((s) => s.total_tokens > 0);
+    const sorted = [...nonZero].sort((a, b) => b.total_tokens - a.total_tokens);
+    const top = sorted[0]?.total_tokens ?? 1;
+    const grand = sorted.reduce((s, r) => s + r.total_tokens, 0) || 1;
+    return {
+      rows: sorted.map((r) => ({
+        ...r,
+        label: r.session_id || '(no session)',
+        // For OAuth sessions show the email next to the session id.
+        sublabel: [r.sample_identity, r.sample_app_slug && r.sample_app_slug !== '' ? r.sample_app_slug : '']
+          .filter(Boolean)
+          .join(' · '),
+        barPct: (r.total_tokens / top) * 100,
+        sharePct: (r.total_tokens / grand) * 100,
+        isPinned: r.session_id === pinnedSession,
+      })),
+      grandTotal: sorted.reduce((s, r) => s + r.total_tokens, 0),
+      grandReqs: sorted.reduce((s, r) => s + r.request_count, 0),
+      sessionCount: sorted.length,
+    };
+  }, [bySessionRecent.data, pinnedSession]);
+
+  // Pinned session sample identity for the chip label (so users see
+  // "FreySilvaqzs@... · Claude Code" rather than a raw session id).
+  const pinnedSessionLabel = useMemo(() => {
+    if (!pinnedSession) return '';
+    const row = sessionRows.rows.find((r) => r.session_id === pinnedSession);
+    if (!row) return pinnedSession;
+    if (row.sublabel) return `${pinnedSession.slice(0, 12)}… · ${row.sublabel}`;
+    return pinnedSession;
+  }, [pinnedSession, sessionRows.rows]);
+
+  const hasFilters = pinnedDate !== null || pinnedSession !== null;
+  const resetFilters = () => {
+    setPinnedDate(null);
+    setPinnedSession(null);
+  };
+
   return (
     <div className="performance-page p-6">
       <style>{COST_CSS}</style>
@@ -243,7 +346,141 @@ export default function UserPerformancePage() {
         </div>
       </div>
 
+      {/* Filter chips + Reset (2026-05-26): ALWAYS rendered so the row
+          doesn't appear / disappear as the user toggles filters —
+          avoids layout jumps that shift the charts down on first click.
+          When nothing's pinned the row shows the implicit defaults as
+          plain text (no chip × since defaults have nothing to clear).
+          Reset link only appears when at least one filter is pinned. */}
+      <div className="flex items-center gap-2 flex-wrap mb-4 text-[11.5px] font-mono" style={{ minHeight: '24px' }}>
+        <span style={{ color: 'var(--muted-foreground)' }}>Filtered by:</span>
+        {pinnedDate ? (
+          <span className="filter-chip" title={`Date: ${pinnedDate}`}>
+            Date: {pinnedDate}
+            <button className="chip-x" onClick={() => setPinnedDate(null)} aria-label="Clear date filter">×</button>
+          </span>
+        ) : (
+          <span style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}>
+            Date: {isShowingToday ? 'Today' : derivedDate} <span style={{ opacity: 0.55 }}>(default)</span>
+          </span>
+        )}
+        <span style={{ color: 'var(--muted-foreground)', opacity: 0.4 }}>·</span>
+        {pinnedSession ? (
+          <span className="filter-chip" title={`Session: ${pinnedSession}`}>
+            Session: {pinnedSessionLabel}
+            <button className="chip-x" onClick={() => setPinnedSession(null)} aria-label="Clear session filter">×</button>
+          </span>
+        ) : (
+          <span style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}>
+            Session: All <span style={{ opacity: 0.55 }}>(default)</span>
+          </span>
+        )}
+        {hasFilters && (
+          <button className="reset-link" onClick={resetFilters}>Reset all</button>
+        )}
+      </div>
+
       <div className="space-y-5">
+        {/* 7-day trend (2026-05-26): one clickable bar per day. Source
+            data is the existing usageTimeline query — no new fetch. The
+            current activeDate (pinned or derived) is visually highlighted.
+            Click a bar → setPinnedDate. */}
+        <section className="chart-card" data-origin-name="7-day token trend">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <div className="min-w-0">
+              <div className="chart-title">7-day token trend</div>
+              <div className="chart-sub">Click a day to drill down</div>
+            </div>
+          </div>
+          {usageTimeline.isLoading ? (
+            <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+              Loading...
+            </div>
+          ) : trend7d.length === 0 ? (
+            <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+              No usage in the last 7 days
+            </div>
+          ) : (
+            <div className="trend7d">
+              {trend7d.map((d) => (
+                <button
+                  key={d.date}
+                  className={`trend7d-bar ${d.isActive ? 'is-active' : ''} ${d.isToday ? 'is-today' : ''}`}
+                  onClick={() => {
+                    // Switching day implicitly clears any session pin —
+                    // a session that existed on day A almost certainly
+                    // doesn't exist on day B, so leaving the session
+                    // filter active would render an empty by-key /
+                    // by-model card and confuse the user. Date click
+                    // resets the session dimension to "All".
+                    setPinnedDate(d.date);
+                    setPinnedSession(null);
+                  }}
+                  title={`${d.date} · ${fmtTok(d.total_tokens)} tokens · ${d.request_count} req`}
+                >
+                  <span className="trend7d-fill" style={{ height: `${Math.max(d.heightPct, 1)}%` }} />
+                  <span className="trend7d-label">{d.date.slice(5)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Top N sessions (2026-05-26): clickable rows feed pinnedSession.
+            Empty session_id rendered as "(no session)" so users see the
+            traffic that lacks session attribution (curl / generic SDKs). */}
+        <section className="chart-card" data-origin-name="Top N sessions">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <div className="min-w-0">
+              <div className="chart-title">Top sessions</div>
+              <div className="chart-sub">
+                {activeDate} · click to filter charts below
+              </div>
+            </div>
+          </div>
+          {bySessionRecent.isLoading ? (
+            <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+              Loading...
+            </div>
+          ) : sessionRows.rows.length === 0 ? (
+            <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+              No sessions on this day
+            </div>
+          ) : (
+            <ul className="mt-4 space-y-2.5">
+              {sessionRows.rows.map((s) => (
+                <li key={s.session_id || '__none__'} className="key-row session-row">
+                  <button
+                    className={`session-label ${s.isPinned ? 'is-pinned' : ''}`}
+                    onClick={() => setPinnedSession(s.isPinned ? null : (s.session_id || null))}
+                    title={s.label}
+                  >
+                    <div className="flex flex-col items-start min-w-0">
+                      <span className="font-mono text-[11.5px] truncate" style={{ color: 'var(--foreground)' }}>
+                        {s.label.length > 32 ? `${s.label.slice(0, 30)}…` : s.label}
+                      </span>
+                      {s.sublabel && (
+                        <span className="font-mono text-[10px] truncate" style={{ color: 'var(--muted-foreground)' }}>
+                          {s.sublabel}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  <div className="key-bar">
+                    <span style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: '#facc15' }} />
+                  </div>
+                  <span className="font-mono text-[11.5px] text-right whitespace-nowrap">
+                    <span style={{ color: 'var(--foreground)' }}>{fmtTok(s.total_tokens)}</span>
+                    <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
+                      {s.sharePct < 1 ? '<1%' : `${Math.round(s.sharePct)}%`}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         <section className="chart-card" data-origin-name="Usage by key today">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div className="min-w-0">
@@ -690,5 +927,163 @@ const COST_CSS = `
   color: #facc15;
   text-shadow: 0 0 6px rgba(250, 204, 21, 0.35);
   cursor: help;
+}
+
+/* 7-day trend chart (2026-05-26). Flex of equal-width clickable bars.
+ * Active bar (current activeDate, pinned or derived) gets a brighter
+ * fill + outline; today's bar gets the live-pulse dot color. Hover
+ * lifts slightly so the affordance is obvious. */
+.performance-page .trend7d {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;          /* stretch children to full container height */
+  height: 110px;
+  padding: 0.5rem 0;
+}
+.performance-page .trend7d-bar {
+  flex: 1;
+  height: 100%;                  /* anchor for the fill's percentage height */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;     /* fill grows from the bottom up */
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  /* Tiny inner padding + rounding so the column-wide hover highlight
+   * (added below) doesn't visually touch its neighbours. Without this
+   * adjacent bars look "glued" when both hover overlap on quick
+   * mouseovers. */
+  padding: 2px;
+  border-radius: 4px;
+  position: relative;
+  min-width: 0;
+  transition: background 120ms ease;
+}
+/* Whole-column hover affordance (option A, 2026-05-26): on hover the
+ * entire button column gets a subtle background tint so users see
+ * "this is a clickable cell" — even on zero-token days where the bar
+ * itself is just a 2px line. Far more discoverable than relying on
+ * cursor: pointer alone. */
+.performance-page .trend7d-bar:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.performance-page .trend7d-fill {
+  display: block;
+  /* Default state: muted dark yellow (~25% opacity of the chart base
+   * color). Quiet enough that the eye doesn't read every day as
+   * "active" but still visible against the card background. */
+  background: rgba(202, 138, 4, 0.25);
+  border-radius: 3px 3px 0 0;
+  transition: background 120ms ease, transform 120ms ease;
+  min-height: 2px;
+}
+.performance-page .trend7d-bar:hover .trend7d-fill {
+  /* Hover lift sits between default and active so users get a clear
+   * "I'm about to select this" affordance. */
+  background: rgba(202, 138, 4, 0.55);
+  transform: scaleY(1.03);
+  transform-origin: bottom;
+}
+.performance-page .trend7d-bar.is-active .trend7d-fill {
+  /* Selected state: full-saturation project base yellow (same hue
+   * as the cache-utilization "uncached" segment below — visual
+   * consistency). 4x more saturated than the 25%-opacity default
+   * is plenty of contrast without the harshness of pure #facc15. */
+  background: #ca8a04;
+  box-shadow: 0 0 6px rgba(202, 138, 4, 0.45);
+}
+.performance-page .trend7d-bar.is-today .trend7d-fill {
+  outline: 1px dashed rgba(74, 222, 128, 0.7);
+  outline-offset: 1px;
+}
+.performance-page .trend7d-label {
+  display: block;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* Session label button — reset default button chrome so it sits cleanly
+ * inside the .key-row grid. Pinned session glows the same accent gold
+ * as the trend7d active bar for visual consistency. */
+.performance-page .session-label {
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.performance-page .session-label.is-pinned {
+  outline: 1px solid #ca8a04;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* Top-session row hover highlight (matches the 7-day trend bar
+ * affordance): the whole row gets a subtle background tint on hover
+ * so users see "this entire line is clickable", not just the small
+ * label button. Padding negative-margin trick keeps the highlight
+ * flush with the row grid without shifting layout. */
+.performance-page .session-row {
+  cursor: pointer;
+  margin: 0 -6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 120ms ease;
+}
+.performance-page .session-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Filter chip — small inline tag with × close button. Pinned date /
+ * session each get one. Reset clears all. Designed to look like
+ * existing badge components in the project (e.g. usage-ledger app
+ * row INTERNAL badge) to avoid visual noise. */
+.performance-page .filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(202, 138, 4, 0.15);
+  border: 1px solid rgba(202, 138, 4, 0.4);
+  color: var(--foreground);
+  white-space: nowrap;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.performance-page .filter-chip .chip-x {
+  background: none;
+  border: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+}
+.performance-page .filter-chip .chip-x:hover {
+  color: #facc15;
+}
+.performance-page .reset-link {
+  background: none;
+  border: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+  margin-left: 0.25rem;
+}
+.performance-page .reset-link:hover {
+  color: #facc15;
 }
 `;
