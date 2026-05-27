@@ -418,7 +418,27 @@ export default function UserPerformancePage() {
                   }}
                   title={`${d.date} · ${fmtTok(d.total_tokens)} tokens · ${d.request_count} req`}
                 >
-                  <span className="trend7d-fill" style={{ height: `${Math.max(d.heightPct, 1)}%` }} />
+                  {/* Bar height with two tiers so a small-traffic day doesn't
+                      disappear under one huge-traffic day:
+                       - zero tokens     → render the 2px CSS min-height
+                                           ONLY (clickable empty cell hint)
+                       - non-zero tokens → at least 12% of chart height so
+                                           a 1:100 ratio (e.g. 12K vs 1.3M)
+                                           is still visibly a real bar, not
+                                           a sub-pixel line. Larger days
+                                           still scale linearly up to 100%. */}
+                  {/* Per-day token total above the bar. Shown only when
+                      non-zero — empty days stay visually quiet so the eye
+                      can scan only the days with real traffic. Formatted
+                      via fmtTok ("12.8K", "1.3M") to keep the number
+                      tight under the narrow column width. */}
+                  {d.total_tokens > 0 && (
+                    <span className="trend7d-value">{fmtTok(d.total_tokens)}</span>
+                  )}
+                  <span
+                    className="trend7d-fill"
+                    style={{ height: `${d.total_tokens > 0 ? Math.max(d.heightPct, 12) : 0}%` }}
+                  />
                   <span className="trend7d-label">{d.date.slice(5)}</span>
                 </button>
               ))}
@@ -1004,6 +1024,20 @@ const COST_CSS = `
   color: var(--muted-foreground);
   text-align: center;
   margin-top: 4px;
+}
+/* Per-day token total — small mono label above the bar. Matches the
+ * trend7d-label visual weight so the column reads as one tight unit:
+ * value · bar · date. Slightly less muted than the date label since
+ * the number is the data and the date is the index. */
+.performance-page .trend7d-value {
+  display: block;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--foreground);
+  text-align: center;
+  margin-bottom: 3px;
+  opacity: 0.75;
+  white-space: nowrap;
 }
 
 /* Session label button — reset default button chrome so it sits cleanly
