@@ -1464,6 +1464,17 @@ export default function UserVaultPage() {
             onOpenAdd={() => setAddOpen(true)}
           />
 
+          {/* When the vault has zero records, render JUST the empty
+              placeholder — skip the .card wrapper + CardHeader entirely.
+              The previous nested layout (card → CardHeader showing
+              "0 stored / 0 active" → .vault-empty with its own bg +
+              border) read as "card inside card" against the dark page,
+              which the user flagged as unnecessarily heavy for a
+              placeholder (2026-05-23). Loading / error / filter-empty
+              states keep the card wrapper so CardHeader stays useful. */}
+          {!listLoading && !listError && records.length === 0 ? (
+            <VaultEmptyPanel />
+          ) : (
           <section className="card overflow-hidden">
             <CardHeader
               counts={counts}
@@ -1474,9 +1485,6 @@ export default function UserVaultPage() {
             <div className="overflow-x-auto">
               {listLoading && <EmptyState message="Loading…" />}
               {listError && <EmptyState message={`Failed to load: ${(listError as Error).message}`} />}
-              {!listLoading && !listError && records.length === 0 && (
-                <VaultEmptyPanel />
-              )}
               {!listLoading && !listError && records.length > 0 && filtered.length === 0 && (
                 <EmptyState message="No records match your filters." />
               )}
@@ -1633,6 +1641,7 @@ export default function UserVaultPage() {
               onNext={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             />
           </section>
+          )}
 
           <PageFooter />
         </div>

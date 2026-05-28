@@ -1468,10 +1468,12 @@ export const KEYS_PAGE_CSS = `
   flex: 1;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center;
-  padding: 48px 32px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  padding: 56px 32px;
+  /* Stripped own bg + border + border-radius 2026-05-23. Previously
+     .vault-empty drew its own card; combined with the parent .card
+     wrapper this made a "card-in-card" placeholder that read as heavy
+     for a "0 keys yet" state. JSX now skips the parent .card too, so
+     this is bare typography centered on the page bg — lighter feel. */
 }
 .vault-page .vault-empty-ring {
   width: 56px; height: 56px;

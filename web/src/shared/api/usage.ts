@@ -30,6 +30,17 @@ export interface ProtocolTimelinePoint {
   request_count: number;
 }
 
+/** 2026-05-28 — intra-day per-protocol bucket. The "1D" range option
+ * on /user/usage-ledger swaps in this shape (one row per hour×provider)
+ * for ProtocolTimelinePoint (one row per day×provider). Hour is 0..23
+ * in the user's local timezone. */
+export interface ProtocolHourlyPoint {
+  hour: number;
+  protocol_type: string;
+  total_tokens: number;
+  request_count: number;
+}
+
 export interface ProtocolTotal {
   protocol_type: string;
   total_tokens: number;
@@ -221,9 +232,10 @@ export const usageApi = {
     return res.data;
   },
 
-  personalHourly: async (id: PersonalIdentity, date?: string): Promise<HourlyPoint[]> => {
+  personalHourly: async (id: PersonalIdentity, date?: string, appSlug?: string): Promise<HourlyPoint[]> => {
     const params: Record<string, string> = { ...personalParams(id), tz: browserTZ() };
     if (date) params.date = date;
+    if (appSlug) params.app_slug = appSlug;
     const res = await httpClient.get<HourlyPoint[]>('/v1/usage/personal/hourly', { params });
     return res.data;
   },
@@ -233,6 +245,20 @@ export const usageApi = {
     const res = await httpClient.get<ProtocolTimelinePoint[]>('/v1/usage/personal/by-protocol/timeline', {
       params: { ...personalParams(id), ...range, tz: browserTZ() },
     });
+    return res.data;
+  },
+
+  /**
+   * 2026-05-28 — intra-day per-protocol stacked-bar source for the
+   * "1D" range option on /user/usage-ledger. Returns up to 24 × N rows
+   * (N distinct providers active in the chosen day). Single-day window
+   * via `date`; range parameters are ignored by the backend beyond
+   * extracting the day.
+   */
+  personalByProtocolHourly: async (id: PersonalIdentity, date?: string): Promise<ProtocolHourlyPoint[]> => {
+    const params: Record<string, string> = { ...personalParams(id), tz: browserTZ() };
+    if (date) params.date = date;
+    const res = await httpClient.get<ProtocolHourlyPoint[]>('/v1/usage/personal/by-protocol/hourly', { params });
     return res.data;
   },
 

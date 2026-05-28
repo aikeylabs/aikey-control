@@ -86,7 +86,13 @@ function providerToToolName(providerCode: string): string {
   }
 }
 
-type RangeKey = 7 | 14 | 30 | 90;
+/** 2026-05-28 — added 1 (intra-day hourly). When range === 1 the
+ * timeline + protocol-timeline charts swap their X axis from "day"
+ * to "hour of day"; all other (whole-range aggregate) charts simply
+ * narrow their window to (today, today) and continue rendering the
+ * same row shapes. See `personalByProtocolHourly` for the hourly
+ * stacked-bar source. */
+type RangeKey = 1 | 7 | 14 | 30 | 90;
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -205,7 +211,13 @@ function deriveAppSubtitle(slug: string | undefined, identity: string | undefine
 
 export default function UserUsageLedgerPage() {
   const [range, setRange] = useState<RangeKey>(30);
-  const startDate = daysAgo(range);
+  // For 1D, both ends collapse to today — aggregate endpoints work
+  // unchanged with the narrowed window. The hourly endpoints below
+  // ignore start/end anyway and use today's date implicitly via
+  // ?date=, but we keep the variable consistent so existing prop
+  // wiring (chart axis label, etc.) stays straightforward.
+  const isHourly = range === 1;
+  const startDate = isHourly ? daysAgo(0) : daysAgo(range);
   const endDate = daysAgo(0);
 
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
@@ -222,14 +234,40 @@ export default function UserUsageLedgerPage() {
   const identityKey = accountId ?? '';
   const hasIdentity = !!identity;
 
+  // 1D mode: fetch hourly and reshape to the daily TimelinePoint /
+  // ProtocolTimelinePoint shapes the existing chart components expect.
+  // The "date" field carries "HH:00" so sort-by-string still gives the
+  // chronological 00..23 order; chart X axis labels naturally render
+  // these as hour-of-day instead of dates.
   const timeline = useQuery({
-    queryKey: ['user-usage-timeline', identityKey, range],
-    queryFn: () => usageApi.personalTimeline(identity!, startDate, endDate),
+    queryKey: ['user-usage-timeline', identityKey, range, isHourly],
+    queryFn: async () => {
+      if (isHourly) {
+        const hourly = await usageApi.personalHourly(identity!, endDate);
+        return hourly.map((h) => ({
+          date: String(h.hour).padStart(2, '0') + ':00',
+          total_tokens: h.total_tokens,
+          request_count: h.request_count,
+        }));
+      }
+      return usageApi.personalTimeline(identity!, startDate, endDate);
+    },
     enabled: hasIdentity,
   });
   const protocolTimeline = useQuery({
-    queryKey: ['user-usage-protocol-timeline', identityKey, range],
-    queryFn: () => usageApi.personalByProtocolTimeline(identity!, startDate, endDate),
+    queryKey: ['user-usage-protocol-timeline', identityKey, range, isHourly],
+    queryFn: async () => {
+      if (isHourly) {
+        const hourly = await usageApi.personalByProtocolHourly(identity!, endDate);
+        return hourly.map((h) => ({
+          date: String(h.hour).padStart(2, '0') + ':00',
+          protocol_type: h.protocol_type,
+          total_tokens: h.total_tokens,
+          request_count: h.request_count,
+        }));
+      }
+      return usageApi.personalByProtocolTimeline(identity!, startDate, endDate);
+    },
     enabled: hasIdentity,
   });
   const protocols = useQuery({
@@ -406,7 +444,7 @@ export default function UserUsageLedgerPage() {
           </p>
         </div>
         <div className="seg" role="tablist" aria-label="Time range">
-          {([7, 14, 30, 90] as const).map((d) => (
+          {([1, 7, 14, 30, 90] as const).map((d) => (
             <button
               key={d}
               type="button"
@@ -461,7 +499,7 @@ export default function UserUsageLedgerPage() {
               <div>
                 <div className="chart-title">My token usage over time</div>
                 <div className="chart-sub">
-                  Last {range} days · {formatTokens(totalTokens)} total tokens
+                  {range === 1 ? 'Today' : `Last ${range} days`} · {formatTokens(totalTokens)} total tokens
                 </div>
               </div>
               <div className="legend">
@@ -646,7 +684,7 @@ export default function UserUsageLedgerPage() {
               <span>
                 {protocolData.length} protocol{protocolData.length === 1 ? '' : 's'}
               </span>
-              <span>Last {range}D · {formatTokens(totalTokens)} total</span>
+              <span>{range === 1 ? 'Today' : `Last ${range}D`} · {formatTokens(totalTokens)} total</span>
             </div>
           </div>
         </section>
@@ -657,7 +695,7 @@ export default function UserUsageLedgerPage() {
             <div>
               <div className="chart-title">Usage by protocol over time</div>
               <div className="chart-sub">
-                Daily tokens stacked by provider · last {range} days
+                {range === 1 ? 'Hourly' : 'Daily'} tokens stacked by provider · {range === 1 ? 'today' : `last ${range} days`}
               </div>
             </div>
             {protocolNames.length > 0 && (

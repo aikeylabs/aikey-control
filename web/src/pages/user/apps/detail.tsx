@@ -58,7 +58,10 @@ import { APPS_DETAIL_CSS } from './apps-detail-css';
 
 // --- Per-app usage helpers --------------------------------------------
 
-type RangeKey = 7 | 14 | 30;
+/** 2026-05-28 — added 1 (intra-day hourly). For 1D the timeline
+ * switches to personalHourly(app_slug=slug) and densifies to 24 hour
+ * buckets; by-model just narrows window to today. */
+type RangeKey = 1 | 7 | 14 | 30;
 
 function daysAgoISO(n: number): string {
   const d = new Date();
@@ -97,6 +100,16 @@ function densifyTimeline(points: TimelinePoint[], range: RangeKey): TimelinePoin
   const map = new Map<string, TimelinePoint>();
   for (const p of points) map.set(p.date, p);
   const out: TimelinePoint[] = [];
+  // 1D — pad to 24 hour-of-day buckets (the upstream queryFn already
+  // mapped HourlyPoint to TimelinePoint with date="HH:00"). Same
+  // "no gaps in the axis" guarantee as the daily path.
+  if (range === 1) {
+    for (let h = 0; h < 24; h++) {
+      const k = String(h).padStart(2, '0') + ':00';
+      out.push(map.get(k) ?? { date: k, total_tokens: 0, request_count: 0 });
+    }
+    return out;
+  }
   for (let i = range - 1; i >= 0; i--) {
     const d = daysAgoISO(i);
     out.push(map.get(d) ?? { date: d, total_tokens: 0, request_count: 0 });
@@ -215,7 +228,20 @@ export default function UserAppDetailPage() {
 
   const usageTimeline = useQuery({
     queryKey: ['user-apps-detail-timeline', slug, identityKey, usageRange],
-    queryFn: () => usageApi.personalTimeline(identity!, usageStart, usageEnd, slug),
+    queryFn: async () => {
+      // 1D: hourly per-app traffic (24 hour buckets), reshaped to the
+      // TimelinePoint shape so densifyTimeline + chart consumers don't
+      // branch. date="HH:00" sorts chronologically as a string.
+      if (usageRange === 1) {
+        const hourly = await usageApi.personalHourly(identity!, usageEnd, slug);
+        return hourly.map((h) => ({
+          date: String(h.hour).padStart(2, '0') + ':00',
+          total_tokens: h.total_tokens,
+          request_count: h.request_count,
+        }));
+      }
+      return usageApi.personalTimeline(identity!, usageStart, usageEnd, slug);
+    },
     enabled: hasIdentity && !!slug,
   });
   const usageByModel = useQuery({
@@ -747,7 +773,7 @@ export default function UserAppDetailPage() {
                 </p>
               </div>
               <div className="flex items-center gap-1.5" aria-label="Range selector">
-                {([7, 14, 30] as const).map((r) => (
+                {([1, 7, 14, 30] as const).map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -788,7 +814,7 @@ export default function UserAppDetailPage() {
                           fontFamily: 'var(--font-mono)',
                         }}
                       >
-                        last {usageRange} days
+                        {usageRange === 1 ? 'today' : `last ${usageRange} days`}
                       </div>
                     </div>
 
@@ -812,12 +838,19 @@ export default function UserAppDetailPage() {
                     </div>
 
                     <div className="cap-metric-card">
-                      <div className="cap-mono-label">Active days</div>
+                      {/* 1D label flip: usageMetrics.activeDays counts
+                          non-zero buckets in the timeline. For ranges
+                          7/14/30 the buckets are days; for 1D they're
+                          hours. Show "Active hours" / 24 then so the
+                          label matches what the number actually counts. */}
+                      <div className="cap-mono-label">
+                        {usageRange === 1 ? 'Active hours' : 'Active days'}
+                      </div>
                       <div
                         className="mt-3 text-[28px] font-extrabold tracking-tight"
                         style={{ color: 'var(--foreground)' }}
                       >
-                        {usageMetrics.activeDays} / {usageRange}
+                        {usageMetrics.activeDays} / {usageRange === 1 ? 24 : usageRange}
                       </div>
                       <div
                         className="mt-2 text-xs"
@@ -826,7 +859,7 @@ export default function UserAppDetailPage() {
                           fontFamily: 'var(--font-mono)',
                         }}
                       >
-                        zero days rendered honestly
+                        {usageRange === 1 ? 'zero hours rendered honestly' : 'zero days rendered honestly'}
                       </div>
                     </div>
 

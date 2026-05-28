@@ -64,8 +64,12 @@ function providerColor(name: string): string {
   return PROVIDER_COLORS[k] ?? '#52525b';
 }
 
-type RangeKey = '7D' | '14D' | '30D' | '90D';
-const RANGE_DAYS: Record<RangeKey, number> = { '7D': 7, '14D': 14, '30D': 30, '90D': 90 };
+/** 2026-05-28 — added '1D'. When range === '1D' the hero timeline
+ * switches to hourly granularity (24 buckets in the user's local tz);
+ * the by-protocol donut narrows to today and renders as usual. See
+ * personalHourly for the hourly source. */
+type RangeKey = '1D' | '7D' | '14D' | '30D' | '90D';
+const RANGE_DAYS: Record<RangeKey, number> = { '1D': 1, '7D': 7, '14D': 14, '30D': 30, '90D': 90 };
 
 function fmtTok(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -94,6 +98,19 @@ function daysAgoStr(n: number): string {
 }
 
 function padTimeline(data: TimelinePoint[], days: number): TimelinePoint[] {
+  // 1D mode (days=1): the upstream queryFn already reshaped hourly data
+  // into TimelinePoint with date="HH:00". Pad to 24 buckets so the
+  // chart axis stays continuous; using the daily key (YYYY-MM-DD)
+  // here would not match and produce a single empty bar.
+  if (days === 1) {
+    const map = new Map(data.map((p) => [p.date, p]));
+    const out: TimelinePoint[] = [];
+    for (let h = 0; h < 24; h++) {
+      const k = String(h).padStart(2, '0') + ':00';
+      out.push(map.get(k) ?? { date: k, total_tokens: 0, request_count: 0 });
+    }
+    return out;
+  }
   const map = new Map(data.map((p) => [p.date, p]));
   const out: TimelinePoint[] = [];
   for (let i = days - 1; i >= 0; i--) {
@@ -308,12 +325,34 @@ export default function UserOverviewPage() {
     queryKey: ['user-overview-timeline', dataScope, usageIdentityKey, range],
     queryFn: crossClient
       ? async () => {
+        // 1D: hourly (?date=) instead of daily (?start_date=&end_date=)
+        // — both endpoints already CORS-allowed on local-server.
+        if (range === '1D') {
+          const r = await crossClient.get<HourlyPoint[]>('/v1/usage/personal/hourly', {
+            params: { ...usageParams(), date: endDate },
+          });
+          return r.data.map((h) => ({
+            date: String(h.hour).padStart(2, '0') + ':00',
+            total_tokens: h.total_tokens,
+            request_count: h.request_count,
+          }));
+        }
         const r = await crossClient.get<TimelinePoint[]>('/v1/usage/personal/timeline', {
           params: { ...usageParams(), start_date: startDate, end_date: endDate },
         });
         return r.data;
       }
-      : () => usageApi.personalTimeline(usageIdentity!, startDate, endDate),
+      : async () => {
+        if (range === '1D') {
+          const hourly = await usageApi.personalHourly(usageIdentity!, endDate);
+          return hourly.map((h) => ({
+            date: String(h.hour).padStart(2, '0') + ':00',
+            total_tokens: h.total_tokens,
+            request_count: h.request_count,
+          }));
+        }
+        return usageApi.personalTimeline(usageIdentity!, startDate, endDate);
+      },
     enabled: !!usageIdentity,
   });
   const usageProtocols = useQuery({
@@ -739,7 +778,7 @@ export default function UserOverviewPage() {
                 </p>
               </div>
               <div className="seg" role="tablist" aria-label="Time range">
-                {(['7D', '14D', '30D', '90D'] as const).map((k) => (
+                {(['1D', '7D', '14D', '30D', '90D'] as const).map((k) => (
                   <button
                     key={k}
                     type="button"
