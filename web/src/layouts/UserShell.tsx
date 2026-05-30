@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 
 import { useUserAuthStore } from '@/store';
 import { userAccountsApi } from '@/shared/api/user/accounts';
@@ -318,6 +319,37 @@ function useBreadcrumb(): RouteMeta {
   return ROUTE_LABELS[last] ?? { label: last };
 }
 
+// ── i18n label maps ──────────────────────────────────────────────────────────
+//
+// Nav labels and group titles double as logic anchors elsewhere in this file:
+//   - `group.title` feeds `matchesGroup` (uppercased ASCII comparison vs the
+//     cross-app Group enum), so the raw English title MUST stay in the data.
+//   - route labels feed `data-origin-name` selectors / e2e scripts.
+// We therefore keep the English literals in the data structures and translate
+// only at the render boundary by mapping the English string → an i18n sub-key.
+// Unmapped strings fall through to the raw label (e.g. cross-app labels from
+// the wire contract, which are already localized server-side).
+const NAV_LABEL_I18N_KEY: Record<string, string> = {
+  Overview: 'navOverview',
+  Vault: 'navVault',
+  Import: 'navImport',
+  'Team Keys': 'navTeamKeys',
+  Usage: 'navUsage',
+  'Team Usage': 'navTeamUsage',
+  Performance: 'navPerformance',
+  Apps: 'navApps',
+  'Trust Check': 'navTrustCheck',
+  Account: 'navAccount',
+  Invites: 'navInvites',
+};
+
+const GROUP_TITLE_I18N_KEY: Record<string, string> = {
+  Keys: 'groupKeys',
+  Cost: 'groupCost',
+  Quality: 'groupQuality',
+  Account: 'groupAccount',
+};
+
 function initials(email: string): string {
   const parts = email.split('@')[0].split(/[._-]/);
   return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
@@ -330,6 +362,25 @@ const SIDEBAR_COLLAPSED_STORAGE_KEY = 'aikey:sidebar-collapsed:v1';
 // ── UserShell ───────────────────────────────────────────────────────────────
 
 export function UserShell() {
+  const { t } = useTranslation();
+  // Translate a nav label / group title at the render boundary. The raw
+  // English string stays in the data (it doubles as a logic anchor — see
+  // NAV_LABEL_I18N_KEY note); unmapped strings (cross-app wire labels) pass
+  // through untranslated.
+  const tNavLabel = React.useCallback(
+    (label: string) => {
+      const key = NAV_LABEL_I18N_KEY[label];
+      return key ? t(`userShell.${key}`) : label;
+    },
+    [t],
+  );
+  const tGroupTitle = React.useCallback(
+    (title: string) => {
+      const key = GROUP_TITLE_I18N_KEY[title];
+      return key ? t(`userShell.${key}`) : title;
+    },
+    [t],
+  );
   const user = useUserAuthStore((s) => s.user);
   // Pull the same /accounts/me query the Profile page uses so the
   // sidebar identity (email + role) stays in lockstep with the Profile
@@ -776,7 +827,7 @@ export function UserShell() {
                     className="nav-group-title"
                     {...(gi === 0 ? { 'data-origin-name': 'User Console' } : {})}
                   >
-                    {group.title}
+                    {tGroupTitle(group.title)}
                   </div>
                 )}
                 {/* Phase 3B R13 (2026-05-11): preserve navGroups declared
@@ -855,7 +906,7 @@ export function UserShell() {
                               className="nav-item nav-item-cross-app"
                               data-tooltip={xa.label}
                               data-origin-name={`cross-app:${xa.id}`}
-                              title={`Opens ${otherBaseUrl}${xa.path}`}
+                              title={t('userShell.opensLink', { url: `${otherBaseUrl}${xa.path}` })}
                             >
                               {crossAppIconFor(xa.icon)}
                               <span className="nav-label">{xa.label}</span>
@@ -869,12 +920,12 @@ export function UserShell() {
                               key={item.path}
                               href={`${otherBaseUrl}${item.path}`}
                               className="nav-item nav-item-cross-app"
-                              data-tooltip={displayLabel}
+                              data-tooltip={tNavLabel(displayLabel)}
                               data-origin-name={`cross-app:own-${item.path.replace(/^\//, '').replace(/\//g, '-')}`}
-                              title={`Opens ${otherBaseUrl}${item.path}`}
+                              title={t('userShell.opensLink', { url: `${otherBaseUrl}${item.path}` })}
                             >
                               {item.icon}
-                              <span className="nav-label">{displayLabel}</span>
+                              <span className="nav-label">{tNavLabel(displayLabel)}</span>
                             </a>
                           );
                           continue;
@@ -894,12 +945,12 @@ export function UserShell() {
                             key={item.path}
                             href={`${otherBaseUrl}${item.path}`}
                             className="nav-item nav-item-cross-app"
-                            data-tooltip={displayLabel}
+                            data-tooltip={tNavLabel(displayLabel)}
                             data-origin-name={`cross-app:own-${item.path.replace(/^\//, '').replace(/\//g, '-')}`}
-                            title={`Opens ${otherBaseUrl}${item.path}`}
+                            title={t('userShell.opensLink', { url: `${otherBaseUrl}${item.path}` })}
                           >
                             {item.icon}
-                            <span className="nav-label">{displayLabel}</span>
+                            <span className="nav-label">{tNavLabel(displayLabel)}</span>
                           </a>
                         );
                       } else {
@@ -908,11 +959,11 @@ export function UserShell() {
                             key={item.path}
                             to={item.path}
                             className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
-                            data-tooltip={displayLabel}
+                            data-tooltip={tNavLabel(displayLabel)}
                             {...(item.originName ? { 'data-origin-name': item.originName } : {})}
                           >
                             {item.icon}
-                            <span className="nav-label">{displayLabel}</span>
+                            <span className="nav-label">{tNavLabel(displayLabel)}</span>
                           </NavLink>
                         );
                       }
@@ -930,7 +981,7 @@ export function UserShell() {
                             className="nav-item nav-item-cross-app"
                             data-tooltip={xa.label}
                             data-origin-name={`cross-app:${xa.id}`}
-                            title={`Opens ${otherBaseUrl}${xa.path}`}
+                            title={t('userShell.opensLink', { url: `${otherBaseUrl}${xa.path}` })}
                           >
                             {crossAppIconFor(xa.icon)}
                             <span className="nav-label">{xa.label}</span>
@@ -953,7 +1004,7 @@ export function UserShell() {
                           className="nav-item nav-item-cross-app"
                           data-tooltip={e.label}
                           data-origin-name={`cross-app:${e.id}`}
-                          title={`Opens ${otherBaseUrl}${e.path}`}
+                          title={t('userShell.opensLink', { url: `${otherBaseUrl}${e.path}` })}
                         >
                           {crossAppIconFor(e.icon)}
                           <span className="nav-label">{e.label}</span>
@@ -978,9 +1029,9 @@ export function UserShell() {
           className="sidebar-toggle"
           onClick={() => setCollapsed((c) => !c)}
           aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          data-tooltip={collapsed ? 'Expand sidebar  (⌘\\)' : 'Collapse sidebar  (⌘\\)'}
-          title={collapsed ? 'Expand sidebar  (⌘\\)' : 'Collapse sidebar  (⌘\\)'}
+          aria-label={collapsed ? t('userShell.expandSidebar') : t('userShell.collapseSidebar')}
+          data-tooltip={collapsed ? t('userShell.expandSidebarShortcut') : t('userShell.collapseSidebarShortcut')}
+          title={collapsed ? t('userShell.expandSidebarShortcut') : t('userShell.collapseSidebarShortcut')}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
             {/* lucide chevrons-left — CSS rotates it 180° when collapsed
@@ -988,7 +1039,7 @@ export function UserShell() {
                 needing a second icon component. */}
             <path strokeLinecap="round" strokeLinejoin="round" d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
           </svg>
-          <span className="sidebar-toggle-label">{collapsed ? 'Expand' : 'Collapse'}</span>
+          <span className="sidebar-toggle-label">{collapsed ? t('userShell.expand') : t('userShell.collapse')}</span>
         </button>
 
         {/* Bottom: User info — rounded surface card, no top border. The
@@ -1008,14 +1059,14 @@ export function UserShell() {
                 Profile page's .role-badge rendering). */}
             <div className="nav-user-name truncate">{identityEmail ?? '…'}</div>
             <div className="nav-user-role truncate">
-              {(identityRole ?? 'member').toUpperCase()}
+              {(identityRole ?? t('userShell.roleMember')).toUpperCase()}
             </div>
           </div>
           <button
             onClick={clearAuth}
             className="nav-user-signout"
-            title="Sign out"
-            aria-label="Sign out"
+            title={t('userShell.signOut')}
+            aria-label={t('userShell.signOut')}
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
@@ -1028,14 +1079,14 @@ export function UserShell() {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <header className="vault-header h-16 flex items-center justify-between px-6 flex-shrink-0 z-10">
           <div className="flex items-center text-sm font-mono" style={{ color: 'var(--muted-foreground)' }}>
-            <span data-origin-name="User Console">User</span>
+            <span data-origin-name="User Console">{t('userShell.breadcrumbUser')}</span>
             <span className="mx-2 opacity-50">/</span>
             <span
               className="font-bold"
               style={{ color: 'var(--display-foreground)' }}
               {...(breadcrumb.originName ? { 'data-origin-name': breadcrumb.originName } : {})}
             >
-              {breadcrumb.label}
+              {tNavLabel(breadcrumb.label)}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -1049,7 +1100,7 @@ export function UserShell() {
                   nav-sidebar icons. Prior 3.5 made the Invite glyph look
                   visually smaller than every other icon on screen. */}
               <UserPlusIcon />
-              Invite
+              {t('userShell.invite')}
             </button>
           </div>
         </header>

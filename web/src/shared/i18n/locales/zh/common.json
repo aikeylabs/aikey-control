@@ -3,5 +3,88 @@
     "name": "语言",
     "en": "English",
     "zh": "中文"
+  },
+  "actionDialog": {
+    "confirm": "确认",
+    "cancel": "取消",
+    "processing": "处理中…",
+    "typeToConfirm": "请输入 <v>{{value}}</v> 以确认"
+  },
+  "errorDisplay": {
+    "field": "字段",
+    "rule": "规则",
+    "provider": "供应商",
+    "upstreamStatus": "上游状态",
+    "upstreamMessage": "上游消息"
+  },
+  "filterBar": {
+    "all": "全部",
+    "searchPlaceholder": "搜索…"
+  },
+  "pagination": {
+    "range": "{{start}}–{{end}} / 共 {{total}}",
+    "prev": "← 上一页",
+    "next": "下一页 →"
+  },
+  "placeholderPage": {
+    "columnId": "ID",
+    "columnName": "名称",
+    "columnStatus": "状态",
+    "columnCreatedAt": "创建时间",
+    "phaseNotice": "第二阶段实现待定",
+    "zeroRecords": "0 条记录",
+    "noData": "暂无数据 — 等待实现"
+  },
+  "providerMultiSelect": {
+    "searchPlaceholder": "搜索或输入自定义…",
+    "addMorePlaceholder": "添加更多…",
+    "noMatch": "无匹配项",
+    "addCustom": "+ 添加自定义：“{{query}}”",
+    "addButton": "+ 添加",
+    "removeAriaLabel": "移除 {{value}}",
+    "kimiFamilyNote": "注意：kimi 系列共用同一个上游——选择 kimi(kimi-code) 会自动取消选择 kimi(moonshot)，反之亦然。"
+  },
+  "searchableMultiSelect": {
+    "addPlaceholder": "添加…",
+    "add": "添加",
+    "searchInputPlaceholder": "输入以搜索或添加自定义…",
+    "allPresetsPicked": "预设项已全部选完 — 输入自定义名称即可添加。",
+    "noMatches": "无匹配项",
+    "useCustom": "+ 使用自定义：",
+    "removeAria": "移除 {{value}}"
+  },
+  "searchableSelect": {
+    "placeholder": "请选择…",
+    "searchPlaceholder": "输入以搜索…",
+    "noMatches": "无匹配项",
+    "useCustom": "+ 使用自定义："
+  },
+  "userShell": {
+    "navOverview": "概览",
+    "navVault": "保管库",
+    "navImport": "导入",
+    "navTeamKeys": "团队密钥",
+    "navUsage": "用量",
+    "navTeamUsage": "团队用量",
+    "navPerformance": "性能",
+    "navApps": "应用",
+    "navTrustCheck": "置信度检测",
+    "navAccount": "账户",
+    "navInvites": "邀请码",
+    "groupKeys": "密钥",
+    "groupCost": "成本",
+    "groupQuality": "质量",
+    "groupAccount": "账户",
+    "expandSidebar": "展开侧栏",
+    "collapseSidebar": "收起侧栏",
+    "expandSidebarShortcut": "展开侧栏  (⌘\\)",
+    "collapseSidebarShortcut": "收起侧栏  (⌘\\)",
+    "expand": "展开",
+    "collapse": "收起",
+    "signOut": "退出登录",
+    "invite": "邀请",
+    "breadcrumbUser": "用户",
+    "roleMember": "成员",
+    "opensLink": "打开 {{url}}"
   }
 }

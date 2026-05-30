@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { SearchableSelect } from './SearchableSelect';
 
 interface FilterOption {
@@ -26,12 +27,15 @@ export function FilterBar({
   statusOptions,
   statusValue,
   onStatusChange,
-  statusPlaceholder = 'All',
+  statusPlaceholder,
   searchValue,
   onSearchChange,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder,
   actions,
 }: FilterBarProps) {
+  const { t } = useTranslation();
+  const resolvedStatusPlaceholder = statusPlaceholder ?? t('filterBar.all');
+  const resolvedSearchPlaceholder = searchPlaceholder ?? t('filterBar.searchPlaceholder');
   return (
     <div className="flex items-center gap-3 flex-wrap">
       {/* Search */}
@@ -50,7 +54,7 @@ export function FilterBar({
           <input
             type="text"
             className="pl-9 pr-3 py-1.5 text-xs w-52"
-            placeholder={searchPlaceholder}
+            placeholder={resolvedSearchPlaceholder}
             value={searchValue ?? ''}
             onChange={(e) => onSearchChange(e.target.value)}
           />
@@ -60,10 +64,10 @@ export function FilterBar({
       {/* Status select */}
       {statusOptions && onStatusChange && (
         <SearchableSelect
-          options={[{ value: '', label: statusPlaceholder }, ...statusOptions]}
+          options={[{ value: '', label: resolvedStatusPlaceholder }, ...statusOptions]}
           value={statusValue ?? ''}
           onChange={onStatusChange}
-          placeholder={statusPlaceholder}
+          placeholder={resolvedStatusPlaceholder}
           style={{ minWidth: 160 }}
         />
       )}

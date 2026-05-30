@@ -27,4 +27,20 @@ i18n
     },
   });
 
+// Keep <html lang> in sync with the active i18n language.
+//
+// Why: the static index.html ships `lang="en"`. When the user switches to
+// Chinese the document attribute must follow, otherwise screen readers,
+// browser translation prompts, and `:lang()` CSS see the wrong language.
+// We map any zh* variant (zh-CN / zh-TW) down to 'zh' and everything else
+// to 'en' to match SUPPORTED_LANGUAGES — keep it simple rather than echoing
+// the full BCP-47 tag.
+function htmlLangFor(lng: string | undefined): string {
+  return (lng ?? 'en').startsWith('zh') ? 'zh' : 'en';
+}
+document.documentElement.lang = htmlLangFor(i18n.resolvedLanguage);
+i18n.on('languageChanged', (l) => {
+  document.documentElement.lang = htmlLangFor(l);
+});
+
 export default i18n;

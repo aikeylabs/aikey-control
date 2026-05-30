@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { SelectOption } from './SearchableSelect';
 
@@ -40,12 +41,13 @@ export function SearchableMultiSelect({
   options,
   values,
   onChange,
-  placeholder = 'Add…',
+  placeholder,
   className = '',
   style,
   disabled,
   allowCustom = true,
 }: SearchableMultiSelectProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [highlightIdx, setHighlightIdx] = useState(0);
@@ -177,7 +179,7 @@ export function SearchableMultiSelect({
                 opacity: 0.6,
                 cursor: 'pointer',
               }}
-              aria-label={`Remove ${v}`}
+              aria-label={t('searchableMultiSelect.removeAria', { value: v })}
             >
               <svg
                 className="w-2.5 h-2.5"
@@ -204,7 +206,9 @@ export function SearchableMultiSelect({
           <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          {values.length === 0 ? placeholder : 'Add'}
+          {values.length === 0
+            ? (placeholder ?? t('searchableMultiSelect.addPlaceholder'))
+            : t('searchableMultiSelect.add')}
         </span>
       </div>
 
@@ -223,7 +227,7 @@ export function SearchableMultiSelect({
               ref={inputRef}
               type="text"
               className="w-full px-2.5 py-1.5 text-xs rounded border outline-none"
-              placeholder="Type to search or add custom..."
+              placeholder={t('searchableMultiSelect.searchInputPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -243,8 +247,8 @@ export function SearchableMultiSelect({
                 style={{ color: 'var(--muted-foreground)' }}
               >
                 {values.length === options.length
-                  ? 'All presets picked — type a custom name to add.'
-                  : 'No matches'}
+                  ? t('searchableMultiSelect.allPresetsPicked')
+                  : t('searchableMultiSelect.noMatches')}
               </div>
             ) : (
               filtered.map((opt, idx) => (
@@ -278,7 +282,7 @@ export function SearchableMultiSelect({
                   fontSize: 12,
                 }}
               >
-                <span>+ Use custom:</span>
+                <span>{t('searchableMultiSelect.useCustom')}</span>
                 <span style={{ color: 'var(--foreground)', fontWeight: 600 }}>{q}</span>
               </div>
             )}

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
 interface ActionDialogProps {
   open: boolean;
@@ -24,13 +25,14 @@ export function ActionDialog({
   loading = false,
   title,
   description,
-  confirmLabel = 'Confirm',
+  confirmLabel,
   variant = 'danger',
   requireInput,
   inputValue = '',
   onInputChange,
   inputPlaceholder,
 }: ActionDialogProps) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -82,7 +84,13 @@ export function ActionDialog({
         {requireInput !== undefined && (
           <div className="mb-4">
             <p className="text-[10px] font-mono mb-2" style={{ color: 'var(--muted-foreground)' }}>
-              Type <span className="font-bold" style={{ color: confirmColor }}>{requireInput}</span> to confirm
+              <Trans
+                i18nKey="actionDialog.typeToConfirm"
+                values={{ value: requireInput }}
+                components={{
+                  v: <span className="font-bold" style={{ color: confirmColor }} />,
+                }}
+              />
             </p>
             <input
               type="text"
@@ -102,7 +110,7 @@ export function ActionDialog({
             className="px-4 py-2 text-xs font-mono font-bold tracking-wider rounded border transition-colors"
             style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
           >
-            Cancel
+            {t('actionDialog.cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -110,7 +118,7 @@ export function ActionDialog({
             className="px-4 py-2 text-xs font-mono font-bold tracking-wider rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: confirmBg, borderColor: confirmBorder, color: confirmColor }}
           >
-            {loading ? 'Processing...' : confirmLabel}
+            {loading ? t('actionDialog.processing') : (confirmLabel ?? t('actionDialog.confirm'))}
           </button>
         </div>
       </div>

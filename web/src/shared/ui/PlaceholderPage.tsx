@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageHeader } from './PageHeader';
 
 interface Column {
@@ -14,20 +15,21 @@ interface PlaceholderPageProps {
   actions?: React.ReactNode;
 }
 
-const DEFAULT_COLUMNS: Column[] = [
-  { key: 'id', label: 'ID' },
-  { key: 'name', label: 'Name' },
-  { key: 'status', label: 'Status' },
-  { key: 'created_at', label: 'Created At' },
-];
-
 export function PlaceholderPage({
   title,
   description,
-  columns = DEFAULT_COLUMNS,
+  columns,
   todoNote,
   actions,
 }: PlaceholderPageProps) {
+  const { t } = useTranslation();
+  const defaultColumns: Column[] = [
+    { key: 'id', label: t('placeholderPage.columnId') },
+    { key: 'name', label: t('placeholderPage.columnName') },
+    { key: 'status', label: t('placeholderPage.columnStatus') },
+    { key: 'created_at', label: t('placeholderPage.columnCreatedAt') },
+  ];
+  const effectiveColumns = columns ?? defaultColumns;
   return (
     <div className="p-6 space-y-6">
       <PageHeader title={title} description={description} actions={actions} />
@@ -56,7 +58,7 @@ export function PlaceholderPage({
         </svg>
         <div>
           <p className="text-xs font-mono font-bold" style={{ color: 'var(--primary)' }}>
-            PHASE 2 IMPLEMENTATION PENDING
+            {t('placeholderPage.phaseNotice')}
           </p>
           {todoNote && (
             <p className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>
@@ -88,7 +90,7 @@ export function PlaceholderPage({
             className="text-[10px] font-mono px-2 py-0.5 rounded border"
             style={{ color: 'var(--muted-foreground)', borderColor: 'var(--border)' }}
           >
-            0 RECORDS
+            {t('placeholderPage.zeroRecords')}
           </span>
         </div>
 
@@ -96,7 +98,7 @@ export function PlaceholderPage({
           <table className="w-full whitespace-nowrap text-left border-collapse">
             <thead>
               <tr>
-                {columns.map((col) => (
+                {effectiveColumns.map((col) => (
                   <th key={col.key} className="px-5 py-3">
                     {col.label}
                   </th>
@@ -106,7 +108,7 @@ export function PlaceholderPage({
             <tbody>
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={effectiveColumns.length}
                   className="px-5 py-12 text-center"
                   style={{ color: 'var(--muted-foreground)' }}
                 >
@@ -124,7 +126,7 @@ export function PlaceholderPage({
                         d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
                       />
                     </svg>
-                    <span className="text-xs font-mono">NO DATA — AWAITING IMPLEMENTATION</span>
+                    <span className="text-xs font-mono">{t('placeholderPage.noData')}</span>
                   </div>
                 </td>
               </tr>

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 import './ProviderMultiSelect.css';
 
@@ -117,10 +118,12 @@ export function ProviderMultiSelect({
   values,
   onChange,
   presets = KNOWN_PROTOCOLS,
-  placeholder = 'Search or type custom…',
+  placeholder,
   className,
   showRequired = false,
 }: ProviderMultiSelectProps) {
+  const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder ?? t('providerMultiSelect.searchPlaceholder');
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -241,7 +244,7 @@ export function ProviderMultiSelect({
             }}
           >
             {filtered.length === 0 && !customHit && (
-              <div className="provider-ms-empty">No match</div>
+              <div className="provider-ms-empty">{t('providerMultiSelect.noMatch')}</div>
             )}
             {filtered.map((p) => (
               <button
@@ -265,7 +268,7 @@ export function ProviderMultiSelect({
                   add(query);
                 }}
               >
-                + Add custom: "{query.trim().toLowerCase()}"
+                {t('providerMultiSelect.addCustom', { query: query.trim().toLowerCase() })}
               </button>
             )}
           </div>,
@@ -298,7 +301,7 @@ export function ProviderMultiSelect({
             type="button"
             className="provider-ms-chip-x"
             onClick={() => remove(v)}
-            aria-label={`Remove ${v}`}
+            aria-label={t('providerMultiSelect.removeAriaLabel', { value: v })}
           >
             ×
           </button>
@@ -309,7 +312,7 @@ export function ProviderMultiSelect({
           autoFocus
           className="provider-ms-search"
           type="text"
-          placeholder={values.length === 0 ? placeholder : 'Add more…'}
+          placeholder={values.length === 0 ? resolvedPlaceholder : t('providerMultiSelect.addMorePlaceholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -318,7 +321,7 @@ export function ProviderMultiSelect({
         />
       ) : (
         <button type="button" className={addBtnClass} onClick={() => setOpen(true)}>
-          + Add
+          {t('providerMultiSelect.addButton')}
         </button>
       )}
       {dropdown}
@@ -330,8 +333,7 @@ export function ProviderMultiSelect({
           has fired this lifetime, not preemptive teaching on first kimi pick. */}
       {showKimiNote && (
         <div className="provider-ms-note">
-          Note: kimi family routes through one upstream — picking kimi(kimi-code)
-          auto-deselects kimi(moonshot), and vice versa.
+          {t('providerMultiSelect.kimiFamilyNote')}
         </div>
       )}
     </div>

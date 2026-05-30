@@ -3,5 +3,88 @@
     "name": "Language",
     "en": "English",
     "zh": "中文"
+  },
+  "actionDialog": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "processing": "Processing...",
+    "typeToConfirm": "Type <v>{{value}}</v> to confirm"
+  },
+  "errorDisplay": {
+    "field": "Field",
+    "rule": "Rule",
+    "provider": "Provider",
+    "upstreamStatus": "Upstream status",
+    "upstreamMessage": "Upstream message"
+  },
+  "filterBar": {
+    "all": "All",
+    "searchPlaceholder": "Search..."
+  },
+  "pagination": {
+    "range": "{{start}}–{{end}} of {{total}}",
+    "prev": "← Prev",
+    "next": "Next →"
+  },
+  "placeholderPage": {
+    "columnId": "ID",
+    "columnName": "Name",
+    "columnStatus": "Status",
+    "columnCreatedAt": "Created At",
+    "phaseNotice": "PHASE 2 IMPLEMENTATION PENDING",
+    "zeroRecords": "0 RECORDS",
+    "noData": "NO DATA — AWAITING IMPLEMENTATION"
+  },
+  "providerMultiSelect": {
+    "searchPlaceholder": "Search or type custom…",
+    "addMorePlaceholder": "Add more…",
+    "noMatch": "No match",
+    "addCustom": "+ Add custom: \"{{query}}\"",
+    "addButton": "+ Add",
+    "removeAriaLabel": "Remove {{value}}",
+    "kimiFamilyNote": "Note: kimi family routes through one upstream — picking kimi(kimi-code) auto-deselects kimi(moonshot), and vice versa."
+  },
+  "searchableMultiSelect": {
+    "addPlaceholder": "Add…",
+    "add": "Add",
+    "searchInputPlaceholder": "Type to search or add custom...",
+    "allPresetsPicked": "All presets picked — type a custom name to add.",
+    "noMatches": "No matches",
+    "useCustom": "+ Use custom:",
+    "removeAria": "Remove {{value}}"
+  },
+  "searchableSelect": {
+    "placeholder": "Select...",
+    "searchPlaceholder": "Type to search...",
+    "noMatches": "No matches",
+    "useCustom": "+ Use custom:"
+  },
+  "userShell": {
+    "navOverview": "Overview",
+    "navVault": "Vault",
+    "navImport": "Import",
+    "navTeamKeys": "Team Keys",
+    "navUsage": "Usage",
+    "navTeamUsage": "Team Usage",
+    "navPerformance": "Performance",
+    "navApps": "Apps",
+    "navTrustCheck": "Trust Check",
+    "navAccount": "Account",
+    "navInvites": "Invites",
+    "groupKeys": "Keys",
+    "groupCost": "Cost",
+    "groupQuality": "Quality",
+    "groupAccount": "Account",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebarShortcut": "Expand sidebar  (⌘\\)",
+    "collapseSidebarShortcut": "Collapse sidebar  (⌘\\)",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "signOut": "Sign out",
+    "invite": "Invite",
+    "breadcrumbUser": "User",
+    "roleMember": "member",
+    "opensLink": "Opens {{url}}"
   }
 }

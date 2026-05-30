@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface SelectOption {
   value: string;
@@ -36,12 +37,16 @@ export function SearchableSelect({
   options,
   value,
   onChange,
-  placeholder = 'Select...',
+  placeholder,
   className = '',
   style,
   disabled,
   allowCustom = false,
 }: SearchableSelectProps) {
+  const { t } = useTranslation();
+  // Default placeholder is resolved here (not as a prop default) so it can
+  // use the i18n `t()` hook; callers passing `placeholder` still override it.
+  const resolvedPlaceholder = placeholder ?? t('searchableSelect.placeholder');
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [highlightIdx, setHighlightIdx] = useState(0);
@@ -144,7 +149,7 @@ export function SearchableSelect({
           fontFamily: 'var(--font-mono, ui-monospace, monospace)',
         }}
       >
-        <span className="truncate">{selectedLabel || placeholder}</span>
+        <span className="truncate">{selectedLabel || resolvedPlaceholder}</span>
         <svg className="w-3.5 h-3.5 shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
@@ -166,7 +171,7 @@ export function SearchableSelect({
               ref={inputRef}
               type="text"
               className="w-full px-2.5 py-1.5 text-xs rounded border outline-none"
-              placeholder="Type to search..."
+              placeholder={t('searchableSelect.searchPlaceholder')}
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -183,7 +188,7 @@ export function SearchableSelect({
           <div ref={listRef} className="max-h-52 overflow-y-auto py-1">
             {filtered.length === 0 && !canCustom ? (
               <div className="px-3 py-2 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                No matches
+                {t('searchableSelect.noMatches')}
               </div>
             ) : (
               filtered.map((opt, idx) => (
@@ -216,7 +221,7 @@ export function SearchableSelect({
                   fontSize: 12,
                 }}
               >
-                <span>+ Use custom:</span>
+                <span>{t('searchableSelect.useCustom')}</span>
                 <span style={{ color: 'var(--foreground)', fontWeight: 600 }}>{q}</span>
               </div>
             )}
