@@ -29,6 +29,7 @@ import {
   groupByBand,
   type BaseUrlGroup,
   type HealthSummary,
+  type LabelRef,
   type TrustRow,
 } from './derive';
 import { AliasDetailDrawer } from './drawer';
@@ -43,6 +44,17 @@ import {
 import { GaugeIcon, KeyIcon, RefreshIcon, ScanIcon } from './icons';
 import { SourceTable, type VerifyErrorState } from './table';
 import { TRUST_CHECK_CSS } from './trust-check-css';
+
+// Resolve a derive.ts label output for rendering. derive returns a
+// `LabelRef` (i18n key + vars) for fixed labels and a plain string for
+// raw user values (aliases, base_url hosts). This helper renders either:
+// raw strings pass through; LabelRefs go through `t()`. `t` is taken as
+// an argument so the helper stays usable from any component that already
+// called useTranslation().
+type TFn = ReturnType<typeof useTranslation>['t'];
+function resolveLabel(t: TFn, x: string | LabelRef): string {
+  return typeof x === 'string' ? x : t(x.key, x.vars);
+}
 
 // Real filter chips (Day 5 post-A2). The UI template originally had
 // 11 chips + 2 select-pills but most of them needed data trust-local
@@ -768,7 +780,7 @@ function HealthOverviewPanel({
               {isLoading ? t('trustCheck.healthLoadingTitle') : t('trustCheck.healthTitle')}
             </h2>
             <p className="tc-health-desc">
-              {isLoading ? ' ' : health.description}
+              {isLoading ? ' ' : resolveLabel(t, health.description)}
             </p>
           </div>
           <span className="tc-health-window">{t('trustCheck.healthWindow')}</span>
@@ -896,7 +908,7 @@ function BaseUrlList({
               title={t('trustCheck.baseUrlRowTitle')}
             >
               <div className="tc-baseurl-cell tc-baseurl-gateway">
-                <strong>{group.label}</strong>
+                <strong>{resolveLabel(t, group.label)}</strong>
                 <span className="tc-mono tc-baseurl-sub">
                   {t('trustCheck.baseUrlAliasCount', { count: group.rows.length })}
                   {' · '}
@@ -913,7 +925,7 @@ function BaseUrlList({
                   <div className="tc-score-head">
                     <span>{rep.score || '—'}</span>
                     <span className={`tc-pill tc-pill-${group.band}`}>
-                      {rep.band_label}
+                      {resolveLabel(t, rep.band_label)}
                     </span>
                   </div>
                 </div>

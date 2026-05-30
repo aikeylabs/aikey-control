@@ -24,10 +24,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { importApi, type ProviderRoute } from '@/shared/api/user/import';
-import { formatRelativeTime } from '@/shared/utils/datetime-intl';
+import { formatDate, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import {
   vaultApi,
   oauthApi,
@@ -133,29 +134,28 @@ function rowKey(r: VaultRowRecord): string {
  *  - 'revoked'  : team admin disabled the share; key won't authenticate
  *                 even if the local cache still holds metadata.
  */
-function teamShareLabel(s: 'pending' | 'claimed' | 'revoked'): string {
+function teamShareLabel(s: 'pending' | 'claimed' | 'revoked', t: TFunction): string {
   switch (s) {
     case 'pending':
-      return 'pending';
+      return t('vault.shareStatusPending');
     case 'claimed':
-      return 'claimed';
+      return t('vault.shareStatusClaimed');
     case 'revoked':
-      return 'revoked';
+      return t('vault.shareStatusRevoked');
   }
 }
 
 /** "expires Mar 5" / "expired" / null when no expiry. ISO string from
  *  the team server, no time-of-day shown — daily resolution is enough
- *  for a vault row sub-line. */
-function formatExpiresAtIso(iso: string | undefined | null): string | null {
+ *  for a vault row sub-line. Date is formatted via datetime-intl
+ *  (locale-aware, in lock-step with the active i18n language) and the
+ *  surrounding phrase comes from the message catalogue. */
+function formatExpiresAtIso(iso: string | undefined | null, t: TFunction): string | null {
   if (!iso) return null;
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return null;
-  if (t < Date.now()) return 'expired';
-  const d = new Date(t);
-  // Locked to en-US (project-wide rule for code/UI strings) so this stays
-  // consistent across browsers regardless of the user's locale prefs.
-  return `expires ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  const parsed = Date.parse(iso);
+  if (Number.isNaN(parsed)) return null;
+  if (parsed < Date.now()) return t('vault.expired');
+  return t('vault.expiresOn', { date: formatDate(new Date(parsed)) });
 }
 
 /**
@@ -377,14 +377,17 @@ function LastTestCell(props: { value: VaultLastTest | null }) {
   );
 }
 
-/** "expires in 27d" / "expires in 4h" / "expired" / null when unknown. */
-function formatExpiresIn(unix: number | null | undefined): string | null {
+/** "expires in 27d" / "expires in 4h" / "expired" / null when unknown.
+ *  Phrasing comes from the message catalogue with i18next plural
+ *  (`_one`/`_other`) + {{count}} interpolation so the relative-time
+ *  suffix follows the active language. */
+function formatExpiresIn(unix: number | null | undefined, t: TFunction): string | null {
   if (!unix) return null;
   const diff = unix - Date.now() / 1000;
-  if (diff <= 0) return 'expired';
-  if (diff < 3600) return `expires in ${Math.max(1, Math.floor(diff / 60))}m`;
-  if (diff < 86400) return `expires in ${Math.floor(diff / 3600)}h`;
-  return `expires in ${Math.floor(diff / 86400)}d`;
+  if (diff <= 0) return t('vault.expired');
+  if (diff < 3600) return t('vault.expiresInMinutes', { count: Math.max(1, Math.floor(diff / 60)) });
+  if (diff < 86400) return t('vault.expiresInHours', { count: Math.floor(diff / 3600) });
+  return t('vault.expiresInDays', { count: Math.floor(diff / 86400) });
 }
 
 /** Canonical brand color for a provider, matching the 3.1 template's
@@ -2584,10 +2587,10 @@ const Row = React.memo(function Row(props: {
     // revoked = key is dead even if metadata lingers); expiry is a hint
     // about the team-managed lifecycle so users aren't surprised when
     // the team admin's rotation kicks in.
-    const expires = formatExpiresAtIso(r.expires_at);
+    const expires = formatExpiresAtIso(r.expires_at, t);
     subLine = (
       <>
-        {t('vault.teamKeyPrefix')}{teamShareLabel(r.share_status)}
+        {t('vault.teamKeyPrefix')}{teamShareLabel(r.share_status, t)}
         {expires && (
           <>
             <span className="mx-1 opacity-40">·</span>
@@ -2598,7 +2601,7 @@ const Row = React.memo(function Row(props: {
     );
   } else {
     const o = r as OAuthVaultRecord;
-    const expires = formatExpiresIn(o.token_expires_at);
+    const expires = formatExpiresIn(o.token_expires_at, t);
     subLine = (
       <>
         {providerName}{t('vault.sessionSuffix')}
@@ -3327,7 +3330,7 @@ function DetailDrawer(props: {
                 <span className="k">{t('vault.share')}</span>
                 <span className="v">
                   <span className={`chip ${team.share_status === 'claimed' ? 'success' : team.share_status === 'revoked' ? 'danger' : 'warning'}`}>
-                    {team.share_status.toUpperCase()}
+                    {teamShareLabel(team.share_status, t)}
                   </span>
                 </span>
               </div>
@@ -4127,7 +4130,7 @@ function DetailDrawer(props: {
               <div className="drawer-field">
                 <span className="k">{t('vault.expires')}</span>
                 <span className="v">
-                  {formatExpiresIn(oauth.token_expires_at)}
+                  {formatExpiresIn(oauth.token_expires_at, t)}
                   <span className="mono dim">
                     · {formatCreatedShort(oauth.token_expires_at)}
                   </span>
@@ -4140,7 +4143,7 @@ function DetailDrawer(props: {
             {team?.expires_at && (
               <div className="drawer-field">
                 <span className="k">{t('vault.expires')}</span>
-                <span className="v">{formatExpiresAtIso(team.expires_at)}</span>
+                <span className="v">{formatExpiresAtIso(team.expires_at, t)}</span>
               </div>
             )}
             <div className="drawer-field">

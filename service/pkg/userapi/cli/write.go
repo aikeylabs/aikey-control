@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 )
 
 // WriteInvokeError maps a Bridge.Invoke error to an HTTP response with the
@@ -125,6 +127,13 @@ func WriteErr(w http.ResponseWriter, code, msg string) {
 	case ErrCliTimeout:
 		status = http.StatusGatewayTimeout
 	}
+	// Phase E-2: localize error_message by the locale negotiated in
+	// shared.LocaleMiddleware (carried on w). zh requests with a known I_*
+	// code get the zh template; CLI/curl (no Accept-Language → "en") and
+	// codes without a template fall back to the passed English msg. Response
+	// SHAPE is unchanged — only the message text localizes. See
+	// errors_locale.go for the WHY/scope.
+	msg = localizeWriteErrMessage(shared.LocaleFromWriter(w), code, msg)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(JSONError{Status: "error", ErrorCode: code, ErrorMessage: msg})

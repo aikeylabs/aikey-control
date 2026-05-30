@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 )
 
 func TestHandler_ReturnsExpectedShape(t *testing.T) {
@@ -41,6 +43,64 @@ func TestHandler_ReturnsExpectedShape(t *testing.T) {
 	}
 	if len(resp.Entries) != 1 || resp.Entries[0].ID != "x" {
 		t.Errorf("entries=%+v, want one entry with id=x", resp.Entries)
+	}
+}
+
+func TestPersonalMenuZhLabels_CoverAllEntries(t *testing.T) {
+	// Coverage invariant (Phase E-2): every PersonalMenu entry must have a
+	// zh label so a zh user never silently sees an English label mixed in.
+	// A new menu entry added without a translation fails here loudly.
+	for _, e := range PersonalMenu {
+		if _, ok := personalMenuZhLabels[e.ID]; !ok {
+			t.Errorf("PersonalMenu entry %q (%q) has no zh label in personalMenuZhLabels", e.ID, e.Label)
+		}
+	}
+}
+
+func TestHandler_LocalizesLabelsForZh(t *testing.T) {
+	// zh request → labels swapped to Chinese; en (default) → unchanged.
+	// Drives the real Handler through the same LocaleMiddleware the
+	// user-local mux uses, so the locale path is exercised end-to-end.
+	cases := []struct {
+		name       string
+		accept     string
+		wantVault  string
+		wantImport string
+	}{
+		{"zh", "zh-CN,zh;q=0.9", "保管库", "导入"},
+		{"en", "en-US,en;q=0.9", "Vault", "Import"},
+		{"no-header", "", "Vault", "Import"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := shared.LocaleMiddleware(Handler(SourcePersonal, PersonalMenu))
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/system/cross-app-menu", nil)
+			if tc.accept != "" {
+				req.Header.Set("Accept-Language", tc.accept)
+			}
+			h.ServeHTTP(rec, req)
+
+			var resp Response
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			byID := map[string]string{}
+			for _, e := range resp.Entries {
+				byID[e.ID] = e.Label
+			}
+			if got := byID["personal-vault"]; got != tc.wantVault {
+				t.Errorf("vault label=%q, want %q", got, tc.wantVault)
+			}
+			if got := byID["personal-import"]; got != tc.wantImport {
+				t.Errorf("import label=%q, want %q", got, tc.wantImport)
+			}
+		})
+	}
+
+	// The shared PersonalMenu slice must not be mutated by a zh request.
+	if PersonalMenu[0].Label != "Vault" {
+		t.Errorf("PersonalMenu mutated: [0].Label=%q, want %q", PersonalMenu[0].Label, "Vault")
 	}
 }
 

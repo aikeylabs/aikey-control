@@ -191,6 +191,11 @@
     "keysZeroPending": "0 pending",
     "default": "DEFAULT"
   },
+  "accountRole": {
+    "member": "MEMBER",
+    "owner": "OWNER",
+    "admin": "ADMIN"
+  },
   "vault": {
     "toastRenameFailedTitle": "Rename failed",
     "toastUnlockFirstTitle": "Unlock vault first",
@@ -363,6 +368,17 @@
     "created": "Created",
     "useCount": "Use count",
     "expires": "Expires",
+    "expired": "expired",
+    "expiresOn": "expires {{date}}",
+    "expiresInDays_one": "expires in {{count}}d",
+    "expiresInDays_other": "expires in {{count}}d",
+    "expiresInHours_one": "expires in {{count}}h",
+    "expiresInHours_other": "expires in {{count}}h",
+    "expiresInMinutes_one": "expires in {{count}}m",
+    "expiresInMinutes_other": "expires in {{count}}m",
+    "shareStatusPending": "pending",
+    "shareStatusClaimed": "claimed",
+    "shareStatusRevoked": "revoked",
     "target": "Target",
     "connectivityTestResultAria": "Connectivity test result",
     "testConnectionPopupTitle": "Test connection",
@@ -1000,7 +1016,30 @@
     "recentObsEmpty": "No D-rule hits on this credential. Healthy traffic produces zero observations — they appear here when the proxy spots a buffer-restream signature (D4), a model-name swap (D5), or a non-Anthropic batching rhythm (D6) on chat traffic.",
     "obsScoreDetail": "score {{score}}",
     "obsTraceTitle": "trace {{traceId}}",
-    "signalsTitle": "Signals"
+    "signalsTitle": "Signals",
+    "trustCheckLeftover": {
+      "healthNeedsReview_one": "Some sources need review — {{count}} flagged.",
+      "healthNeedsReview_other": "Some sources need review — {{count}} flagged.",
+      "healthNoSources": "No sources in scope yet.",
+      "healthNoRecentChecks": "No recent checks. Run Check to see health.",
+      "healthStable": "Sources are stable across the last 24h.",
+      "healthMostlyStable_one": "Mostly stable; {{count}} source needs a recheck.",
+      "healthMostlyStable_other": "Mostly stable; {{count}} sources need a recheck.",
+      "healthMultipleFlagged": "Multiple sources flagged — recheck {{count}} before bulk use.",
+      "sourceOauthAccount": "OAuth account",
+      "sourceOauthIdentity": "OAuth identity",
+      "sourcePersonalByok": "personal BYOK",
+      "useKindLast24h": "last 24h",
+      "useKindUnverified": "unverified",
+      "bandTrusted": "Trusted",
+      "bandSuspect": "Suspect",
+      "bandRisky": "Risky",
+      "bandUnverified": "Unverified",
+      "gatewayUnknown": "Unknown gateway",
+      "gatewayOauthOfficial": "OAuth (official)",
+      "gatewayBrandOauthOfficial": "{{brand}} OAuth (official)",
+      "sourceAppKey": "app key · {{idTail}}…"
+    }
   },
   "apps": {
     "loadingConnectedApps": "Loading connected apps…",

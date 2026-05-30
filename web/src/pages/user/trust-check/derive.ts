@@ -15,18 +15,45 @@ import type { CascadeHistoryEntry, TrustSummary } from './api';
 
 export type StatusBand = 'trust' | 'suspect' | 'risk' | 'info';
 
+// ---------------------------------------------------------------------------
+// i18n indirection (Option B). derive.ts is a PURE function module — no
+// React, no hooks, unit-testable without booting i18next, and reusable
+// from a CLI that prints the same labels. To keep that property while
+// still localising display text, derive functions return a `LabelRef`
+// (a catalog key + optional interpolation vars) for any FIXED label
+// instead of a hard-coded English string. The React consumers resolve
+// it via `t(ref.key, ref.vars)`; the CLI can resolve it against its own
+// catalog. User-provided values (aliases, base_url hosts, brand proper
+// nouns) stay as plain strings and are NEVER wrapped in a key.
+//
+// All keys live under the `trustCheck.trustCheckLeftover.*` namespace
+// in shared/i18n/locales/{en,zh}/common.json.
+// ---------------------------------------------------------------------------
+
+export type LabelRef = { key: string; vars?: Record<string, unknown> };
+
+/** Namespace prefix for every trust-check leftover label key. */
+const L = 'trustCheck.trustCheckLeftover.';
+
 export interface TrustRow {
   /** Stable identity for React keys + per-row Check button binding. */
   alias_name: string;
-  use_label: string;
-  use_kind: string;
-  source_name: string;
-  source_meta: string;
+  /** Either a raw user-provided value (e.g. app slug / personal-key
+   *  alias) or a fixed-label LabelRef (e.g. "OAuth account"). */
+  use_label: string | LabelRef;
+  /** Always a fixed label ("unverified" / "last 24h"). */
+  use_kind: LabelRef;
+  /** Raw alias / app slug / email (plain string) OR a fixed LabelRef. */
+  source_name: string | LabelRef;
+  /** Fixed label ("OAuth identity" / "personal BYOK" / app key) LabelRef,
+   *  OR a raw derived session id string for oauth-session aliases. */
+  source_meta: string | LabelRef;
   model: string;
   provider: string;
   score: number;
   band: StatusBand;
-  band_label: string;
+  /** Always a fixed band label LabelRef (Trusted/Suspect/Risky/Unverified). */
+  band_label: LabelRef;
   /** Weakest layer subtitle for the score pill — surfaces real signal
    *  the headline ``score`` (harmonic mean) hides. Set only when the
    *  weakest layer is < 80; null when all layers are 80+ (no hidden
@@ -89,16 +116,16 @@ export function deriveBand(score: number | null | undefined): StatusBand {
   return 'risk';
 }
 
-export function deriveBandLabel(band: StatusBand): string {
+export function deriveBandLabel(band: StatusBand): LabelRef {
   switch (band) {
     case 'trust':
-      return 'Trusted';
+      return { key: L + 'bandTrusted' };
     case 'suspect':
-      return 'Suspect';
+      return { key: L + 'bandSuspect' };
     case 'risk':
-      return 'Risky';
+      return { key: L + 'bandRisky' };
     case 'info':
-      return 'Unverified';
+      return { key: L + 'bandUnverified' };
   }
 }
 
@@ -136,34 +163,44 @@ export function formatTimeSince(epochSec: number | null | undefined): string {
 // keep CLI ↔ web identifiers byte-aligned per kickoff §7.1 invariant.
 // ---------------------------------------------------------------------------
 
-function deriveSourceLabels(alias: string): { name: string; meta: string } {
+function deriveSourceLabels(
+  alias: string,
+): { name: string | LabelRef; meta: string | LabelRef } {
   const oauthMatch = alias.match(/^(?:oauth:)?session_([a-f0-9]+)/i);
   if (oauthMatch) {
+    // `name` is a fixed label → LabelRef. `meta` is the derived session
+    // id (`session_abc12345…`) — a raw identifier, not translatable
+    // prose, so it stays a plain string per the LabelRef contract.
     return {
-      name: 'OAuth account',
+      name: { key: L + 'sourceOauthAccount' },
       meta: `session_${oauthMatch[1].slice(0, 8)}…`,
     };
   }
   if (alias.includes('@') && alias.includes('.')) {
-    // Bare email-like identity (e.g. FreySilvaqzs@qualityservice.com)
+    // Bare email-like identity (e.g. FreySilvaqzs@qualityservice.com).
+    // `name` is the raw user email — keep it a plain string.
     return {
       name: alias,
-      meta: 'OAuth identity',
+      meta: { key: L + 'sourceOauthIdentity' },
     };
   }
   const appMatch = alias.match(/^app:([^:]+):([0-9a-f-]+)/i);
   if (appMatch) {
     const slug = appMatch[1];
     const idTail = appMatch[2].slice(0, 8);
+    // `name` is the raw app slug (user-defined) — plain string. `meta`
+    // is the fixed "app key · {idTail}…" template with the id tail var.
     return {
       name: slug,
-      meta: `app key · ${idTail}…`,
+      meta: { key: L + 'sourceAppKey', vars: { idTail } },
     };
   }
-  return { name: alias, meta: 'personal BYOK' };
+  return { name: alias, meta: { key: L + 'sourcePersonalByok' } };
 }
 
-function deriveUseLabel(summary: TrustSummary): { label: string; kind: string } {
+function deriveUseLabel(
+  summary: TrustSummary,
+): { label: string | LabelRef; kind: LabelRef } {
   // Day 2: trust-local doesn't tell us "which app is currently using this
   // alias" — that's a usage_events join we don't have here. Show a
   // generic source-kind label so the column carries SOME signal without
@@ -180,20 +217,24 @@ function deriveUseLabel(summary: TrustSummary): { label: string; kind: string } 
   // doesn't already match a structured family handled by deriveSourceLabels;
   // for OAuth / app-resource / oauth-session aliases, show the family
   // name so the column stays meaningful but distinct.
-  const verifiedTag = summary.last_verified_at == null ? 'unverified' : 'last 24h';
+  const verifiedTag: LabelRef =
+    summary.last_verified_at == null
+      ? { key: L + 'useKindUnverified' }
+      : { key: L + 'useKindLast24h' };
   const alias = summary.alias_name;
   // OAuth email-identity aliases (`local@domain.tld`) — Source column
   // already shows the full email + "OAuth identity" sub-label. Show a
   // semantic family label here instead of the local-part.
   if (alias.includes('@') && alias.includes('.')) {
-    return { label: 'OAuth account', kind: verifiedTag };
+    return { label: { key: L + 'sourceOauthAccount' }, kind: verifiedTag };
   }
   // oauth:session_<hex> — same family, give it the same label.
   if (/^(?:oauth:)?session_[a-f0-9]+/i.test(alias)) {
-    return { label: 'OAuth account', kind: verifiedTag };
+    return { label: { key: L + 'sourceOauthAccount' }, kind: verifiedTag };
   }
   // app-resource synthetic (`app:<slug>:<keyid>`) — show the slug; the
-  // Source column carries the `app key · <id>...` detail.
+  // Source column carries the `app key · <id>...` detail. The slug is a
+  // raw user-defined value → plain string, NOT keyed.
   const appMatch = alias.match(/^app:([^:]+):/i);
   if (appMatch) {
     return { label: appMatch[1], kind: verifiedTag };
@@ -201,7 +242,8 @@ function deriveUseLabel(summary: TrustSummary): { label: string; kind: string } 
   // Plain personal BYOK — the alias is the natural label here too,
   // but deriveSourceLabels' meta is "personal BYOK", not a copy of
   // the alias, so this is the one case where label == Source name is
-  // intentional (the alias IS the identity for personal keys).
+  // intentional (the alias IS the identity for personal keys). Raw
+  // user value → plain string.
   return { label: alias.split(/[:/]/)[0] || alias, kind: verifiedTag };
 }
 
@@ -304,7 +346,8 @@ export function summaryToRow(s: TrustSummary): TrustRow {
 
 export interface BandSection {
   band: StatusBand;
-  label: string;
+  /** Band display label LabelRef (same as TrustRow.band_label). */
+  label: LabelRef;
   rows: TrustRow[];
 }
 
@@ -603,8 +646,8 @@ export interface HealthSummary {
   needsReviewCount: number;
   /** Tier hint for UI colouring — same band scale as deriveBand. */
   band: StatusBand;
-  /** One-line description, English, derived from overallPct. */
-  description: string;
+  /** One-line description LabelRef, derived from overallPct. */
+  description: LabelRef;
 }
 
 export function computeHealthSummary(items: TrustSummary[]): HealthSummary {
@@ -664,18 +707,22 @@ function describeHealth(
   overall: number | null,
   needsReview: number,
   total: number,
-): string {
-  if (total === 0) return 'No sources in scope yet.';
-  if (overall == null) return 'No recent checks. Run Check to see health.';
+): LabelRef {
+  if (total === 0) return { key: L + 'healthNoSources' };
+  if (overall == null) return { key: L + 'healthNoRecentChecks' };
   if (overall >= 80) {
+    // i18next resolves the `_one` / `_other` plural suffix from `count`,
+    // so we pass the base key + a `count` var rather than baking the
+    // pluralisation here. The singular/plural English (and zh) wording
+    // lives in the catalog.
     return needsReview === 0
-      ? 'Sources are stable across the last 24h.'
-      : `Mostly stable; ${needsReview} source${needsReview === 1 ? '' : 's'} need a recheck.`;
+      ? { key: L + 'healthStable' }
+      : { key: L + 'healthMostlyStable', vars: { count: needsReview } };
   }
   if (overall >= 60) {
-    return `Some sources need review — ${needsReview} flagged.`;
+    return { key: L + 'healthNeedsReview', vars: { count: needsReview } };
   }
-  return `Multiple sources flagged — recheck ${needsReview} before bulk use.`;
+  return { key: L + 'healthMultipleFlagged', vars: { count: needsReview } };
 }
 
 // ---------------------------------------------------------------------------
@@ -699,8 +746,10 @@ function describeHealth(
 export interface BaseUrlGroup {
   /** Vault base_url verbatim, or "" for unknown. */
   base_url: string;
-  /** Display label for the gateway (host + path tail). */
-  label: string;
+  /** Display label for the gateway. A raw host+path string for personal
+   *  base_url groups (user-config value, NOT keyed), or a fixed LabelRef
+   *  for the "Unknown gateway" / "OAuth (official)" cases. */
+  label: string | LabelRef;
   /** Aliases sharing this baseurl. Sorted: lowest score first
    *  (worst risk surfaces). */
   rows: TrustRow[];
@@ -714,7 +763,7 @@ export interface BaseUrlGroup {
 }
 
 const UNKNOWN_BASE_URL_KEY = '';
-const UNKNOWN_BASE_URL_LABEL = 'Unknown gateway';
+const UNKNOWN_BASE_URL_LABEL: LabelRef = { key: L + 'gatewayUnknown' };
 // 2026-05-23: OAuth credentials are not user-configurable to a non-
 // official endpoint (vault deliberately does NOT store base_url for
 // OAuth — there's nothing to store). Pre-fix, OAuth rows fell into
@@ -729,12 +778,15 @@ function oauthGroupKey(providerId: string): string {
   return OAUTH_KEY_PREFIX + (providerId || 'unknown');
 }
 
-function oauthGroupLabel(providerId: string): string {
+function oauthGroupLabel(providerId: string): LabelRef {
   const p = (providerId || '').trim();
-  if (!p) return 'OAuth (official)';
+  if (!p) return { key: L + 'gatewayOauthOfficial' };
   // Provider id mapping mirrors the canonical short names trust-local
   // uses (anthropic, openai, google, kimi_code, moonshot, ...). Render
-  // the casual brand name so the label reads naturally to users.
+  // the casual brand name so the label reads naturally to users. Brand
+  // names are proper nouns → stay plain strings, passed into the
+  // "{{brand}} OAuth (official)" key as the `brand` interpolation var
+  // (only the "OAuth (official)" wrapper is localised).
   const brand =
     p === 'anthropic' ? 'Anthropic' :
     p === 'openai'    ? 'OpenAI'    :
@@ -742,7 +794,7 @@ function oauthGroupLabel(providerId: string): string {
     p === 'kimi_code' ? 'Kimi'      :
     p === 'moonshot'  ? 'Moonshot'  :
     p.charAt(0).toUpperCase() + p.slice(1);
-  return `${brand} OAuth (official)`;
+  return { key: L + 'gatewayBrandOauthOfficial', vars: { brand } };
 }
 
 export function dedupByBaseUrl(rows: readonly TrustRow[]): BaseUrlGroup[] {
@@ -778,12 +830,13 @@ export function dedupByBaseUrl(rows: readonly TrustRow[]): BaseUrlGroup[] {
       return acc == null || r.last_verified_at > acc ? r.last_verified_at : acc;
     }, null);
 
-    let label: string;
+    let label: string | LabelRef;
     if (key === UNKNOWN_BASE_URL_KEY) {
       label = UNKNOWN_BASE_URL_LABEL;
     } else if (key.startsWith(OAUTH_KEY_PREFIX)) {
       label = oauthGroupLabel(key.slice(OAUTH_KEY_PREFIX.length));
     } else {
+      // Raw host+path from the user's configured base_url — plain string.
       label = labelForBaseUrl(key);
     }
 

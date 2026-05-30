@@ -191,6 +191,11 @@
     "keysZeroPending": "0 个待领取",
     "default": "默认"
   },
+  "accountRole": {
+    "member": "成员",
+    "owner": "所有者",
+    "admin": "管理员"
+  },
   "vault": {
     "toastRenameFailedTitle": "重命名失败",
     "toastUnlockFirstTitle": "请先解锁保管库",
@@ -363,6 +368,17 @@
     "created": "创建时间",
     "useCount": "使用次数",
     "expires": "到期时间",
+    "expired": "已过期",
+    "expiresOn": "{{date}} 到期",
+    "expiresInDays_one": "{{count}} 天后到期",
+    "expiresInDays_other": "{{count}} 天后到期",
+    "expiresInHours_one": "{{count}} 小时后到期",
+    "expiresInHours_other": "{{count}} 小时后到期",
+    "expiresInMinutes_one": "{{count}} 分钟后到期",
+    "expiresInMinutes_other": "{{count}} 分钟后到期",
+    "shareStatusPending": "待领取",
+    "shareStatusClaimed": "已领取",
+    "shareStatusRevoked": "已吊销",
     "target": "目标",
     "connectivityTestResultAria": "连通性检测结果",
     "testConnectionPopupTitle": "连接测试",
@@ -1000,7 +1016,30 @@
     "recentObsEmpty": "该凭据上没有 D 规则命中。健康流量不会产生观测 — 当代理在对话流量上发现缓冲重传特征（D4）、模型名替换（D5）或非 Anthropic 批处理节奏（D6）时，它们会显示在这里。",
     "obsScoreDetail": "得分 {{score}}",
     "obsTraceTitle": "trace {{traceId}}",
-    "signalsTitle": "信号"
+    "signalsTitle": "信号",
+    "trustCheckLeftover": {
+      "healthNeedsReview_one": "部分来源需要复核 —— 标记了 {{count}} 个。",
+      "healthNeedsReview_other": "部分来源需要复核 —— 标记了 {{count}} 个。",
+      "healthNoSources": "暂无纳入范围的来源。",
+      "healthNoRecentChecks": "近期无检测记录。运行检测以查看健康状况。",
+      "healthStable": "近 24 小时内来源保持稳定。",
+      "healthMostlyStable_one": "整体稳定；有 {{count}} 个来源需要重新检测。",
+      "healthMostlyStable_other": "整体稳定；有 {{count}} 个来源需要重新检测。",
+      "healthMultipleFlagged": "多个来源被标记 —— 批量使用前请先重新检测 {{count}} 个。",
+      "sourceOauthAccount": "OAuth 账号",
+      "sourceOauthIdentity": "OAuth 身份",
+      "sourcePersonalByok": "个人自带密钥",
+      "useKindLast24h": "近 24 小时",
+      "useKindUnverified": "未验证",
+      "bandTrusted": "可信",
+      "bandSuspect": "可疑",
+      "bandRisky": "高风险",
+      "bandUnverified": "未验证",
+      "gatewayUnknown": "未知网关",
+      "gatewayOauthOfficial": "OAuth（官方）",
+      "gatewayBrandOauthOfficial": "{{brand}} OAuth（官方）",
+      "sourceAppKey": "应用密钥 · {{idTail}}…"
+    }
   },
   "apps": {
     "loadingConnectedApps": "正在加载已连接应用…",

@@ -17,8 +17,16 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { VerifyRecord } from './api';
-import type { StatusBand, TrustRow } from './derive';
+import type { LabelRef, StatusBand, TrustRow } from './derive';
 import { ScanIcon, SpinDotInline } from './icons';
+
+// Resolve a derive.ts label output (raw string OR i18n LabelRef) for
+// rendering. Mirrors the helper in index.tsx — derive stays a pure
+// module returning keys; the View layer resolves them via `t()`.
+type TFn = ReturnType<typeof useTranslation>['t'];
+function resolveLabel(t: TFn, x: string | LabelRef): string {
+  return typeof x === 'string' ? x : t(x.key, x.vars);
+}
 
 /**
  * Per-row verify failure modes. M6 decision 3.1 removed the 24h
@@ -80,8 +88,14 @@ export function SourceTable({
                 }}
                 title={t('trustCheck.rowClickTitle')}
               >
-                <RowCell primary={row.use_label} secondary={row.use_kind} />
-                <RowCell primary={row.source_name} secondary={row.source_meta} />
+                <RowCell
+                  primary={resolveLabel(t, row.use_label)}
+                  secondary={resolveLabel(t, row.use_kind)}
+                />
+                <RowCell
+                  primary={resolveLabel(t, row.source_name)}
+                  secondary={resolveLabel(t, row.source_meta)}
+                />
                 <RowCell
                   primary={<span style={{ fontWeight: 500 }}>{row.model}</span>}
                   secondary={row.provider}
@@ -90,7 +104,7 @@ export function SourceTable({
                   <ScorePill
                     score={row.score}
                     band={row.band}
-                    label={row.band_label}
+                    label={resolveLabel(t, row.band_label)}
                     weakestLayer={row.weakest_layer}
                   />
                 </td>

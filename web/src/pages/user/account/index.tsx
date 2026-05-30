@@ -12,6 +12,7 @@
  */
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { userAccountsApi, type SeatSummaryDTO } from '@/shared/api/user/accounts';
@@ -117,7 +118,7 @@ export default function MyAccountPage() {
                 <div>
                   <span className="role-badge">
                     <span className="dot" aria-hidden="true" />
-                    {(me?.role ?? 'member').toUpperCase()}
+                    {roleLabel(t, me?.role)}
                   </span>
                 </div>
               </div>
@@ -284,6 +285,16 @@ function truncateId(id: string): string {
   if (!id) return '—';
   if (id.length <= 16) return id;
   return `${id.slice(0, 16)}…`;
+}
+
+/** Localize the org role enum (member/owner/admin/…) for the role badge.
+ * The backend returns `role` as a free-form string; we normalize to
+ * lowercase and look up `accountRole.<role>`. Unknown roles fall back to
+ * the raw value upper-cased — fail loud rather than silently mislabel an
+ * unexpected enum (same uppercase visual the badge always used). */
+function roleLabel(t: TFunction, role?: string): string {
+  const normalized = (role ?? 'member').toLowerCase();
+  return t(`accountRole.${normalized}`, { defaultValue: normalized.toUpperCase() });
 }
 
 /** Locale-aware relative time via the shared `Intl.RelativeTimeFormat`

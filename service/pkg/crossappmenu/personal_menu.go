@@ -93,3 +93,27 @@ var PersonalMenu = []Entry{
 	// duplicate Account trailer in the same group.
 	// Spec: requirements/2026-05-11-aikey-web-local-first-team-merge.md R16.
 }
+
+// personalMenuZhLabels maps each PersonalMenu entry's stable ID to its
+// Simplified-Chinese label. Phase E-2 (2026-05-30): the Handler swaps in
+// these labels when the request's negotiated locale is "zh"; English stays
+// the default for any other locale (incl. a missing Accept-Language header).
+//
+// Why key by ID, not by English label: ID is the backward-compat anchor
+// (e.g. "personal-cost" survives the Cost→Performance rename), so keying by
+// ID keeps the translation stable across English-label renames. The English
+// labels in PersonalMenu above remain the canonical source compared by the
+// TS-drift / cross-app-menu lints — this map is additive and applied only at
+// response time, so it never mutates the shared slice.
+//
+// Coverage invariant: every PersonalMenu entry must have a zh label.
+// TestPersonalMenuZhLabels_CoverAllEntries enforces this so a future entry
+// can't silently fall back to English for zh users.
+var personalMenuZhLabels = map[string]string{
+	"personal-vault":       "保管库",
+	"personal-import":      "导入",
+	"personal-usage":       "用量",
+	"personal-cost":        "性能", // Label "Performance"; ID kept for back-compat.
+	"personal-apps":        "应用",
+	"personal-trust-check": "置信度检测",
+}

@@ -311,7 +311,9 @@ describe('computeHealthSummary', () => {
     expect(h.overallPct).toBeNull();
     expect(h.totalCount).toBe(0);
     expect(h.checkedCount).toBe(0);
-    expect(h.description).toMatch(/No sources/i);
+    // Option B: description is now a LabelRef (i18n key), not English
+    // text — assert on the key so the test stays i18n-init-free.
+    expect(h.description).toEqual({ key: 'trustCheck.trustCheckLeftover.healthNoSources' });
   });
 
   test('mean over only 24h-checked rows', () => {
@@ -349,20 +351,33 @@ describe('computeHealthSummary', () => {
 
   test('description tier transitions on overallPct', () => {
     const now = Math.floor(Date.now() / 1000);
+    // Option B: assert on LabelRef key (+ vars where the wording is
+    // count-parameterised) instead of English text.
     const stableItems: TrustSummary[] = [
       makeSummary({ alias_name: 'a', s_combined: 95, last_verified_at: now - 60 }),
     ];
-    expect(computeHealthSummary(stableItems).description).toMatch(/stable/i);
+    // 1 trust-band row, 0 needs-review → healthStable (no count var).
+    expect(computeHealthSummary(stableItems).description).toEqual({
+      key: 'trustCheck.trustCheckLeftover.healthStable',
+    });
 
     const suspectItems: TrustSummary[] = [
       makeSummary({ alias_name: 'a', s_combined: 70, last_verified_at: now - 60 }),
     ];
-    expect(computeHealthSummary(suspectItems).description).toMatch(/review/i);
+    // overall 70 (60..79) → healthNeedsReview with 1 flagged.
+    expect(computeHealthSummary(suspectItems).description).toEqual({
+      key: 'trustCheck.trustCheckLeftover.healthNeedsReview',
+      vars: { count: 1 },
+    });
 
     const riskyItems: TrustSummary[] = [
       makeSummary({ alias_name: 'a', s_combined: 30, last_verified_at: now - 60 }),
     ];
-    expect(computeHealthSummary(riskyItems).description).toMatch(/recheck/i);
+    // overall < 60 → healthMultipleFlagged with 1 to recheck.
+    expect(computeHealthSummary(riskyItems).description).toEqual({
+      key: 'trustCheck.trustCheckLeftover.healthMultipleFlagged',
+      vars: { count: 1 },
+    });
   });
 
   test('overallPct null when rows exist but none verified in 24h', () => {
@@ -376,7 +391,9 @@ describe('computeHealthSummary', () => {
     ];
     const h = computeHealthSummary(items);
     expect(h.overallPct).toBeNull();
-    expect(h.description).toMatch(/No recent checks/i);
+    expect(h.description).toEqual({
+      key: 'trustCheck.trustCheckLeftover.healthNoRecentChecks',
+    });
   });
 });
 
@@ -410,7 +427,13 @@ describe('dedupByBaseUrl', () => {
     ];
     const groups = dedupByBaseUrl(rows);
     expect(groups).toHaveLength(2);
-    const unknown = groups.find((g) => g.label === 'Unknown gateway');
+    // Option B: fixed labels are LabelRefs; the "Unknown gateway" group
+    // is keyed by gatewayUnknown. (Raw base_url host labels stay strings.)
+    const unknown = groups.find(
+      (g) =>
+        typeof g.label !== 'string' &&
+        g.label.key === 'trustCheck.trustCheckLeftover.gatewayUnknown',
+    );
     expect(unknown).toBeDefined();
     expect(unknown!.rows).toHaveLength(2);
   });
@@ -433,10 +456,18 @@ describe('dedupByBaseUrl', () => {
     ];
     const groups = dedupByBaseUrl(rows);
     expect(groups).toHaveLength(1);
-    expect(groups[0]!.label).toBe('Anthropic OAuth (official)');
-    // MUST NOT be "Unknown gateway" — that label is reserved for the
+    // Option B: brand-wrapped OAuth label is a LabelRef — the
+    // "OAuth (official)" wrapper is keyed; the Anthropic brand proper
+    // noun rides in as the `brand` interpolation var.
+    expect(groups[0]!.label).toEqual({
+      key: 'trustCheck.trustCheckLeftover.gatewayBrandOauthOfficial',
+      vars: { brand: 'Anthropic' },
+    });
+    // MUST NOT be the "Unknown gateway" key — reserved for the
     // genuinely-missing-baseurl catchall.
-    expect(groups[0]!.label).not.toBe('Unknown gateway');
+    expect(groups[0]!.label).not.toEqual({
+      key: 'trustCheck.trustCheckLeftover.gatewayUnknown',
+    });
   });
 
   test('OAuth rows from different providers split into separate groups', () => {
@@ -462,10 +493,17 @@ describe('dedupByBaseUrl', () => {
     ];
     const groups = dedupByBaseUrl(rows);
     expect(groups).toHaveLength(2);
-    expect(groups.map((g) => g.label).sort()).toEqual([
-      'Anthropic OAuth (official)',
-      'OpenAI OAuth (official)',
-    ]);
+    // Option B: each label is a brand-wrapped OAuth LabelRef. Sort by the
+    // brand var for a deterministic comparison.
+    const brands = groups
+      .map((g) => (typeof g.label === 'string' ? g.label : g.label.vars?.brand))
+      .sort();
+    expect(brands).toEqual(['Anthropic', 'OpenAI']);
+    for (const g of groups) {
+      expect(typeof g.label !== 'string' && g.label.key).toBe(
+        'trustCheck.trustCheckLeftover.gatewayBrandOauthOfficial',
+      );
+    }
   });
 
   test('OAuth and non-OAuth null-base_url do NOT collide into the same group', () => {
@@ -492,8 +530,22 @@ describe('dedupByBaseUrl', () => {
     ];
     const groups = dedupByBaseUrl(rows);
     expect(groups).toHaveLength(2);
-    expect(groups.find((g) => g.label === 'Anthropic OAuth (official)')).toBeDefined();
-    expect(groups.find((g) => g.label === 'Unknown gateway')).toBeDefined();
+    // Option B: match on LabelRef key (+ brand var for the OAuth group).
+    expect(
+      groups.find(
+        (g) =>
+          typeof g.label !== 'string' &&
+          g.label.key === 'trustCheck.trustCheckLeftover.gatewayBrandOauthOfficial' &&
+          g.label.vars?.brand === 'Anthropic',
+      ),
+    ).toBeDefined();
+    expect(
+      groups.find(
+        (g) =>
+          typeof g.label !== 'string' &&
+          g.label.key === 'trustCheck.trustCheckLeftover.gatewayUnknown',
+      ),
+    ).toBeDefined();
   });
 
   test('sorts groups latest-verified-first', () => {
