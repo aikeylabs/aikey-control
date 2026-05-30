@@ -1980,5 +1980,72 @@
     "emptyHintImportLink": "Import",
     "emptyHintSuffix": " page.",
     "footer": "Team keys are managed by your team server. Local routing decisions live in your CLI vault."
+  },
+  "compliancePacks": {
+    "status": {
+      "all": "All statuses",
+      "draft": "Draft",
+      "auditOnly": "Audit-only",
+      "active": "Active",
+      "deprecated": "Deprecated"
+    },
+    "kind": {
+      "all": "All kinds",
+      "builtIn": "Built-in",
+      "tenantCustom": "Tenant Custom"
+    },
+    "createDialog": {
+      "title": "Create Compliance Pack",
+      "statusHint": "Status defaults to 'draft' — promote to audit_only or active afterwards.",
+      "packKindLabel": "Pack Kind *",
+      "packKindBuiltInOption": "Built-in (system, cross-tenant)",
+      "packKindPlaceholder": "Select kind...",
+      "tenantIdLabel": "Tenant ID *",
+      "tenantIdPlaceholderBuiltIn": "system",
+      "tenantIdPlaceholderCustom": "org id, e.g. org_xxx",
+      "tenantIdHint": "Built-in packs are typically owned by 'system' and shared across all tenants.",
+      "nameLabel": "Name *",
+      "namePlaceholder": "e.g. Sales Script — Insurance Q1",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "What does this pack cover? (optional)",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "submit": "Create Pack"
+    },
+    "deleteDialog": {
+      "title": "Delete Pack",
+      "body": "Pack <0>{{name}}</0> ({{shortId}}) will be removed. All rules and phrases inside cascade-delete.",
+      "activeWarning": "Active packs cannot be deleted. Deprecate first.",
+      "cancel": "Cancel",
+      "deleting": "Deleting...",
+      "confirm": "Delete"
+    },
+    "page": {
+      "title": "Compliance Packs",
+      "description": "Manage rule / phrase packs that ai-compliance-detector pulls down for runtime detection.",
+      "newPack": "+ New Pack"
+    },
+    "filters": {
+      "statusPlaceholder": "Filter status...",
+      "kindPlaceholder": "Filter kind...",
+      "searchPlaceholder": "Search by name..."
+    },
+    "list": {
+      "loading": "Loading…",
+      "empty": "No packs match the current filters."
+    },
+    "table": {
+      "name": "Name",
+      "tenant": "Tenant",
+      "kind": "Kind",
+      "status": "Status",
+      "version": "Version",
+      "updated": "Updated",
+      "actions": "Actions"
+    },
+    "row": {
+      "edit": "Edit",
+      "delete": "Delete"
+    }
   }
 }

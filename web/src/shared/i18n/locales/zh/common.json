@@ -1980,5 +1980,72 @@
     "emptyHintImportLink": "导入",
     "emptyHintSuffix": "页面导入你自己的密钥。",
     "footer": "团队密钥由你的团队服务器管理。本地路由决策保存在你的 CLI 保管库中。"
+  },
+  "compliancePacks": {
+    "status": {
+      "all": "全部状态",
+      "draft": "草稿",
+      "auditOnly": "仅审核",
+      "active": "启用",
+      "deprecated": "已弃用"
+    },
+    "kind": {
+      "all": "全部类型",
+      "builtIn": "内置",
+      "tenantCustom": "租户自定义"
+    },
+    "createDialog": {
+      "title": "新建合规包",
+      "statusHint": "状态默认为 'draft'，之后可提升为 audit_only 或 active。",
+      "packKindLabel": "合规包类型 *",
+      "packKindBuiltInOption": "内置（系统级，跨租户）",
+      "packKindPlaceholder": "选择类型…",
+      "tenantIdLabel": "租户 ID *",
+      "tenantIdPlaceholderBuiltIn": "system",
+      "tenantIdPlaceholderCustom": "组织 ID，例如 org_xxx",
+      "tenantIdHint": "内置合规包通常归 'system' 所有，并在所有租户间共享。",
+      "nameLabel": "名称 *",
+      "namePlaceholder": "例如 Sales Script — Insurance Q1",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "这个合规包覆盖什么内容？（可选）",
+      "cancel": "取消",
+      "creating": "创建中…",
+      "submit": "新建合规包"
+    },
+    "deleteDialog": {
+      "title": "删除合规包",
+      "body": "合规包 <0>{{name}}</0>（{{shortId}}）将被移除。其内所有规则与词条将级联删除。",
+      "activeWarning": "启用中的合规包无法删除，请先弃用。",
+      "cancel": "取消",
+      "deleting": "删除中…",
+      "confirm": "删除"
+    },
+    "page": {
+      "title": "合规包",
+      "description": "管理 ai-compliance-detector 拉取用于运行时检测的规则 / 词条合规包。",
+      "newPack": "+ 新建合规包"
+    },
+    "filters": {
+      "statusPlaceholder": "按状态筛选…",
+      "kindPlaceholder": "按类型筛选…",
+      "searchPlaceholder": "按名称搜索…"
+    },
+    "list": {
+      "loading": "加载中…",
+      "empty": "没有符合当前筛选条件的合规包。"
+    },
+    "table": {
+      "name": "名称",
+      "tenant": "租户",
+      "kind": "类型",
+      "status": "状态",
+      "version": "版本",
+      "updated": "更新时间",
+      "actions": "操作"
+    },
+    "row": {
+      "edit": "编辑",
+      "delete": "删除"
+    }
   }
 }
