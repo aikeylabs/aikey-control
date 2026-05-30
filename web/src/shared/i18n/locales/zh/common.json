@@ -839,10 +839,20 @@
   },
   "trustCheck": {
     "title": "置信度检测",
-    "observerOfflineTitle": "trust-local 已离线 — 观察器未在采集证据",
-    "observerOnTitle": "trust-local 运行中 — 观察器正在采集证据",
-    "observerOffline": "观察器离线",
-    "observerOn": "观察器运行中",
+    "observer": {
+      "on": {
+        "label": "观察器运行中",
+        "title": "正在通过代理观察 user_chat 流量 — D 规则（D4/D5/D6）实时打分"
+      },
+      "standby": {
+        "label": "观察器待命中",
+        "title": "trust-local 运行中,但实时检测已关闭 — 只有手动 Check 会跑 D 规则。点右侧 Real-time 开关可启用对 user_chat 的实时观察。"
+      },
+      "offline": {
+        "label": "观察器离线",
+        "title": "trust-local 已离线 — 手动 Check 和实时检测都不可用。点击下方 Start service 或终端运行 aikey service start trust-local 恢复。"
+      }
+    },
     "subtitle": "覆盖你所有供应商来源的置信度信号 · 由 trust-local 提供支持",
     "refreshingTitle": "刷新中…",
     "refreshNowTitle": "立即重新拉取 /v1/status",

@@ -100,6 +100,16 @@ export const TRUST_CHECK_CSS = `
   border: 1px solid rgba(74, 222, 128, 0.35);
   color: var(--tc-trust);
 }
+/* 2026-05-28: third state added between ON and OFFLINE. Amber to signal
+   "service alive but not actively watching" — distinct from green ON
+   (watching) and gray OFFLINE (process dead). No pulse animation
+   (only the ON state pulses below): STANDBY means the observer is
+   intentionally sitting still, animating it would lie. */
+.trust-check-page .tc-observer-standby {
+  background: rgba(251, 191, 36, 0.10);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: rgb(245, 158, 11);
+}
 .trust-check-page .tc-observer-off {
   background: rgba(161, 161, 170, 0.10);
   border: 1px solid rgba(161, 161, 170, 0.35);

@@ -93,6 +93,45 @@ function matchesChip(row: TrustRow, key: ChipKey): boolean {
   }
 }
 
+/**
+ * Three states for the OBSERVER pill (2026-05-28 redesign — was 2-state).
+ *
+ *   ON       — trust-local up AND realtime detection toggle is ON.
+ *              D-rules (D4/D5/D6) run on every user_chat through the proxy.
+ *              The observer is actively collecting evidence — green + pulse.
+ *
+ *   STANDBY  — trust-local up but realtime detection toggle is OFF (default).
+ *              Manual Check still works, but user_chat traffic is NOT
+ *              scored automatically. Amber + no pulse. Previously
+ *              mis-rendered as "OBSERVER ON" — that was the rc.5 UX bug
+ *              the user caught on 2026-05-28: "OBSERVER ON 但 Real-time
+ *              OFF 时 observer 实际不在观察 user_chat,文案误导".
+ *
+ *   OFFLINE  — trust-local process is down (8801 unreachable).
+ *              Neither Check nor real-time works — gray.
+ *
+ * Why we don't simply collapse STANDBY into ON: telling the user "observer
+ * is collecting evidence" when the default is "we touch zero chat traffic
+ * until you flip the toggle" was misleading. Splitting the state makes
+ * the difference between "process up" and "actually doing something"
+ * legible, and pairs naturally with the realtime toggle next to it.
+ */
+type ObserverState = 'on' | 'standby' | 'offline';
+
+function pickObserverState(
+  isOffline: boolean,
+  realtimeEnabled: boolean | undefined,
+): ObserverState {
+  if (isOffline) return 'offline';
+  // While the realtime-detection query is still loading or hit a
+  // non-fatal error, optimistically render STANDBY rather than ON.
+  // STANDBY is the safe default for rc.5 (toggle defaults OFF), so
+  // brief loading-flash → STANDBY → ON is fine; the reverse would
+  // briefly mislead the user into "we're protecting your chat".
+  if (realtimeEnabled === true) return 'on';
+  return 'standby';
+}
+
 export default function UserTrustCheckPage() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'source' | 'band'>('source');
@@ -106,6 +145,17 @@ export default function UserTrustCheckPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const { status, rows: allRows, metrics, isOffline, summaries } = useTrustView();
+  // Read the realtime toggle here so the OBSERVER pill in the header
+  // can flip between ON / STANDBY based on whether the proxy is actively
+  // scoring user_chat (toggle ON) or only handling manual Check (toggle
+  // OFF — the rc.5 default). The same hook is re-called inside
+  // RealtimeDetectionToggle; React Query dedupes by queryKey, so this
+  // is a free read, not a second network request.
+  const { query: realtimeQuery } = useRealtimeDetection();
+  const observerState: ObserverState = pickObserverState(
+    isOffline,
+    realtimeQuery.data?.enabled,
+  );
   // Apply filter chips + search BEFORE the table render. We filter
   // `rows` here so both SOURCE and BAND views see the same subset and
   // the same filter has the same effect across tabs.
@@ -327,16 +377,16 @@ export default function UserTrustCheckPage() {
               repo path + marketing copy; the underlying engine
               "trust-local" still appears in the subtitle. */}
           <h1 className="tc-title">{t('trustCheck.title')}</h1>
+          {/* Three states, see pickObserverState() above. CSS class names
+              kept legacy-compatible: tc-observer-on / tc-observer-off
+              already in trust-check-css.ts; tc-observer-standby added
+              alongside in the same file. */}
           <span
-            className={`tc-observer-pill ${isOffline ? 'tc-observer-off' : 'tc-observer-on'}`}
-            title={
-              isOffline
-                ? t('trustCheck.observerOfflineTitle')
-                : t('trustCheck.observerOnTitle')
-            }
+            className={`tc-observer-pill tc-observer-${observerState === 'offline' ? 'off' : observerState}`}
+            title={t(`trustCheck.observer.${observerState}.title`)}
           >
             <span className="tc-observer-dot" />
-            {isOffline ? t('trustCheck.observerOffline') : t('trustCheck.observerOn')}
+            {t(`trustCheck.observer.${observerState}.label`)}
           </span>
           <p className="tc-subtitle">
             {t('trustCheck.subtitle')}

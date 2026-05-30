@@ -839,10 +839,20 @@
   },
   "trustCheck": {
     "title": "Trust Check",
-    "observerOfflineTitle": "trust-local is offline — observer is not collecting evidence",
-    "observerOnTitle": "trust-local is up — observer is collecting evidence",
-    "observerOffline": "OBSERVER OFFLINE",
-    "observerOn": "OBSERVER ON",
+    "observer": {
+      "on": {
+        "label": "OBSERVER ON",
+        "title": "Watching user_chat through the proxy — D-rules (D4/D5/D6) score every chunk in real time."
+      },
+      "standby": {
+        "label": "OBSERVER STANDBY",
+        "title": "trust-local is up but real-time detection is OFF — only manual Check runs D-rules. Flip the Real-time toggle on the right to watch user_chat."
+      },
+      "offline": {
+        "label": "OBSERVER OFFLINE",
+        "title": "trust-local is down — neither manual Check nor real-time will work. Click Start service below or run aikey service start trust-local in a terminal."
+      }
+    },
     "subtitle": "Trust signals across your provider sources · powered by trust-local",
     "refreshingTitle": "Refreshing…",
     "refreshNowTitle": "Re-fetch /v1/status now",
