@@ -47,7 +47,7 @@ func DomainErrorResponse(w http.ResponseWriter, err *DomainError) {
 		}
 		slog.Debug("domain error internal detail (stripped from response)", attrs...)
 	}
-	JSON(w, domainErrorStatus(err.Code), err.ResponseBody())
+	JSON(w, domainErrorStatus(err.Code), err.LocalizedResponseBody(LocaleFromWriter(w)))
 }
 
 func domainErrorStatus(code string) int {

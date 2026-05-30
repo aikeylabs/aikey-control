@@ -291,7 +291,11 @@ func NewHandler(cfg Config) http.Handler {
 	// shadow this route.
 	mux.HandleFunc("POST /api/internal/services/{name}/{action}", HandleServiceAction(logger))
 
-	return mux
+	// Wrap the whole control handler so every API response carries the
+	// negotiated locale (Accept-Language → resolved locale header). One wrap
+	// here covers Personal local-server AND the control routes composed into
+	// the trial bundle — both build their handler via this NewHandler.
+	return shared.LocaleMiddleware(mux)
 }
 
 // withCrossAppMenuCORS allows the /system/cross-app-menu endpoint to be

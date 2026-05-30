@@ -3,6 +3,7 @@
  */
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import { runtimeConfig } from '@/app/config/runtime';
+import i18n from '@/shared/i18n/i18n';
 
 function getToken(): string | null {
   try {
@@ -75,6 +76,12 @@ function createHttpClient(config?: AxiosRequestConfig): AxiosInstance {
     const token = getToken();
     if (token && req.headers) {
       req.headers['Authorization'] = `Bearer ${token}`;
+    }
+    // Send the active UI language so backend error messages come back
+    // localized. CLI/curl send no Accept-Language → backend defaults to en;
+    // the web app sends en/zh to match what the user is reading.
+    if (req.headers) {
+      req.headers['Accept-Language'] = i18n.resolvedLanguage || i18n.language || 'en';
     }
     return req;
   });

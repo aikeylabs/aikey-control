@@ -1,6 +1,9 @@
 package shared
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // DomainError carries an HTTP-visible error code, a human-readable message,
 // and optional structured meta for DATA/EXT errors.
@@ -65,6 +68,122 @@ func (e *DomainError) InternalMeta() map[string]any {
 		}
 	}
 	return m
+}
+
+// ── Localisation (Phase E: backend error message i18n) ─────────────────────────
+
+// LocalizedResponseBody is ResponseBody with the message rendered in the given
+// locale. Falls back to the English Message when no zh template exists for the code.
+// ResponseBody() (English) is kept as-is for backward compatibility.
+func (e *DomainError) LocalizedResponseBody(locale string) map[string]any {
+	body := e.ResponseBody()
+	if msg := localizeMessage(e.Code, locale, e.Meta); msg != "" {
+		body["message"] = msg
+	}
+	return body
+}
+
+func localizeMessage(code, locale string, meta map[string]any) string {
+	if locale != "zh" {
+		return ""
+	}
+	tmpl, ok := zhMessages[code]
+	if !ok {
+		return ""
+	}
+	return interpolate(tmpl, meta)
+}
+
+func interpolate(tmpl string, meta map[string]any) string {
+	if meta == nil || !strings.Contains(tmpl, "{{") {
+		return tmpl
+	}
+	out := tmpl
+	for k, v := range meta {
+		out = strings.ReplaceAll(out, "{{"+k+"}}", fmt.Sprintf("%v", v))
+	}
+	return out
+}
+
+// zhMessages maps each error Code to its zh-locale message template. {{key}}
+// placeholders are filled from DomainError.Meta by interpolate(). Codes absent
+// from this map (e.g. SeatStatusConflict / DataInvalidField which carry English
+// free text) fall back to the English Message automatically.
+//
+// Glossary (kept in sync with web i18n): 虚拟密钥=virtual key, 保管库=vault,
+// 凭据=credential, 供应商=provider, 席位=seat, 组织=org, 绑定=binding,
+// 登录会话=login session, 令牌=token, 邮箱=email.
+var zhMessages = map[string]string{
+	// BIZ — Auth
+	CodeBizAuthEmailTaken:         "邮箱 {{email}} 已被注册",
+	CodeBizAuthInvalidCredentials: "邮箱或密码错误",
+	CodeBizAuthAccountInactive:    "账户未激活",
+	CodeBizAuthTokenInvalid:       "令牌无效或无法识别",
+	CodeBizAuthTokenRevoked:       "令牌已被吊销",
+	CodeBizAuthTokenExpired:       "令牌已过期",
+	CodeBizAuthTokenRecycled:      "令牌已被回收",
+	CodeBizAuthTokenNotActive:     "令牌不处于激活状态",
+	CodeBizAuthAccessDenied:       "访问被拒绝",
+
+	// BIZ — Organization
+	CodeBizOrgNotFound: "组织 {{id}} 不存在",
+
+	// BIZ — Seat
+	CodeBizSeatNotFound:       "席位 {{id}} 不存在",
+	CodeBizSeatEmailTaken:     "邮箱 {{email}} 的席位已存在于组织 {{org_id}} 中",
+	CodeBizSeatAlreadyClaimed: "席位已被认领",
+
+	// BIZ — Virtual Key
+	CodeBizKeyNotFound:          "虚拟密钥 {{id}} 不存在",
+	CodeBizKeyNotActive:         "虚拟密钥不处于激活状态",
+	CodeBizKeyDuplicateProtocol: "绑定列表中存在重复的协议类型 {{protocol_type}}",
+
+	// BIZ — Protocol Binding
+	CodeBizBindNotFound:         "绑定 {{id}} 不存在",
+	CodeBizBindProtocolMismatch: "绑定协议 {{binding_protocol}} 与凭据供应商协议 {{cred_protocol}} 不匹配",
+	CodeBizBindDuplicateTarget:  "该虚拟密钥上已存在协议 {{protocol_type}} / 供应商 {{provider_id}} 的激活绑定",
+	CodeBizBindNoActive:         "未找到该令牌的激活协议绑定",
+	CodeBizBindNotDelivered:     "绑定已存在，但无法下发至代理",
+
+	// BIZ — Login Session / OAuth
+	CodeBizLoginSessionNotFound:   "登录会话 {{id}} 不存在",
+	CodeBizLoginSessionExpired:    "登录会话已过期，请重新运行 aikey login",
+	CodeBizLoginSessionDenied:     "登录会话已被拒绝",
+	CodeBizLoginResendCooldown:    "请等待 {{retry_after_seconds}} 秒后再请求新的邮件",
+	CodeBizLoginSessionTerminated: "该登录会话已结束，请重新运行 `aikey account login` 开始新的会话",
+	CodeBizLoginTokenInvalid:      "登录令牌无效或与会话不匹配",
+	CodeBizLoginTokenAlreadyUsed:  "登录令牌已被使用",
+	CodeBizRefreshTokenInvalid:    "刷新令牌无效或已过期，请重新运行 aikey login",
+	CodeBizRefreshTokenRevoked:    "刷新令牌已被吊销，请重新运行 aikey login",
+
+	// BIZ — unique-conflict specialisations
+	CodeBizBindAliasTaken: "组织中已存在使用该别名的模板绑定",
+	CodeBizKeyAliasTaken:  "该席位下已存在使用该别名的虚拟密钥",
+	CodeBizCredNameTaken:  "组织中该供应商下已存在使用该名称的凭据",
+	CodeBizProvCodeTaken:  "已存在使用该代码的供应商",
+
+	// BIZ — Credential
+	CodeBizCredNotFound: "凭据 {{id}} 不存在",
+	CodeBizCredInactive: "凭据 {{id}} 未激活",
+
+	// BIZ — Provider
+	CodeBizProvNotFound: "供应商 {{id}} 不存在",
+
+	// DATA — client input validation
+	CodeDataInvalidBody:  "请求体不是有效的 JSON 或结构不符合预期",
+	CodeDataMissingField: "缺少必填字段 {{field}}",
+	CodeDataInvalidEmail: "邮箱格式无效",
+
+	// EXT — external / upstream service
+	CodeExtProviderUpstream:    "上游供应商 {{provider}} 返回了错误（HTTP {{upstream_status}}）",
+	CodeExtProviderAuthFailure: "供应商 {{provider}} 拒绝了凭据，API 密钥可能无效或已吊销",
+	CodeExtProviderRateLimited: "供应商 {{provider}} 正在限流，请稍后重试",
+	CodeExtProviderUnavailable: "供应商 {{provider}} 不可用或无法连接",
+
+	// SYS — system / infrastructure
+	CodeSysInternal: "发生未预期的错误",
+	CodeSysDB:       "发生数据库错误",
+	CodeSysConfig:   "服务配置错误",
 }
 
 // ── Error code constants ───────────────────────────────────────────────────────
@@ -155,7 +274,8 @@ const (
 
 func BizAuthEmailTaken(email string) *DomainError {
 	return &DomainError{Code: CodeBizAuthEmailTaken,
-		Message: fmt.Sprintf("email %q is already registered", email)}
+		Message: fmt.Sprintf("email %q is already registered", email),
+		Meta:    map[string]any{"email": email}}
 }
 func BizAuthInvalidCredentials() *DomainError {
 	return &DomainError{Code: CodeBizAuthInvalidCredentials, Message: "invalid email or password"}
@@ -184,16 +304,19 @@ func BizAuthAccessDenied() *DomainError {
 
 func BizOrgNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizOrgNotFound,
-		Message: fmt.Sprintf("organization %q not found", id)}
+		Message: fmt.Sprintf("organization %q not found", id),
+		Meta:    map[string]any{"id": id}}
 }
 
 func BizSeatNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizSeatNotFound,
-		Message: fmt.Sprintf("seat %q not found", id)}
+		Message: fmt.Sprintf("seat %q not found", id),
+		Meta:    map[string]any{"id": id}}
 }
 func BizSeatEmailTaken(email, orgID string) *DomainError {
 	return &DomainError{Code: CodeBizSeatEmailTaken,
-		Message: fmt.Sprintf("seat for email %q already exists in org %q", email, orgID)}
+		Message: fmt.Sprintf("seat for email %q already exists in org %q", email, orgID),
+		Meta:    map[string]any{"email": email, "org_id": orgID}}
 }
 func BizSeatAlreadyClaimed() *DomainError {
 	return &DomainError{Code: CodeBizSeatAlreadyClaimed, Message: "seat has already been claimed"}
@@ -204,24 +327,28 @@ func BizSeatStatusConflict(msg string) *DomainError {
 
 func BizKeyNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizKeyNotFound,
-		Message: fmt.Sprintf("virtual key %q not found", id)}
+		Message: fmt.Sprintf("virtual key %q not found", id),
+		Meta:    map[string]any{"id": id}}
 }
 func BizKeyNotActive() *DomainError {
 	return &DomainError{Code: CodeBizKeyNotActive, Message: "virtual key is not in active state"}
 }
 func BizKeyDuplicateProtocol(protocol string) *DomainError {
 	return &DomainError{Code: CodeBizKeyDuplicateProtocol,
-		Message: fmt.Sprintf("duplicate protocol_type %q in binding list", protocol)}
+		Message: fmt.Sprintf("duplicate protocol_type %q in binding list", protocol),
+		Meta:    map[string]any{"protocol_type": protocol}}
 }
 
 func BizBindNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizBindNotFound,
-		Message: fmt.Sprintf("binding %q not found", id)}
+		Message: fmt.Sprintf("binding %q not found", id),
+		Meta:    map[string]any{"id": id}}
 }
 func BizBindProtocolMismatch(bindingProtocol, credProtocol string) *DomainError {
 	return &DomainError{Code: CodeBizBindProtocolMismatch,
 		Message: fmt.Sprintf("binding protocol %q does not match credential provider protocol %q",
-			bindingProtocol, credProtocol)}
+			bindingProtocol, credProtocol),
+		Meta: map[string]any{"binding_protocol": bindingProtocol, "cred_protocol": credProtocol}}
 }
 func BizBindDuplicateTarget(protocol, providerID string) *DomainError {
 	return &DomainError{Code: CodeBizBindDuplicateTarget,
@@ -240,21 +367,25 @@ func BizBindNotDelivered() *DomainError {
 
 func BizCredNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizCredNotFound,
-		Message: fmt.Sprintf("credential %q not found", id)}
+		Message: fmt.Sprintf("credential %q not found", id),
+		Meta:    map[string]any{"id": id}}
 }
 func BizCredInactive(id string) *DomainError {
 	return &DomainError{Code: CodeBizCredInactive,
-		Message: fmt.Sprintf("credential %q is not active", id)}
+		Message: fmt.Sprintf("credential %q is not active", id),
+		Meta:    map[string]any{"id": id}}
 }
 
 func BizProvNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizProvNotFound,
-		Message: fmt.Sprintf("provider %q not found", id)}
+		Message: fmt.Sprintf("provider %q not found", id),
+		Meta:    map[string]any{"id": id}}
 }
 
 func BizLoginSessionNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizLoginSessionNotFound,
-		Message: fmt.Sprintf("login session %q not found", id)}
+		Message: fmt.Sprintf("login session %q not found", id),
+		Meta:    map[string]any{"id": id}}
 }
 func BizLoginSessionExpired() *DomainError {
 	return &DomainError{Code: CodeBizLoginSessionExpired,

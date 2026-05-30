@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -351,4 +352,77 @@ func LoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// ── Locale negotiation (Phase E: backend error message i18n) ──────────────────
+//
+// Why a ResponseWriter wrapper instead of a context value: the ~87 call sites that
+// emit errors call DomainErrorResponse(w, err) / HandleDomainErr(w, err) with only
+// the ResponseWriter — no *http.Request / context.Context. Threading locale through
+// all of them would be an 87-site signature change (and would collide with a
+// concurrent edit to master's router.go). LocaleMiddleware wraps w so the negotiated
+// locale rides on the value every handler already has; respond.go reads it back.
+//
+// Supported locales: "en" (default) and "zh". Any tag starting with "zh" → "zh";
+// everything else, incl. a missing header (CLI / curl) → "en".
+type localeResponseWriter struct {
+	http.ResponseWriter
+	locale string
+}
+
+func (w *localeResponseWriter) Locale() string { return w.locale }
+
+// Flush / Hijack forwarded so the wrapper is transparent to SSE / long-poll /
+// websocket handlers that type-assert the ResponseWriter.
+func (w *localeResponseWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *localeResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
+}
+
+// LocaleFromWriter returns the negotiated locale from a wrapped ResponseWriter,
+// defaulting to "en" when w is not a localeResponseWriter (e.g. a future middleware
+// re-wrapped it without forwarding Locale()). Callers always get a valid locale.
+func LocaleFromWriter(w http.ResponseWriter) string {
+	if lw, ok := w.(interface{ Locale() string }); ok {
+		if loc := lw.Locale(); loc != "" {
+			return loc
+		}
+	}
+	return "en"
+}
+
+// ParseAcceptLanguage maps an Accept-Language header to a supported locale. We only
+// support en/zh, so a cheap first-tag scan is enough (no RFC 7231 q-value parsing).
+func ParseAcceptLanguage(header string) string {
+	h := strings.TrimSpace(strings.ToLower(header))
+	if h == "" {
+		return "en"
+	}
+	first := h
+	if i := strings.IndexAny(h, ",;"); i >= 0 {
+		first = strings.TrimSpace(h[:i])
+	}
+	if strings.HasPrefix(first, "zh") {
+		return "zh"
+	}
+	return "en"
+}
+
+// LocaleMiddleware negotiates the response locale from Accept-Language and wraps the
+// ResponseWriter so DomainErrorResponse can localise messages without a per-call-site
+// signature change. Register at the top-level handler (each edition's handler factory
+// or cmd/main), NOT in router.go.
+func LocaleMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		loc := ParseAcceptLanguage(r.Header.Get("Accept-Language"))
+		next.ServeHTTP(&localeResponseWriter{ResponseWriter: w, locale: loc}, r)
+	})
 }
