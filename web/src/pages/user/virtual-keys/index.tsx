@@ -23,6 +23,8 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import axios from 'axios';
 
 import { deliveryApi, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
@@ -35,6 +37,7 @@ import {
 } from '@/shared/components/HookWireRcModal';
 import { copyText } from '@/shared/utils/clipboard';
 import { mapUseError } from '@/shared/utils/mapUseError';
+import { formatDate } from '@/shared/utils/datetime-intl';
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl } from '@/shared/cross-app-menu';
 
@@ -67,35 +70,40 @@ function providerBrandColor(provider: string | null | undefined): string {
   return 'var(--chart-neutral)';
 }
 
-/** key_status (CLI side) → vault page chip semantics. */
-function statusMeta(keyStatus: string): {
+/** key_status (CLI side) → vault page chip semantics. Pure helper —
+ *  the i18n translator is threaded in by callers (this isn't a React
+ *  component so it can't call useTranslation itself). */
+function statusMeta(keyStatus: string, t: TFunction): {
   chipClass: 'success' | 'warning' | 'danger';
   label: string;
 } {
-  if (keyStatus === 'active')        return { chipClass: 'success', label: 'ISSUED' };
-  if (keyStatus === 'pending_claim') return { chipClass: 'warning', label: 'PENDING' };
-  if (keyStatus === 'revoked')       return { chipClass: 'danger',  label: 'REVOKED' };
-  if (keyStatus === 'expired')       return { chipClass: 'danger',  label: 'EXPIRED' };
-  return { chipClass: 'danger', label: (keyStatus || 'UNKNOWN').toUpperCase() };
+  if (keyStatus === 'active')        return { chipClass: 'success', label: t('teamKeys.statusIssued') };
+  if (keyStatus === 'pending_claim') return { chipClass: 'warning', label: t('teamKeys.statusPending') };
+  if (keyStatus === 'revoked')       return { chipClass: 'danger',  label: t('teamKeys.statusRevoked') };
+  if (keyStatus === 'expired')       return { chipClass: 'danger',  label: t('teamKeys.statusExpired') };
+  return { chipClass: 'danger', label: keyStatus ? keyStatus.toUpperCase() : t('teamKeys.statusUnknown') };
 }
 
-function shareLabel(s: string | undefined): string {
+function shareLabel(s: string | undefined, t: TFunction): string {
   const k = (s ?? '').toLowerCase();
-  if (k === 'pending_claim') return 'pending';
-  if (k === 'claimed')       return 'claimed';
-  if (k === 'revoked')       return 'revoked';
-  if (k === 'shared' || k === 'team') return 'shared';
-  if (k === 'private' || k === 'owner_only') return 'private';
-  return s || 'unknown';
+  if (k === 'pending_claim') return t('teamKeys.shareValuePending');
+  if (k === 'claimed')       return t('teamKeys.shareValueClaimed');
+  if (k === 'revoked')       return t('teamKeys.shareValueRevoked');
+  if (k === 'shared' || k === 'team') return t('teamKeys.shareValueShared');
+  if (k === 'private' || k === 'owner_only') return t('teamKeys.shareValuePrivate');
+  return s || t('teamKeys.shareValueUnknown');
 }
 
-function formatExpiresAt(iso: string | undefined): string | null {
+/** "expires Mar 5, 2026" / "expired" / null when no expiry. Date is
+ *  formatted via datetime-intl (locale-aware, in lock-step with the
+ *  active i18n language); the surrounding phrase comes from the
+ *  message catalogue. */
+function formatExpiresAt(iso: string | undefined, t: TFunction): string | null {
   if (!iso) return null;
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return null;
-  if (t < Date.now()) return 'expired';
-  const d = new Date(t);
-  return `expires ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  const parsed = Date.parse(iso);
+  if (Number.isNaN(parsed)) return null;
+  if (parsed < Date.now()) return t('teamKeys.expired');
+  return t('teamKeys.expiresOn', { date: formatDate(new Date(parsed)) });
 }
 
 function shortVk(vk: string): string {
@@ -107,6 +115,7 @@ function shortVk(vk: string): string {
 
 export default function UserVirtualKeysPage() {
   const qc = useQueryClient();
+  const { t } = useTranslation();
 
   const { data: rawAll, isLoading, isError, error } = useQuery({
     queryKey: ['my-keys'],
@@ -266,8 +275,8 @@ export default function UserVirtualKeysPage() {
       setSummary(null);
       const status = (err as { response?: { status?: number } })?.response?.status;
       setDrawerError(status === 403
-        ? 'This key has been revoked or is no longer accessible.'
-        : 'Failed to load key details.');
+        ? t('teamKeys.detailErrorRevoked')
+        : t('teamKeys.detailErrorLoadFailed'));
     },
   });
 
@@ -316,12 +325,12 @@ export default function UserVirtualKeysPage() {
       const k = allKeys.find((x) => x.virtual_key_id === vkId);
       pushToast({
         kind: 'success',
-        title: 'Now routing through ' + (k?.alias ?? '(unnamed)'),
-        sub: 'Open terminals will pick up the change on next prompt',
+        title: t('teamKeys.toastNowRouting', { alias: k?.alias ?? t('teamKeys.unnamed') }),
+        sub: t('teamKeys.toastNowRoutingSub'),
       });
     },
     onError: (err: unknown) => {
-      pushToast({ kind: 'error', title: 'Failed to set routing', sub: mapUseError(err) });
+      pushToast({ kind: 'error', title: t('teamKeys.toastSetRoutingFailed'), sub: mapUseError(err) });
     },
   });
 
@@ -331,11 +340,11 @@ export default function UserVirtualKeysPage() {
     onSuccess: (_res, vkId) => {
       qc.invalidateQueries({ queryKey: ['my-keys'] });
       const k = allKeys.find((x) => x.virtual_key_id === vkId);
-      pushToast({ kind: 'success', title: 'Claimed ' + (k?.alias ?? '(unnamed)') });
+      pushToast({ kind: 'success', title: t('teamKeys.toastClaimed', { alias: k?.alias ?? t('teamKeys.unnamed') }) });
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
-      pushToast({ kind: 'error', title: 'Failed to claim key', sub: msg });
+      pushToast({ kind: 'error', title: t('teamKeys.toastClaimFailed'), sub: msg });
     },
   });
 
@@ -377,11 +386,11 @@ export default function UserVirtualKeysPage() {
             <CardHeader counts={counts} />
 
             <div className="overflow-x-auto">
-              {isLoading && <EmptyState message="Loading…" />}
-              {isError && <EmptyState message={`Failed to load: ${(error as Error)?.message ?? 'unknown error'}`} />}
+              {isLoading && <EmptyState message={t('teamKeys.emptyLoading')} />}
+              {isError && <EmptyState message={t('teamKeys.emptyLoadFailed', { message: (error as Error)?.message ?? t('teamKeys.unknownError') })} />}
               {!isLoading && !isError && allKeys.length === 0 && <TeamKeysEmptyPanel />}
               {!isLoading && !isError && allKeys.length > 0 && filtered.length === 0 && (
-                <EmptyState message="No keys match your filters." />
+                <EmptyState message={t('teamKeys.emptyNoMatch')} />
               )}
               {filtered.length > 0 && (
                 <table className="vault">
@@ -393,28 +402,28 @@ export default function UserVirtualKeysPage() {
                         onClick={() => setSortKey('alias')}
                         aria-sort={sortKey === 'alias' ? 'ascending' : 'none'}
                       >
-                        Alias <span className="th-hint">team-managed</span>
+                        {t('teamKeys.colAlias')} <span className="th-hint">{t('teamKeys.colAliasHint')}</span>
                         {sortKey === 'alias' && <span className="th-sort-arrow">↓</span>}
                       </th>
-                      <th style={{ width: '20%' }}>Protocol</th>
+                      <th style={{ width: '20%' }}>{t('teamKeys.colProtocol')}</th>
                       <th
                         style={{ width: '14%' }}
                         className={`th-sortable ${sortKey === 'status' ? 'active' : ''}`}
                         onClick={() => setSortKey('status')}
                       >
-                        Status
+                        {t('teamKeys.colStatus')}
                         {sortKey === 'status' && <span className="th-sort-arrow">↓</span>}
                       </th>
-                      <th style={{ width: '12%' }}>Share</th>
+                      <th style={{ width: '12%' }}>{t('teamKeys.colShare')}</th>
                       <th
                         style={{ width: '12%' }}
                         className={`th-sortable ${sortKey === 'expires' ? 'active' : ''}`}
                         onClick={() => setSortKey('expires')}
                       >
-                        Expires
+                        {t('teamKeys.colExpires')}
                         {sortKey === 'expires' && <span className="th-sort-arrow">↓</span>}
                       </th>
-                      <th style={{ width: 130, textAlign: 'right' }}>Actions</th>
+                      <th style={{ width: 130, textAlign: 'right' }}>{t('teamKeys.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -475,6 +484,7 @@ export default function UserVirtualKeysPage() {
 
 // ── Identity strip (team-keys flavor) ────────────────────────────────────
 function IdentityStrip({ counts }: { counts: { total: number; issued: number; pending: number; revoked: number } }) {
+  const { t } = useTranslation();
   return (
     <section className="flex items-center justify-between flex-wrap gap-3">
       <div className="flex items-center gap-3 min-w-0">
@@ -485,12 +495,12 @@ function IdentityStrip({ counts }: { counts: { total: number; issued: number; pe
           <KeyRoundIcon className="w-4 h-4" style={{ color: 'var(--primary)' }} />
         </div>
         <div className="min-w-0">
-          <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>Team Keys</div>
+          <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>{t('teamKeys.title')}</div>
           <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-            <span>{counts.total} TOTAL</span>
-            {counts.issued > 0 && (<><span className="opacity-40">·</span><span>{counts.issued} ISSUED</span></>)}
-            {counts.pending > 0 && (<><span className="opacity-40">·</span><span>{counts.pending} PENDING</span></>)}
-            {counts.revoked > 0 && (<><span className="opacity-40">·</span><span>{counts.revoked} REVOKED</span></>)}
+            <span>{counts.total} {t('teamKeys.countTotal')}</span>
+            {counts.issued > 0 && (<><span className="opacity-40">·</span><span>{counts.issued} {t('teamKeys.countIssued')}</span></>)}
+            {counts.pending > 0 && (<><span className="opacity-40">·</span><span>{counts.pending} {t('teamKeys.countPending')}</span></>)}
+            {counts.revoked > 0 && (<><span className="opacity-40">·</span><span>{counts.revoked} {t('teamKeys.countRevoked')}</span></>)}
           </div>
         </div>
       </div>
@@ -500,30 +510,31 @@ function IdentityStrip({ counts }: { counts: { total: number; issued: number; pe
 
 // ── Card header ──────────────────────────────────────────────────────────
 function CardHeader({ counts }: { counts: { total: number; issued: number; pending: number; revoked: number } }) {
+  const { t } = useTranslation();
   return (
     <div className="card-header flex items-center justify-between gap-3 px-4 py-3">
       <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
-        <span>ALL KEYS</span>
+        <span>{t('teamKeys.cardAllKeys')}</span>
         <span className="chip">
           <span className="status-dot idle" style={{ width: 5, height: 5 }} />
-          {counts.total} stored
+          {t('teamKeys.cardStored', { count: counts.total })}
         </span>
         {counts.issued > 0 && (
           <span className="chip success">
             <span className="status-dot" style={{ width: 5, height: 5 }} />
-            {counts.issued} issued
+            {t('teamKeys.cardIssued', { count: counts.issued })}
           </span>
         )}
         {counts.pending > 0 && (
           <span className="chip warning">
             <span className="status-dot stale" style={{ width: 5, height: 5 }} />
-            {counts.pending} pending
+            {t('teamKeys.cardPending', { count: counts.pending })}
           </span>
         )}
         {counts.revoked > 0 && (
           <span className="chip danger">
             <span className="status-dot error" style={{ width: 5, height: 5 }} />
-            {counts.revoked} revoked
+            {t('teamKeys.cardRevoked', { count: counts.revoked })}
           </span>
         )}
       </div>
@@ -539,6 +550,7 @@ function FilterStrip(props: {
   onTypeFilterChange: (v: TypeFilter) => void;
   counts: { total: number; issued: number; pending: number; revoked: number };
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-4 flex-wrap">
       <div className="flex items-center gap-4 flex-wrap min-w-0">
@@ -550,17 +562,17 @@ function FilterStrip(props: {
           <input
             type="text"
             className="pl-10 pr-3 py-2 text-sm w-96"
-            placeholder="Search alias, ID, or provider…"
+            placeholder={t('teamKeys.searchPlaceholder')}
             value={props.search}
             onChange={(e) => props.onSearchChange(e.target.value)}
-            aria-label="Search team keys"
+            aria-label={t('teamKeys.searchAriaLabel')}
           />
         </div>
-        <div className="filter-group" role="radiogroup" aria-label="Filter by status">
-          <FilterPill active={props.typeFilter === 'all'} onClick={() => props.onTypeFilterChange('all')} label="All" count={props.counts.total} />
-          <FilterPill active={props.typeFilter === 'issued'} onClick={() => props.onTypeFilterChange('issued')} label="Issued" count={props.counts.issued} />
-          <FilterPill active={props.typeFilter === 'pending'} onClick={() => props.onTypeFilterChange('pending')} label="Pending" count={props.counts.pending} />
-          <FilterPill active={props.typeFilter === 'revoked'} onClick={() => props.onTypeFilterChange('revoked')} label="Revoked" count={props.counts.revoked} />
+        <div className="filter-group" role="radiogroup" aria-label={t('teamKeys.filterAriaLabel')}>
+          <FilterPill active={props.typeFilter === 'all'} onClick={() => props.onTypeFilterChange('all')} label={t('teamKeys.filterAll')} count={props.counts.total} />
+          <FilterPill active={props.typeFilter === 'issued'} onClick={() => props.onTypeFilterChange('issued')} label={t('teamKeys.filterIssued')} count={props.counts.issued} />
+          <FilterPill active={props.typeFilter === 'pending'} onClick={() => props.onTypeFilterChange('pending')} label={t('teamKeys.filterPending')} count={props.counts.pending} />
+          <FilterPill active={props.typeFilter === 'revoked'} onClick={() => props.onTypeFilterChange('revoked')} label={t('teamKeys.filterRevoked')} count={props.counts.revoked} />
         </div>
       </div>
     </div>
@@ -582,7 +594,8 @@ function FilterPill({ active, onClick, label, count }: {
 function GroupHeaderRow({ provider, color, totalCount }: {
   provider: string; color: string; totalCount: number;
 }) {
-  const entryWord = totalCount === 1 ? 'entry' : 'entries';
+  const { t } = useTranslation();
+  const entryWord = totalCount === 1 ? t('teamKeys.entryOne') : t('teamKeys.entryOther');
   return (
     <tr className="group-row" data-group-provider={provider}>
       <td colSpan={6}>
@@ -624,10 +637,11 @@ const Row = React.memo(function Row(props: {
    *  Undefined on A side. */
   useHref?: string;
 }) {
+  const { t } = useTranslation();
   const r = props.record;
-  const status = statusMeta(r.key_status);
+  const status = statusMeta(r.key_status, t);
   const fam = providerFamily(r.provider_code);
-  const expiresStr = formatExpiresAt(r.expires_at);
+  const expiresStr = formatExpiresAt(r.expires_at, t);
   const trClasses = [
     'group-child',
     'row-clickable',
@@ -643,7 +657,7 @@ const Row = React.memo(function Row(props: {
   return (
     <tr className={trClasses} onClick={onRowClick}>
       <td>
-        <div className="alias-main">{r.alias || '(unnamed)'}</div>
+        <div className="alias-main">{r.alias || t('teamKeys.unnamed')}</div>
         <div className="alias-sub">
           <span className="font-mono" title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
         </div>
@@ -653,7 +667,7 @@ const Row = React.memo(function Row(props: {
         <span className="provider-cell">
           <span className="prov-dot" style={{ background: providerBrandColor(fam) }} aria-hidden="true" />
           <span className="name">{fam}</span>
-          <span className="kind-pill team">TEAM</span>
+          <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
         </span>
       </td>
 
@@ -668,7 +682,7 @@ const Row = React.memo(function Row(props: {
 
       <td>
         <span className="text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>
-          {shareLabel(r.share_status)}
+          {shareLabel(r.share_status, t)}
         </span>
       </td>
 
@@ -684,9 +698,9 @@ const Row = React.memo(function Row(props: {
               className="row-use-btn"
               onClick={props.onClaim}
               disabled={props.claimPending}
-              title={props.claimPending ? 'Claiming…' : 'Claim this team key'}
+              title={props.claimPending ? t('teamKeys.claiming') : t('teamKeys.claimTitle')}
             >
-              {props.claimPending ? '…' : 'Claim'}
+              {props.claimPending ? '…' : t('teamKeys.claim')}
             </button>
           ) : r.key_status === 'active' ? (
             props.useHref ? (
@@ -699,11 +713,11 @@ const Row = React.memo(function Row(props: {
               <a
                 href={props.useHref}
                 className="row-use-btn"
-                title={`Set as active key — navigates to local Vault to confirm (${props.useHref})`}
-                aria-label="Navigate to local vault to set as active key"
+                title={t('teamKeys.useHrefTitle', { url: props.useHref })}
+                aria-label={t('teamKeys.useHrefAriaLabel')}
               >
                 <ZapIcon className="w-3 h-3" />
-                Use
+                {t('teamKeys.use')}
               </a>
             ) : (
               <button
@@ -711,17 +725,17 @@ const Row = React.memo(function Row(props: {
                 className="row-use-btn"
                 onClick={props.onUse}
                 disabled={props.usePending}
-                title={props.usePending ? 'Switching…' : 'Route requests through this key (aikey use)'}
-                aria-label="Set as active key"
+                title={props.usePending ? t('teamKeys.switching') : t('teamKeys.useTitle')}
+                aria-label={t('teamKeys.useAriaLabel')}
               >
                 <ZapIcon className="w-3 h-3" />
-                Use
+                {t('teamKeys.use')}
               </button>
             )
           ) : (
             <span className="text-[11px]" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>—</span>
           )}
-          <button className="icon-btn" title="View details" onClick={(e) => { e.stopPropagation(); props.onOpenDrawer(); }}>
+          <button className="icon-btn" title={t('teamKeys.viewDetails')} onClick={(e) => { e.stopPropagation(); props.onOpenDrawer(); }}>
             <EyeIcon className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -750,10 +764,11 @@ function DetailDrawer(props: {
    *  The inline row Use button (handled at the table-row level)
    *  preserves one-click activation for users who want it. */
 }) {
+  const { t } = useTranslation();
   const r = props.record;
-  const status = statusMeta(r.key_status);
+  const status = statusMeta(r.key_status, t);
   const fam = providerFamily(r.provider_code);
-  const expiresStr = formatExpiresAt(r.expires_at);
+  const expiresStr = formatExpiresAt(r.expires_at, t);
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -776,12 +791,12 @@ function DetailDrawer(props: {
       <aside className="drawer" data-open="true" role="dialog" aria-modal="true">
         <div className="drawer-head">
           <div className="content">
-            <div className="alias-title">{r.alias || '(unnamed)'}</div>
+            <div className="alias-title">{r.alias || t('teamKeys.unnamed')}</div>
             <div className="meta-row">
               <span className="provider-cell">
                 <span className="prov-dot" style={{ background: providerBrandColor(fam) }} />
                 <span className="name font-mono" style={{ color: 'var(--muted-foreground)' }}>{fam}</span>
-                <span className="kind-pill team">TEAM</span>
+                <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
               </span>
               <span className={`chip ${status.chipClass}`}>
                 {status.chipClass === 'success' && <span className="status-dot" style={{ width: 5, height: 5 }} />}
@@ -791,7 +806,7 @@ function DetailDrawer(props: {
               </span>
             </div>
           </div>
-          <button className="drawer-close" onClick={props.onClose} title="Close (Esc)" aria-label="Close drawer">
+          <button className="drawer-close" onClick={props.onClose} title={t('teamKeys.drawerCloseTitle')} aria-label={t('teamKeys.drawerCloseAriaLabel')}>
             <XIcon className="w-4 h-4" />
           </button>
         </div>
@@ -801,26 +816,26 @@ function DetailDrawer(props: {
           <div className="drawer-section">
             <div className="drawer-section-title">
               <KeyRoundIcon className="w-3 h-3" />
-              Virtual Key
+              {t('teamKeys.sectionVirtualKey')}
             </div>
             <div className="drawer-field">
-              <span className="k">Alias</span>
-              <span className="v">{r.alias || '(unnamed)'}</span>
+              <span className="k">{t('teamKeys.fieldAlias')}</span>
+              <span className="v">{r.alias || t('teamKeys.unnamed')}</span>
             </div>
             <div className="drawer-field">
-              <span className="k">Virtual key id</span>
+              <span className="k">{t('teamKeys.fieldVirtualKeyId')}</span>
               <span className="v mono">
                 <span title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
-                <button type="button" className="copy-btn" onClick={() => copy('vk_id', r.virtual_key_id)} title={`Copy ${r.virtual_key_id}`}>
+                <button type="button" className="copy-btn" onClick={() => copy('vk_id', r.virtual_key_id)} title={t('teamKeys.copyField', { value: r.virtual_key_id })}>
                   {copied === 'vk_id' ? <CheckIcon className="w-3 h-3" /> : <ClipboardIcon className="w-3 h-3" />}
                 </button>
               </span>
             </div>
             <div className="drawer-field">
-              <span className="k">Share</span>
+              <span className="k">{t('teamKeys.fieldShare')}</span>
               <span className="v">
                 <span className={`chip ${r.share_status === 'claimed' ? 'success' : r.share_status === 'revoked' ? 'danger' : 'warning'}`}>
-                  {shareLabel(r.share_status).toUpperCase()}
+                  {shareLabel(r.share_status, t).toUpperCase()}
                 </span>
               </span>
             </div>
@@ -830,11 +845,11 @@ function DetailDrawer(props: {
           <div className="drawer-section">
             <div className="drawer-section-title">
               <NetworkIcon className="w-3 h-3" />
-              Routing
+              {t('teamKeys.sectionRouting')}
             </div>
             {props.summaryPending && (
               <div className="drawer-field">
-                <span className="v" style={{ color: 'var(--muted-foreground)' }}>Loading binding details…</span>
+                <span className="v" style={{ color: 'var(--muted-foreground)' }}>{t('teamKeys.routingLoading')}</span>
               </div>
             )}
             {props.summaryError && (
@@ -844,7 +859,7 @@ function DetailDrawer(props: {
             )}
             {props.summary && props.summary.slots.length === 0 && (
               <div className="drawer-field">
-                <span className="v" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>No routing slots configured.</span>
+                <span className="v" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>{t('teamKeys.routingNoSlots')}</span>
               </div>
             )}
             {props.summary && props.summary.slots.map((slot) => (
@@ -877,13 +892,13 @@ function DetailDrawer(props: {
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <span className="text-[10px]" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
-                      SDK base URL (via aikey-proxy)
+                      {t('teamKeys.routeUrlHint')}
                     </span>
                     <button
                       type="button"
                       className="copy-btn"
-                      title="Copy route URL"
-                      aria-label="Copy route_url"
+                      title={t('teamKeys.copyRouteUrlTitle')}
+                      aria-label={t('teamKeys.copyRouteUrlAriaLabel')}
                       onClick={() => copy('route_url', props.localRoute!.route_url!)}
                     >
                       {copied === 'route_url' ? <CheckIcon className="w-3 h-3" /> : <ClipboardIcon className="w-3 h-3" />}
@@ -893,16 +908,16 @@ function DetailDrawer(props: {
               </div>
             )}
             <div className="drawer-field">
-              <span className="k">Route token</span>
+              <span className="k">{t('teamKeys.fieldRouteToken')}</span>
               <span className="v stack">
                 {props.localRoute?.route_token ? (
-                  <div className="drawer-tokenbox" tabIndex={0} aria-label="Route token">
+                  <div className="drawer-tokenbox" tabIndex={0} aria-label={t('teamKeys.routeTokenAriaLabel')}>
                     {props.localRoute.route_token}
                     <button
                       type="button"
                       className="copy-btn"
-                      title="Copy route token"
-                      aria-label="Copy route token"
+                      title={t('teamKeys.copyRouteTokenTitle')}
+                      aria-label={t('teamKeys.copyRouteTokenAriaLabel')}
                       onClick={() => copy('route_token', props.localRoute!.route_token!)}
                     >
                       {copied === 'route_token' ? <CheckIcon className="w-3 h-3" /> : <ClipboardIcon className="w-3 h-3" />}
@@ -911,12 +926,12 @@ function DetailDrawer(props: {
                 ) : (
                   <div
                     className="drawer-tokenbox drawer-tokenbox-locked"
-                    aria-label="Route token unavailable"
+                    aria-label={t('teamKeys.routeTokenUnavailableAriaLabel')}
                     style={{ color: 'var(--muted-foreground)' }}
                   >
                     <span style={{ letterSpacing: '0.15em' }}>{'•'.repeat(40)}</span>
                     <span className="drawer-tokenbox-hint text-[10px]" style={{ opacity: 0.55 }}>
-                      Unlock your local vault to reveal
+                      {t('teamKeys.routeTokenUnlockHint')}
                     </span>
                   </div>
                 )}
@@ -934,7 +949,7 @@ function DetailDrawer(props: {
           <div className="drawer-section">
             <div className="drawer-section-title">
               <WrenchIcon className="w-3 h-3" />
-              Actions
+              {t('teamKeys.sectionActions')}
             </div>
             <div className="drawer-actions">
               {r.key_status === 'active' && r.alias ? (
@@ -943,17 +958,17 @@ function DetailDrawer(props: {
                     type="button"
                     className="action-btn primary-route"
                     onClick={() => copy('route_cmd', `aikey activate ${r.alias}`)}
-                    title={`Copy CLI command: aikey activate ${r.alias}`}
+                    title={t('teamKeys.activateCopyTitle', { alias: r.alias })}
                   >
                     {copied === 'route_cmd' ? (
                       <>
                         <CheckIcon className="w-3.5 h-3.5" />
-                        Command copied
+                        {t('teamKeys.commandCopied')}
                       </>
                     ) : (
                       <>
                         <ZapIcon className="w-3.5 h-3.5" />
-                        Activate in terminal
+                        {t('teamKeys.activateInTerminal')}
                       </>
                     )}
                   </button>
@@ -961,13 +976,13 @@ function DetailDrawer(props: {
                     {copied === 'route_cmd' ? (
                       <>
                         <CheckIcon className="w-3 h-3" />
-                        <span>Copied — paste in a terminal.</span>
+                        <span>{t('teamKeys.copiedPasteInTerminal')}</span>
                       </>
                     ) : (
                       <>
                         <ZapIcon className="w-3 h-3" />
                         <span>
-                          Copy <code className="font-mono">aikey activate {r.alias}</code>, run in a terminal.
+                          {t('teamKeys.activateHintCopyPrefix')}<code className="font-mono">aikey activate {r.alias}</code>{t('teamKeys.activateHintRunSuffix')}
                         </span>
                       </>
                     )}
@@ -976,7 +991,7 @@ function DetailDrawer(props: {
               ) : (
                 <div className="drawer-actions-hint" role="note">
                   <InfoIcon className="w-3 h-3" />
-                  <span>This key is {status.label.toLowerCase()} and cannot be activated.</span>
+                  <span>{t('teamKeys.cannotActivate', { status: status.label.toLowerCase() })}</span>
                 </div>
               )}
             </div>
@@ -986,18 +1001,18 @@ function DetailDrawer(props: {
           <div className="drawer-section">
             <div className="drawer-section-title">
               <InfoIcon className="w-3 h-3" />
-              Meta
+              {t('teamKeys.sectionMeta')}
             </div>
             <div className="drawer-field">
-              <span className="k">Protocol</span>
+              <span className="k">{t('teamKeys.fieldProtocol')}</span>
               <span className="v">{fam}<span className="ro-pill">RO</span></span>
             </div>
             <div className="drawer-field">
-              <span className="k">Type</span>
-              <span className="v">Team key<span className="ro-pill">RO</span></span>
+              <span className="k">{t('teamKeys.fieldType')}</span>
+              <span className="v">{t('teamKeys.typeTeamKey')}<span className="ro-pill">RO</span></span>
             </div>
             <div className="drawer-field">
-              <span className="k">Status</span>
+              <span className="k">{t('teamKeys.fieldStatus')}</span>
               <span className="v">
                 {status.chipClass === 'success'
                   ? <><span className="status-dot" style={{ width: 5, height: 5 }} /><span style={{ color: 'var(--success)' }}>{status.label}</span></>
@@ -1006,16 +1021,16 @@ function DetailDrawer(props: {
             </div>
             {expiresStr && (
               <div className="drawer-field">
-                <span className="k">Expires</span>
+                <span className="k">{t('teamKeys.fieldExpires')}</span>
                 <span className="v">{expiresStr}</span>
               </div>
             )}
             <div className="drawer-field">
-              <span className="k">Org</span>
+              <span className="k">{t('teamKeys.fieldOrg')}</span>
               <span className="v mono dim">{r.org_id || '—'}</span>
             </div>
             <div className="drawer-field">
-              <span className="k">Seat</span>
+              <span className="k">{t('teamKeys.fieldSeat')}</span>
               <span className="v mono dim">{r.seat_id || '—'}</span>
             </div>
           </div>
@@ -1030,6 +1045,8 @@ function ToastStack({ toasts, onDismiss }: {
   toasts: Array<{ id: number; kind: 'success' | 'error'; title: string; sub?: string }>;
   onDismiss: (id: number) => void;
 }) {
+  // Named `tr` (not `t`) to avoid shadowing the per-toast `t` loop variable below.
+  const { t: tr } = useTranslation();
   return (
     <div className="toast-stack" aria-live="polite" aria-atomic="true">
       {toasts.map((t) => (
@@ -1042,7 +1059,7 @@ function ToastStack({ toasts, onDismiss }: {
             {t.sub && <div className="toast-sub">{t.sub}</div>}
           </div>
           <div className="toast-actions">
-            <button type="button" className="toast-dismiss" onClick={() => onDismiss(t.id)} aria-label="Dismiss">
+            <button type="button" className="toast-dismiss" onClick={() => onDismiss(t.id)} aria-label={tr('teamKeys.toastDismiss')}>
               <XIcon className="w-3 h-3" />
             </button>
           </div>
@@ -1062,16 +1079,17 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function TeamKeysEmptyPanel() {
+  const { t } = useTranslation();
   return (
     <div className="text-center py-20">
       <div className="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-5" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
         <KeyRoundIcon className="w-6 h-6" style={{ color: 'var(--primary)' }} />
       </div>
-      <div className="text-[12px] font-mono uppercase tracking-wider mb-2" style={{ color: 'var(--foreground)' }}>No keys assigned yet</div>
+      <div className="text-[12px] font-mono uppercase tracking-wider mb-2" style={{ color: 'var(--foreground)' }}>{t('teamKeys.emptyTitle')}</div>
       <p className="text-[12px] mx-auto max-w-md" style={{ color: 'var(--muted-foreground)' }}>
-        Keys your team or organisation grants you will show up here. Ask a{' '}
-        <strong style={{ color: 'var(--foreground)' }}>team admin</strong> to share a key, or import your own from the{' '}
-        <Link to="/user/import" className="underline" style={{ color: 'var(--primary)' }}>Import</Link> page.
+        {t('teamKeys.emptyHintPrefix')}
+        <strong style={{ color: 'var(--foreground)' }}>{t('teamKeys.emptyHintTeamAdmin')}</strong>{t('teamKeys.emptyHintMiddle')}
+        <Link to="/user/import" className="underline" style={{ color: 'var(--primary)' }}>{t('teamKeys.emptyHintImportLink')}</Link>{t('teamKeys.emptyHintSuffix')}
       </p>
     </div>
   );
@@ -1079,9 +1097,10 @@ function TeamKeysEmptyPanel() {
 
 // ── Page footer ──────────────────────────────────────────────────────────
 function PageFooter() {
+  const { t } = useTranslation();
   return (
     <div className="text-center py-3 text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
-      Team keys are managed by your team server. Local routing decisions live in your CLI vault.
+      {t('teamKeys.footer')}
     </div>
   );
 }

@@ -350,6 +350,24 @@ const GROUP_TITLE_I18N_KEY: Record<string, string> = {
   Account: 'groupAccount',
 };
 
+// Cross-app TEAM menu labels (i18n). The cross-app menu entries carry an
+// English `label` from the wire contract / fallback snapshot (see
+// CrossAppMenuEntry.label — "Today English-only; i18n hook is a follow-up").
+// We translate at the render boundary by mapping the entry's stable `id`
+// (which never changes across releases — see types.ts) to a `teamMenu.*`
+// sub-key. The English label stays in the data (it doubles as the offline
+// fallback display); unmapped ids fall through to the raw label so a
+// newly-added cross-app entry still renders rather than showing a bare key.
+//
+// Why key off `id` and not `label`: `id` is the wire-contract stable
+// identity (renaming a label is allowed, changing an id breaks cross-app
+// active-state), so it's the durable anchor for the translation lookup.
+const TEAM_MENU_I18N_KEY: Record<string, string> = {
+  'team-keys': 'teamKeys',
+  'team-usage': 'teamUsage',
+  'team-account': 'account',
+};
+
 function initials(email: string): string {
   const parts = email.split('@')[0].split(/[._-]/);
   return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
@@ -378,6 +396,16 @@ export function UserShell() {
     (title: string) => {
       const key = GROUP_TITLE_I18N_KEY[title];
       return key ? t(`userShell.${key}`) : title;
+    },
+    [t],
+  );
+  // Translate a cross-app TEAM menu entry label by its stable `id`,
+  // falling back to the wire/fallback English label when the id is not in
+  // the `teamMenu` namespace (forward-compat with new cross-app entries).
+  const tTeamMenuLabel = React.useCallback(
+    (id: string, fallbackLabel: string) => {
+      const key = TEAM_MENU_I18N_KEY[id];
+      return key ? t(`teamMenu.${key}`) : fallbackLabel;
     },
     [t],
   );
@@ -904,12 +932,12 @@ export function UserShell() {
                               key={xa.id}
                               href={`${otherBaseUrl}${xa.path}`}
                               className="nav-item nav-item-cross-app"
-                              data-tooltip={xa.label}
+                              data-tooltip={tTeamMenuLabel(xa.id, xa.label)}
                               data-origin-name={`cross-app:${xa.id}`}
                               title={t('userShell.opensLink', { url: `${otherBaseUrl}${xa.path}` })}
                             >
                               {crossAppIconFor(xa.icon)}
-                              <span className="nav-label">{xa.label}</span>
+                              <span className="nav-label">{tTeamMenuLabel(xa.id, xa.label)}</span>
                             </a>
                           );
                           continue;
@@ -979,12 +1007,12 @@ export function UserShell() {
                             key={xa.id}
                             href={`${otherBaseUrl}${xa.path}`}
                             className="nav-item nav-item-cross-app"
-                            data-tooltip={xa.label}
+                            data-tooltip={tTeamMenuLabel(xa.id, xa.label)}
                             data-origin-name={`cross-app:${xa.id}`}
                             title={t('userShell.opensLink', { url: `${otherBaseUrl}${xa.path}` })}
                           >
                             {crossAppIconFor(xa.icon)}
-                            <span className="nav-label">{xa.label}</span>
+                            <span className="nav-label">{tTeamMenuLabel(xa.id, xa.label)}</span>
                           </a>
                         );
                       }
@@ -1002,12 +1030,12 @@ export function UserShell() {
                           key={e.id}
                           href={`${otherBaseUrl}${e.path}`}
                           className="nav-item nav-item-cross-app"
-                          data-tooltip={e.label}
+                          data-tooltip={tTeamMenuLabel(e.id, e.label)}
                           data-origin-name={`cross-app:${e.id}`}
                           title={t('userShell.opensLink', { url: `${otherBaseUrl}${e.path}` })}
                         >
                           {crossAppIconFor(e.icon)}
-                          <span className="nav-label">{e.label}</span>
+                          <span className="nav-label">{tTeamMenuLabel(e.id, e.label)}</span>
                         </a>
                       );
                     }
