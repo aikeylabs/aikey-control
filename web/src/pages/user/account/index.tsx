@@ -11,6 +11,7 @@
  *    populated case renders one row per seat with status + key counts.
  */
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { userAccountsApi, type SeatSummaryDTO } from '@/shared/api/user/accounts';
@@ -30,6 +31,7 @@ import { formatRelativeTime } from '@/shared/utils/datetime-intl';
 // /api/user/* surface).
 
 export default function MyAccountPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -74,13 +76,13 @@ export default function MyAccountPage() {
           user pages like /referrals, /pending-keys). */}
       <div className="mb-6">
         <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--display-foreground)' }}>
-          My Account
+          {t('account.pageTitle')}
         </h1>
         <p
           className="text-[12px] font-mono mt-0.5"
           style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}
         >
-          Account details and organization memberships
+          {t('account.pageSubtitle')}
         </p>
       </div>
 
@@ -90,28 +92,28 @@ export default function MyAccountPage() {
           <div className="card-header">
             <span className="card-title">
               <FingerprintIcon />
-              Identity &amp; Session
+              {t('account.identitySession')}
             </span>
             <span
               className="inline-flex items-center gap-1.5 text-[10px] font-mono"
               style={{ color: 'var(--muted-foreground)' }}
             >
               <span className="status-dot" aria-hidden="true" />
-              TOKEN VALID
+              {t('account.tokenValid')}
             </span>
           </div>
 
           <div className="p-5 pl-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-5">
-              <Field label="Email" value={me?.email} mono={false} />
+              <Field label={t('account.fieldEmail')} value={me?.email} mono={false} />
               <Field
-                label="Account ID"
+                label={t('account.fieldAccountId')}
                 value={me?.account_id ? truncateId(me.account_id) : undefined}
                 title={me?.account_id}
                 mono
               />
               <div>
-                <div className="field-label">Role</div>
+                <div className="field-label">{t('account.fieldRole')}</div>
                 <div>
                   <span className="role-badge">
                     <span className="dot" aria-hidden="true" />
@@ -120,7 +122,7 @@ export default function MyAccountPage() {
                 </div>
               </div>
               <Field
-                label="Created"
+                label={t('account.fieldCreated')}
                 value={me?.created_at ? new Date(me.created_at).toLocaleDateString(navigator.language) : undefined}
                 mono
               />
@@ -137,7 +139,7 @@ export default function MyAccountPage() {
                 disabled={meQuery.isFetching}
               >
                 <RefreshIcon />
-                {meQuery.isFetching ? 'Refreshing…' : 'Refresh profile'}
+                {meQuery.isFetching ? t('account.refreshing') : t('account.refreshProfile')}
               </button>
               <button
                 type="button"
@@ -145,7 +147,7 @@ export default function MyAccountPage() {
                 onClick={() => navigate('/user/cli-guide')}
               >
                 <TerminalIcon />
-                Run aikey login
+                {t('account.runAikeyLogin')}
               </button>
               <button
                 type="button"
@@ -153,13 +155,13 @@ export default function MyAccountPage() {
                 onClick={() => navigate('/user/cli-guide')}
               >
                 <BookIcon />
-                CLI guide
+                {t('account.cliGuide')}
               </button>
               <span
                 className="ml-auto text-[12px] font-mono"
                 style={{ color: 'var(--muted-foreground)' }}
               >
-                Last refresh:{' '}
+                {t('account.lastRefresh')}{' '}
                 <span style={{ color: '#d4d4d8' }}>{lastRefreshed ?? '—'}</span>
               </span>
             </div>
@@ -171,13 +173,13 @@ export default function MyAccountPage() {
           <div className="card-header">
             <span className="card-title" style={{ color: 'var(--muted-foreground)' }}>
               <BuildingIcon />
-              My Organizations &amp; Seats
+              {t('account.myOrgsSeats')}
             </span>
             <span
               className="text-[12px] font-mono"
               style={{ color: 'var(--muted-foreground)' }}
             >
-              {seats.length} seat{seats.length === 1 ? '' : 's'}
+              {t('account.seatCount', { count: seats.length })}
             </span>
           </div>
 
@@ -192,11 +194,10 @@ export default function MyAccountPage() {
                 className="text-[13px] font-medium"
                 style={{ color: 'var(--muted-foreground)' }}
               >
-                No seats assigned yet
+                {t('account.noSeatsAssigned')}
               </div>
               <p className="text-[12px] font-mono mt-1 max-w-sm">
-                Ask a team admin to invite you, or spin up your own workspace to start
-                importing keys.
+                {t('account.noSeatsHint')}
               </p>
               <div className="mt-4 flex items-center gap-2">
                 <button
@@ -205,7 +206,7 @@ export default function MyAccountPage() {
                   onClick={() => window.open('mailto:?subject=AiKey%20invite%20request', '_blank')}
                 >
                   <MailIcon />
-                  Request an invite
+                  {t('account.requestInvite')}
                 </button>
                 <button
                   type="button"
@@ -213,7 +214,7 @@ export default function MyAccountPage() {
                   onClick={() => navigate('/user/cli-guide')}
                 >
                   <BookIcon />
-                  Learn about seats
+                  {t('account.learnAboutSeats')}
                 </button>
               </div>
             </div>
@@ -226,7 +227,7 @@ export default function MyAccountPage() {
                     <div className="seat-row-head">
                       <div className="min-w-0">
                         <div className="text-[10px] font-mono tracking-widest uppercase" style={{ color: 'var(--muted-foreground)' }}>
-                          Organization
+                          {t('account.organization')}
                         </div>
                         <div
                           className="text-[13px] font-mono font-semibold truncate"
@@ -238,30 +239,30 @@ export default function MyAccountPage() {
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <SeatStatusChip status={s.seat_status} />
-                        {idx === 0 && <span className="chip-muted">DEFAULT</span>}
+                        {idx === 0 && <span className="chip-muted">{t('account.default')}</span>}
                       </div>
                     </div>
                     <div className="seat-row-meta">
-                      <Meta label="Seat ID" value={truncateId(s.seat_id)} />
+                      <Meta label={t('account.seatId')} value={truncateId(s.seat_id)} />
                       <Meta
-                        label="Joined"
+                        label={t('account.joined')}
                         value={s.claimed_at ? new Date(s.claimed_at).toLocaleDateString(navigator.language) : '—'}
                       />
                       <div>
-                        <div className="field-label">Allocated keys</div>
+                        <div className="field-label">{t('account.allocatedKeys')}</div>
                         <div className="text-[13px] font-mono">
                           <span style={{ color: '#4ade80', fontWeight: 600 }}>
-                            {counts.active} active
+                            {t('account.keysActive', { count: counts.active })}
                           </span>
                           <span className="mx-2" style={{ color: 'var(--muted-foreground)' }}>
                             ·
                           </span>
                           {counts.pending > 0 ? (
                             <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                              {counts.pending} pending
+                              {t('account.keysPending', { count: counts.pending })}
                             </span>
                           ) : (
-                            <span style={{ color: 'var(--muted-foreground)' }}>0 pending</span>
+                            <span style={{ color: 'var(--muted-foreground)' }}>{t('account.keysZeroPending')}</span>
                           )}
                         </div>
                       </div>

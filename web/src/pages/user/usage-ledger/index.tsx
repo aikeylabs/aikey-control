@@ -18,6 +18,7 @@
  *   - Per-key totals:         GET /v1/usage/personal/by-key/total
  */
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -137,7 +138,10 @@ function normProto(s: string) {
 // the underlying binding is OAuth-backed) to render with the user's
 // email instead of the app name. The current per-prefix dispatch keeps
 // the F2 OAuth fix without leaking identity into non-OAuth labels.
-function deriveKeyLabel(k: { alias?: string; identity?: string; virtual_key_id: string }): string {
+function deriveKeyLabel(
+  k: { alias?: string; identity?: string; virtual_key_id: string },
+  t: (key: string) => string,
+): string {
   const id = (k.virtual_key_id || '').trim();
   const aliasStr = (k.alias ?? '').trim();
 
@@ -163,7 +167,7 @@ function deriveKeyLabel(k: { alias?: string; identity?: string; virtual_key_id: 
     if (aliasOAuth) return `OAuth · ${aliasOAuth[1].slice(0, 8)}…`;
     return aliasStr;
   }
-  if (!id) return 'unlabeled';
+  if (!id) return t('usageLedger.unlabeled');
   if (id.startsWith('personal:')) return id.slice('personal:'.length);
   return id;
 }
@@ -185,18 +189,22 @@ function deriveKeyLabel(k: { alias?: string; identity?: string; virtual_key_id: 
 //   aikey-proxy/internal/proxy/uaattribution/fingerprint.yaml
 // Display text pinned in:
 //   workflow/CI/requirements/2026-05-26-usage-by-key-app-attribution.md
-function deriveAppSubtitle(slug: string | undefined, identity: string | undefined): string {
+function deriveAppSubtitle(
+  slug: string | undefined,
+  identity: string | undefined,
+  t: (key: string) => string,
+): string {
   const s = (slug ?? '').trim();
   const id = (identity ?? '').trim();
   if (!s) {
     // Legacy OAuth row with no projected app_slug — honor spec by
     // surfacing "Unknown App". Personal/team rows fall through and
     // get no subtitle.
-    return id ? 'Unknown App' : '';
+    return id ? t('usageLedger.unknownApp') : '';
   }
   switch (s) {
     case 'claude-code': return 'Claude Code';
-    case 'unknown-app': return 'Unknown App';
+    case 'unknown-app': return t('usageLedger.unknownApp');
     case 'cursor':      return 'Cursor';
     case 'cline':       return 'Cline';
     case 'continue':    return 'Continue';
@@ -210,6 +218,7 @@ function deriveAppSubtitle(slug: string | undefined, identity: string | undefine
 }
 
 export default function UserUsageLedgerPage() {
+  const { t } = useTranslation();
   const [range, setRange] = useState<RangeKey>(30);
   // For 1D, both ends collapse to today — aggregate endpoints work
   // unchanged with the narrowed window. The hourly endpoints below
@@ -298,12 +307,12 @@ export default function UserUsageLedgerPage() {
   //   6. raw id / empty             — fallback
   const keyData = (byKey.data ?? []).map((k) => ({
     ...k,
-    label: deriveKeyLabel(k),
+    label: deriveKeyLabel(k, t),
     // App attribution subtitle (2026-05-26). Empty string suppresses the
     // subtitle row; non-empty renders the small grey caption under the
     // primary label. Keeps OAuth multi-session rows distinguishable when
     // the same email shows up under different clients.
-    appSubtitle: deriveAppSubtitle(k.app_slug, k.identity),
+    appSubtitle: deriveAppSubtitle(k.app_slug, k.identity, t),
   }));
 
   const totalTokens = timeline.data?.reduce((s, p) => s + p.total_tokens, 0) ?? 0;
@@ -419,7 +428,7 @@ export default function UserUsageLedgerPage() {
     return (
       <div className="p-6 flex items-center justify-center h-64">
         <p className="text-sm font-mono" style={{ color: 'var(--muted-foreground)' }}>
-          Loading account info...
+          {t('usageLedger.loadingAccountInfo')}
         </p>
       </div>
     );
@@ -436,14 +445,14 @@ export default function UserUsageLedgerPage() {
       <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--display-foreground)' }}>
-            My Usage
+            {t('usageLedger.title')}
           </h1>
           <p className="text-[11.5px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
-            Personal consumption across all accessible keys
-            {updatedAt ? ` · updated ${updatedAt}` : ''}
+            {t('usageLedger.subtitle')}
+            {updatedAt ? t('usageLedger.updatedSuffix', { updatedAt }) : ''}
           </p>
         </div>
-        <div className="seg" role="tablist" aria-label="Time range">
+        <div className="seg" role="tablist" aria-label={t('usageLedger.timeRangeAria')}>
           {([1, 7, 14, 30, 90] as const).map((d) => (
             <button
               key={d}
@@ -453,7 +462,7 @@ export default function UserUsageLedgerPage() {
               className={range === d ? 'active' : ''}
               onClick={() => setRange(d)}
             >
-              {d}D
+              {t('usageLedger.rangeLabel', { d })}
             </button>
           ))}
         </div>
@@ -463,29 +472,30 @@ export default function UserUsageLedgerPage() {
         {/* ── 3 KPI cards ── */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="kpi">
-            <div className="kpi-label">Total Tokens</div>
+            <div className="kpi-label">{t('usageLedger.kpiTotalTokens')}</div>
             <div className="kpi-value">{formatTokens(totalTokens)}</div>
             <div className="kpi-hint">
-              Last <span style={{ color: 'var(--foreground)' }}>{range}D</span>
+              {t('usageLedger.kpiHintLast')}
+              <span style={{ color: 'var(--foreground)' }}>{t('usageLedger.rangeLabel', { d: range })}</span>
             </div>
           </div>
           <div className="kpi">
-            <div className="kpi-label">Total Requests</div>
+            <div className="kpi-label">{t('usageLedger.kpiTotalRequests')}</div>
             <div className="kpi-value">{totalRequests.toLocaleString()}</div>
             <div className="kpi-hint">
-              avg{' '}
+              {t('usageLedger.kpiHintAvg')}{' '}
               <span style={{ color: 'var(--foreground)' }}>
                 {totalRequests > 0 ? formatTokens(avgPerRequest) : '—'}
               </span>{' '}
-              tokens/req
+              {t('usageLedger.kpiHintTokensPerReq')}
             </div>
           </div>
           <div className="kpi">
-            <div className="kpi-label">Protocols Used</div>
+            <div className="kpi-label">{t('usageLedger.kpiProtocolsUsed')}</div>
             <div className="kpi-value">{protocolData.length}</div>
             <div className="kpi-hint">
               {protocolData.length === 0
-                ? 'No activity yet'
+                ? t('usageLedger.noActivityYet')
                 : protocolData.map((p) => p.protocol_type).slice(0, 3).join(' · ')}
             </div>
           </div>
@@ -497,15 +507,15 @@ export default function UserUsageLedgerPage() {
           <div className="chart-card col-span-12 md:col-span-8">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <div className="chart-title">My token usage over time</div>
+                <div className="chart-title">{t('usageLedger.chartUsageOverTimeTitle')}</div>
                 <div className="chart-sub">
-                  {range === 1 ? 'Today' : `Last ${range} days`} · {formatTokens(totalTokens)} total tokens
+                  {range === 1 ? t('usageLedger.today') : t('usageLedger.lastNDays', { range })} · {formatTokens(totalTokens)}{t('usageLedger.totalTokensSuffix')}
                 </div>
               </div>
               <div className="legend">
                 <span className="item">
                   <span className="dot" style={{ background: 'var(--primary)' }} />
-                  tokens
+                  {t('usageLedger.legendTokens')}
                 </span>
                 <span className="item">
                   <span
@@ -516,7 +526,7 @@ export default function UserUsageLedgerPage() {
                       boxShadow: 'inset 0 0 0 1px #71717a',
                     }}
                   />
-                  requests
+                  {t('usageLedger.legendRequests')}
                 </span>
               </div>
             </div>
@@ -531,9 +541,9 @@ export default function UserUsageLedgerPage() {
                 volume-vs-frequency read is the headline value here. */}
             <div className="w-full h-[220px]">
               {timeline.isLoading ? (
-                <Placeholder>Loading...</Placeholder>
+                <Placeholder>{t('usageLedger.loading')}</Placeholder>
               ) : padTimelineData.length === 0 ? (
-                <Placeholder>No usage data yet</Placeholder>
+                <Placeholder>{t('usageLedger.noUsageDataYet')}</Placeholder>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={padTimelineData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
@@ -581,8 +591,8 @@ export default function UserUsageLedgerPage() {
                       }}
                       formatter={(v, name) =>
                         name === 'Requests'
-                          ? [Number(v).toLocaleString(), 'requests']
-                          : [formatTokens(Number(v)), 'tokens']
+                          ? [Number(v).toLocaleString(), t('usageLedger.legendRequests')]
+                          : [formatTokens(Number(v)), t('usageLedger.legendTokens')]
                       }
                     />
                     <Bar
@@ -616,14 +626,14 @@ export default function UserUsageLedgerPage() {
           <div className="chart-card col-span-12 md:col-span-4 flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="chart-title">By protocol</div>
-                <div className="chart-sub">{range}D token share</div>
+                <div className="chart-title">{t('usageLedger.byProtocolTitle')}</div>
+                <div className="chart-sub">{t('usageLedger.byProtocolSub', { range })}</div>
               </div>
             </div>
 
             {protocolData.length === 0 ? (
               <div className="py-8 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                No data
+                {t('usageLedger.noData')}
               </div>
             ) : (
               <ul className="space-y-3">
@@ -682,9 +692,13 @@ export default function UserUsageLedgerPage() {
               style={{ borderTop: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
             >
               <span>
-                {protocolData.length} protocol{protocolData.length === 1 ? '' : 's'}
+                {protocolData.length === 1
+                  ? t('usageLedger.protocolCountSingular', { count: protocolData.length })
+                  : t('usageLedger.protocolCountPlural', { count: protocolData.length })}
               </span>
-              <span>{range === 1 ? 'Today' : `Last ${range}D`} · {formatTokens(totalTokens)} total</span>
+              <span>
+                {range === 1 ? t('usageLedger.today') : t('usageLedger.kpiHintLast') + t('usageLedger.rangeLabel', { d: range })} · {formatTokens(totalTokens)}{t('usageLedger.totalSuffix')}
+              </span>
             </div>
           </div>
         </section>
@@ -693,9 +707,9 @@ export default function UserUsageLedgerPage() {
         <section className="chart-card">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
             <div>
-              <div className="chart-title">Usage by protocol over time</div>
+              <div className="chart-title">{t('usageLedger.byProtocolOverTimeTitle')}</div>
               <div className="chart-sub">
-                {range === 1 ? 'Hourly' : 'Daily'} tokens stacked by provider · {range === 1 ? 'today' : `last ${range} days`}
+                {range === 1 ? t('usageLedger.hourly') : t('usageLedger.daily')}{t('usageLedger.tokensStackedByProvider')}{range === 1 ? t('usageLedger.todayLower') : t('usageLedger.lastNDaysLower', { range })}
               </div>
             </div>
             {protocolNames.length > 0 && (
@@ -712,7 +726,7 @@ export default function UserUsageLedgerPage() {
 
           <div className="w-full h-[220px]">
             {stackedData.length === 0 ? (
-              <Placeholder>No usage data yet</Placeholder>
+              <Placeholder>{t('usageLedger.noUsageDataYet')}</Placeholder>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={stackedData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
@@ -762,15 +776,15 @@ export default function UserUsageLedgerPage() {
         <section className="chart-card">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <div className="chart-title">Usage by key</div>
-              <div className="chart-sub">Top virtual keys · {range}D token consumption</div>
+              <div className="chart-title">{t('usageLedger.byKeyTitle')}</div>
+              <div className="chart-sub">{t('usageLedger.byKeySub', { range })}</div>
             </div>
           </div>
 
           {byKey.isLoading ? (
-            <div className="mt-6"><Placeholder>Loading...</Placeholder></div>
+            <div className="mt-6"><Placeholder>{t('usageLedger.loading')}</Placeholder></div>
           ) : keyRows.length === 0 ? (
-            <div className="mt-6"><Placeholder>No usage data yet</Placeholder></div>
+            <div className="mt-6"><Placeholder>{t('usageLedger.noUsageDataYet')}</Placeholder></div>
           ) : (
             <ul className="mt-4 space-y-2.5">
               {keyRows.map((k) => (
@@ -830,17 +844,17 @@ export default function UserUsageLedgerPage() {
         <section className="chart-card">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <div className="chart-title">Usage by app</div>
+              <div className="chart-title">{t('usageLedger.byAppTitle')}</div>
               <div className="chart-sub">
-                Top connected apps · {range}D token consumption · direct CLI calls bucketed by tool name
+                {t('usageLedger.byAppSub', { range })}
               </div>
             </div>
           </div>
 
           {byApp.isLoading ? (
-            <div className="mt-6"><Placeholder>Loading...</Placeholder></div>
+            <div className="mt-6"><Placeholder>{t('usageLedger.loading')}</Placeholder></div>
           ) : appRows.length === 0 ? (
-            <div className="mt-6"><Placeholder>No app usage in this range</Placeholder></div>
+            <div className="mt-6"><Placeholder>{t('usageLedger.noAppUsageInRange')}</Placeholder></div>
           ) : (
             <ul className="mt-4 space-y-2.5">
               {appRows.map((a) => (
@@ -849,7 +863,7 @@ export default function UserUsageLedgerPage() {
                     className="font-mono text-[11.5px] truncate flex items-center gap-1.5"
                     title={
                       a.kind === 'direct'
-                        ? `direct /v1/... calls bucketed by ${a.provider_code}`
+                        ? t('usageLedger.directBucketedByTitle', { provider: a.provider_code })
                         : `${a.label} (${a.provider_code})`
                     }
                     style={{ color: 'var(--foreground)' }}
@@ -863,9 +877,9 @@ export default function UserUsageLedgerPage() {
                           color: 'var(--primary-foreground, #18181b)',
                           flexShrink: 0,
                         }}
-                        title="Built-in AiKey component — your own tokens, but the traffic originates from an internal pipeline (e.g., Trust Check probes)."
+                        title={t('usageLedger.badgeInternalTitle')}
                       >
-                        INTERNAL
+                        {t('usageLedger.badgeInternal')}
                       </span>
                     ) : a.kind === 'direct' ? (
                       <span
@@ -876,9 +890,9 @@ export default function UserUsageLedgerPage() {
                           border: '1px solid var(--border)',
                           flexShrink: 0,
                         }}
-                        title="Direct /v1/... CLI traffic — no Connected App context. The label is the CLI tool inferred from the provider; proxy can't tell which actual binary called."
+                        title={t('usageLedger.badgeDirectTitle')}
                       >
-                        DIRECT
+                        {t('usageLedger.badgeDirect')}
                       </span>
                     ) : null}
                   </span>
@@ -898,7 +912,7 @@ export default function UserUsageLedgerPage() {
                       {a.sharePct < 1 ? '<1%' : `${Math.round(a.sharePct)}%`}
                     </span>
                     <span className="ml-2" style={{ color: 'var(--muted-foreground)' }}>
-                      {a.request_count} req
+                      {t('usageLedger.reqSuffix', { count: a.request_count })}
                     </span>
                   </span>
                 </li>

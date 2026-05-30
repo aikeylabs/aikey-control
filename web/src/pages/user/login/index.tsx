@@ -10,6 +10,7 @@
  * This page guides users to install the CLI and authenticate.
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { runtimeConfig } from '@/app/config/runtime';
 import { copyText } from '@/shared/utils/clipboard';
@@ -28,6 +29,7 @@ function decodeBase64URL(encoded: string): string {
 }
 
 export default function UserLoginPage() {
+  const { t } = useTranslation();
   const [params] = useSearchParams();
   const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedInstall, setCopiedInstall] = useState(false);
@@ -77,7 +79,7 @@ export default function UserLoginPage() {
           </h1>
         </div>
         <p className="text-[10px] font-mono tracking-[0.15em]" style={{ color: 'var(--muted-foreground)' }}>
-          Member Workspace Access
+          {t('login.subtitle')}
         </p>
       </div>
 
@@ -98,7 +100,7 @@ export default function UserLoginPage() {
             </div>
             <div>
               <div className="text-[10px] font-mono font-bold tracking-wider mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                You have been invited
+                {t('login.inviteLabel')}
               </div>
               <div className="text-sm font-mono font-bold" style={{ color: 'var(--primary)' }}>
                 {inviteEmail}
@@ -121,10 +123,10 @@ export default function UserLoginPage() {
             </div>
             <div>
               <div className="text-[10px] font-mono font-bold tracking-wider mb-1" style={{ color: 'var(--muted-foreground)' }}>
-                You've been referred
+                {t('login.referralLabel')}
               </div>
               <div className="text-xs font-mono" style={{ color: '#4ade80' }}>
-                A team member has shared AiKey with you
+                {t('login.referralMessage')}
               </div>
             </div>
           </div>
@@ -135,7 +137,7 @@ export default function UserLoginPage() {
           <div className="flex items-center gap-2">
             <StepBadge n={1} />
             <h2 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
-              Install the CLI
+              {t('login.stepInstallTitle')}
             </h2>
           </div>
           <div
@@ -159,7 +161,7 @@ export default function UserLoginPage() {
             style={{ color: 'var(--primary)' }}
           >
             <BookIcon />
-            Full CLI Install Guide
+            {t('login.fullInstallGuide')}
             <ExternalIcon />
           </a>
         </div>
@@ -169,13 +171,13 @@ export default function UserLoginPage() {
           <div className="flex items-center gap-2">
             <StepBadge n={2} />
             <h2 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
-              Sign in
+              {t('login.stepSignInTitle')}
             </h2>
           </div>
           <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
             {inviteEmail
-              ? 'Run this command — your email will be pre-filled in the browser:'
-              : 'Run this command in your terminal to authenticate:'}
+              ? t('login.signInPromptInvite')
+              : t('login.signInPromptDefault')}
           </p>
           <div
             className="rounded border p-3 flex items-center justify-between"
@@ -197,13 +199,13 @@ export default function UserLoginPage() {
           <div className="flex items-center gap-2">
             <StepBadge n={3} />
             <h2 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
-              Open Console
+              {t('login.stepConsoleTitle')}
             </h2>
           </div>
           <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-            After login, run{' '}
+            {t('login.consoleHintPrefix')}{' '}
             <code className="px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)', color: 'var(--foreground)' }}>aikey web</code>{' '}
-            to open the console in your browser.
+            {t('login.consoleHintSuffix')}
           </p>
         </div>
       </div>
@@ -214,7 +216,7 @@ export default function UserLoginPage() {
         style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderTop: '1px solid var(--border)' }}
       >
         <span className="text-[10px] font-mono tracking-[0.15em]" style={{ color: 'var(--muted-foreground)' }}>
-          AiKey User Access
+          {t('login.footerAccess')}
         </span>
         <a
           href="/user/cli-guide"
@@ -224,7 +226,7 @@ export default function UserLoginPage() {
           style={{ color: 'var(--primary)', textDecoration: 'none' }}
         >
           <TerminalIcon />
-          CLI Guide
+          {t('login.footerCliGuide')}
         </a>
       </div>
     </div>
@@ -245,6 +247,7 @@ function StepBadge({ n }: { n: number }) {
 }
 
 function CopyBtn({ text, copied, onCopy }: { text: string; copied: boolean; onCopy: () => void }) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={() => { copyText(text); onCopy(); }}
@@ -255,7 +258,7 @@ function CopyBtn({ text, copied, onCopy }: { text: string; copied: boolean; onCo
         backgroundColor: 'transparent',
       }}
     >
-      {copied ? 'Copied!' : 'Copy'}
+      {copied ? t('login.copied') : t('login.copy')}
     </button>
   );
 }

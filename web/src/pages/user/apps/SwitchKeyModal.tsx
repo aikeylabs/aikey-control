@@ -30,6 +30,7 @@
  * user sees groupings rather than a flat list mixing types.
  */
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { appsApi, type KeySourceType } from '@/shared/api/user/apps';
@@ -62,6 +63,7 @@ export function SwitchKeyModal({
   onClose,
   onSwitched,
 }: SwitchKeyModalProps) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [selectedRef, setSelectedRef] = useState<string | undefined>(currentKeyRef);
 
@@ -89,7 +91,7 @@ export function SwitchKeyModal({
         qc.invalidateQueries({ queryKey: ['vault-status'] });
         qc.invalidateQueries({ queryKey: ['user-vault-list-for-switch'] });
       } else {
-        setUnlockError(res.error_message || 'unlock failed');
+        setUnlockError(res.error_message || t('apps.unlockFailed'));
       }
     },
     onError: (e: Error) => setUnlockError(e.message),
@@ -187,7 +189,7 @@ export function SwitchKeyModal({
   const switchM = useMutation({
     mutationFn: () => {
       if (!selectedRef) {
-        return Promise.reject(new Error('Select a key first'));
+        return Promise.reject(new Error(t('apps.selectKeyFirst')));
       }
       // Derive key_source_type from the chosen candidate's source so
       // OAuth and team selections write the correct discriminator (the
@@ -241,13 +243,13 @@ export function SwitchKeyModal({
             className="text-base font-semibold font-mono"
             style={{ color: 'var(--foreground)' }}
           >
-            Switch upstream key — <span style={{ color: '#ca8a04' }}>{upstream}</span>
+            {t('apps.switchUpstreamKey')} — <span style={{ color: '#ca8a04' }}>{upstream}</span>
           </h2>
           <p
             className="text-[12px] mt-1"
             style={{ color: 'var(--muted-foreground)' }}
           >
-            App: <span className="font-mono">{slug}</span>. The new binding applies to the next request the agent makes.
+            {t('apps.switchAppLabel')} <span className="font-mono">{slug}</span>{t('apps.switchAppSuffix')}
           </p>
         </div>
 
@@ -262,7 +264,7 @@ export function SwitchKeyModal({
                 color: 'var(--muted-foreground)',
               }}
             >
-              Vault not initialised yet. Open{' '}
+              {t('apps.vaultNotInitialised')}{' '}
               <a
                 href="/user/vault"
                 className="underline"
@@ -270,7 +272,7 @@ export function SwitchKeyModal({
               >
                 /user/vault
               </a>{' '}
-              to set a master password first, then come back here.
+              {t('apps.vaultNotInitialisedSuffix')}
             </div>
           ) : vaultLocked ? (
             <div
@@ -284,14 +286,13 @@ export function SwitchKeyModal({
                 className="font-mono text-[12px] uppercase tracking-wider mb-2"
                 style={{ color: '#facc15' }}
               >
-                Vault locked
+                {t('apps.vaultLocked')}
               </div>
               <p
                 className="text-[12px] mb-3"
                 style={{ color: 'var(--muted-foreground)' }}
               >
-                Unlock the vault to list your saved keys and switch the
-                binding for{' '}
+                {t('apps.unlockToListKeys')}{' '}
                 <span className="font-mono" style={{ color: 'var(--foreground)' }}>
                   {upstream}
                 </span>
@@ -310,7 +311,7 @@ export function SwitchKeyModal({
                   autoFocus
                   value={unlockPassword}
                   onChange={(e) => setUnlockPassword(e.target.value)}
-                  placeholder="Master password"
+                  placeholder={t('apps.masterPasswordPlaceholder')}
                   className="rounded border bg-transparent outline-none text-[13px] font-mono px-2 py-1.5 flex-1"
                   style={{
                     color: 'var(--foreground)',
@@ -327,7 +328,7 @@ export function SwitchKeyModal({
                     color: '#18181b',
                   }}
                 >
-                  {unlockMut.isPending ? 'Unlocking…' : 'Unlock'}
+                  {unlockMut.isPending ? t('apps.unlocking') : t('apps.unlock')}
                 </button>
               </form>
               {unlockError ? (
@@ -344,14 +345,14 @@ export function SwitchKeyModal({
               className="text-[13px] text-center py-8"
               style={{ color: 'var(--muted-foreground)' }}
             >
-              Loading vault…
+              {t('apps.loadingVault')}
             </div>
           ) : vaultQuery.isError ? (
             <div
               className="text-[13px] py-4"
               style={{ color: 'var(--destructive, #ef4444)' }}
             >
-              Failed to load vault: {(vaultQuery.error as Error)?.message}
+              {t('apps.failedToLoadVault')} {(vaultQuery.error as Error)?.message}
             </div>
           ) : candidates.length === 0 ? (
             <div
@@ -362,24 +363,24 @@ export function SwitchKeyModal({
                 color: 'var(--muted-foreground)',
               }}
             >
-              No keys found for upstream{' '}
+              {t('apps.noKeysForUpstream')}{' '}
               <span className="font-mono" style={{ color: 'var(--foreground)' }}>
                 {upstream}
               </span>
-              . Options:
+              {t('apps.noKeysOptions')}
               <ul className="list-disc list-inside mt-2 space-y-0.5">
                 <li>
-                  Personal API key:{' '}
+                  {t('apps.personalApiKey')}{' '}
                   <span className="font-mono" style={{ color: 'var(--foreground)' }}>
                     aikey add &lt;alias&gt; --provider {upstream}
                   </span>
                 </li>
-                <li>OAuth account: log in via the Vault page</li>
-                <li>Team key: ask your org admin to share a virtual key for {upstream}</li>
+                <li>{t('apps.oauthAccountOption')}</li>
+                <li>{t('apps.teamKeyOption', { upstream })}</li>
               </ul>
             </div>
           ) : (
-            <div role="radiogroup" aria-label="Available keys" className="flex flex-col gap-2">
+            <div role="radiogroup" aria-label={t('apps.availableKeysAria')} className="flex flex-col gap-2">
               {candidates.map((c) => {
                 const checked = c.ref === selectedRef;
                 return (
@@ -426,7 +427,7 @@ export function SwitchKeyModal({
             className="text-[11px] mt-4"
             style={{ color: 'var(--muted-foreground)' }}
           >
-            <strong>Why this matters:</strong> AiKey snapshotted your default key into a per-app binding when the app registered. Switching overrides that snapshot for this app only — other apps and the CLI continue using your global default.
+            <strong>{t('apps.whyThisMatters')}</strong> {t('apps.switchExplainer')}
           </p>
         </div>
 
@@ -456,7 +457,7 @@ export function SwitchKeyModal({
                 borderColor: 'var(--border)',
               }}
             >
-              Cancel
+              {t('apps.cancel')}
             </button>
             <button
               type="button"
@@ -468,14 +469,14 @@ export function SwitchKeyModal({
                 vaultLocked ||
                 !vaultInitialized
               }
-              title={vaultLocked ? 'Unlock vault first' : undefined}
+              title={vaultLocked ? t('apps.unlockVaultFirst') : undefined}
               className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider disabled:opacity-50"
               style={{
                 background: '#ca8a04',
                 color: 'var(--primary-foreground, #18181b)',
               }}
             >
-              {switchM.isPending ? 'Switching…' : 'Switch'}
+              {switchM.isPending ? t('apps.switching') : t('apps.switch')}
             </button>
           </div>
         </div>

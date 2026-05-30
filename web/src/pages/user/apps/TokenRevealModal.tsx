@@ -18,6 +18,7 @@
  * can fix before traffic 4xx's at runtime.
  */
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { AppRegisterResponse } from '@/shared/api/user/apps';
 
@@ -31,6 +32,7 @@ export interface TokenRevealModalProps {
 type CopiedSdk = 'openai' | 'anthropic' | null;
 
 export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState<CopiedSdk>(null);
 
   // Reset the "Copied" pill back to default after ~2s so the button is
@@ -106,15 +108,15 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
             className="text-base font-semibold font-mono"
             style={{ color: 'var(--foreground)' }}
           >
-            App registered — <span style={{ color: '#ca8a04' }}>{result.slug}</span>
+            {t('apps.appRegistered')} <span style={{ color: '#ca8a04' }}>{result.slug}</span>
           </h2>
           <p
             className="text-[12px] mt-1"
             style={{ color: 'var(--muted-foreground)' }}
           >
             {result.action === 'inserted'
-              ? 'A new bearer has been issued. Configure your agent with the env block below.'
-              : 'Re-registered. The existing bearer was reused (its plaintext is shown below for your records).'}
+              ? t('apps.bearerIssuedDesc')
+              : t('apps.bearerReusedDesc')}
           </p>
         </div>
 
@@ -132,15 +134,14 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
               className="font-mono text-[12px] uppercase tracking-wider mb-1"
               style={{ color: 'var(--destructive, #ef4444)' }}
             >
-              Save this token now
+              {t('apps.saveTokenNow')}
             </div>
             <p
               className="text-[12px]"
               style={{ color: 'var(--foreground)' }}
             >
-              It won't be shown again. If you lose it, use{' '}
-              <span className="font-mono">Rotate</span> from this app's detail page to
-              issue a new one.
+              {t('apps.tokenWontShowAgain')}{' '}
+              <span className="font-mono">{t('apps.rotate')}</span> {t('apps.tokenWontShowAgainSuffix')}
             </p>
           </div>
 
@@ -152,8 +153,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
               className="text-[12px]"
               style={{ color: 'var(--muted-foreground)' }}
             >
-              Pick the block matching your agent's SDK. The two URL forms
-              differ — the SDK appends its own path suffix.
+              {t('apps.pickBlockMatchingSdk')}
             </p>
 
             {/* OpenAI SDK block */}
@@ -177,7 +177,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                     color: 'var(--primary-foreground, #18181b)',
                   }}
                 >
-                  {copied === 'openai' ? 'Copied' : 'Copy'}
+                  {copied === 'openai' ? t('apps.copied') : t('apps.copy')}
                 </button>
               </div>
               <pre
@@ -213,7 +213,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                     color: 'var(--primary-foreground, #18181b)',
                   }}
                 >
-                  {copied === 'anthropic' ? 'Copied' : 'Copy'}
+                  {copied === 'anthropic' ? t('apps.copied') : t('apps.copy')}
                 </button>
               </div>
               <pre
@@ -240,7 +240,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                 className="text-[12px] font-mono uppercase tracking-wider mb-1"
                 style={{ color: 'var(--muted-foreground)' }}
               >
-                Will route to
+                {t('apps.willRouteTo')}
               </div>
               <ul
                 className="rounded border p-3 text-[12px] font-mono space-y-1"
@@ -262,7 +262,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                       className="text-[10px] uppercase tracking-wider"
                       style={{ color: 'var(--muted-foreground)' }}
                     >
-                      snapshot · {b.key_source_type}
+                      {t('apps.snapshot')} · {b.key_source_type}
                     </span>
                   </li>
                 ))}
@@ -279,7 +279,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                       className="text-[10px] uppercase tracking-wider"
                       style={{ color: 'var(--muted-foreground)' }}
                     >
-                      kept · {b.key_source_type}
+                      {t('apps.kept')} · {b.key_source_type}
                     </span>
                   </li>
                 ))}
@@ -305,19 +305,17 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                 className="font-mono text-[12px] uppercase tracking-wider mb-1"
                 style={{ color: '#facc15' }}
               >
-                ⚠ Missing default key for{' '}
+                {t('apps.missingDefaultKeyFor')}{' '}
                 {result.missing_upstreams_for_aikey_use.join(', ')}
               </div>
               <p
                 className="text-[12px]"
                 style={{ color: 'var(--foreground)' }}
               >
-                Your <code className="font-mono">aikey use</code> selection has no key
-                for the upstream(s) above. The agent will receive a{' '}
-                <code className="font-mono">BINDING_NOT_FOUND</code> error at request
-                time until you pick a key. Fix it from the terminal
-                (<code className="font-mono">aikey use</code>) or from this app's
-                detail page (<span className="font-mono">Switch Key</span>).
+                {t('apps.missingDefaultKeyYour')} <code className="font-mono">aikey use</code> {t('apps.missingDefaultKeyExplainerPre')}{' '}
+                <code className="font-mono">BINDING_NOT_FOUND</code> {t('apps.missingDefaultKeyExplainerMid')}{' '}
+                (<code className="font-mono">aikey use</code>) {t('apps.missingDefaultKeyExplainerSuffix')}{' '}
+                (<span className="font-mono">{t('apps.switchKey')}</span>).
               </p>
             </div>
           ) : null}
@@ -337,7 +335,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
               color: 'var(--primary-foreground, #18181b)',
             }}
           >
-            Done
+            {t('apps.done')}
           </button>
         </div>
       </div>

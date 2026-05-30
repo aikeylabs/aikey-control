@@ -20,6 +20,7 @@
  * Page bg + colors come from the local PALETTE const below.
  */
 import { useEffect, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { copyText } from '@/shared/utils/clipboard';
 
 const PALETTE = {
@@ -62,15 +63,16 @@ const MONO = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Con
 const SANS = '"Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 const TABS = [
-  { id: 'setup',          label: 'Check setup' },
-  { id: 'paths',          label: 'Choose key path' },
-  { id: 'tools',          label: 'Use tools' },
-  { id: 'commands',       label: 'Daily commands' },
-  { id: 'outbound-proxy', label: 'Outbound proxy' },
-  { id: 'trouble',        label: 'Troubleshooting' },
+  { id: 'setup',          labelKey: 'cliGuide.tabSetup' },
+  { id: 'paths',          labelKey: 'cliGuide.tabPaths' },
+  { id: 'tools',          labelKey: 'cliGuide.tabTools' },
+  { id: 'commands',       labelKey: 'cliGuide.tabCommands' },
+  { id: 'outbound-proxy', labelKey: 'cliGuide.tabOutboundProxy' },
+  { id: 'trouble',        labelKey: 'cliGuide.tabTrouble' },
 ] as const;
 
 function CodeBlock({ code, lang = 'bash' }: { code: string; lang?: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   return (
     <div
@@ -126,7 +128,7 @@ function CodeBlock({ code, lang = 'bash' }: { code: string; lang?: string }) {
           cursor: 'pointer',
         }}
       >
-        {copied ? 'Copied!' : 'Copy'}
+        {copied ? t('cliGuide.copied') : t('cliGuide.copy')}
       </button>
       <pre
         style={{
@@ -260,6 +262,7 @@ function Command({ cmd, desc }: { cmd: string; desc: string }) {
 }
 
 export default function CLIGuidePage() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>(() => {
     // Initial state from URL hash if it matches a known tab; else first tab.
     if (typeof window === 'undefined') return TABS[0].id;
@@ -365,7 +368,7 @@ export default function CLIGuidePage() {
             ⌘
           </span>
           <span>AiKey</span>
-          <span style={{ color: PALETTE.faint, fontWeight: 500 }}>/ CLI Guide</span>
+          <span style={{ color: PALETTE.faint, fontWeight: 500 }}>{t('cliGuide.brandSubtitle')}</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <a
@@ -373,14 +376,14 @@ export default function CLIGuidePage() {
             onClick={(e) => handleTabClick(e, 'commands')}
             style={topButtonStyle(false)}
           >
-            Commands
+            {t('cliGuide.topbarCommands')}
           </a>
           <a
             href="#setup"
             onClick={(e) => handleTabClick(e, 'setup')}
             style={topButtonStyle(true)}
           >
-            Check setup
+            {t('cliGuide.topbarCheckSetup')}
           </a>
         </div>
       </header>
@@ -416,7 +419,7 @@ export default function CLIGuidePage() {
                 textTransform: 'uppercase',
               }}
             >
-              Installed already
+              {t('cliGuide.introBadge')}
             </p>
             <h1
               style={{
@@ -429,14 +432,14 @@ export default function CLIGuidePage() {
                 letterSpacing: '-0.04em',
               }}
             >
-              Finish setup and start using your AI tools.
+              {t('cliGuide.introTitle')}
             </h1>
             <p style={{ margin: '14px 0 0', maxWidth: 680, color: PALETTE.subtle, fontSize: 14, lineHeight: 1.58 }}>
-              Check the local CLI, choose how AiKey should provide keys, then use Claude, Codex, Kimi, scripts, or third-party clients without exposing real provider keys.
+              {t('cliGuide.introDesc')}
             </p>
           </div>
           <aside
-            aria-label="Current setup status"
+            aria-label={t('cliGuide.statusAriaLabel')}
             style={{
               padding: 14,
               border: `1px solid ${PALETTE.borderSoft}`,
@@ -455,7 +458,7 @@ export default function CLIGuidePage() {
                 textTransform: 'uppercase',
               }}
             >
-              Recommended first command
+              {t('cliGuide.recommendedFirstCommand')}
             </div>
             <div style={{ marginTop: 8, color: PALETTE.success, fontFamily: MONO, fontSize: 18, fontWeight: 700 }}>
               aikey doctor
@@ -465,7 +468,7 @@ export default function CLIGuidePage() {
 
         {/* Tabs */}
         <nav
-          aria-label="Page sections"
+          aria-label={t('cliGuide.sectionsNavAriaLabel')}
           style={{
             display: 'flex',
             gap: 8,
@@ -474,13 +477,13 @@ export default function CLIGuidePage() {
             paddingBottom: 2,
           }}
         >
-          {TABS.map((t) => {
-            const active = t.id === activeTab;
+          {TABS.map((tab) => {
+            const active = tab.id === activeTab;
             return (
               <a
-                key={t.id}
-                href={`#${t.id}`}
-                onClick={(e) => handleTabClick(e, t.id)}
+                key={tab.id}
+                href={`#${tab.id}`}
+                onClick={(e) => handleTabClick(e, tab.id)}
                 style={{
                   flex: '0 0 auto',
                   padding: '8px 11px',
@@ -494,7 +497,7 @@ export default function CLIGuidePage() {
                   textDecoration: 'none',
                 }}
               >
-                {t.label}
+                {t(tab.labelKey)}
               </a>
             );
           })}
@@ -502,11 +505,11 @@ export default function CLIGuidePage() {
 
         {/* Stack */}
         <div style={{ display: 'grid', gap: 14 }}>
-          <Section id="setup" title="Check the local setup" step="Step 1" note="Confirm PATH, proxy, shell hook readiness, and vault state.">
+          <Section id="setup" title={t('cliGuide.setupTitle')} step={t('cliGuide.stepStep1')} note={t('cliGuide.setupNote')}>
             <CodeBlock code="aikey doctor" />
           </Section>
 
-          <Section id="paths" title="Choose a key path" step="Step 2" note="Pick the one that matches how you want to use AiKey today.">
+          <Section id="paths" title={t('cliGuide.pathsTitle')} step={t('cliGuide.stepStep2')} note={t('cliGuide.pathsNote')}>
             <div
               className="cli-guide-path-grid"
               style={{
@@ -516,28 +519,28 @@ export default function CLIGuidePage() {
               }}
             >
               <PathCard
-                title="Personal API key"
-                blurb="Add your own provider key to the local encrypted vault."
+                title={t('cliGuide.pathPersonalTitle')}
+                blurb={t('cliGuide.pathPersonalBlurb')}
                 code={'aikey add my-key --provider anthropic\naikey use my-key'}
               />
               <PathCard
-                title="Provider OAuth"
-                blurb="Use Claude, ChatGPT, or Kimi account access without an API key."
+                title={t('cliGuide.pathOAuthTitle')}
+                blurb={t('cliGuide.pathOAuthBlurb')}
                 code={'aikey auth login claude\naikey auth login codex\naikey auth login kimi_code'}
               />
               <PathCard
-                title="Team key"
-                blurb="Log in to your team's control service and select an assigned key."
+                title={t('cliGuide.pathTeamTitle')}
+                blurb={t('cliGuide.pathTeamBlurb')}
                 code={'aikey login --email you@example.com --control-url http://server:3000\naikey use'}
               />
             </div>
           </Section>
 
-          <Section id="tools" title="Use your tools" step="Step 3" note="Install the hook once, open a new terminal, then run your normal tools.">
+          <Section id="tools" title={t('cliGuide.toolsTitle')} step={t('cliGuide.stepStep3')} note={t('cliGuide.toolsNote')}>
             <CodeBlock code={'aikey hook install\n# open a NEW terminal, then:\nclaude\ncodex\nkimi'} />
           </Section>
 
-          <Section id="commands" title="Daily commands" step="Reference" note="Small reference for common operations.">
+          <Section id="commands" title={t('cliGuide.commandsTitle')} step={t('cliGuide.stepReference')} note={t('cliGuide.commandsNote')}>
             <div
               className="cli-guide-commands"
               style={{
@@ -546,32 +549,32 @@ export default function CLIGuidePage() {
                 gap: 8,
               }}
             >
-              <Command cmd="aikey list" desc="View all keys and OAuth accounts." />
-              <Command cmd="aikey use" desc="Switch the global active key." />
-              <Command cmd="aikey route" desc="Show base URL and API key for clients." />
-              <Command cmd="aikey whoami" desc="Show identity and active key." />
-              <Command cmd="aikey web vault" desc="Open the local Vault page." />
-              <Command cmd="aikey test --all" desc="Test every key in the vault." />
-              <Command cmd="aikey env" desc="Inspect proxy.env + active.env." />
-              <Command cmd="aikey env set --" desc="Merge-write proxy.env (see Outbound proxy)." />
+              <Command cmd="aikey list" desc={t('cliGuide.cmdListDesc')} />
+              <Command cmd="aikey use" desc={t('cliGuide.cmdUseDesc')} />
+              <Command cmd="aikey route" desc={t('cliGuide.cmdRouteDesc')} />
+              <Command cmd="aikey whoami" desc={t('cliGuide.cmdWhoamiDesc')} />
+              <Command cmd="aikey web vault" desc={t('cliGuide.cmdWebVaultDesc')} />
+              <Command cmd="aikey test --all" desc={t('cliGuide.cmdTestDesc')} />
+              <Command cmd="aikey env" desc={t('cliGuide.cmdEnvDesc')} />
+              <Command cmd="aikey env set --" desc={t('cliGuide.cmdEnvSetDesc')} />
               <Command
                 cmd="aikey service <action> <name>"
-                desc="Actions: start, stop, restart. Names: trust-local, web, proxy."
+                desc={t('cliGuide.cmdServiceDesc')}
               />
             </div>
           </Section>
 
           <Section
             id="outbound-proxy"
-            title="Outbound proxy (VPN / corp network)"
-            step="Optional"
-            note="If GitHub or providers are unreachable without a VPN, point aikey-proxy at your local SOCKS / HTTP proxy via proxy.env."
+            title={t('cliGuide.outboundTitle')}
+            step={t('cliGuide.stepOptional')}
+            note={t('cliGuide.outboundNote')}
           >
             <p style={{ margin: '0 0 10px', color: PALETTE.subtle, fontSize: 12, lineHeight: 1.5 }}>
-              Two forms are supported. Pick whichever you find easier to remember.
+              {t('cliGuide.outboundTwoForms')}
             </p>
             <p style={{ margin: '0 0 6px', color: PALETTE.text, fontSize: 12, fontFamily: MONO }}>
-              A. Space-separated KEY=VALUE pairs (simplest):
+              {t('cliGuide.outboundFormA')}
             </p>
             <CodeBlock
               code={
@@ -580,7 +583,7 @@ export default function CLIGuidePage() {
               }
             />
             <p style={{ margin: '14px 0 6px', color: PALETTE.text, fontSize: 12, fontFamily: MONO }}>
-              B. Paste a shell-export snippet — wrap the whole thing in single quotes:
+              {t('cliGuide.outboundFormB')}
             </p>
             <CodeBlock
               code={
@@ -601,28 +604,37 @@ export default function CLIGuidePage() {
                 lineHeight: 1.55,
               }}
             >
-              ⚠️ <strong>Common pitfall:</strong> without the surrounding{' '}
-              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>&apos;...&apos;</code>{' '}
-              your shell (zsh/bash) reads every <code style={{ fontFamily: MONO, fontSize: 11.5 }}>;</code>{' '}
-              as a command separator. Only the first <code style={{ fontFamily: MONO, fontSize: 11.5 }}>export</code>{' '}
-              reaches <code style={{ fontFamily: MONO, fontSize: 11.5 }}>aikey</code>; the rest run inside your
-              current shell and never touch <code style={{ fontFamily: MONO, fontSize: 11.5 }}>proxy.env</code>.
-              Diagnostic: run <code style={{ fontFamily: MONO, fontSize: 11.5 }}>aikey env</code> afterward —
-              if the missing keys show up under <em>&quot;Shell env (inherited by proxy)&quot;</em> instead of{' '}
-              <em>&quot;Proxy env&quot;</em>, that&apos;s what happened.
+              ⚠️ <strong>{t('cliGuide.outboundPitfallLabel')}</strong>{' '}
+              <Trans
+                i18nKey="cliGuide.outboundPitfallBody"
+                components={[
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <em />,
+                  <em />,
+                ]}
+              />
             </div>
             <p style={{ margin: '14px 0 0', color: PALETTE.subtle, fontSize: 12, lineHeight: 1.55 }}>
-              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>aikey env set</code> only writes{' '}
-              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>~/.aikey/proxy.env</code> — it never touches{' '}
-              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>active.env</code>. It merges into the existing
-              file (no full replace) and accepts plain{' '}
-              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>KEY=VAL</code> pairs, optional{' '}
-              <code style={{ fontFamily: MONO, fontSize: 11.5 }}>export</code> prefix, and semicolon-separated
-              input <strong>inside a quoted string</strong>.
+              <Trans
+                i18nKey="cliGuide.outboundFootnote"
+                components={[
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <code style={{ fontFamily: MONO, fontSize: 11.5 }} />,
+                  <strong />,
+                ]}
+              />
             </p>
           </Section>
 
-          <Section id="trouble" title="Troubleshooting" step="Fix" note="Use these when proxy, hook, vault, or sync state looks wrong.">
+          <Section id="trouble" title={t('cliGuide.troubleTitle')} step={t('cliGuide.stepFix')} note={t('cliGuide.troubleNote')}>
             <CodeBlock code={'aikey doctor\naikey logs\naikey proxy restart\naikey key sync'} />
           </Section>
         </div>
@@ -639,7 +651,7 @@ export default function CLIGuidePage() {
             fontSize: 11,
           }}
         >
-          <span>AiKey CLI Guide</span>
+          <span>{t('cliGuide.footerTitle')}</span>
           <span>
             <a
               href="https://github.com/aikeylabs/launch/issues"
@@ -647,7 +659,7 @@ export default function CLIGuidePage() {
               rel="noopener noreferrer"
               style={{ color: PALETTE.faint, textDecoration: 'none' }}
             >
-              Report an issue
+              {t('cliGuide.footerReportIssue')}
             </a>
             <span style={{ color: PALETTE.muted }}> · </span>
             <a
@@ -656,7 +668,7 @@ export default function CLIGuidePage() {
               rel="noopener noreferrer"
               style={{ color: PALETTE.faint, textDecoration: 'none' }}
             >
-              Main site
+              {t('cliGuide.footerMainSite')}
             </a>
           </span>
         </footer>

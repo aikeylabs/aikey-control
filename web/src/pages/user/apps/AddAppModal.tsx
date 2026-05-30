@@ -21,6 +21,7 @@
  * the locked state itself rather than punting to the parent.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { appsApi, type AppRegisterResponse } from '@/shared/api/user/apps';
@@ -40,17 +41,21 @@ export interface AddAppModalProps {
 // catches them before the network round-trip.
 const SLUG_RE = /^[a-z][a-z0-9-]{2,63}$/;
 
+/** Returns an i18n key for the violated rule, or null when the slug is
+ *  valid. Caller resolves the key with t() so the message is localised.
+ *  (Module-level fn has no access to the t hook, hence keys not strings.) */
 function validateSlugClient(slug: string): string | null {
-  if (slug === '') return 'Slug is required';
-  if (slug.length < 3) return 'Slug must be at least 3 characters';
-  if (slug.length > 64) return 'Slug must be at most 64 characters';
+  if (slug === '') return 'apps.slugRequired';
+  if (slug.length < 3) return 'apps.slugMinChars';
+  if (slug.length > 64) return 'apps.slugMaxChars';
   if (!SLUG_RE.test(slug)) {
-    return "Use lowercase letters, digits, and hyphens; must start with a letter (e.g. 'claude-mem')";
+    return 'apps.slugShapeError';
   }
   return null;
 }
 
 export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [slug, setSlug] = useState('');
   const [name, setName] = useState('');
@@ -79,7 +84,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
         setUnlockError(null);
         qc.invalidateQueries({ queryKey: ['vault-status'] });
       } else {
-        setUnlockError(res.error_message || 'unlock failed');
+        setUnlockError(res.error_message || t('apps.unlockFailed'));
       }
     },
     onError: (e: Error) => setUnlockError(e.message),
@@ -106,9 +111,9 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
       // reserved-slug error).
       const hint =
         e.code === 'I_FIRST_PARTY_SLUG_RESERVED'
-          ? ' (this slug is reserved for built-in AiKey apps — pick another)'
+          ? t('apps.firstPartySlugReservedHint')
           : e.code === 'I_INVALID_SLUG'
-          ? ' (check the slug shape)'
+          ? t('apps.invalidSlugHint')
           : '';
       setServerError(`${e.message}${hint}`);
     },
@@ -119,7 +124,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
     return validateSlugClient(slug);
   }, [slug]);
 
-  const upstreamsError = upstreams.length === 0 ? 'Pick at least one provider' : null;
+  const upstreamsError = upstreams.length === 0 ? t('apps.pickAtLeastOneProvider') : null;
   const canSubmit =
     !slugError &&
     slug !== '' &&
@@ -168,14 +173,14 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
             className="text-base font-semibold font-mono"
             style={{ color: 'var(--foreground)' }}
           >
-            Add Connected App
+            {t('apps.addModalTitle')}
           </h2>
           <p
             className="text-[12px] mt-1"
             style={{ color: 'var(--muted-foreground)' }}
           >
-            Register a third-party agent (e.g. <span className="font-mono">claude-mem</span>) so it can
-            call providers through AiKey without seeing your real keys.
+            {t('apps.addModalDescPre')} <span className="font-mono">claude-mem</span>
+            {t('apps.addModalDescSuffix')}
           </p>
         </div>
 
@@ -190,7 +195,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                 color: 'var(--muted-foreground)',
               }}
             >
-              Vault not initialised yet. Open{' '}
+              {t('apps.vaultNotInitialised')}{' '}
               <a
                 href="/user/vault"
                 className="underline"
@@ -198,7 +203,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
               >
                 /user/vault
               </a>{' '}
-              to set a master password first, then come back here.
+              {t('apps.vaultNotInitialisedSuffix')}
             </div>
           ) : vaultLocked ? (
             <div
@@ -212,14 +217,14 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                 className="font-mono text-[12px] uppercase tracking-wider mb-2"
                 style={{ color: '#facc15' }}
               >
-                Vault locked
+                {t('apps.vaultLocked')}
               </div>
               <p
                 className="text-[12px] mb-3"
                 style={{ color: 'var(--muted-foreground)' }}
               >
-                Unlock the vault to register a new app. We need the master password to issue a fresh bearer and snapshot your current{' '}
-                <code className="font-mono">aikey use</code> selection into the new app's bindings.
+                {t('apps.unlockToRegister')}{' '}
+                <code className="font-mono">aikey use</code> {t('apps.unlockToRegisterSuffix')}
               </p>
               <form
                 className="flex items-center gap-2"
@@ -234,7 +239,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                   autoFocus
                   value={unlockPassword}
                   onChange={(e) => setUnlockPassword(e.target.value)}
-                  placeholder="Master password"
+                  placeholder={t('apps.masterPasswordPlaceholder')}
                   className="rounded border bg-transparent outline-none text-[13px] font-mono px-2 py-1.5 flex-1"
                   style={{
                     color: 'var(--foreground)',
@@ -251,7 +256,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                     color: '#18181b',
                   }}
                 >
-                  {unlockMut.isPending ? 'Unlocking…' : 'Unlock'}
+                  {unlockMut.isPending ? t('apps.unlocking') : t('apps.unlock')}
                 </button>
               </form>
               {unlockError ? (
@@ -272,7 +277,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                   className="block text-[12px] font-mono uppercase tracking-wider mb-1"
                   style={{ color: 'var(--muted-foreground)' }}
                 >
-                  Slug <span style={{ color: 'var(--destructive, #ef4444)' }}>*</span>
+                  {t('apps.slugLabel')} <span style={{ color: 'var(--destructive, #ef4444)' }}>*</span>
                 </label>
                 <input
                   id="add-app-slug"
@@ -296,8 +301,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                     color: slugError ? 'var(--destructive, #ef4444)' : 'var(--muted-foreground)',
                   }}
                 >
-                  {slugError ??
-                    'Lowercase letters, digits, and hyphens. 3-64 chars. Must start with a letter.'}
+                  {slugError ? t(slugError) : t('apps.slugHelp')}
                 </div>
               </div>
 
@@ -308,7 +312,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                   className="block text-[12px] font-mono uppercase tracking-wider mb-1"
                   style={{ color: 'var(--muted-foreground)' }}
                 >
-                  Display name <span style={{ color: 'var(--muted-foreground)' }}>(optional)</span>
+                  {t('apps.displayNameLabel')} <span style={{ color: 'var(--muted-foreground)' }}>{t('apps.optional')}</span>
                 </label>
                 <input
                   id="add-app-name"
@@ -327,7 +331,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                   className="text-[11px] mt-1"
                   style={{ color: 'var(--muted-foreground)' }}
                 >
-                  Shown in the Connected Apps list. Defaults to the slug when empty.
+                  {t('apps.displayNameHelp')}
                 </div>
               </div>
 
@@ -337,12 +341,12 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                   className="block text-[12px] font-mono uppercase tracking-wider mb-1"
                   style={{ color: 'var(--muted-foreground)' }}
                 >
-                  Upstream providers <span style={{ color: 'var(--destructive, #ef4444)' }}>*</span>
+                  {t('apps.upstreamProvidersLabel')} <span style={{ color: 'var(--destructive, #ef4444)' }}>*</span>
                 </label>
                 <ProviderMultiSelect
                   values={upstreams}
                   onChange={setUpstreams}
-                  placeholder="Pick one or more providers…"
+                  placeholder={t('apps.pickProvidersPlaceholder')}
                   showRequired={upstreams.length === 0}
                 />
                 <div
@@ -353,9 +357,8 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                 >
                   {upstreamsError ?? (
                     <>
-                      Use my current default KEY for each picked provider (snapshotted from{' '}
-                      <code className="font-mono">aikey use</code>). You can change bindings later
-                      from the app's detail page.
+                      {t('apps.useCurrentDefaultKey')}{' '}
+                      <code className="font-mono">aikey use</code>{t('apps.useCurrentDefaultKeySuffix')}
                     </>
                   )}
                 </div>
@@ -395,7 +398,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
               borderColor: 'var(--border)',
             }}
           >
-            Cancel
+            {t('apps.cancel')}
           </button>
           <button
             type="button"
@@ -410,7 +413,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
               color: canSubmit ? 'var(--primary-foreground, #18181b)' : 'var(--muted-foreground)',
             }}
           >
-            {registerMut.isPending ? 'Registering…' : 'Register'}
+            {registerMut.isPending ? t('apps.registering') : t('apps.register')}
           </button>
         </div>
       </div>

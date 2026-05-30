@@ -16,6 +16,7 @@
  *     saved.
  */
 import { useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { PageHeader } from '@/shared/ui/PageHeader';
 import { Badge } from '@/shared/ui/Badge';
 import { copyText } from '@/shared/utils/clipboard';
@@ -33,6 +34,7 @@ interface RevokeFeedback {
 }
 
 export default function UserInvitesPage() {
+  const { t } = useTranslation();
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [latest, setLatest] = useState<GenerateResult | null>(null);
@@ -54,7 +56,7 @@ export default function UserInvitesPage() {
       const resp: CreateInviteResponse = await inviteLocalAPI.create({});
       setLatest({ url: resp.url, code: resp.code, createdAt: resp.created_at });
     } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : 'Unknown error');
+      setGenerateError(err instanceof Error ? err.message : t('invites.unknownError'));
     } finally {
       setGenerating(false);
     }
@@ -76,22 +78,22 @@ export default function UserInvitesPage() {
       const resp = await inviteLocalAPI.revoke(code);
       switch (resp.status) {
         case 'revoked':
-          setRevokeFeedback({ variant: 'green', text: `Revoked ${code}` });
+          setRevokeFeedback({ variant: 'green', text: t('invites.revokedToast', { code }) });
           setRevokeInput('');
           break;
         case 'not_found':
-          setRevokeFeedback({ variant: 'yellow', text: 'Code not found — check that you pasted it exactly' });
+          setRevokeFeedback({ variant: 'yellow', text: t('invites.codeNotFound') });
           break;
         case 'forbidden':
-          setRevokeFeedback({ variant: 'red', text: 'This code belongs to a different machine — only the creator can revoke' });
+          setRevokeFeedback({ variant: 'red', text: t('invites.codeForbidden') });
           break;
         default:
-          setRevokeFeedback({ variant: 'neutral', text: resp.message ?? `Unexpected status: ${resp.status}` });
+          setRevokeFeedback({ variant: 'neutral', text: resp.message ?? t('invites.unexpectedStatus', { status: resp.status }) });
       }
     } catch (err) {
       setRevokeFeedback({
         variant: 'red',
-        text: err instanceof Error ? err.message : 'Revoke failed',
+        text: err instanceof Error ? err.message : t('invites.revokeFailed'),
       });
     } finally {
       setRevoking(false);
@@ -101,8 +103,8 @@ export default function UserInvitesPage() {
   return (
     <div className="p-6 space-y-6 max-w-3xl">
       <PageHeader
-        title="Invites"
-        description="Generate anonymous install-attribution links. Each link tracks installs back to this machine for trend analysis — internal use only."
+        title={t('invites.pageTitle')}
+        description={t('invites.pageDescription')}
       />
 
       {/* Generate card */}
@@ -115,10 +117,15 @@ export default function UserInvitesPage() {
           style={{ backgroundColor: 'var(--primary-dim)', boxShadow: '0 0 10px rgba(202, 138, 4, 0.5)' }}
         />
         <h2 className="text-xs font-mono font-bold tracking-wider uppercase mb-3" style={{ color: 'var(--muted-foreground)' }}>
-          Generate Invite Link
+          {t('invites.generateHeading')}
         </h2>
         <p className="text-xs font-mono mb-4" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-          Each click mints a fresh short URL. Anyone clicking it gets the standard install script; their first install is attributed to this machine. <strong style={{ color: 'var(--foreground)' }}>You must save the link yourself</strong> — we don't keep a list.
+          <Trans
+            i18nKey="invites.generateBody"
+            components={{
+              strong: <strong style={{ color: 'var(--foreground)' }} />,
+            }}
+          />
         </p>
 
         <button
@@ -135,7 +142,7 @@ export default function UserInvitesPage() {
             opacity: generating ? 0.6 : 1,
           }}
         >
-          {generating ? 'Generating…' : 'Generate New Link'}
+          {generating ? t('invites.generating') : t('invites.generateButton')}
         </button>
 
         {generateError ? (
@@ -168,7 +175,7 @@ export default function UserInvitesPage() {
                   borderColor: copied ? 'rgba(74,222,128,0.3)' : 'var(--border)',
                 }}
               >
-                {copied ? 'Copied!' : 'Copy Link'}
+                {copied ? t('invites.copied') : t('invites.copyLink')}
               </button>
             </div>
 
@@ -181,7 +188,14 @@ export default function UserInvitesPage() {
                 lineHeight: 1.6,
               }}
             >
-              <strong>Save this link now.</strong> We will not show it again. To revoke it later, paste the invite code <code className="px-1 rounded" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>{latest.code}</code> below.
+              <Trans
+                i18nKey="invites.saveLinkWarning"
+                values={{ code: latest.code }}
+                components={{
+                  strong: <strong />,
+                  code: <code className="px-1 rounded" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }} />,
+                }}
+              />
               {!acknowledged ? (
                 <div className="mt-2">
                   <label className="inline-flex items-center gap-2 cursor-pointer">
@@ -190,7 +204,7 @@ export default function UserInvitesPage() {
                       checked={acknowledged}
                       onChange={(e) => setAcknowledged(e.target.checked)}
                     />
-                    <span>I saved the link</span>
+                    <span>{t('invites.savedLinkLabel')}</span>
                   </label>
                 </div>
               ) : null}
@@ -205,10 +219,10 @@ export default function UserInvitesPage() {
         style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}
       >
         <h2 className="text-xs font-mono font-bold tracking-wider uppercase mb-3" style={{ color: 'var(--muted-foreground)' }}>
-          Revoke Invite Code
+          {t('invites.revokeHeading')}
         </h2>
         <p className="text-xs font-mono mb-4" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-          Paste an invite code below to disable it. Future clicks fall back to the unattributed install path — your machine no longer gets credit.
+          {t('invites.revokeBody')}
         </p>
 
         <div className="flex gap-2">
@@ -216,7 +230,7 @@ export default function UserInvitesPage() {
             type="text"
             value={revokeInput}
             onChange={(e) => setRevokeInput(e.target.value)}
-            placeholder="invite code (e.g. AbCdEf1234)"
+            placeholder={t('invites.revokePlaceholder')}
             disabled={revoking}
             className="flex-1 rounded border px-3 py-2 text-xs font-mono"
             style={{
@@ -235,7 +249,7 @@ export default function UserInvitesPage() {
               opacity: revoking || !revokeInput.trim() ? 0.6 : 1,
             }}
           >
-            {revoking ? 'Revoking…' : 'Revoke'}
+            {revoking ? t('invites.revoking') : t('invites.revokeButton')}
           </button>
         </div>
 
@@ -250,7 +264,12 @@ export default function UserInvitesPage() {
 
       {/* Privacy note */}
       <div className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-        Each link's only identifier is an anonymous per-machine uuid stored at <code className="px-1 rounded" style={{ backgroundColor: 'var(--muted)' }}>~/.aikey/identity</code>. No email or login is attached. Delete that file to reset your identity (a new identity is generated on the next install). Per spec §6.14.7: invite Top-N rankings are internal trend analysis only — not a reward leaderboard.
+        <Trans
+          i18nKey="invites.privacyNote"
+          components={{
+            code: <code className="px-1 rounded" style={{ backgroundColor: 'var(--muted)' }} />,
+          }}
+        />
       </div>
     </div>
   );

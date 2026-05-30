@@ -7,10 +7,12 @@
  *   2. `aikey login`   — if the CLI login token itself has expired
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { runtimeConfig } from '@/app/config/runtime';
 import { copyText } from '@/shared/utils/clipboard';
 
 function CopyButton({ text }: { text: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -27,7 +29,7 @@ function CopyButton({ text }: { text: string }) {
         backgroundColor: 'transparent',
       }}
     >
-      {copied ? 'Copied!' : 'Copy'}
+      {copied ? t('sessionExpired.copyButtonCopied') : t('sessionExpired.copyButton')}
     </button>
   );
 }
@@ -52,6 +54,7 @@ function CommandBlock({ command, label }: { command: string; label: string }) {
 }
 
 export default function SessionExpiredPage() {
+  const { t } = useTranslation();
   return (
     <div
       className="w-full rounded border p-8"
@@ -69,7 +72,7 @@ export default function SessionExpiredPage() {
           {runtimeConfig.branding.appName}
         </span>
         <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-          User Console — Session Expired
+          {t('sessionExpired.consoleSubheading')}
         </p>
       </div>
 
@@ -94,22 +97,22 @@ export default function SessionExpiredPage() {
       </div>
 
       <h2 className="text-center text-sm font-mono font-bold mb-3" style={{ color: 'var(--foreground)' }}>
-        Your session has expired
+        {t('sessionExpired.heading')}
       </h2>
 
       <p className="text-center text-xs font-mono mb-8" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-        Run one of the following commands in your terminal to continue:
+        {t('sessionExpired.instruction')}
       </p>
 
       {/* Two recovery paths */}
       <div className="space-y-4 mb-8">
         <CommandBlock
           command="aikey web"
-          label="If only this page expired (most common):"
+          label={t('sessionExpired.webLabel')}
         />
         <CommandBlock
           command="aikey login"
-          label="If the above doesn't work (login token expired):"
+          label={t('sessionExpired.loginLabel')}
         />
       </div>
 
@@ -119,13 +122,13 @@ export default function SessionExpiredPage() {
           <code className="px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)', color: 'var(--foreground)' }}>
             aikey web
           </code>{' '}
-          refreshes the web session token and re-opens this console.
+          {t('sessionExpired.webHelp')}
         </p>
         <p>
           <code className="px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--muted)', color: 'var(--foreground)' }}>
             aikey login
           </code>{' '}
-          re-authenticates your account when the CLI login has fully expired.
+          {t('sessionExpired.loginHelp')}
         </p>
       </div>
     </div>

@@ -13,6 +13,7 @@
  * legend) so the two Insights pages read as a coherent set.
  */
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { usageApi, type TimelinePoint, type SessionTotal } from '@/shared/api/usage';
@@ -50,7 +51,10 @@ function daysAgoStr(n: number): string {
 }
 
 /** Mirror of overview's deriveKeyLabel — keep call sites in sync if you edit. */
-function deriveKeyLabel(k: { alias?: string; identity?: string; virtual_key_id: string }): string {
+function deriveKeyLabel(
+  k: { alias?: string; identity?: string; virtual_key_id: string },
+  unlabeled: string,
+): string {
   if (k.identity && k.identity.trim()) return k.identity;
   const oauthRe = /^(?:oauth:)?session_([a-f0-9]+)/i;
   const aliasStr = (k.alias ?? '').trim();
@@ -58,7 +62,7 @@ function deriveKeyLabel(k: { alias?: string; identity?: string; virtual_key_id: 
   if (aliasOAuth) return `OAuth · ${aliasOAuth[1].slice(0, 8)}…`;
   if (aliasStr) return aliasStr;
   const id = (k.virtual_key_id || '').trim();
-  if (!id) return 'unlabeled';
+  if (!id) return unlabeled;
   const idOAuth = id.match(oauthRe);
   if (idOAuth) return `OAuth · ${idOAuth[1].slice(0, 8)}…`;
   if (id.startsWith('personal:')) return id.slice('personal:'.length);
@@ -66,6 +70,7 @@ function deriveKeyLabel(k: { alias?: string; identity?: string; virtual_key_id: 
 }
 
 export default function UserPerformancePage() {
+  const { t } = useTranslation();
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
 
   // Same usage-identity logic as Overview (see overview/index.tsx for rationale).
@@ -149,7 +154,7 @@ export default function UserPerformancePage() {
   // (NOT the arithmetic mean of per-row rates) so large-traffic rows weigh
   // proportionally — small "100% hit" probe rows don't drag the average up.
   const todayKeyRows = useMemo(() => {
-    const data = (byKeyRecent.data ?? []).map((k) => ({ ...k, label: deriveKeyLabel(k) }));
+    const data = (byKeyRecent.data ?? []).map((k) => ({ ...k, label: deriveKeyLabel(k, t('performance.unlabeled')) }));
     const nonZero = data.filter((k) => k.total_tokens > 0);
     const sorted = [...nonZero].sort((a, b) => b.total_tokens - a.total_tokens);
     const top = sorted[0]?.total_tokens ?? 1;
@@ -193,7 +198,7 @@ export default function UserPerformancePage() {
       grandHitRate: grandInput > 0 ? grandCached / grandInput : 0,
       keyCount: sorted.length,
     };
-  }, [byKeyRecent.data]);
+  }, [byKeyRecent.data, t]);
 
   // Same 4-segment math as todayKeyRows but keyed by `model`. Kept
   // inline (not extracted to a helper) because this is the second
@@ -296,7 +301,7 @@ export default function UserPerformancePage() {
     return {
       rows: sorted.map((r) => ({
         ...r,
-        label: r.session_id || '(no session)',
+        label: r.session_id || t('performance.noSession'),
         // For OAuth sessions show the email next to the session id.
         sublabel: [r.sample_identity, r.sample_app_slug && r.sample_app_slug !== '' ? r.sample_app_slug : '']
           .filter(Boolean)
@@ -309,7 +314,7 @@ export default function UserPerformancePage() {
       grandReqs: sorted.reduce((s, r) => s + r.request_count, 0),
       sessionCount: sorted.length,
     };
-  }, [bySessionRecent.data, pinnedSession]);
+  }, [bySessionRecent.data, pinnedSession, t]);
 
   // Pinned session sample identity for the chip label (so users see
   // "FreySilvaqzs@... · Claude Code" rather than a raw session id).
@@ -337,11 +342,11 @@ export default function UserPerformancePage() {
       <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--display-foreground)' }}>
-            Performance
+            {t('performance.title')}
           </h1>
           <p className="text-[11.5px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
-            Per-key token usage breakdown for the active day
-            {updatedAt ? ` · updated ${updatedAt}` : ''}
+            {t('performance.subtitle')}
+            {updatedAt ? t('performance.updatedSuffix', { time: updatedAt }) : ''}
           </p>
         </div>
       </div>
@@ -353,30 +358,30 @@ export default function UserPerformancePage() {
           plain text (no chip × since defaults have nothing to clear).
           Reset link only appears when at least one filter is pinned. */}
       <div className="flex items-center gap-2 flex-wrap mb-4 text-[11.5px] font-mono" style={{ minHeight: '24px' }}>
-        <span style={{ color: 'var(--muted-foreground)' }}>Filtered by:</span>
+        <span style={{ color: 'var(--muted-foreground)' }}>{t('performance.filteredBy')}</span>
         {pinnedDate ? (
-          <span className="filter-chip" title={`Date: ${pinnedDate}`}>
-            Date: {pinnedDate}
-            <button className="chip-x" onClick={() => setPinnedDate(null)} aria-label="Clear date filter">×</button>
+          <span className="filter-chip" title={`${t('performance.dateLabelPrefix')}${pinnedDate}`}>
+            {t('performance.dateLabelPrefix')}{pinnedDate}
+            <button className="chip-x" onClick={() => setPinnedDate(null)} aria-label={t('performance.clearDateFilter')}>×</button>
           </span>
         ) : (
           <span style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}>
-            Date: {isShowingToday ? 'Today' : derivedDate} <span style={{ opacity: 0.55 }}>(default)</span>
+            {t('performance.dateLabelPrefix')}{isShowingToday ? t('performance.today') : derivedDate} <span style={{ opacity: 0.55 }}>{t('performance.defaultSuffix')}</span>
           </span>
         )}
         <span style={{ color: 'var(--muted-foreground)', opacity: 0.4 }}>·</span>
         {pinnedSession ? (
-          <span className="filter-chip" title={`Session: ${pinnedSession}`}>
-            Session: {pinnedSessionLabel}
-            <button className="chip-x" onClick={() => setPinnedSession(null)} aria-label="Clear session filter">×</button>
+          <span className="filter-chip" title={`${t('performance.sessionLabelPrefix')}${pinnedSession}`}>
+            {t('performance.sessionLabelPrefix')}{pinnedSessionLabel}
+            <button className="chip-x" onClick={() => setPinnedSession(null)} aria-label={t('performance.clearSessionFilter')}>×</button>
           </span>
         ) : (
           <span style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}>
-            Session: All <span style={{ opacity: 0.55 }}>(default)</span>
+            {t('performance.sessionLabelPrefix')}{t('performance.sessionAll')} <span style={{ opacity: 0.55 }}>{t('performance.defaultSuffix')}</span>
           </span>
         )}
         {hasFilters && (
-          <button className="reset-link" onClick={resetFilters}>Reset all</button>
+          <button className="reset-link" onClick={resetFilters}>{t('performance.resetAll')}</button>
         )}
       </div>
 
@@ -388,17 +393,17 @@ export default function UserPerformancePage() {
         <section className="chart-card" data-origin-name="7-day token trend">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div className="min-w-0">
-              <div className="chart-title">7-day token trend</div>
-              <div className="chart-sub">Click a day to drill down</div>
+              <div className="chart-title">{t('performance.trendTitle')}</div>
+              <div className="chart-sub">{t('performance.trendSub')}</div>
             </div>
           </div>
           {usageTimeline.isLoading ? (
             <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              Loading...
+              {t('performance.loading')}
             </div>
           ) : trend7d.length === 0 ? (
             <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              No usage in the last 7 days
+              {t('performance.noUsage7d')}
             </div>
           ) : (
             <div className="trend7d">
@@ -416,7 +421,7 @@ export default function UserPerformancePage() {
                     setPinnedDate(d.date);
                     setPinnedSession(null);
                   }}
-                  title={`${d.date} · ${fmtTok(d.total_tokens)} tokens · ${d.request_count} req`}
+                  title={t('performance.trendBarTitle', { date: d.date, tokens: fmtTok(d.total_tokens), reqs: d.request_count })}
                 >
                   {/* Bar height with two tiers so a small-traffic day doesn't
                       disappear under one huge-traffic day:
@@ -452,19 +457,19 @@ export default function UserPerformancePage() {
         <section className="chart-card" data-origin-name="Top N sessions">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div className="min-w-0">
-              <div className="chart-title">Top sessions</div>
+              <div className="chart-title">{t('performance.topSessionsTitle')}</div>
               <div className="chart-sub">
-                {activeDate} · click to filter charts below
+                {t('performance.topSessionsSub', { date: activeDate })}
               </div>
             </div>
           </div>
           {bySessionRecent.isLoading ? (
             <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              Loading...
+              {t('performance.loading')}
             </div>
           ) : sessionRows.rows.length === 0 ? (
             <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              No sessions on this day
+              {t('performance.noSessions')}
             </div>
           ) : (
             <ul className="mt-4 space-y-2.5">
@@ -506,29 +511,29 @@ export default function UserPerformancePage() {
             <div className="min-w-0">
               <div className="chart-title">
                 {isShowingToday && <span className="live-dot" aria-hidden />}
-                {isShowingToday ? 'Cache utilization by key' : 'Cache utilization by key (recent)'}
+                {isShowingToday ? t('performance.cacheUtilByKey') : t('performance.cacheUtilByKeyRecent')}
               </div>
               <div className="chart-sub">
-                {activeDate}{isShowingToday ? '' : ' · no usage today yet'}
+                {activeDate}{isShowingToday ? '' : t('performance.noUsageTodayYet')}
               </div>
             </div>
             {todayKeyRows.keyCount > 0 && (
               <div className="legend">
                 <span className="item">
                   <span className="dot" style={{ background: '#ca8a04' }} />
-                  uncached
+                  {t('performance.legendUncached')}
                 </span>
                 <span className="item">
                   <span className="dot" style={{ background: 'rgba(202,138,4,0.7)' }} />
-                  creation
+                  {t('performance.legendCreation')}
                 </span>
                 <span className="item">
                   <span className="dot" style={{ background: 'rgba(202,138,4,0.45)' }} />
-                  cached
+                  {t('performance.legendCached')}
                 </span>
                 <span className="item">
                   <span className="dot" style={{ background: 'rgba(202,138,4,0.2)' }} />
-                  output
+                  {t('performance.legendOutput')}
                 </span>
               </div>
             )}
@@ -536,11 +541,11 @@ export default function UserPerformancePage() {
 
           {byKeyRecent.isLoading ? (
             <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              Loading...
+              {t('performance.loading')}
             </div>
           ) : todayKeyRows.rows.length === 0 ? (
             <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              No usage recorded yet
+              {t('performance.noUsageRecorded')}
             </div>
           ) : (
             <ul className="mt-4 space-y-2.5">
@@ -555,7 +560,7 @@ export default function UserPerformancePage() {
                   </span>
                   <div
                     className="key-bar"
-                    title={`uncached ${fmtTok(k.uncached)} · creation ${fmtTok(k.creation)} · cached ${fmtTok(k.cached)} · output ${fmtTok(k.output)} · ${k.request_count.toLocaleString()} req`}
+                    title={t('performance.barTooltip', { uncached: fmtTok(k.uncached), creation: fmtTok(k.creation), cached: fmtTok(k.cached), output: fmtTok(k.output), reqs: k.request_count.toLocaleString() })}
                   >
                     <div
                       className="key-bar-fill"
@@ -569,22 +574,22 @@ export default function UserPerformancePage() {
                   </div>
                   <div className="key-stats font-mono text-[11.5px] whitespace-nowrap">
                     {k.uncached > 0 && (
-                      <span className="stat" title="uncached">
+                      <span className="stat" title={t('performance.statTitleUncached')}>
                         <span className="stat-dot stat-uncached" />{fmtTok(k.uncached)}
                       </span>
                     )}
                     {k.creation > 0 && (
-                      <span className="stat" title="cache_creation">
+                      <span className="stat" title={t('performance.statTitleCacheCreation')}>
                         <span className="stat-dot stat-creation" />{fmtTok(k.creation)}
                       </span>
                     )}
                     {k.cached > 0 && (
-                      <span className="stat" title="cache_read">
+                      <span className="stat" title={t('performance.statTitleCacheRead')}>
                         <span className="stat-dot stat-cached" />{fmtTok(k.cached)}
                       </span>
                     )}
                     {k.output > 0 && (
-                      <span className="stat" title="output">
+                      <span className="stat" title={t('performance.statTitleOutput')}>
                         <span className="stat-dot stat-output" />{fmtTok(k.output)}
                       </span>
                     )}
@@ -594,7 +599,7 @@ export default function UserPerformancePage() {
                         raw numerator / denominator for forensic clarity. */}
                     <span
                       className="hit-rate"
-                      title={`cache hit rate = cached / input · ${k.cached.toLocaleString()} / ${(k.input_tokens ?? 0).toLocaleString()}`}
+                      title={t('performance.hitRateTooltip', { cached: k.cached.toLocaleString(), input: (k.input_tokens ?? 0).toLocaleString() })}
                     >
                       {formatHitRate(k.hitRate)}
                     </span>
@@ -616,22 +621,24 @@ export default function UserPerformancePage() {
               style={{ borderTop: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
             >
               <span>
-                {todayKeyRows.keyCount} key{todayKeyRows.keyCount === 1 ? '' : 's'}
+                {todayKeyRows.keyCount === 1
+                  ? t('performance.footerKeyCount', { count: todayKeyRows.keyCount })
+                  : t('performance.footerKeyCountPlural', { count: todayKeyRows.keyCount })}
                 {' · '}
                 <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandTotal)}</span>
-                {' total'}
+                {t('performance.footerTotal')}
                 {todayKeyRows.grandCreation > 0 && (
                   <>
                     {' · '}
                     <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandCreation)}</span>
-                    {' creation'}
+                    {t('performance.footerCreation')}
                   </>
                 )}
                 {todayKeyRows.grandCached > 0 && (
                   <>
                     {' · '}
                     <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayKeyRows.grandCached)}</span>
-                    {' cached'}
+                    {t('performance.footerCached')}
                   </>
                 )}
                 {/* Weighted aggregate cache hit rate. Same accent treatment
@@ -642,16 +649,16 @@ export default function UserPerformancePage() {
                     {' · '}
                     <span
                       className="hit-rate"
-                      title={`weighted cache hit rate = ${todayKeyRows.grandCached.toLocaleString()} / ${todayKeyRows.grandInput.toLocaleString()}`}
+                      title={t('performance.weightedHitRateTooltip', { cached: todayKeyRows.grandCached.toLocaleString(), input: todayKeyRows.grandInput.toLocaleString() })}
                     >
                       {formatHitRate(todayKeyRows.grandHitRate)}
                     </span>
-                    {' hit rate'}
+                    {t('performance.footerHitRate')}
                   </>
                 )}
                 {' · '}
                 <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{todayKeyRows.grandReqs.toLocaleString()}</span>
-                {' req'}
+                {t('performance.footerReq')}
               </span>
             </div>
           )}
@@ -665,29 +672,29 @@ export default function UserPerformancePage() {
             <div className="min-w-0">
               <div className="chart-title">
                 {isShowingToday && <span className="live-dot" aria-hidden />}
-                {isShowingToday ? 'Usage by model' : 'Usage by model (recent)'}
+                {isShowingToday ? t('performance.usageByModel') : t('performance.usageByModelRecent')}
               </div>
               <div className="chart-sub">
-                {activeDate}{isShowingToday ? '' : ' · no usage today yet'}
+                {activeDate}{isShowingToday ? '' : t('performance.noUsageTodayYet')}
               </div>
             </div>
             {todayModelRows.modelCount > 0 && (
               <div className="legend">
                 <span className="item">
                   <span className="dot" style={{ background: '#ca8a04' }} />
-                  uncached
+                  {t('performance.legendUncached')}
                 </span>
                 <span className="item">
                   <span className="dot" style={{ background: 'rgba(202,138,4,0.7)' }} />
-                  creation
+                  {t('performance.legendCreation')}
                 </span>
                 <span className="item">
                   <span className="dot" style={{ background: 'rgba(202,138,4,0.45)' }} />
-                  cached
+                  {t('performance.legendCached')}
                 </span>
                 <span className="item">
                   <span className="dot" style={{ background: 'rgba(202,138,4,0.2)' }} />
-                  output
+                  {t('performance.legendOutput')}
                 </span>
               </div>
             )}
@@ -695,11 +702,11 @@ export default function UserPerformancePage() {
 
           {byModelRecent.isLoading ? (
             <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              Loading...
+              {t('performance.loading')}
             </div>
           ) : todayModelRows.rows.length === 0 ? (
             <div className="py-6 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              No usage recorded yet
+              {t('performance.noUsageRecorded')}
             </div>
           ) : (
             <ul className="mt-4 space-y-2.5">
@@ -714,7 +721,7 @@ export default function UserPerformancePage() {
                   </span>
                   <div
                     className="key-bar"
-                    title={`uncached ${fmtTok(m.uncached)} · creation ${fmtTok(m.creation)} · cached ${fmtTok(m.cached)} · output ${fmtTok(m.output)} · ${m.request_count.toLocaleString()} req`}
+                    title={t('performance.barTooltip', { uncached: fmtTok(m.uncached), creation: fmtTok(m.creation), cached: fmtTok(m.cached), output: fmtTok(m.output), reqs: m.request_count.toLocaleString() })}
                   >
                     <div
                       className="key-bar-fill"
@@ -728,22 +735,22 @@ export default function UserPerformancePage() {
                   </div>
                   <div className="key-stats font-mono text-[11.5px] whitespace-nowrap">
                     {m.uncached > 0 && (
-                      <span className="stat" title="uncached">
+                      <span className="stat" title={t('performance.statTitleUncached')}>
                         <span className="stat-dot stat-uncached" />{fmtTok(m.uncached)}
                       </span>
                     )}
                     {m.creation > 0 && (
-                      <span className="stat" title="cache_creation">
+                      <span className="stat" title={t('performance.statTitleCacheCreation')}>
                         <span className="stat-dot stat-creation" />{fmtTok(m.creation)}
                       </span>
                     )}
                     {m.cached > 0 && (
-                      <span className="stat" title="cache_read">
+                      <span className="stat" title={t('performance.statTitleCacheRead')}>
                         <span className="stat-dot stat-cached" />{fmtTok(m.cached)}
                       </span>
                     )}
                     {m.output > 0 && (
-                      <span className="stat" title="output">
+                      <span className="stat" title={t('performance.statTitleOutput')}>
                         <span className="stat-dot stat-output" />{fmtTok(m.output)}
                       </span>
                     )}
@@ -751,7 +758,7 @@ export default function UserPerformancePage() {
                         See the by-key block above for rationale. */}
                     <span
                       className="hit-rate"
-                      title={`cache hit rate = cached / input · ${m.cached.toLocaleString()} / ${(m.input_tokens ?? 0).toLocaleString()}`}
+                      title={t('performance.hitRateTooltip', { cached: m.cached.toLocaleString(), input: (m.input_tokens ?? 0).toLocaleString() })}
                     >
                       {formatHitRate(m.hitRate)}
                     </span>
@@ -773,22 +780,24 @@ export default function UserPerformancePage() {
               style={{ borderTop: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
             >
               <span>
-                {todayModelRows.modelCount} model{todayModelRows.modelCount === 1 ? '' : 's'}
+                {todayModelRows.modelCount === 1
+                  ? t('performance.footerModelCount', { count: todayModelRows.modelCount })
+                  : t('performance.footerModelCountPlural', { count: todayModelRows.modelCount })}
                 {' · '}
                 <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayModelRows.grandTotal)}</span>
-                {' total'}
+                {t('performance.footerTotal')}
                 {todayModelRows.grandCreation > 0 && (
                   <>
                     {' · '}
                     <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayModelRows.grandCreation)}</span>
-                    {' creation'}
+                    {t('performance.footerCreation')}
                   </>
                 )}
                 {todayModelRows.grandCached > 0 && (
                   <>
                     {' · '}
                     <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmtTok(todayModelRows.grandCached)}</span>
-                    {' cached'}
+                    {t('performance.footerCached')}
                   </>
                 )}
                 {todayModelRows.grandInput > 0 && (
@@ -796,16 +805,16 @@ export default function UserPerformancePage() {
                     {' · '}
                     <span
                       className="hit-rate"
-                      title={`weighted cache hit rate = ${todayModelRows.grandCached.toLocaleString()} / ${todayModelRows.grandInput.toLocaleString()}`}
+                      title={t('performance.weightedHitRateTooltip', { cached: todayModelRows.grandCached.toLocaleString(), input: todayModelRows.grandInput.toLocaleString() })}
                     >
                       {formatHitRate(todayModelRows.grandHitRate)}
                     </span>
-                    {' hit rate'}
+                    {t('performance.footerHitRate')}
                   </>
                 )}
                 {' · '}
                 <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{todayModelRows.grandReqs.toLocaleString()}</span>
-                {' req'}
+                {t('performance.footerReq')}
               </span>
             </div>
           )}

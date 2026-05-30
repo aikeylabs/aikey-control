@@ -43,57 +43,84 @@ import type React from 'react';
  * http-client → runtime.ts which dereferences `window` at module init
  * and fails under vitest's default node environment.
  */
-export function friendlyTestError(err: { code?: string; httpStatus?: number; message: string }): {
+export function friendlyTestError(
+  err: { code?: string; httpStatus?: number; message: string },
+  // Optional i18n translator. When provided, user-facing copy is
+  // localised via the 'vault' namespace; when omitted the function
+  // returns the original English literals so the fence test in
+  // `friendlyTestError.test.tsx` (which pins matching order + English
+  // invariants and calls without `t`) keeps passing unchanged.
+  t?: (key: string) => string,
+): {
   title: string;
   detail: string;
   action?: React.ReactNode;
 } {
   const { code, httpStatus, message } = err;
+  // Translate-or-fallback helper: `tr(key, english)` returns the
+  // localised string when a translator is present, otherwise the raw
+  // English so the pure-logic contract (and the fence test) is intact.
+  const tr = (key: string, english: string): string => (t ? t(key) : english);
   if (code === 'I_PROXY_NOT_RUNNING') {
     return {
-      title: 'aikey-proxy is not running',
-      detail:
+      title: tr('vault.errProxyNotRunningTitle', 'aikey-proxy is not running'),
+      detail: tr(
+        'vault.errProxyNotRunningDetail',
         'The probe routes through aikey-proxy. Start the proxy and re-run the test.',
+      ),
       action: (
         <>
-          Start it in a terminal: <code className="font-bold">aikey service start proxy</code>.
+          {tr('vault.errProxyNotRunningActionPrefix', 'Start it in a terminal: ')}
+          <code className="font-bold">aikey service start proxy</code>.
         </>
       ),
     };
   }
   if (code === 'I_CREDENTIAL_NOT_FOUND') {
     return {
-      title: 'Key not found',
-      detail:
+      title: tr('vault.errCredNotFoundTitle', 'Key not found'),
+      detail: tr(
+        'vault.errCredNotFoundDetail',
         'The vault no longer contains a credential with this alias / id. It may have been deleted in another window.',
-      action: 'Refresh the list (top-right button) and try again.',
+      ),
+      action: tr('vault.errCredNotFoundAction', 'Refresh the list (top-right button) and try again.'),
     };
   }
   if (code === 'ERR_NETWORK' || code === 'ECONNREFUSED') {
     return {
-      title: 'Cannot reach aikey-local-server',
-      detail:
+      title: tr('vault.errNetworkTitle', 'Cannot reach aikey-local-server'),
+      detail: tr(
+        'vault.errNetworkDetail',
         'The browser could not connect to the local server — it&apos;s probably stopped.',
+      ),
       action: (
         <>
-          Start it in a terminal: <code className="font-bold">aikey service start web</code>.
+          {tr('vault.errProxyNotRunningActionPrefix', 'Start it in a terminal: ')}
+          <code className="font-bold">aikey service start web</code>.
         </>
       ),
     };
   }
   if (code === 'ECONNABORTED' || /timeout/i.test(message)) {
     return {
-      title: 'Probe timed out',
-      detail:
+      title: tr('vault.errTimeoutTitle', 'Probe timed out'),
+      detail: tr(
+        'vault.errTimeoutDetail',
         'The connectivity test took longer than 60 seconds. Upstream may be slow, or the key may be bound to many providers.',
-      action: 'Try again — if it keeps timing out, test one provider at a time via the CLI.',
+      ),
+      action: tr(
+        'vault.errTimeoutAction',
+        'Try again — if it keeps timing out, test one provider at a time via the CLI.',
+      ),
     };
   }
   if (httpStatus != null && httpStatus >= 500 && httpStatus < 600) {
     return {
-      title: 'Local server is unavailable',
-      detail:
+      title: tr('vault.errServerUnavailableTitle', 'Local server is unavailable'),
+      detail: tr(
+        'vault.errServerUnavailableDetail',
         'The aikey-local-server returned an internal error. The auto-retry already tried once. Usually a quick restart fixes it.',
+      ),
       action: (
         <>
           Restart it in a terminal: <code className="font-bold">aikey service restart web</code>{' '}
@@ -106,7 +133,7 @@ export function friendlyTestError(err: { code?: string; httpStatus?: number; mes
   // bugs, but keep the title friendly so users know what kind of thing
   // went wrong.
   return {
-    title: 'Probe could not run',
+    title: tr('vault.errFallbackTitle', 'Probe could not run'),
     detail: message,
   };
 }

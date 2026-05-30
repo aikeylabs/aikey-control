@@ -28,6 +28,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -84,16 +85,16 @@ function healthBucket(h: AppHealth | undefined): HealthBucket {
 /** Icon + colour pair for a bucket. Icons are single Unicode glyphs to
  *  match the existing column compactness (table cell is ~110px wide); a
  *  proper Lucide icon would dominate the row visually. */
-function healthGlyph(b: HealthBucket): { glyph: string; color: string; label: string } {
+function healthGlyph(b: HealthBucket): { glyph: string; color: string; labelKey: string } {
   switch (b) {
     case 'ok':
-      return { glyph: '✓', color: 'var(--success, #16a34a)', label: 'OK' };
+      return { glyph: '✓', color: 'var(--success, #16a34a)', labelKey: 'apps.healthOk' };
     case 'warn':
-      return { glyph: '⚠', color: '#ca8a04', label: 'Warn' };
+      return { glyph: '⚠', color: '#ca8a04', labelKey: 'apps.healthWarn' };
     case 'error':
-      return { glyph: '✗', color: 'var(--destructive, #ef4444)', label: 'Error' };
+      return { glyph: '✗', color: 'var(--destructive, #ef4444)', labelKey: 'apps.healthError' };
     case 'never':
-      return { glyph: '—', color: 'var(--muted-foreground)', label: 'No recent calls' };
+      return { glyph: '—', color: 'var(--muted-foreground)', labelKey: 'apps.healthNoRecentCalls' };
   }
 }
 
@@ -161,6 +162,7 @@ function MetricCard({ label, value, note, color }: MetricCardProps) {
 }
 
 function StatusBadge({ status }: { status: RowStatus }) {
+  const { t } = useTranslation();
   const isActive = status === 'active';
   return (
     <span
@@ -171,7 +173,7 @@ function StatusBadge({ status }: { status: RowStatus }) {
         className="inline-block w-1.5 h-1.5 rounded-full"
         style={{ background: isActive ? 'var(--success)' : 'var(--muted-foreground)' }}
       />
-      {isActive ? 'Active' : 'No active key'}
+      {isActive ? t('apps.statusActiveBadge') : t('apps.statusNoActiveKeyBadge')}
     </span>
   );
 }
@@ -203,6 +205,7 @@ function BindingPill({ binding }: { binding: AppBinding }) {
 type StatusFilter = 'all' | 'active' | 'inactive';
 
 export default function UserAppsListPage() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [providerFilter, setProviderFilter] = useState<string>('all');
@@ -336,7 +339,7 @@ export default function UserAppsListPage() {
             color: 'var(--muted-foreground)',
           }}
         >
-          Loading connected apps…
+          {t('apps.loadingConnectedApps')}
         </div>
       </section>
     );
@@ -357,9 +360,9 @@ export default function UserAppsListPage() {
             color: 'var(--destructive, #ef4444)',
           }}
         >
-          <strong>Failed to load apps.</strong>
+          <strong>{t('apps.failedToLoad')}</strong>
           <div className="mt-1" style={{ color: 'var(--muted-foreground)' }}>
-            {err.message || 'Unknown error.'}
+            {err.message || t('apps.unknownError')}
           </div>
         </div>
       </section>
@@ -378,13 +381,13 @@ export default function UserAppsListPage() {
               className="text-lg font-bold font-mono tracking-wide"
               style={{ color: 'var(--foreground)' }}
             >
-              Connected Apps
+              {t('apps.title')}
             </h1>
             <p
               className="text-[12px] mt-1"
               style={{ color: 'var(--muted-foreground)' }}
             >
-              These apps can call AI providers through AiKey. They never receive your real provider keys.
+              {t('apps.subtitleNeverReceiveKeys')}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -396,9 +399,9 @@ export default function UserAppsListPage() {
                 background: '#ca8a04',
                 color: 'var(--primary-foreground, #18181b)',
               }}
-              title="Register a third-party app — get an env block + a one-time bearer."
+              title={t('apps.addAppTooltip')}
             >
-              + Add App
+              {t('apps.addAppButton')}
             </button>
             <VaultStatusPill invalidateOnUnlock={[['user-apps-list']]} />
           </div>
@@ -415,15 +418,15 @@ export default function UserAppsListPage() {
             className="text-base font-semibold"
             style={{ color: 'var(--foreground)' }}
           >
-            No connected apps yet
+            {t('apps.noConnectedAppsYet')}
           </div>
           <p
             className="mt-2 text-[13px] max-w-[520px] mx-auto"
             style={{ color: 'var(--muted-foreground)' }}
           >
-            Apps appear here once they register with AiKey. Click <strong>+ Add App</strong> above
-            to register a third-party agent (e.g. <span className="font-mono">claude-mem</span>),
-            or run the CLI command below from your terminal — vendor installers also call this.
+            {t('apps.emptyDescPre')} <strong>{t('apps.addAppButton')}</strong>{' '}
+            {t('apps.emptyDescMid')} <span className="font-mono">claude-mem</span>
+            {t('apps.emptyDescSuffix')}
           </p>
           <div
             className="mt-4 inline-block rounded px-3 py-2 font-mono text-[12px]"
@@ -432,7 +435,7 @@ export default function UserAppsListPage() {
               color: 'var(--foreground)',
             }}
           >
-            aikey app register --slug &lt;name&gt; --upstreams &lt;list&gt;
+            {t('apps.cliRegisterCommand')}
           </div>
         </div>
 
@@ -465,13 +468,13 @@ export default function UserAppsListPage() {
             className="text-lg font-bold font-mono tracking-wide"
             style={{ color: 'var(--display-foreground)' }}
           >
-            Connected Apps
+            {t('apps.title')}
           </h1>
           <p
             className="text-[12px] mt-1"
             style={{ color: 'var(--muted-foreground)' }}
           >
-            Third-party agents authorized to use your AiKey-managed keys. They never receive your real provider keys.
+            {t('apps.subtitleAuthorized')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -483,9 +486,9 @@ export default function UserAppsListPage() {
               background: '#ca8a04',
               color: 'var(--primary-foreground, #18181b)',
             }}
-            title="Register a third-party app — get an env block + a one-time bearer."
+            title={t('apps.addAppTooltip')}
           >
-            + Add App
+            {t('apps.addAppButton')}
           </button>
           <VaultStatusPill invalidateOnUnlock={[['user-apps-list']]} />
         </div>
@@ -493,23 +496,23 @@ export default function UserAppsListPage() {
 
       {/* Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <MetricCard label="Connected" value={metrics.total} note="registered locally" />
+        <MetricCard label={t('apps.metricConnected')} value={metrics.total} note={t('apps.metricConnectedNote')} />
         <MetricCard
-          label="Active"
+          label={t('apps.metricActive')}
           value={metrics.active}
           color="var(--success)"
-          note="ready to call providers"
+          note={t('apps.metricActiveNote')}
         />
         <MetricCard
-          label="No active key"
+          label={t('apps.metricNoActiveKey')}
           value={metrics.inactive}
           color="var(--muted-foreground)"
-          note="register again to issue"
+          note={t('apps.metricNoActiveKeyNote')}
         />
         <MetricCard
-          label="Spend (30d)"
+          label={t('apps.metricSpend30d')}
           value="—"
-          note="coming soon"
+          note={t('apps.comingSoon')}
         />
       </div>
 
@@ -536,13 +539,13 @@ export default function UserAppsListPage() {
                     }
               }
             >
-              {s === 'all' ? 'All' : s === 'active' ? 'Active' : 'No active key'}
+              {s === 'all' ? t('apps.filterAll') : s === 'active' ? t('apps.statusActive') : t('apps.statusNoActiveKey')}
             </button>
           ))}
         </div>
 
         <label className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--muted-foreground)' }}>
-          Provider:
+          {t('apps.providerLabel')}
           <select
             value={providerFilter}
             onChange={(e) => setProviderFilter(e.target.value)}
@@ -553,7 +556,7 @@ export default function UserAppsListPage() {
               border: '1px solid var(--border)',
             }}
           >
-            <option value="all">Any</option>
+            <option value="all">{t('apps.providerAny')}</option>
             {providerChoices.map((p) => (
               <option key={p} value={p}>{p}</option>
             ))}
@@ -572,16 +575,16 @@ export default function UserAppsListPage() {
               className="text-left text-[11px] font-mono uppercase tracking-wider"
               style={{ color: 'var(--muted-foreground)' }}
             >
-              <th className="px-4 py-3 font-normal">App</th>
-              <th className="px-4 py-3 font-normal">Status</th>
-              <th className="px-4 py-3 font-normal">Provider bindings</th>
+              <th className="px-4 py-3 font-normal">{t('apps.colApp')}</th>
+              <th className="px-4 py-3 font-normal">{t('apps.colStatus')}</th>
+              <th className="px-4 py-3 font-normal">{t('apps.colProviderBindings')}</th>
               <th
                 className="px-4 py-3 font-normal"
-                title="Most recent app pipeline call. ✓ OK (2xx) · ⚠ Warn (4xx) · ✗ Error (5xx or upstream error) · — never called since proxy started. Data is in-memory only; restarting aikey-proxy resets the column to '—' until traffic resumes."
+                title={t('apps.healthColTooltip')}
               >
-                Health
+                {t('apps.colHealth')}
               </th>
-              <th className="px-4 py-3 font-normal text-right">Actions</th>
+              <th className="px-4 py-3 font-normal text-right">{t('apps.colActions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -592,7 +595,7 @@ export default function UserAppsListPage() {
                   className="px-4 py-8 text-center text-[13px]"
                   style={{ color: 'var(--muted-foreground)' }}
                 >
-                  No apps match the current filters.
+                  {t('apps.noAppsMatchFilters')}
                 </td>
               </tr>
             ) : (
@@ -636,9 +639,9 @@ export default function UserAppsListPage() {
                                   background: '#ca8a04',
                                   color: 'var(--primary-foreground, #18181b)',
                                 }}
-                                title="Built-in AiKey component (e.g. degrade-detector). Manageable here but tightly integrated with another panel — see related sidebar entries before changing bindings."
+                                title={t('apps.firstPartyBadgeTooltip')}
                               >
-                                First-party
+                                {t('apps.firstPartyBadge')}
                               </span>
                             ) : null}
                           </div>
@@ -653,7 +656,7 @@ export default function UserAppsListPage() {
                               className="text-[11px]"
                               style={{ color: 'var(--muted-foreground)' }}
                             >
-                              Vendor: {app.vendor}
+                              {t('apps.vendorLabel', { vendor: app.vendor })}
                             </div>
                           ) : null}
                         </div>
@@ -682,14 +685,14 @@ export default function UserAppsListPage() {
                             className="text-[12px]"
                             style={{ color: 'var(--muted-foreground)' }}
                           >
-                            Uses your default key dynamically (<code className="font-mono">aikey use</code> selection)
+                            {t('apps.bindingsFollowDynamic')} (<code className="font-mono">aikey use</code> {t('apps.bindingsFollowDynamicSelection')})
                           </span>
                         ) : (
                           <span
                             className="text-[12px]"
                             style={{ color: 'var(--destructive, #ef4444)' }}
                           >
-                            No bindings · runtime calls will fail with BINDING_NOT_FOUND
+                            {t('apps.bindingsNoneWillFail')}
                           </span>
                         )
                       ) : (
@@ -709,7 +712,7 @@ export default function UserAppsListPage() {
                     <td className="px-4 py-3 align-top">
                       {healthQuery.isLoading ? (
                         <span
-                          aria-label="Loading health"
+                          aria-label={t('apps.loadingHealthAria')}
                           className="inline-block rounded"
                           style={{
                             background: 'var(--secondary, #3f3f46)',
@@ -724,8 +727,8 @@ export default function UserAppsListPage() {
                         const meta = healthGlyph(bucket);
                         const detail =
                           bucket === 'never'
-                            ? meta.label
-                            : `${meta.label} · HTTP ${h?.status_code ?? '?'}${h?.error_type ? ` (${h.error_type})` : ''}`;
+                            ? t(meta.labelKey)
+                            : `${t(meta.labelKey)} · HTTP ${h?.status_code ?? '?'}${h?.error_type ? ` (${h.error_type})` : ''}`;
                         return (
                           <span
                             className="inline-flex items-center gap-2 font-mono text-[12px]"
@@ -765,7 +768,7 @@ export default function UserAppsListPage() {
                             borderColor: 'var(--border)',
                           }}
                         >
-                          Open
+                          {t('apps.actionOpen')}
                         </Link>
                         {/*
                           Pause / Resume disabled for first-party apps for the
@@ -781,9 +784,9 @@ export default function UserAppsListPage() {
                             disabled={isPending || vaultLocked || app.app_kind === 'first-party'}
                             title={
                               app.app_kind === 'first-party'
-                                ? 'First-party app state is self-healing and cannot be paused from the UI. Stop the plugin service itself to halt traffic.'
+                                ? t('apps.firstPartyPauseTooltip')
                                 : vaultLocked
-                                ? 'Unlock vault first'
+                                ? t('apps.unlockVaultFirst')
                                 : undefined
                             }
                             onClick={() => pauseM.mutate(app.slug)}
@@ -794,7 +797,7 @@ export default function UserAppsListPage() {
                               borderColor: 'var(--border)',
                             }}
                           >
-                            Pause
+                            {t('apps.actionPause')}
                           </button>
                         ) : (
                           <button
@@ -802,9 +805,9 @@ export default function UserAppsListPage() {
                             disabled={isPending || vaultLocked || app.app_kind === 'first-party'}
                             title={
                               app.app_kind === 'first-party'
-                                ? 'First-party app state is self-healing and cannot be resumed from the UI (the next CLI startup auto-recovers active state).'
+                                ? t('apps.firstPartyResumeTooltip')
                                 : vaultLocked
-                                ? 'Unlock vault first'
+                                ? t('apps.unlockVaultFirst')
                                 : undefined
                             }
                             onClick={() => resumeM.mutate(app.slug)}
@@ -815,7 +818,7 @@ export default function UserAppsListPage() {
                               borderColor: 'var(--border)',
                             }}
                           >
-                            Resume
+                            {t('apps.actionResume')}
                           </button>
                         )}
                         {/*
@@ -835,15 +838,15 @@ export default function UserAppsListPage() {
                           disabled={isPending || vaultLocked || app.app_kind === 'first-party'}
                           title={
                             app.app_kind === 'first-party'
-                              ? 'First-party app bearer is self-healing and cannot be revoked from the UI. Uninstall the plugin itself to remove the app.'
+                              ? t('apps.firstPartyRevokeTooltip')
                               : vaultLocked
-                              ? 'Unlock vault first'
+                              ? t('apps.unlockVaultFirst')
                               : undefined
                           }
                           onClick={() => {
                             if (
                               window.confirm(
-                                `Revoke all active keys for "${app.name}"?\n\nThe agent will immediately return 401 on its next request. The app record stays — re-register to issue a new bearer.\n\nThis cannot be undone.`,
+                                t('apps.revokeConfirm', { name: app.name }),
                               )
                             ) {
                               revokeM.mutate(app.slug);
@@ -856,7 +859,7 @@ export default function UserAppsListPage() {
                             borderColor: 'var(--destructive, #ef4444)',
                           }}
                         >
-                          Revoke
+                          {t('apps.actionRevoke')}
                         </button>
                       </div>
                     </td>
@@ -880,8 +883,8 @@ export default function UserAppsListPage() {
           }}
           role="alert"
         >
-          Last action failed:{' '}
-          {(pauseM.error || resumeM.error || revokeM.error)?.message ?? 'unknown'}
+          {t('apps.lastActionFailed')}{' '}
+          {(pauseM.error || resumeM.error || revokeM.error)?.message ?? t('apps.unknown')}
         </div>
       ) : null}
 

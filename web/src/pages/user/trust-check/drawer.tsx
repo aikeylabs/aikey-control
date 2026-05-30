@@ -23,6 +23,7 @@
  * 待 S5/S6 orchestrator 落地时统一改名为 RunHistory*。
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   TrustAliasInUseError,
@@ -53,6 +54,7 @@ export function AliasDetailDrawer({
    *  hook via QueryClient invalidation. */
   onRemoved: () => void;
 }) {
+  const { t } = useTranslation();
   // Drawer renders an absolutely-positioned overlay covering the
   // right ~480px of the page. Clicking the dimmer or pressing the
   // close button dismisses; we intentionally don't trap focus or
@@ -63,19 +65,19 @@ export function AliasDetailDrawer({
       <aside
         className="tc-drawer"
         role="dialog"
-        aria-label={`Detail for ${alias}`}
+        aria-label={t('trustCheck.drawerAriaLabel', { alias })}
       >
         <header className="tc-drawer-header">
           <div>
-            <div className="tc-drawer-eyebrow">Alias detail</div>
+            <div className="tc-drawer-eyebrow">{t('trustCheck.drawerEyebrow')}</div>
             <h2 className="tc-drawer-title">{alias}</h2>
           </div>
           <button
             type="button"
             className="tc-drawer-close"
             onClick={onClose}
-            title="Close (Esc)"
-            aria-label="Close detail drawer"
+            title={t('trustCheck.drawerCloseTitle')}
+            aria-label={t('trustCheck.drawerCloseAria')}
           >
             <CloseIcon />
           </button>
@@ -85,7 +87,7 @@ export function AliasDetailDrawer({
           {isLoading && (
             <div className="tc-empty">
               <span className="tc-spin-dot tc-spin-dot-lg" />
-              <div className="tc-empty-title">Loading detail…</div>
+              <div className="tc-empty-title">{t('trustCheck.drawerLoadingTitle')}</div>
               <div className="tc-empty-note">
                 GET /v1/status/{encodeURIComponent(alias)}
               </div>
@@ -94,7 +96,7 @@ export function AliasDetailDrawer({
 
           {error && !isLoading && (
             <div className="tc-empty">
-              <div className="tc-empty-title">Couldn't load detail.</div>
+              <div className="tc-empty-title">{t('trustCheck.drawerLoadErrorTitle')}</div>
               <div className="tc-empty-note">{error.message}</div>
             </div>
           )}
@@ -153,6 +155,7 @@ function RemoveTrackingFooter({
   isInUse: boolean;
   onRemoved: () => void;
 }) {
+  const { t } = useTranslation();
   const [armed, setArmed] = useState(false);
   const reset = useResetTracking();
 
@@ -179,24 +182,21 @@ function RemoveTrackingFooter({
   let helperText: string | null = null;
   let helperKind: 'info' | 'warn' | 'error' = 'info';
   if (isInUse) {
-    helperText =
-      `Currently in use — switch with \`aikey use\` to another alias first to remove.`;
+    helperText = t('trustCheck.removeInUseHint');
     helperKind = 'info';
   } else if (err instanceof TrustAliasInUseError) {
-    helperText =
-      `Alias is now in use; switch with \`aikey use\` first, then retry.`;
+    helperText = t('trustCheck.removeNowInUseHint');
     helperKind = 'warn';
   } else if (err) {
     helperText = err.message;
     helperKind = 'error';
   } else if (armed && !busy) {
-    helperText =
-      'This clears detection history for this alias. The credential in your vault is preserved.';
+    helperText = t('trustCheck.removeArmedHint');
     helperKind = 'warn';
   }
 
   return (
-    <footer className="tc-drawer-footer" aria-label="Remove detection history">
+    <footer className="tc-drawer-footer" aria-label={t('trustCheck.removeFooterAria')}>
       {helperText && (
         <div className={`tc-drawer-footer-hint tc-drawer-footer-hint-${helperKind}`}>
           {helperText}
@@ -209,7 +209,7 @@ function RemoveTrackingFooter({
             className="tc-drawer-footer-cancel"
             onClick={onCancel}
           >
-            Cancel
+            {t('trustCheck.removeCancel')}
           </button>
         )}
         <button
@@ -217,17 +217,13 @@ function RemoveTrackingFooter({
           className={`tc-drawer-footer-remove ${armed ? 'armed' : ''}`}
           onClick={onPrimaryClick}
           disabled={isInUse || busy}
-          title={
-            isInUse
-              ? 'Currently in use — switch via `aikey use` first'
-              : undefined
-          }
+          title={isInUse ? t('trustCheck.removeInUseButtonTitle') : undefined}
         >
           {busy
-            ? 'Removing…'
+            ? t('trustCheck.removing')
             : armed
-              ? 'Click again to confirm'
-              : 'Remove detection history'}
+              ? t('trustCheck.removeConfirm')
+              : t('trustCheck.removeButton')}
         </button>
       </div>
     </footer>
@@ -253,105 +249,49 @@ function RemoveTrackingFooter({
 // ---------------------------------------------------------------------------
 
 function SubScoresPanel({ detail }: { detail: TrustStatusDetail }) {
+  const { t } = useTranslation();
   return (
     <section className="tc-drawer-section">
-      <h3 className="tc-drawer-section-title">Sub-scores</h3>
+      <h3 className="tc-drawer-section-title">{t('trustCheck.subScoresTitle')}</h3>
       <div className="tc-subscores">
         <SubScore
-          label="L1 · Protocol rules"
+          label={t('trustCheck.l1Label')}
           value={detail.s_l1}
-          hint="A/B/C/D5 rules on Check probe responses"
-          description={
-            'How: 5 deterministic rules run against each of the 10 Check ' +
-            'probe responses — A) domain allowlist, B) anthropic-ratelimit-* ' +
-            'headers present, C) body shape matches Anthropic schema, ' +
-            'D) model field consistent across SSE chunks, D5) chunk ' +
-            'metadata complete.\n' +
-            'Score: average pass rate across all rule × probe cells, ' +
-            'scaled to 0–100.\n' +
-            'Read: ≥80 healthy; 60–80 one rule degraded (often D model ' +
-            'drift); <60 strongly suggests a proxy rewriting responses ' +
-            'or a non-Anthropic origin.\n' +
-            'Null until you trigger Check once.'
-          }
+          hint={t('trustCheck.l1Hint')}
+          description={t('trustCheck.l1Description')}
         />
         <SubScore
-          label="L2 · Answer match + crowd"
+          label={t('trustCheck.l2Label')}
           value={detail.s_l2}
-          hint="0.7 × content + 0.3 × crowd"
-          description={
-            'How: blended score = 0.7 × L2-content (answer correctness) + ' +
-            '0.3 × L2-crowd (peer consensus). The 0.7/0.3 weighting ' +
-            'lets a correct-but-divergent answer still score high while ' +
-            'penalising both wrong answers and outlier responses.\n' +
-            'Score: 0–100, both inputs on the same scale.\n' +
-            'Read: ≥80 healthy. If low, drill into L2-content vs L2-crowd ' +
-            'below — wrong answers (L2-content) vs divergence from healthy ' +
-            'peers (L2-crowd) imply different root causes.\n' +
-            'Null until first Check.'
-          }
+          hint={t('trustCheck.l2Hint')}
+          description={t('trustCheck.l2Description')}
         />
         <SubScore
-          label="└ L2-content"
+          label={t('trustCheck.l2ContentLabel')}
           value={detail.s_l2_content ?? null}
-          hint="pass_rate × 100 over 10 probes"
-          description={
-            'How: StructuredScorer compares each of the 10 Check probe ' +
-            'answers against the expected canonical answer (exact + ' +
-            'fuzzy match), produces a pass_rate.\n' +
-            'Score: pass_rate × 100.\n' +
-            'Read: ≥80 healthy; sustained <60 means the model is not ' +
-            'returning correct answers to deterministic prompts — ' +
-            'either a downgraded model or aggressive prompt rewriting.\n' +
-            'Null until first Check runs.'
-          }
+          hint={t('trustCheck.l2ContentHint')}
+          description={t('trustCheck.l2ContentDescription')}
         />
         <SubScore
-          label="└ L2-crowd"
+          label={t('trustCheck.l2CrowdLabel')}
           value={detail.s_l2_crowd ?? null}
           hint={
             detail.s_l2_crowd_source
-              ? `source: ${detail.s_l2_crowd_source}`
-              : "remote quorum or 24h fallback"
+              ? t('trustCheck.l2CrowdSourceHint', { source: detail.s_l2_crowd_source })
+              : t('trustCheck.l2CrowdFallbackHint')
           }
-          description={
-            'How: prefers trust-central remote quorum (aggregated recent ' +
-            'Checks from many users on the same model). When remote is ' +
-            'empty or unreachable, falls back to this host\'s own past-24h ' +
-            'Check average. The "source" badge tells you which path served ' +
-            'the number — `remote` / `local_24h`.\n' +
-            'Score: 0–100, alignment with peer-group average.\n' +
-            'Read: ≥80 = aligned with peers; <70 means your responses ' +
-            'diverge from what other users see for the same model — a ' +
-            'strong proxy-rewrite signal that L2-content alone cannot ' +
-            'detect (your answers can be self-consistent yet collectively ' +
-            'wrong).\n' +
-            'Null when both sources are empty (e.g. first-ever Check on ' +
-            'a brand-new model + remote stub still returning null).'
-          }
+          description={t('trustCheck.l2CrowdDescription')}
           unitLabel={
             detail.s_l2_crowd == null && detail.s_l2_crowd_source == null
-              ? "no data"
+              ? t('trustCheck.l2CrowdNoData')
               : undefined
           }
         />
         <SubScore
-          label="L3 · Rhythm fingerprint"
+          label={t('trustCheck.l3Label')}
           value={detail.s_l3}
-          hint="ITT / n_chunks vs baseline"
-          description={
-            'How: across 10 streaming probes, collects the inter-token-time ' +
-            '(ITT) distribution and per-probe n_chunks. Compares both ' +
-            'against the per-model baseline (shipped with the detector or ' +
-            'learned locally on first use).\n' +
-            'Score: 0–100, where 100 = rhythm matches baseline exactly.\n' +
-            'Read: ≥80 healthy; 40–80 watch (network jitter can dip a real ' +
-            'Anthropic endpoint here); <40 strongly suggests the upstream ' +
-            'is a re-tokenising proxy or model mirror — the timing ' +
-            'signature of inference + streaming is very hard to forge. ' +
-            'Requires probes to actually stream; falls back to neutral 50 ' +
-            'if no baseline exists for the model.'
-          }
+          hint={t('trustCheck.l3Hint')}
+          description={t('trustCheck.l3Description')}
         />
         {/* 2026-05-23 display-layer redesign — see api.ts s_display
             doc comment + degrade-detector/docs/user-guide.zh.md "结果
@@ -370,85 +310,48 @@ function SubScoresPanel({ detail }: { detail: TrustStatusDetail }) {
             sub-hint so an advanced user can still see which layer
             dragged the score and by how much. */}
         <SubScore
-          label="Score"
+          label={t('trustCheck.scoreLabel')}
           value={detail.s_display}
           hint={
             detail.s_combined != null && detail.s_display != null
-              ? `harmonic mean · weakest layer = ${detail.s_combined}`
-              : "harmonic mean of L1 / L2 / L3 (single run; replicate for confidence)"
+              ? t('trustCheck.scoreHintWithWeakest', { value: detail.s_combined })
+              : t('trustCheck.scoreHintDefault')
           }
           highlight
-          description={
-            'How: harmonic mean of L1 / L2 / L3 (non-null layers only). ' +
-            'Harmonic mean is biased toward the lowest layer so a single ' +
-            'weak signal still drags the headline, but never collapses to ' +
-            'a raw MIN — which would read as a definitive verdict that ' +
-            'one observation does not warrant.\n' +
-            'Score: 0–100; weakest-layer raw value (MIN) is shown in the ' +
-            'hint for advanced users.\n' +
-            'Read: a single low run is ONE observation, not a verdict. ' +
-            'Replicate the Check ≥3 times and look for the SAME layer to ' +
-            'stay low before treating an anomaly as evidence. Network ' +
-            'jitter, transient quota issues, or one bad probe can drag ' +
-            'a single run.\n' +
-            'Null only when no layer has produced a score yet (first-ever ' +
-            'Check, or all probes ineligible).'
-          }
+          description={t('trustCheck.scoreDescription')}
         />
       </div>
 
       {/* Data source row (v2 改动): local vs trust-net 不是分层标签，
           而是数据来源。单独一行显示, 避免和 L1/L2/L3 标签混淆. */}
       <h3 className="tc-drawer-section-title" style={{ marginTop: 16 }}>
-        Data source
+        {t('trustCheck.dataSourceTitle')}
       </h3>
       <div className="tc-subscores">
         <SubScore
-          label="Local · this host"
+          label={t('trustCheck.localLabel')}
           value={null}
-          hint="Check probes + observations on this host"
-          description={
-            'What: every Check probe (manual ③ / auto ②) plus real-time ' +
-            'observations (① per chat) run on this machine. Stored in ' +
-            'trust_local.sqlite, never uploaded — your prompts, answers, ' +
-            'and KEYs stay on disk.\n' +
-            'Feeds: L1 (protocol rules), L2-content (answer match), ' +
-            'L3 (rhythm fingerprint). All three layer scores above are ' +
-            '100% local.\n' +
-            'Status: "active" means the proxy + trust-local are running ' +
-            'and observations are flowing into the DB.'
-          }
-          unitLabel="active"
+          hint={t('trustCheck.localHint')}
+          description={t('trustCheck.localDescription')}
+          unitLabel={t('trustCheck.localUnit')}
         />
         <SubScore
-          label="Trust-net · consensus"
+          label={t('trustCheck.trustNetLabel')}
           value={null}
-          hint="remote crowd quorum"
-          description={
-            'What: aggregated Check results from many AiKey users on the ' +
-            'same model, served by the trust-central quorum endpoint. ' +
-            'Gives L2-crowd a peer-group baseline so we can flag responses ' +
-            'that look self-consistent but collectively wrong (the kind ' +
-            'of drift a single host cannot detect alone).\n' +
-            'Status: "pending P1" — this build ships a stub that always ' +
-            'returns null. The real crowd aggregator lands in P1.\n' +
-            'Fallback: while remote is unavailable (now, or future ' +
-            'outages), L2-crowd auto-uses this host\'s own 24h Check ' +
-            'history average. The "source" badge on the L2-crowd card ' +
-            'tells you which path served the number.'
-          }
-          unitLabel="pending P1"
+          hint={t('trustCheck.trustNetHint')}
+          description={t('trustCheck.trustNetDescription')}
+          unitLabel={t('trustCheck.trustNetUnit')}
         />
       </div>
       <div className="tc-drawer-meta">
         <span>
-          provider <code>{detail.provider_id}</code>
+          {t('trustCheck.metaProvider')} <code>{detail.provider_id}</code>
         </span>
         <span>
-          model <code>{detail.model}</code>
+          {t('trustCheck.metaModel')} <code>{detail.model}</code>
         </span>
         <span>
-          last verify {formatTimeSince(detail.last_verified_at)} ·{' '}
+          {t('trustCheck.metaLastVerify')} {formatTimeSince(detail.last_verified_at)} ·{' '}
           <code>{detail.last_verify_result}</code>
         </span>
       </div>
@@ -509,13 +412,16 @@ function SubScore({
 // ---------------------------------------------------------------------------
 
 function CascadeHistoryPanel({ history }: { history: CascadeHistoryEntry[] }) {
+  const { t } = useTranslation();
   const [expandedVerify, setExpandedVerify] = useState<string | null>(null);
   if (history.length === 0) {
     return (
       <section className="tc-drawer-section">
-        <h3 className="tc-drawer-section-title">Check history</h3>
+        <h3 className="tc-drawer-section-title">{t('trustCheck.checkHistoryTitle')}</h3>
         <div className="tc-drawer-empty">
-          No runs yet. Click <strong>Check</strong> on this row to trigger one.
+          {t('trustCheck.checkHistoryEmptyPrefix')}{' '}
+          <strong>{t('trustCheck.checkHistoryEmptyButton')}</strong>{' '}
+          {t('trustCheck.checkHistoryEmptyTail')}
         </div>
       </section>
     );
@@ -523,7 +429,8 @@ function CascadeHistoryPanel({ history }: { history: CascadeHistoryEntry[] }) {
   return (
     <section className="tc-drawer-section">
       <h3 className="tc-drawer-section-title">
-        Check history <span className="tc-drawer-section-count">({history.length})</span>
+        {t('trustCheck.checkHistoryTitle')}{' '}
+        <span className="tc-drawer-section-count">({history.length})</span>
       </h3>
       <div className="tc-history">
         {history.map((entry) => (
@@ -552,6 +459,7 @@ function CascadeHistoryRow({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className={`tc-history-row ${expanded ? 'expanded' : ''}`}>
       <button type="button" className="tc-history-row-head" onClick={onToggle}>
@@ -571,7 +479,7 @@ function CascadeHistoryRow({
         <div className="tc-history-detail">
           {entry.error_message && (
             <div className="tc-history-error">
-              <strong>Error:</strong> {entry.error_message}
+              <strong>{t('trustCheck.historyErrorLabel')}</strong> {entry.error_message}
             </div>
           )}
           <ScoringDetailPanel verifyId={entry.verify_id} />
@@ -614,18 +522,19 @@ interface ScoringAnswer {
 }
 
 function ScoringDetailPanel({ verifyId }: { verifyId: string }) {
+  const { t } = useTranslation();
   const detail = useVerifyDetail(verifyId);
   if (detail.isLoading) {
     return (
       <div className="tc-history-detail-loading">
-        <span className="tc-spin-dot" /> loading scoring detail…
+        <span className="tc-spin-dot" /> {t('trustCheck.scoringLoadingDetail')}
       </div>
     );
   }
   if (detail.error) {
     return (
       <div className="tc-history-error">
-        <strong>Couldn't load detail:</strong> {detail.error.message}
+        <strong>{t('trustCheck.scoringLoadErrorPrefix')}</strong> {detail.error.message}
       </div>
     );
   }
@@ -665,8 +574,7 @@ function ScoringDetailPanel({ verifyId }: { verifyId: string }) {
     <div className="tc-scoring-detail">
       {pairs.length === 0 && otherEntries.length === 0 && (
         <div className="tc-history-detail-note">
-          No scoring detail recorded — typically the verify came from
-          the M3 mock path and only the band-level outcome was stored.
+          {t('trustCheck.scoringEmptyNote')}
         </div>
       )}
 
@@ -679,7 +587,7 @@ function ScoringDetailPanel({ verifyId }: { verifyId: string }) {
                 {p.q?.qid && <code>{p.q.qid}</code>}
                 {(p.a?.score ?? p.q?.score) != null && (
                   <span className="tc-scoring-q-score">
-                    score {Math.round((p.a?.score ?? p.q?.score) as number)}
+                    {t('trustCheck.scoringQScore', { value: Math.round((p.a?.score ?? p.q?.score) as number) })}
                   </span>
                 )}
               </div>
@@ -697,7 +605,7 @@ function ScoringDetailPanel({ verifyId }: { verifyId: string }) {
 
       {otherEntries.length > 0 && (
         <details className="tc-scoring-raw">
-          <summary>Raw scoring fields ({otherEntries.length})</summary>
+          <summary>{t('trustCheck.scoringRawSummary', { count: otherEntries.length })}</summary>
           <pre>
             {JSON.stringify(Object.fromEntries(otherEntries), null, 2)}
           </pre>
@@ -769,15 +677,13 @@ function RecentObservationsPanel({
 }: {
   observations: RecentObservation[];
 }) {
+  const { t } = useTranslation();
   if (observations.length === 0) {
     return (
       <section className="tc-drawer-section">
-        <h3 className="tc-drawer-section-title">Recent observations</h3>
+        <h3 className="tc-drawer-section-title">{t('trustCheck.recentObsTitle')}</h3>
         <div className="tc-drawer-empty">
-          No D-rule hits on this credential. Healthy traffic produces zero
-          observations — they appear here when the proxy spots a buffer-
-          restream signature (D4), a model-name swap (D5), or a non-Anthropic
-          batching rhythm (D6) on chat traffic.
+          {t('trustCheck.recentObsEmpty')}
         </div>
       </section>
     );
@@ -785,7 +691,7 @@ function RecentObservationsPanel({
   return (
     <section className="tc-drawer-section">
       <h3 className="tc-drawer-section-title">
-        Recent observations{' '}
+        {t('trustCheck.recentObsTitle')}{' '}
         <span className="tc-drawer-section-count">({observations.length})</span>
       </h3>
       <div className="tc-history">
@@ -801,6 +707,7 @@ function RecentObservationsPanel({
 }
 
 function RecentObservationRow({ obs }: { obs: RecentObservation }) {
+  const { t } = useTranslation();
   // Rule → pill tone mapping (re-uses the existing pill colours so the
   // panel feels visually consistent with the CASCADE HISTORY pills).
   // D4 buffer-restream and D5 model-swap are stronger signals than D6
@@ -811,10 +718,10 @@ function RecentObservationRow({ obs }: { obs: RecentObservation }) {
     obs.reason && obs.reason.length > 0
       ? obs.reason
       : obs.score != null
-        ? `score ${obs.score}`
+        ? t('trustCheck.obsScoreDetail', { score: obs.score })
         : '';
   return (
-    <div className="tc-history-row" title={`trace ${obs.trace_id}`}>
+    <div className="tc-history-row" title={t('trustCheck.obsTraceTitle', { traceId: obs.trace_id })}>
       <div className="tc-history-row-head">
         <span className={`tc-pill tc-pill-${pillTone}`}>{obs.rule}</span>
         <span className="tc-mono">{formatEpoch(obs.occurred_at)}</span>
@@ -828,10 +735,11 @@ function RecentObservationRow({ obs }: { obs: RecentObservation }) {
 }
 
 function SignalsPanel({ signals }: { signals: Record<string, unknown> | null | undefined }) {
+  const { t } = useTranslation();
   if (!signals || Object.keys(signals).length === 0) return null;
   return (
     <section className="tc-drawer-section">
-      <h3 className="tc-drawer-section-title">Signals</h3>
+      <h3 className="tc-drawer-section-title">{t('trustCheck.signalsTitle')}</h3>
       <dl className="tc-signals">
         {Object.entries(signals).map(([k, v]) => (
           <div key={k} className="tc-signals-row">

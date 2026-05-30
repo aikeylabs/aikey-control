@@ -31,6 +31,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 
 import { importApi } from '@/shared/api/user/import';
 
@@ -40,6 +41,7 @@ export interface VaultStatusPillProps {
 }
 
 export function VaultStatusPill({ invalidateOnUnlock }: VaultStatusPillProps) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
 
   const { data: status, refetch } = useQuery({
@@ -85,7 +87,7 @@ export function VaultStatusPill({ invalidateOnUnlock }: VaultStatusPillProps) {
           qc.invalidateQueries({ queryKey: key }),
         );
       } else {
-        setError(res.error_message || 'unlock failed');
+        setError(res.error_message || t('shared.unlockFailed'));
       }
     },
     onError: (e: Error) => setError(e.message),
@@ -103,9 +105,9 @@ export function VaultStatusPill({ invalidateOnUnlock }: VaultStatusPillProps) {
           borderColor: 'var(--border)',
           textDecoration: 'none',
         }}
-        title="Vault not initialised. Set a master password first."
+        title={t('shared.vaultNotInitialisedTitle')}
       >
-        Vault not set · Set up →
+        {t('shared.vaultNotSetSetUp')}
       </a>
     );
   }
@@ -120,9 +122,10 @@ export function VaultStatusPill({ invalidateOnUnlock }: VaultStatusPillProps) {
           color: 'var(--muted-foreground)',
           borderColor: 'var(--border)',
         }}
-        title="Vault unlocked. Click Lock on /user/vault to lock manually."
+        title={t('shared.vaultUnlockedTitle')}
       >
-        Vault unlocked{remaining !== null ? ` · ${fmtTtl(remaining)}` : ''}
+        {t('shared.vaultUnlocked')}
+        {remaining !== null ? ` · ${fmtTtl(remaining)}` : ''}
       </span>
     );
   }
@@ -140,7 +143,7 @@ export function VaultStatusPill({ invalidateOnUnlock }: VaultStatusPillProps) {
           border: '1px solid #facc15',
         }}
       >
-        Vault locked · UNLOCK
+        {t('shared.vaultLockedUnlock')}
       </button>
     );
   }
@@ -164,7 +167,7 @@ export function VaultStatusPill({ invalidateOnUnlock }: VaultStatusPillProps) {
         autoFocus
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        placeholder="Master password"
+        placeholder={t('shared.masterPasswordPlaceholder')}
         className="bg-transparent outline-none text-[12px] font-mono px-1 py-0.5 w-44"
         style={{ color: 'var(--foreground)' }}
         disabled={unlockMut.isPending}
@@ -178,7 +181,7 @@ export function VaultStatusPill({ invalidateOnUnlock }: VaultStatusPillProps) {
           color: '#18181b',
         }}
       >
-        {unlockMut.isPending ? '…' : 'UNLOCK'}
+        {unlockMut.isPending ? '…' : t('shared.unlock')}
       </button>
       <button
         type="button"

@@ -19,6 +19,7 @@
  * domain — keep this file under ~400 lines per the splitting rule.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { VerifyRecord, TrustSummary } from './api';
@@ -59,9 +60,9 @@ import { TRUST_CHECK_CSS } from './trust-check-css';
 // Filters compose with AND. Empty filter set = show all rows.
 type ChipKey = 'in_use' | 'not_checked';
 
-const CHIPS: { key: ChipKey; label: string }[] = [
-  { key: 'in_use', label: 'in use' },
-  { key: 'not_checked', label: 'not checked' },
+const CHIPS: { key: ChipKey; labelKey: string }[] = [
+  { key: 'in_use', labelKey: 'trustCheck.chipInUse' },
+  { key: 'not_checked', labelKey: 'trustCheck.chipNotChecked' },
 ];
 
 function matchesChip(row: TrustRow, key: ChipKey): boolean {
@@ -81,6 +82,7 @@ function matchesChip(row: TrustRow, key: ChipKey): boolean {
 }
 
 export default function UserTrustCheckPage() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'source' | 'band'>('source');
   const [expandedAlias, setExpandedAlias] = useState<string | null>(null);
 
@@ -190,15 +192,15 @@ export default function UserTrustCheckPage() {
         data.status === 'inconclusive';
       if (isFailure) {
         const fallbackByStatus: Record<string, string> = {
-          fail:         'Cascade verify came back as fail.',
-          failed:       'Cascade verify came back as failed.',
-          error:        'Cascade verify hit an error before completing — see message.',
-          inconclusive: 'Cascade verify was inconclusive — retry to refine the score.',
+          fail:         t('trustCheck.verifyFailFallback'),
+          failed:       t('trustCheck.verifyFailedFallback'),
+          error:        t('trustCheck.verifyErrorFallback'),
+          inconclusive: t('trustCheck.verifyInconclusiveFallback'),
         };
         nextErrors[alias] = {
           kind: 'verify_terminal',
           status: data.status,
-          message: data.error_message || fallbackByStatus[data.status] || 'Cascade verify did not pass.',
+          message: data.error_message || fallbackByStatus[data.status] || t('trustCheck.verifyDefaultFallback'),
         };
       } else {
         delete nextErrors[alias];
@@ -312,20 +314,20 @@ export default function UserTrustCheckPage() {
               technical package name "Degrade Detector" lives in the
               repo path + marketing copy; the underlying engine
               "trust-local" still appears in the subtitle. */}
-          <h1 className="tc-title">Trust Check</h1>
+          <h1 className="tc-title">{t('trustCheck.title')}</h1>
           <span
             className={`tc-observer-pill ${isOffline ? 'tc-observer-off' : 'tc-observer-on'}`}
             title={
               isOffline
-                ? 'trust-local is offline — observer is not collecting evidence'
-                : 'trust-local is up — observer is collecting evidence'
+                ? t('trustCheck.observerOfflineTitle')
+                : t('trustCheck.observerOnTitle')
             }
           >
             <span className="tc-observer-dot" />
-            {isOffline ? 'OBSERVER OFFLINE' : 'OBSERVER ON'}
+            {isOffline ? t('trustCheck.observerOffline') : t('trustCheck.observerOn')}
           </span>
           <p className="tc-subtitle">
-            Trust signals across your provider sources · powered by trust-local
+            {t('trustCheck.subtitle')}
           </p>
         </div>
         <div className="tc-header-actions">
@@ -335,10 +337,10 @@ export default function UserTrustCheckPage() {
             className="tc-btn"
             onClick={onRefresh}
             disabled={isLoading || status.isFetching}
-            title={status.isFetching ? 'Refreshing…' : 'Re-fetch /v1/status now'}
+            title={status.isFetching ? t('trustCheck.refreshingTitle') : t('trustCheck.refreshNowTitle')}
           >
             <RefreshIcon />
-            {status.isFetching ? 'Refreshing…' : 'Refresh'}
+            {status.isFetching ? t('trustCheck.refreshing') : t('trustCheck.refresh')}
           </button>
           <button
             type="button"
@@ -353,14 +355,14 @@ export default function UserTrustCheckPage() {
             }
             title={
               isOffline
-                ? 'trust-local is offline'
+                ? t('trustCheck.runChecksOfflineTitle')
                 : bulkRunning
-                  ? 'Running checks across visible rows…'
-                  : 'Trigger a Check run for every row in the table'
+                  ? t('trustCheck.runChecksBusyTitle')
+                  : t('trustCheck.runChecksTitle')
             }
           >
             <ScanIcon />
-            {bulkRunning ? 'Running…' : 'Run checks'}
+            {bulkRunning ? t('trustCheck.running') : t('trustCheck.runChecks')}
           </button>
         </div>
       </header>
@@ -386,28 +388,28 @@ export default function UserTrustCheckPage() {
               <div>
                 {notInstalled ? (
                   <>
-                    <strong>Trust Check is not installed.</strong>{' '}
-                    Run{' '}
-                    <code>aikey app install degrade-detector</code> in a
-                    terminal to install the trust-local service
-                    (~23MB binary, runs on 127.0.0.1:8801).
+                    <strong>{t('trustCheck.notInstalledTitle')}</strong>{' '}
+                    {t('trustCheck.notInstalledRun')}{' '}
+                    <code>aikey app install degrade-detector</code>{' '}
+                    {t('trustCheck.notInstalledDetail')}
                   </>
                 ) : (
                   <>
-                    <strong>trust-local is offline.</strong>{' '}
+                    <strong>{t('trustCheck.offlineTitle')}</strong>{' '}
                     {startService.isError ? (
                       <span className="tc-banner-err">
-                        Couldn't start it: {startService.error?.detail}.
-                        Try <code>aikey service restart trust-local</code>{' '}
-                        in a terminal.
+                        {t('trustCheck.offlineStartFailedPrefix')} {startService.error?.detail}.{' '}
+                        {t('trustCheck.offlineStartFailedTry')}{' '}
+                        <code>aikey service restart trust-local</code>{' '}
+                        {t('trustCheck.offlineStartFailedTail')}
                       </span>
                     ) : (
                       <>
-                        Click <strong>Start service</strong> to relaunch
-                        it, or run{' '}
-                        <code>aikey service start trust-local</code> in
-                        a terminal. The page auto-recovers on next 30s
-                        tick.
+                        {t('trustCheck.offlineClick')}{' '}
+                        <strong>{t('trustCheck.offlineStartService')}</strong>{' '}
+                        {t('trustCheck.offlineRelaunchMid')}{' '}
+                        <code>aikey service start trust-local</code>{' '}
+                        {t('trustCheck.offlineRelaunchTail')}
                       </>
                     )}
                   </>
@@ -420,9 +422,9 @@ export default function UserTrustCheckPage() {
                 className="tc-btn tc-btn-primary tc-banner-action"
                 onClick={() => startService.mutate()}
                 disabled={startService.isPending}
-                title="POST /api/internal/services/trust-local/start (local-server shells out to launchctl)"
+                title={t('trustCheck.startServiceTitle')}
               >
-                {startService.isPending ? 'Starting…' : 'Start service'}
+                {startService.isPending ? t('trustCheck.starting') : t('trustCheck.startService')}
               </button>
             )}
           </div>
@@ -434,7 +436,7 @@ export default function UserTrustCheckPage() {
 
       <section className="tc-panel" data-origin-name="Trust table">
         <div className="tc-panel-header">
-          <div className="tc-tabs" role="tablist" aria-label="Trust table mode">
+          <div className="tc-tabs" role="tablist" aria-label={t('trustCheck.tableModeAria')}>
             <button
               type="button"
               role="tab"
@@ -443,7 +445,7 @@ export default function UserTrustCheckPage() {
               onClick={() => setActiveTab('source')}
             >
               <KeyIcon />
-              SOURCE
+              {t('trustCheck.tabSource')}
             </button>
             <button
               type="button"
@@ -453,16 +455,17 @@ export default function UserTrustCheckPage() {
               onClick={() => setActiveTab('band')}
             >
               <GaugeIcon />
-              BAND
+              {t('trustCheck.tabBand')}
             </button>
             <span className="tc-tab-hint">
-              BAND is sorted by latest detection time, not by rank.
+              {t('trustCheck.bandSortHint')}
             </span>
           </div>
 
           <div className="tc-filters" data-source-filters>
             {CHIPS.map((chip) => {
               const active = activeChips.has(chip.key);
+              const chipLabel = t(chip.labelKey);
               return (
                 <button
                   key={chip.key}
@@ -470,9 +473,9 @@ export default function UserTrustCheckPage() {
                   className={`tc-chip ${active ? 'active' : ''}`}
                   onClick={() => toggleChip(chip.key)}
                   aria-pressed={active}
-                  title={`Toggle "${chip.label}" filter`}
+                  title={t('trustCheck.chipToggleTitle', { label: chipLabel })}
                 >
-                  {chip.label}
+                  {chipLabel}
                 </button>
               );
             })}
@@ -481,9 +484,9 @@ export default function UserTrustCheckPage() {
                 type="button"
                 className="tc-chip tc-chip-clear"
                 onClick={clearFilters}
-                title="Clear all filters"
+                title={t('trustCheck.clearFiltersTitle')}
               >
-                clear
+                {t('trustCheck.clear')}
               </button>
             )}
           </div>
@@ -491,10 +494,10 @@ export default function UserTrustCheckPage() {
           <div className="tc-search-row">
             <input
               className="tc-search"
-              placeholder="Search alias, source, model, provider…"
+              placeholder={t('trustCheck.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search rows"
+              aria-label={t('trustCheck.searchAria')}
             />
           </div>
         </div>
@@ -535,31 +538,31 @@ export default function UserTrustCheckPage() {
           identified when raw MIN (15/100) was read as a verdict.
           Wording mirrors degrade-detector/docs/user-guide.zh.md "结果
           怎么读" section — keep the two in sync if either changes. */}
-      <footer className="tc-disclaimer" aria-label="About these results">
-        <p className="tc-disclaimer-title">About these results</p>
+      <footer className="tc-disclaimer" aria-label={t('trustCheck.aboutResultsAria')}>
+        <p className="tc-disclaimer-title">{t('trustCheck.aboutResultsTitle')}</p>
         <ul>
           <li>
-            A single Check is <strong>one observation, not a verdict</strong>.
-            Replicate ≥ 3 times and look for a consistently low layer before
-            treating an anomaly as evidence.
+            {t('trustCheck.disclaimerSingleCheck')}{' '}
+            <strong>{t('trustCheck.disclaimerSingleCheckBold')}</strong>.{' '}
+            {t('trustCheck.disclaimerReplicate')}
           </li>
           <li>
-            All data stays <strong>on your machine</strong>. Degrade detection
-            does not upload your conversations, KEYs, or Check results.
+            {t('trustCheck.disclaimerDataLocalPrefix')}{' '}
+            <strong>{t('trustCheck.disclaimerDataLocalBold')}</strong>.{' '}
+            {t('trustCheck.disclaimerDataLocalTail')}
           </li>
           <li>
-            AiKey does <strong>not certify or de-certify any provider</strong>.
-            Scores reflect this run's measurement against a healthy baseline;
-            they are informational, not endorsements or accusations.
+            {t('trustCheck.disclaimerNoCertPrefix')}{' '}
+            <strong>{t('trustCheck.disclaimerNoCertBold')}</strong>.{' '}
+            {t('trustCheck.disclaimerNoCertTail')}
           </li>
           <li>
-            Heuristic statistical detection has <strong>false positives and
-            false negatives</strong>. Verify independently before taking
-            action (refund, switching providers, public posts).
+            {t('trustCheck.disclaimerHeuristicPrefix')}{' '}
+            <strong>{t('trustCheck.disclaimerHeuristicBold')}</strong>.{' '}
+            {t('trustCheck.disclaimerHeuristicTail')}
           </li>
           <li>
-            Tool provided as-is. AiKey is not liable for decisions made on
-            the basis of these results.
+            {t('trustCheck.disclaimerAsIs')}
           </li>
         </ul>
       </footer>
@@ -606,21 +609,22 @@ function TablePanelBody({
   onRowClick: (row: TrustRow) => void;
   onClearFilters: () => void;
 }) {
+  const { t } = useTranslation();
   if (isLoading) {
     return (
       <div className="tc-empty">
         <span className="tc-spin-dot tc-spin-dot-lg" />
-        <div className="tc-empty-title">Loading trust signals…</div>
-        <div className="tc-empty-note">Fetching /v1/status from trust-local</div>
+        <div className="tc-empty-title">{t('trustCheck.loadingTitle')}</div>
+        <div className="tc-empty-note">{t('trustCheck.loadingNote')}</div>
       </div>
     );
   }
   if (isOffline) {
     return (
       <div className="tc-empty">
-        <div className="tc-empty-title">No data while trust-local is offline.</div>
+        <div className="tc-empty-title">{t('trustCheck.offlineNoDataTitle')}</div>
         <div className="tc-empty-note">
-          Rows refresh automatically once the service is back up.
+          {t('trustCheck.offlineNoDataNote')}
         </div>
       </div>
     );
@@ -628,7 +632,7 @@ function TablePanelBody({
   if (loadError) {
     return (
       <div className="tc-empty">
-        <div className="tc-empty-title">Couldn't load trust signals.</div>
+        <div className="tc-empty-title">{t('trustCheck.loadErrorTitle')}</div>
         <div className="tc-empty-note">{loadError.message}</div>
       </div>
     );
@@ -636,10 +640,9 @@ function TablePanelBody({
   if (isEmpty) {
     return (
       <div className="tc-empty">
-        <div className="tc-empty-title">No sources observed yet.</div>
+        <div className="tc-empty-title">{t('trustCheck.emptyTitle')}</div>
         <div className="tc-empty-note">
-          Send a request through aikey-proxy — once trust-local sees one
-          observation it shows up here automatically.
+          {t('trustCheck.emptyNote')}
         </div>
       </div>
     );
@@ -647,15 +650,15 @@ function TablePanelBody({
   if (isFilteredEmpty) {
     return (
       <div className="tc-empty">
-        <div className="tc-empty-title">No rows match the current filter.</div>
+        <div className="tc-empty-title">{t('trustCheck.filteredEmptyTitle')}</div>
         <div className="tc-empty-note">
-          Try toggling a chip off, broadening the search, or{' '}
+          {t('trustCheck.filteredEmptyNotePrefix')}{' '}
           <button
             type="button"
             className="tc-empty-link"
             onClick={onClearFilters}
           >
-            clear all filters
+            {t('trustCheck.filteredEmptyClearLink')}
           </button>
           .
         </div>
@@ -718,6 +721,7 @@ function HealthOverviewPanel({
   isLoading: boolean;
   summaries: TrustSummary[];
 }) {
+  const { t } = useTranslation();
   const health: HealthSummary = computeHealthSummary(summaries);
   const ringDisplay = isLoading
     ? '—'
@@ -743,7 +747,7 @@ function HealthOverviewPanel({
     <section
       className="tc-health-panel"
       data-origin-name="Health overview"
-      aria-label={`Overall health ${ringDisplay} percent`}
+      aria-label={t('trustCheck.healthOverviewAria', { value: ringDisplay })}
     >
       <div
         className="tc-health-ring"
@@ -754,41 +758,41 @@ function HealthOverviewPanel({
       >
         <div className="tc-health-ring-inner">
           <div className="tc-health-score">{ringDisplay}</div>
-          <div className="tc-health-score-label">Health</div>
+          <div className="tc-health-score-label">{t('trustCheck.healthScoreLabel')}</div>
         </div>
       </div>
       <div className="tc-health-copy">
         <div className="tc-health-head">
           <div>
             <h2 className="tc-health-title">
-              {isLoading ? 'Loading 24h health…' : 'Overall source health'}
+              {isLoading ? t('trustCheck.healthLoadingTitle') : t('trustCheck.healthTitle')}
             </h2>
             <p className="tc-health-desc">
               {isLoading ? ' ' : health.description}
             </p>
           </div>
-          <span className="tc-health-window">Last 24h</span>
+          <span className="tc-health-window">{t('trustCheck.healthWindow')}</span>
         </div>
         <div className="tc-health-stats">
           <HealthStat
-            label="Checked Accounts"
+            label={t('trustCheck.healthCheckedLabel')}
             value={
               isLoading
                 ? '—'
                 : `${health.checkedCount} / ${health.totalCount}`
             }
-            note="KEY + OAuth sources verified in 24h"
+            note={t('trustCheck.healthCheckedNote')}
           />
           <HealthStat
-            label="Healthy"
+            label={t('trustCheck.healthHealthyLabel')}
             value={isLoading ? '—' : health.healthyCount}
-            note="safe for normal use"
+            note={t('trustCheck.healthHealthyNote')}
             color="var(--tc-trust)"
           />
           <HealthStat
-            label="Needs Review"
+            label={t('trustCheck.healthNeedsReviewLabel')}
             value={isLoading ? '—' : health.needsReviewCount}
-            note="route drift or stale checks"
+            note={t('trustCheck.healthNeedsReviewNote')}
             color="var(--warning)"
           />
         </div>
@@ -851,15 +855,15 @@ function BaseUrlList({
   onCheck: (row: TrustRow, opts?: { force?: boolean }) => Promise<string | null>;
   onRowClick: (row: TrustRow) => void;
 }) {
+  const { t } = useTranslation();
   void errors;
   void verifyById;
   if (groups.length === 0) {
     return (
       <div className="tc-empty">
-        <div className="tc-empty-title">No gateways to show.</div>
+        <div className="tc-empty-title">{t('trustCheck.baseUrlEmptyTitle')}</div>
         <div className="tc-empty-note">
-          Once trust-local sees credentials with a base_url they appear
-          here, deduped by gateway.
+          {t('trustCheck.baseUrlEmptyNote')}
         </div>
       </div>
     );
@@ -868,13 +872,12 @@ function BaseUrlList({
     <div className="tc-band-view">
       <div className="tc-band-note">
         <div>
-          <strong>By base URL</strong>
+          <strong>{t('trustCheck.baseUrlByBaseUrl')}</strong>
           <span style={{ marginLeft: 8 }}>
-            One row per unique gateway. Aliases sharing a base URL collapse
-            into a single row — vault is the single source of truth.
+            {t('trustCheck.baseUrlByBaseUrlNote')}
           </span>
         </div>
-        <span className="tc-mono">latest first</span>
+        <span className="tc-mono">{t('trustCheck.baseUrlLatestFirst')}</span>
       </div>
       <div className="tc-baseurl-list">
         {groups.map((group) => {
@@ -890,12 +893,12 @@ function BaseUrlList({
                 if (target.closest('button')) return;
                 onRowClick(rep);
               }}
-              title="Click to view cascade history for representative alias"
+              title={t('trustCheck.baseUrlRowTitle')}
             >
               <div className="tc-baseurl-cell tc-baseurl-gateway">
                 <strong>{group.label}</strong>
                 <span className="tc-mono tc-baseurl-sub">
-                  {group.rows.length} alias{group.rows.length === 1 ? '' : 'es'}
+                  {t('trustCheck.baseUrlAliasCount', { count: group.rows.length })}
                   {' · '}
                   {group.rows
                     .map((r) => r.alias_name)
@@ -905,7 +908,7 @@ function BaseUrlList({
                 </span>
               </div>
               <div className="tc-baseurl-cell">
-                <span className="tc-mono tc-baseurl-sub">Confidence</span>
+                <span className="tc-mono tc-baseurl-sub">{t('trustCheck.confidence')}</span>
                 <div className={`tc-score-wrap tc-band-${group.band}`}>
                   <div className="tc-score-head">
                     <span>{rep.score || '—'}</span>
@@ -916,7 +919,7 @@ function BaseUrlList({
                 </div>
               </div>
               <div className="tc-baseurl-cell">
-                <span className="tc-mono tc-baseurl-sub">Last Check</span>
+                <span className="tc-mono tc-baseurl-sub">{t('trustCheck.lastCheck')}</span>
                 <div className="tc-mono">{rep.checked}</div>
               </div>
               <div className="tc-baseurl-cell tc-baseurl-action">
@@ -925,9 +928,9 @@ function BaseUrlList({
                   className="tc-btn"
                   disabled={running}
                   onClick={() => void onCheck(rep)}
-                  title={`Trigger a Check run for ${rep.alias_name}`}
+                  title={t('trustCheck.checkRowTitle', { alias: rep.alias_name })}
                 >
-                  {running ? 'Checking…' : 'Check'}
+                  {running ? t('trustCheck.checking') : t('trustCheck.check')}
                 </button>
               </div>
             </div>
@@ -955,6 +958,7 @@ function BaseUrlList({
 // ---------------------------------------------------------------------------
 
 function RealtimeDetectionToggle() {
+  const { t } = useTranslation();
   const { query, setEnabled } = useRealtimeDetection();
   const enabled = !!query.data?.enabled;
   const isLoading = query.isLoading || setEnabled.isPending;
@@ -977,24 +981,17 @@ function RealtimeDetectionToggle() {
       type="button"
       role="switch"
       aria-checked={enabled}
-      aria-label="Real-time degrade detection"
+      aria-label={t('trustCheck.realtimeAria')}
       className={`tc-realtime-toggle ${enabled ? 'on' : 'off'}`}
       onClick={onClick}
       disabled={isLoading}
-      title={
-        enabled
-          ? 'Real-time detection ON — D-rules (D4/D5/D6) run on every user chat through the proxy. ' +
-            'Click to disable. Up to 5s before the proxy picks up the change.'
-          : 'Real-time detection OFF (default). Click to enable D-rules ' +
-            '(D4/D5/D6) on every user chat through the proxy. Up to 5s before ' +
-            'the proxy picks up the change. Per-chat overhead: ~5-10ns per SSE chunk.'
-      }
+      title={enabled ? t('trustCheck.realtimeOnTitle') : t('trustCheck.realtimeOffTitle')}
     >
       <span className="tc-realtime-toggle-track" aria-hidden>
         <span className="tc-realtime-toggle-knob" />
       </span>
       <span className="tc-realtime-toggle-label">
-        Real-time {enabled ? 'ON' : 'OFF'}
+        {t('trustCheck.realtimeLabel', { state: enabled ? t('trustCheck.realtimeOn') : t('trustCheck.realtimeOff') })}
       </span>
     </button>
   );

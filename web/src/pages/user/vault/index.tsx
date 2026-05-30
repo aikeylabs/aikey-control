@@ -23,6 +23,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { importApi, type ProviderRoute } from '@/shared/api/user/import';
@@ -475,6 +476,7 @@ function shortRouteToken(rt: string | null | undefined): string | null {
 // ── Main component ───────────────────────────────────────────────────────
 
 export default function UserVaultPage() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
 
   // Vault session (shared with /user/import).
@@ -516,7 +518,7 @@ export default function UserVaultPage() {
         // below for the matching front-end half of this fix.
         qc.invalidateQueries({ queryKey: ['vault-list'] });
       } else {
-        setUnlockError(res.error_message || 'unlock failed');
+        setUnlockError(res.error_message || t('vault.unlockFailedFallback'));
       }
     },
     onError: (e: Error) => setUnlockError(e.message),
@@ -539,7 +541,7 @@ export default function UserVaultPage() {
         setInitError(null);
         refetchVault();
       } else {
-        setInitError(res.error_message || 'failed to set master password');
+        setInitError(res.error_message || t('vault.setMasterPasswordFailedFallback'));
       }
     },
     onError: (e: Error) => setInitError(e.message),
@@ -553,7 +555,7 @@ export default function UserVaultPage() {
     // Empty-string is already blocked by the SET button's `disabled` guard
     // on `!initPassword || !initConfirm`.
     if (initPassword !== initConfirm) {
-      setInitError('Passwords do not match');
+      setInitError(t('vault.passwordsDoNotMatch'));
       return;
     }
     setInitError(null);
@@ -767,7 +769,7 @@ export default function UserVaultPage() {
       // with no feedback when the server returned (e.g.) I_CREDENTIAL_CONFLICT
       // or the team server was unreachable. Surface it.
       const message = err instanceof Error ? err.message : String(err);
-      pushToast({ kind: 'error', title: 'Rename failed', sub: message });
+      pushToast({ kind: 'error', title: t('vault.toastRenameFailedTitle'), sub: message });
     },
   });
   const deleteMut = useMutation({
@@ -928,8 +930,8 @@ export default function UserVaultPage() {
     if (!unlocked) {
       pushToast({
         kind: 'error',
-        title: 'Unlock vault first',
-        sub: 'Enter your master password to switch routing',
+        title: t('vault.toastUnlockFirstTitle'),
+        sub: t('vault.toastUnlockFirstSub'),
       });
       return;
     }
@@ -1002,30 +1004,30 @@ export default function UserVaultPage() {
           if (message.includes('I_KEY_NOT_DELIVERED') || message.includes('was not delivered')) {
             pushToast({
               kind: 'error',
-              title: 'Team key not delivered',
-              sub: 'Run `aikey key sync` in a terminal, or ask your team admin to re-issue the key.',
+              title: t('vault.toastTeamKeyNotDeliveredTitle'),
+              sub: t('vault.toastTeamKeyNotDeliveredSub'),
             });
             return;
           }
           if (message.includes('I_KEY_DISABLED') || message.includes('is disabled')) {
             pushToast({
               kind: 'error',
-              title: 'Key not currently usable',
-              sub: 'This key has been revoked or scope-disabled by your team admin. Pick a different key or run `aikey key sync`.',
+              title: t('vault.toastKeyNotUsableTitle'),
+              sub: t('vault.toastKeyNotUsableSub'),
             });
             return;
           }
           if (message.includes('I_KEY_STALE') || message.includes('is stale')) {
             pushToast({
               kind: 'error',
-              title: 'Key cache is stale',
-              sub: 'Run `aikey key sync` to refresh, then try again.',
+              title: t('vault.toastKeyStaleTitle'),
+              sub: t('vault.toastKeyStaleSub'),
             });
             return;
           }
           pushToast({
             kind: 'error',
-            title: 'Failed to set routing',
+            title: t('vault.toastSetRoutingFailedTitle'),
             sub: message,
           });
         },
@@ -1483,10 +1485,10 @@ export default function UserVaultPage() {
             />
 
             <div className="overflow-x-auto">
-              {listLoading && <EmptyState message="Loading…" />}
-              {listError && <EmptyState message={`Failed to load: ${(listError as Error).message}`} />}
+              {listLoading && <EmptyState message={t('vault.emptyLoading')} />}
+              {listError && <EmptyState message={`${t('vault.loadFailed')}${(listError as Error).message}`} />}
               {!listLoading && !listError && records.length > 0 && filtered.length === 0 && (
-                <EmptyState message="No records match your filters." />
+                <EmptyState message={t('vault.emptyNoMatch')} />
               )}
               {filtered.length > 0 && (
                 <table className="vault">
@@ -1498,18 +1500,18 @@ export default function UserVaultPage() {
                         onClick={() => setSortKey('alias')}
                         aria-sort={sortKey === 'alias' ? 'ascending' : 'none'}
                       >
-                        Alias <span className="th-hint">editable</span>
+                        {t('vault.aliasLabel')}<span className="th-hint">{t('vault.aliasEditableHint')}</span>
                         {sortKey === 'alias' && <span className="th-sort-arrow">↓</span>}
                       </th>
-                      <th style={{ width: '22%' }}>Protocols</th>
-                      <th style={{ width: '14%' }}>Status</th>
+                      <th style={{ width: '22%' }}>{t('vault.colProtocols')}</th>
+                      <th style={{ width: '14%' }}>{t('vault.colStatus')}</th>
                       <th
                         style={{ width: '12%' }}
                         className={`th-sortable ${sortKey === 'created' ? 'active' : ''}`}
                         onClick={() => setSortKey('created')}
                         aria-sort={sortKey === 'created' ? 'descending' : 'none'}
                       >
-                        Created
+                        {t('vault.colCreated')}
                         {sortKey === 'created' && <span className="th-sort-arrow">↓</span>}
                       </th>
                       <th
@@ -1517,12 +1519,12 @@ export default function UserVaultPage() {
                         className={`th-sortable ${sortKey === 'last_test' ? 'active' : ''}`}
                         onClick={() => setSortKey('last_test')}
                         aria-sort={sortKey === 'last_test' ? 'descending' : 'none'}
-                        title="Most recent connectivity test result. Run a test via the drawer Test Connection button."
+                        title={t('vault.colLastTestTitle')}
                       >
-                        Last test
+                        {t('vault.colLastTest')}
                         {sortKey === 'last_test' && <span className="th-sort-arrow">↓</span>}
                       </th>
-                      <th style={{ width: 130, textAlign: 'right' }}>Actions</th>
+                      <th style={{ width: 130, textAlign: 'right' }}>{t('vault.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1723,6 +1725,7 @@ function IdentityStrip({
   onRefresh: () => void;
   updatedAgo: string;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="flex items-center justify-between flex-wrap gap-3">
       {/* Minimal page header — just the title text on the left, the
@@ -1737,22 +1740,22 @@ function IdentityStrip({
           the icon-less, subtitle-less H1 used on Trust Check /
           Performance / Usage / Account / Usage Ledger. */}
       <div className="min-w-0">
-        <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>My Vault</div>
+        <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>{t('vault.myVault')}</div>
       </div>
       <div className="flex items-center gap-2">
         <span
           className="text-[12px] font-mono flex items-center gap-1.5"
           style={{ color: 'var(--muted-foreground)' }}
-          title="Last refreshed"
+          title={t('vault.lastRefreshed')}
         >
           <RefreshIcon className="w-3 h-3" />
-          Updated {updatedAgo}
+          {t('vault.updatedPrefix')}{updatedAgo}
         </span>
         <button
           className="btn btn-ghost text-xs px-2.5 py-1.5 flex items-center gap-1.5"
           onClick={onRefresh}
-          title="Refresh"
-          aria-label="Refresh"
+          title={t('vault.refresh')}
+          aria-label={t('vault.refresh')}
         >
           <RotateIcon className="w-3.5 h-3.5" />
         </button>
@@ -1791,6 +1794,7 @@ function UnlockBanner(props: {
   initPending: boolean;
   initError: string | null;
 }) {
+  const { t } = useTranslation();
   // Local tick state — isolated here so only this component re-renders
   // each second. Starts fresh whenever the parent hands us a new
   // ttlSeconds (happens on unlock, on mutations that extend, and on
@@ -1833,13 +1837,13 @@ function UnlockBanner(props: {
             className="font-mono text-sm font-bold uppercase tracking-wider"
             style={{ color: 'var(--soft-foreground)' }}
           >
-            Vault Not Set Up
+            {t('vault.vaultNotSetUp')}
           </span>
           <span
             className="text-xs font-mono truncate"
             style={{ color: 'var(--muted-foreground)' }}
           >
-            — Set a master password to start storing keys
+            {t('vault.vaultNotSetUpHint')}
           </span>
         </span>
         {!initExpanded ? (
@@ -1847,7 +1851,7 @@ function UnlockBanner(props: {
             className="btn btn-primary px-4 py-1.5 text-[11px]"
             onClick={() => setInitExpanded(true)}
           >
-            SET MASTER PASSWORD
+            {t('vault.setMasterPasswordCta')}
           </button>
         ) : (
           <div className="flex flex-col items-end gap-1.5">
@@ -1861,7 +1865,7 @@ function UnlockBanner(props: {
               <input
                 type="password"
                 className="field-input"
-                placeholder="Master password"
+                placeholder={t('vault.masterPasswordPlaceholder')}
                 style={{ width: 180 }}
                 value={props.initPassword}
                 onChange={(e) => props.onInitPasswordChange(e.target.value)}
@@ -1871,7 +1875,7 @@ function UnlockBanner(props: {
               <input
                 type="password"
                 className="field-input"
-                placeholder="Confirm"
+                placeholder={t('vault.confirmPlaceholder')}
                 style={{ width: 140 }}
                 value={props.initConfirm}
                 onChange={(e) => props.onInitConfirmChange(e.target.value)}
@@ -1882,7 +1886,7 @@ function UnlockBanner(props: {
                 className="btn btn-primary px-3 py-1.5 text-[11px]"
                 disabled={props.initPending || !props.initPassword || !props.initConfirm}
               >
-                {props.initPending ? 'SETTING…' : 'SET'}
+                {props.initPending ? t('vault.setting') : t('vault.set')}
               </button>
               <button
                 type="button"
@@ -1894,7 +1898,7 @@ function UnlockBanner(props: {
                 }}
                 disabled={props.initPending}
               >
-                Cancel
+                {t('vault.cancel')}
               </button>
             </form>
             {props.initError && (
@@ -1927,14 +1931,14 @@ function UnlockBanner(props: {
             className="font-mono text-sm font-bold uppercase tracking-wider"
             style={{ color: 'var(--foreground)' }}
           >
-            Vault Unlocked
+            {t('vault.vaultUnlocked')}
           </span>
           {remaining !== null && (
             <span
               className="text-xs font-mono truncate"
               style={{ color: 'var(--muted-foreground)' }}
             >
-              — auto-lock in{' '}
+              {t('vault.autoLockIn')}{' '}
               <span style={{ color: 'var(--foreground)' }}>
                 {Math.floor(remaining / 60)}m{' '}
                 {String(remaining % 60).padStart(2, '0')}s
@@ -1947,7 +1951,7 @@ function UnlockBanner(props: {
           onClick={props.onLock}
         >
           <LockIcon className="w-3 h-3" />
-          Lock now
+          {t('vault.lockNow')}
         </button>
       </div>
     );
@@ -1964,13 +1968,13 @@ function UnlockBanner(props: {
           className="font-mono text-sm font-bold uppercase tracking-wider"
           style={{ color: 'var(--soft-foreground)' }}
         >
-          Vault Locked
+          {t('vault.vaultLocked')}
         </span>
         <span
           className="text-xs font-mono truncate"
           style={{ color: 'var(--muted-foreground)' }}
         >
-          — Unlock with Master Password to edit or add keys
+          {t('vault.vaultLockedHint')}
         </span>
       </span>
       {!expanded ? (
@@ -1981,7 +1985,7 @@ function UnlockBanner(props: {
           className="btn btn-primary px-4 py-1.5 text-[11px]"
           onClick={() => setExpanded(true)}
         >
-          UNLOCK
+          {t('vault.unlock')}
         </button>
       ) : (
         <div className="flex flex-col items-end gap-1.5">
@@ -1995,7 +1999,7 @@ function UnlockBanner(props: {
             <input
               type="password"
               className="field-input"
-              placeholder="Master password"
+              placeholder={t('vault.masterPasswordPlaceholder')}
               style={{ width: 220 }}
               value={props.password}
               onChange={(e) => props.onPasswordChange(e.target.value)}
@@ -2006,7 +2010,7 @@ function UnlockBanner(props: {
               className="btn btn-primary px-3 py-1.5 text-[11px]"
               disabled={props.unlockPending || !props.password}
             >
-              {props.unlockPending ? 'UNLOCKING…' : 'UNLOCK'}
+              {props.unlockPending ? t('vault.unlocking') : t('vault.unlock')}
             </button>
             <button
               type="button"
@@ -2016,7 +2020,7 @@ function UnlockBanner(props: {
                 props.onPasswordChange('');
               }}
             >
-              Cancel
+              {t('vault.cancel')}
             </button>
           </form>
           {props.unlockError && (
@@ -2052,6 +2056,7 @@ function CardHeader({
   activeCount: number;
   errorCount: number;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="px-5 py-4 flex items-center justify-between gap-3 flex-wrap"
@@ -2064,18 +2069,18 @@ function CardHeader({
       }}
     >
       <div className="flex items-center gap-3 min-w-0 flex-wrap">
-        <h3 className="text-xs font-mono font-bold tracking-wider uppercase whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>All keys</h3>
-        <span className="chip">{counts.total} stored</span>
+        <h3 className="text-xs font-mono font-bold tracking-wider uppercase whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>{t('vault.allKeys')}</h3>
+        <span className="chip">{counts.total}{t('vault.storedSuffix')}</span>
         {activeCount > 0 && (
           <span className="chip success">
             <span className="status-dot" style={{ width: 5, height: 5 }} />
-            {activeCount} active
+            {activeCount}{t('vault.activeSuffix')}
           </span>
         )}
         {errorCount > 0 && (
           <span className="chip danger">
             <span className="status-dot error" style={{ width: 5, height: 5 }} />
-            {errorCount} error
+            {errorCount}{t('vault.errorSuffix')}
           </span>
         )}
       </div>
@@ -2103,6 +2108,7 @@ function FilterStrip(props: {
   locked: boolean;
   onOpenAdd: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       /* FilterStrip follows master's FilterBar layout (naked toolbar,
@@ -2127,10 +2133,10 @@ function FilterStrip(props: {
           <input
             type="text"
             className="pl-10 pr-3 py-2 text-sm w-72"
-            placeholder="Search alias…"
+            placeholder={t('vault.searchAliasPlaceholder')}
             value={props.search}
             onChange={(e) => props.onSearchChange(e.target.value)}
-            aria-label="Search keys"
+            aria-label={t('vault.searchKeysAria')}
           />
         </div>
 
@@ -2139,32 +2145,32 @@ function FilterStrip(props: {
             level status chip carries the signal when an error shows
             up). The "Type" label prefix was removed 2026-04-25 — the
             All/API/OAuth pill labels already read as type filters. */}
-        <div className="filter-group" role="radiogroup" aria-label="Filter by type">
+        <div className="filter-group" role="radiogroup" aria-label={t('vault.filterByTypeAria')}>
           <FilterPill
             active={props.typeFilter === 'all'}
             onClick={() => props.onTypeFilterChange('all')}
-            label="All"
+            label={t('vault.filterAll')}
             count={props.counts.total}
           />
           <FilterPill
             active={props.typeFilter === 'personal'}
             onClick={() => props.onTypeFilterChange('personal')}
             icon={<KeyRoundIcon className="w-2.5 h-2.5" />}
-            label="Key"
+            label={t('vault.filterKey')}
             count={props.counts.personal}
           />
           <FilterPill
             active={props.typeFilter === 'team'}
             onClick={() => props.onTypeFilterChange('team')}
             icon={<UsersIcon className="w-2.5 h-2.5" />}
-            label="Team"
+            label={t('vault.filterTeam')}
             count={props.counts.team}
           />
           <FilterPill
             active={props.typeFilter === 'oauth'}
             onClick={() => props.onTypeFilterChange('oauth')}
             icon={<UserCheckIcon className="w-2.5 h-2.5" />}
-            label="OAuth"
+            label={t('vault.filterOAuth')}
             count={props.counts.oauth}
           />
         </div>
@@ -2179,19 +2185,19 @@ function FilterStrip(props: {
         <a
           className="btn btn-outline text-[11px] px-2.5 py-1 flex items-center gap-1"
           href="/user/import"
-          title="Bulk import from text or file"
+          title={t('vault.importTitle')}
         >
           <UploadIcon className="w-3 h-3" />
-          Import
+          {t('vault.import')}
         </a>
         <button
           className="btn btn-primary btn-primary-dim text-[11px] px-3 py-1 flex items-center gap-1"
           onClick={props.onOpenAdd}
           disabled={props.locked}
-          title={props.locked ? 'Unlock vault to add keys' : 'Add a new key'}
+          title={props.locked ? t('vault.addKeyLockedTitle') : t('vault.addKeyTitle')}
         >
           <PlusIcon className="w-3 h-3" />
-          Add key
+          {t('vault.addKey')}
         </button>
       </div>
     </div>
@@ -2242,6 +2248,7 @@ function TeamFetchBanner(props: {
   error: TeamFetchError | null;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   const { status, error, onRetry } = props;
   // Suppress not-logged-in (single-user installs) and the happy-path
   // states (idle/loading/loaded). Only loud failure modes get a banner.
@@ -2253,20 +2260,19 @@ function TeamFetchBanner(props: {
   let canRetry = true;
   switch (status) {
     case 'unauth':
-      title = 'Team session expired';
+      title = t('vault.teamSessionExpired');
       body = (
         <>
-          Your team-server session is no longer valid. Re-run{' '}
-          <code className="font-mono">aikey login</code> in a terminal to refresh,
-          then retry.
+          {t('vault.teamSessionExpiredBody')}{' '}
+          <code className="font-mono">aikey login</code> {t('vault.teamSessionExpiredBodyTail')}
         </>
       );
       break;
     case 'unreachable':
-      title = 'Team server unreachable';
+      title = t('vault.teamServerUnreachable');
       body = (
         <>
-          Could not reach your team server
+          {t('vault.teamUnreachableBody')}
           {error && error.kind === 'unreachable' && (error.status || error.detail) ? (
             <>
               {' ('}
@@ -2276,19 +2282,19 @@ function TeamFetchBanner(props: {
               {')'}
             </>
           ) : null}
-          . Team keys are hidden until the server is back online.
+          {t('vault.teamUnreachableBodyTail')}
         </>
       );
       break;
     case 'parse-error':
-      title = 'Team server returned unexpected response';
+      title = t('vault.teamServerUnexpectedResponse');
       body = (
         <>
-          The team server responded but the payload could not be parsed
+          {t('vault.teamParseErrorBody')}
           {error && error.kind === 'parse-error' && error.detail
             ? ` (${error.detail})`
             : ''}
-          . This is usually a transient version mismatch.
+          {t('vault.teamParseErrorBodyTail')}
         </>
       );
       break;
@@ -2323,9 +2329,9 @@ function TeamFetchBanner(props: {
           type="button"
           className="btn btn-ghost text-[11px] px-2 py-1"
           onClick={onRetry}
-          title="Retry team-keys fetch"
+          title={t('vault.retryTeamFetchTitle')}
         >
-          Retry
+          {t('vault.retry')}
         </button>
       )}
     </div>
@@ -2353,39 +2359,40 @@ function ToastStack(props: {
   }>;
   onDismiss: (id: number) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="toast-stack" aria-live="polite" aria-atomic="true">
-      {props.toasts.map((t) => (
-        <div key={t.id} className={`toast${t.kind === 'error' ? ' error' : ''}`} data-open="true">
+      {props.toasts.map((toast) => (
+        <div key={toast.id} className={`toast${toast.kind === 'error' ? ' error' : ''}`} data-open="true">
           <span className="toast-icon">
-            {t.kind === 'success' ? (
+            {toast.kind === 'success' ? (
               <ZapIcon className="w-3 h-3" />
             ) : (
               <InfoIcon className="w-3 h-3" />
             )}
           </span>
           <div className="toast-body">
-            <div className="toast-title">{t.title}</div>
-            {t.sub && <div className="toast-sub">{t.sub}</div>}
+            <div className="toast-title">{toast.title}</div>
+            {toast.sub && <div className="toast-sub">{toast.sub}</div>}
           </div>
           <div className="toast-actions">
-            {t.undo && (
+            {toast.undo && (
               <button
                 type="button"
                 className="toast-undo"
                 onClick={() => {
-                  t.undo!();
-                  props.onDismiss(t.id);
+                  toast.undo!();
+                  props.onDismiss(toast.id);
                 }}
               >
-                Undo
+                {t('vault.undo')}
               </button>
             )}
             <button
               type="button"
               className="toast-dismiss"
-              onClick={() => props.onDismiss(t.id)}
-              aria-label="Dismiss"
+              onClick={() => props.onDismiss(toast.id)}
+              aria-label={t('vault.dismiss')}
             >
               <XIcon className="w-3 h-3" />
             </button>
@@ -2418,12 +2425,13 @@ function GroupHeaderRow(props: {
   collapsed: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   const { provider, color, totalCount, personalCount, oauthCount, teamCount, collapsed, onToggle } = props;
   const parts: string[] = [];
   if (personalCount > 0) parts.push(`${personalCount} KEY`);
   if (teamCount > 0) parts.push(`${teamCount} TEAM`);
   if (oauthCount > 0) parts.push(`${oauthCount} OAUTH`);
-  const entryWord = totalCount === 1 ? 'entry' : 'entries';
+  const entryWord = totalCount === 1 ? t('vault.groupEntrySingular') : t('vault.groupEntryPlural');
   return (
     <tr className="group-row" data-collapsed={collapsed ? 'true' : 'false'} data-group-provider={provider}>
       <td colSpan={6}>
@@ -2433,7 +2441,7 @@ function GroupHeaderRow(props: {
             className="gr-toggle"
             onClick={onToggle}
             aria-expanded={!collapsed}
-            aria-label={`Toggle ${provider} group`}
+            aria-label={t('vault.toggleGroupAria', { provider })}
           >
             <ChevronDownIcon className="w-3 h-3" />
           </button>
@@ -2543,9 +2551,10 @@ const Row = React.memo(function Row(props: {
    *  groups they're not actually bound to. */
   groupProvider: string;
 }) {
+  const { t } = useTranslation();
   const r = props.record;
   const inUse = recordInUseForGroup(r, props.groupProvider);
-  const lockedTitle = props.locked ? 'Unlock vault to use this action' : undefined;
+  const lockedTitle = props.locked ? t('vault.unlockToUseAction') : undefined;
   const providerName = providerDisplayName(r);
   const isTeam = r.target === 'team';
   const isOAuth = r.target === 'oauth';
@@ -2578,7 +2587,7 @@ const Row = React.memo(function Row(props: {
     const expires = formatExpiresAtIso(r.expires_at);
     subLine = (
       <>
-        Team key · {teamShareLabel(r.share_status)}
+        {t('vault.teamKeyPrefix')}{teamShareLabel(r.share_status)}
         {expires && (
           <>
             <span className="mx-1 opacity-40">·</span>
@@ -2592,7 +2601,7 @@ const Row = React.memo(function Row(props: {
     const expires = formatExpiresIn(o.token_expires_at);
     subLine = (
       <>
-        {providerName} session
+        {providerName}{t('vault.sessionSuffix')}
         {expires && (
           <>
             <span className="mx-1 opacity-40">·</span>
@@ -2651,14 +2660,14 @@ const Row = React.memo(function Row(props: {
               className="btn btn-primary text-[10px] px-2 py-0.5 flex items-center"
               onClick={props.onSaveEdit}
               disabled={props.renamePending}
-              title="Save alias"
+              title={t('vault.saveAlias')}
             >
               <CheckIcon className="w-3 h-3" />
             </button>
             <button
               className="btn btn-ghost text-[10px] px-1.5 py-0.5 flex items-center"
               onClick={props.onCancelEdit}
-              title="Cancel"
+              title={t('vault.cancel')}
             >
               <XIcon className="w-3 h-3" />
             </button>
@@ -2678,10 +2687,10 @@ const Row = React.memo(function Row(props: {
                 <span
                   className="active-dot"
                   aria-hidden="true"
-                  title="Currently routing"
+                  title={t('vault.currentlyRouting')}
                 />
               )}
-              {r.alias || '(unnamed)'}
+              {r.alias || t('vault.unnamed')}
               {/* IN USE chip moved to the Actions column (2026-04-25)
                   so every row's rightmost cell has the same routing
                   affordance — a "Use" button when the key is idle,
@@ -2711,7 +2720,7 @@ const Row = React.memo(function Row(props: {
         {r.status === 'active' ? (
           <span className="chip success">
             <span className="status-dot" style={{ width: 5, height: 5 }} />
-            ACTIVE
+            {t('vault.statusActive')}
           </span>
         ) : (
           <span className="chip danger">
@@ -2758,7 +2767,7 @@ const Row = React.memo(function Row(props: {
               className="text-[11px] font-mono mr-1"
               style={{ color: '#fca5a5' }}
             >
-              Delete forever?
+              {t('vault.deleteForever')}
             </span>
             <button
               className="btn btn-danger text-[10px] px-2.5 py-1"
@@ -2766,19 +2775,19 @@ const Row = React.memo(function Row(props: {
               disabled={props.deletePending || props.locked}
               title={
                 props.locked
-                  ? 'Unlock vault to delete'
+                  ? t('vault.deleteLockedTitle')
                   : props.deletePending
-                  ? 'Deleting…'
-                  : 'Confirm delete'
+                  ? t('vault.deletingTitle')
+                  : t('vault.confirmDeleteTitle')
               }
             >
-              Delete
+              {t('vault.delete')}
             </button>
             <button
               className="btn btn-ghost text-[10px] px-2 py-1"
               onClick={props.onCancelDelete}
             >
-              Cancel
+              {t('vault.cancel')}
             </button>
           </div>
         ) : (
@@ -2808,8 +2817,8 @@ const Row = React.memo(function Row(props: {
               const teamUnusable = isTeam && (r as TeamRowRecord).effective_status !== 'active';
               if (teamUnusable) return null;
               const useTitle = props.locked
-                ? 'Unlock vault to switch routing'
-                : 'Route all requests through ' + (r.alias ?? '(unnamed)') + '  (aikey use)';
+                ? t('vault.useLockedTitle')
+                : 'Route all requests through ' + (r.alias ?? t('vault.unnamed')) + '  (aikey use)';
               return (
                 <button
                   type="button"
@@ -2817,10 +2826,10 @@ const Row = React.memo(function Row(props: {
                   title={useTitle}
                   onClick={props.onSwitch}
                   disabled={props.locked || !!props.switchPending}
-                  aria-label="Set as active key"
+                  aria-label={t('vault.setAsActiveKeyAria')}
                 >
                   <ZapIcon className="w-3 h-3" />
-                  Use
+                  {t('vault.use')}
                 </button>
               );
             })()}
@@ -2828,20 +2837,20 @@ const Row = React.memo(function Row(props: {
               <button
                 type="button"
                 className="in-use-chip"
-                title="Click to see how to use this account in a shell"
-                aria-label="Currently in use — click to see shell usage"
+                title={t('vault.inUseChipTitle')}
+                aria-label={t('vault.inUseChipAria')}
                 onClick={(e) => {
                   e.stopPropagation();
                   props.onOpenDrawer('peek');
                 }}
               >
                 <ZapIcon className="w-2.5 h-2.5" />
-                IN USE
+                {t('vault.inUse')}
               </button>
             )}
             <button
               className="icon-btn"
-              title="View details"
+              title={t('vault.viewDetails')}
               onClick={(e) => {
                 e.stopPropagation();
                 // Explicit View Details → persistent drawer (stays open
@@ -2860,20 +2869,20 @@ const Row = React.memo(function Row(props: {
             {props.onTest && (
               <button
                 className="icon-btn"
-                title={props.testRunning ? 'Probe in progress…' : 'Test connection'}
+                title={props.testRunning ? t('vault.probeInProgressTitle') : t('vault.testConnection')}
                 onClick={(e) => {
                   e.stopPropagation();
                   props.onTest?.();
                 }}
                 disabled={!!props.testRunning}
-                aria-label="Test connection"
+                aria-label={t('vault.testConnection')}
               >
                 <ActivityIcon className="w-3.5 h-3.5" />
               </button>
             )}
             <button
               className="icon-btn primary"
-              title={lockedTitle ?? 'Rename alias'}
+              title={lockedTitle ?? t('vault.renameAliasTitle')}
               onClick={props.onBeginEdit}
               disabled={props.locked}
             >
@@ -2882,7 +2891,7 @@ const Row = React.memo(function Row(props: {
             {!isTeam && (
               <button
                 className="icon-btn danger"
-                title={lockedTitle ?? 'Delete'}
+                title={lockedTitle ?? t('vault.deleteTitle')}
                 onClick={props.onBeginDelete}
                 disabled={props.locked}
               >
@@ -2945,6 +2954,7 @@ function CardFooter({
   onPrev: () => void;
   onNext: () => void;
 }) {
+  const { t } = useTranslation();
   const prevDisabled = currentPage <= 1;
   const nextDisabled = currentPage >= totalPages;
   // Count copy is context-aware:
@@ -2968,14 +2978,14 @@ function CardFooter({
       <span>
         {totalPages > 1 ? (
           <>
-            Showing <span style={{ color: 'var(--foreground)' }}>{pageKeyCount}</span> on this page ·{' '}
-            <span style={{ color: 'var(--foreground)' }}>{filteredCount}</span> filtered ·{' '}
-            <span style={{ color: 'var(--foreground)' }}>{totalCount}</span> total
+            {t('vault.footerShowing')}<span style={{ color: 'var(--foreground)' }}>{pageKeyCount}</span>{t('vault.footerShowingOnPage')}
+            <span style={{ color: 'var(--foreground)' }}>{filteredCount}</span>{t('vault.footerFiltered')}
+            <span style={{ color: 'var(--foreground)' }}>{totalCount}</span>{t('vault.footerTotal')}
           </>
         ) : (
           <>
-            Showing <span style={{ color: 'var(--foreground)' }}>{filteredCount}</span> of{' '}
-            <span style={{ color: 'var(--foreground)' }}>{totalCount}</span> keys
+            {t('vault.footerShowing')}<span style={{ color: 'var(--foreground)' }}>{filteredCount}</span>{t('vault.footerOf')}
+            <span style={{ color: 'var(--foreground)' }}>{totalCount}</span>{t('vault.footerKeys')}
           </>
         )}
       </span>
@@ -2988,24 +2998,24 @@ function CardFooter({
           className="btn btn-ghost text-[10px] px-2 py-1"
           onClick={onPrev}
           disabled={prevDisabled}
-          title={prevDisabled ? 'Already on the first page' : 'Previous page'}
-          aria-label="Previous page"
+          title={prevDisabled ? t('vault.firstPageTitle') : t('vault.prevPageTitle')}
+          aria-label={t('vault.prevPageTitle')}
         >
           <ChevronLeftIcon className="w-3 h-3" />
-          Prev
+          {t('vault.prev')}
         </button>
         <span title={`${groupsPerPage} provider group${groupsPerPage === 1 ? '' : 's'} per page`}>
-          Page <span style={{ color: 'var(--foreground)' }}>{currentPage}</span> /{' '}
+          {t('vault.pageLabel')}<span style={{ color: 'var(--foreground)' }}>{currentPage}</span> /{' '}
           <span style={{ color: 'var(--foreground)' }}>{totalPages}</span>
         </span>
         <button
           className="btn btn-ghost text-[10px] px-2 py-1"
           onClick={onNext}
           disabled={nextDisabled}
-          title={nextDisabled ? 'No more pages' : 'Next page'}
-          aria-label="Next page"
+          title={nextDisabled ? t('vault.noMorePagesTitle') : t('vault.nextPageTitle')}
+          aria-label={t('vault.nextPageTitle')}
         >
-          Next
+          {t('vault.next')}
           <ChevronRightIcon className="w-3 h-3" />
         </button>
       </div>
@@ -3016,6 +3026,7 @@ function CardFooter({
 // ── Page footer ──────────────────────────────────────────────────────────
 
 function PageFooter() {
+  const { t } = useTranslation();
   return (
     <section
       className="flex flex-col gap-2 text-[12px] font-mono pt-1 pb-6"
@@ -3025,18 +3036,18 @@ function PageFooter() {
         <div className="flex items-center gap-4">
           <a href="/user/cli-guide" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
             <BookOpenIcon className="w-3 h-3" />
-            Docs
+            {t('vault.footerDocs')}
           </a>
           <a href="#" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
             <LifeBuoyIcon className="w-3 h-3" />
-            Support
+            {t('vault.footerSupport')}
           </a>
           <a href="#" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
             <ShieldCheckIcon className="w-3 h-3" />
-            Security
+            {t('vault.footerSecurity')}
           </a>
         </div>
-        <span>control-vault</span>
+        <span>{t('vault.controlVault')}</span>
       </div>
       {/*
         Why a footer encryption disclosure on the vault page (2026-04-22):
@@ -3060,9 +3071,9 @@ function PageFooter() {
       <div className="flex items-center gap-1.5 text-[11px] opacity-80">
         <LockIcon className="w-3 h-3" />
         <span>
-          Defense-in-depth vault —{' '}
-          <span style={{ color: 'var(--foreground)' }}>AES-256-GCM</span> authenticated encryption ·{' '}
-          <span style={{ color: 'var(--foreground)' }}>Argon2id</span> key derivation · master password never leaves this device.
+          {t('vault.defenseInDepthVault')}{' '}
+          <span style={{ color: 'var(--foreground)' }}>AES-256-GCM</span>{t('vault.authenticatedEncryption')}
+          <span style={{ color: 'var(--foreground)' }}>Argon2id</span>{t('vault.keyDerivationTail')}
         </span>
       </div>
     </section>
@@ -3088,6 +3099,7 @@ function EmptyState({ message }: { message: string }) {
 // page (no "ask admin" alternative, since the vault is the user's own
 // local store).
 function VaultEmptyPanel() {
+  const { t } = useTranslation();
   return (
     <div className="flex p-7">
       <div className="vault-empty">
@@ -3096,10 +3108,10 @@ function VaultEmptyPanel() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
           </svg>
         </div>
-        <div className="vault-empty-title">Your vault is empty</div>
+        <div className="vault-empty-title">{t('vault.emptyTitle')}</div>
         <p className="vault-empty-desc">
-          Get started by importing your keys from the{' '}
-          <Link to="/user/import" className="vault-empty-link">Import</Link> page.
+          {t('vault.emptyDescPrefix')}{' '}
+          <Link to="/user/import" className="vault-empty-link">{t('vault.import')}</Link>
         </p>
       </div>
     </div>
@@ -3136,6 +3148,7 @@ function DetailDrawer(props: {
    *  level fallback when the stored base_url's host isn't in the table. */
   providerToRoute: Map<string, ProviderRoute>;
 }) {
+  const { t } = useTranslation();
   const r = props.record;
   const hostToRoute = props.hostToRoute;
   const providerToRoute = props.providerToRoute;
@@ -3177,9 +3190,9 @@ function DetailDrawer(props: {
     );
   }
 
-  const alias = r.alias ?? (r.target === 'oauth' ? '(unnamed OAuth account)' : '(unnamed)');
+  const alias = r.alias ?? (r.target === 'oauth' ? t('vault.unnamedOAuthAccount') : t('vault.unnamed'));
   const aliasMono = isMonoAlias(r.alias);
-  const lockedTitle = props.locked ? 'Unlock vault to use this action' : undefined;
+  const lockedTitle = props.locked ? t('vault.unlockToUseAction') : undefined;
   const isPersonal = r.target === 'personal';
   const isTeam = r.target === 'team';
   const isOAuth = r.target === 'oauth';
@@ -3220,7 +3233,7 @@ function DetailDrawer(props: {
               {r.status === 'active' ? (
                 <span className="chip success">
                   <span className="status-dot" style={{ width: 5, height: 5 }} />
-                  ACTIVE
+                  {t('vault.statusActive')}
                 </span>
               ) : (
                 <span className="chip danger">
@@ -3233,8 +3246,8 @@ function DetailDrawer(props: {
           <button
             className="drawer-close"
             onClick={props.onClose}
-            title="Close (Esc)"
-            aria-label="Close drawer"
+            title={t('vault.closeEsc')}
+            aria-label={t('vault.closeDrawerAria')}
           >
             <XIcon className="w-4 h-4" />
           </button>
@@ -3254,17 +3267,17 @@ function DetailDrawer(props: {
             <div className="drawer-section">
               <div className="drawer-section-title">
                 <KeyRoundIcon className="w-3 h-3" />
-                Virtual Key
+                {t('vault.virtualKey')}
               </div>
               <div className="drawer-field">
-                <span className="k">Alias</span>
+                <span className="k">{t('vault.drawerAlias')}</span>
                 <span className="v">
                   <span className={isMonoAlias(team.alias) ? 'mono' : ''}>{team.alias}</span>
                   <button
                     type="button"
                     className="copy-btn"
                     title={`Copy ${team.alias}`}
-                    aria-label="Copy alias"
+                    aria-label={t('vault.copyAliasAria')}
                     onClick={() => copyField('alias', team.alias)}
                   >
                     {copiedField === 'alias' ? (
@@ -3276,7 +3289,7 @@ function DetailDrawer(props: {
                 </span>
               </div>
               <div className="drawer-field">
-                <span className="k">Virtual key id</span>
+                <span className="k">{t('vault.virtualKeyId')}</span>
                 <span className="v mono">
                   {/* Short + full-on-hover; copy button mirrors the
                       Personal "Route token" row pattern so the two
@@ -3300,7 +3313,7 @@ function DetailDrawer(props: {
               </div>
               {team.supported_providers.length > 0 && (
                 <div className="drawer-field">
-                  <span className="k">Supports</span>
+                  <span className="k">{t('vault.supports')}</span>
                   <span className="v">
                     {team.supported_providers.map((p) => (
                       <span key={p} className="kind-pill" style={{ marginRight: 4 }}>
@@ -3311,7 +3324,7 @@ function DetailDrawer(props: {
                 </div>
               )}
               <div className="drawer-field">
-                <span className="k">Share</span>
+                <span className="k">{t('vault.share')}</span>
                 <span className="v">
                   <span className={`chip ${team.share_status === 'claimed' ? 'success' : team.share_status === 'revoked' ? 'danger' : 'warning'}`}>
                     {team.share_status.toUpperCase()}
@@ -3332,12 +3345,12 @@ function DetailDrawer(props: {
                   <span className="v stack">
                     <span className="mono">{team.route_url}</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <span className="hint">SDK base URL (via aikey-proxy)</span>
+                      <span className="hint">{t('vault.sdkBaseUrlHint')}</span>
                       <button
                         type="button"
                         className="inline-copy"
-                        title="Copy route URL (aikey-proxy endpoint)"
-                        aria-label="Copy route_url"
+                        title={t('vault.copyRouteUrlTitle')}
+                        aria-label={t('vault.copyRouteUrlTitle')}
                         onClick={() => copyField('route_url', team.route_url!)}
                       >
                         {copiedField === 'route_url' ? (
@@ -3351,16 +3364,16 @@ function DetailDrawer(props: {
                 </div>
               )}
               <div className="drawer-field">
-                <span className="k">Route token</span>
+                <span className="k">{t('vault.routeTokenAria')}</span>
                 <span className="v stack">
                   {team.route_token ? (
-                    <div className="drawer-tokenbox" tabIndex={0} aria-label="Route token">
+                    <div className="drawer-tokenbox" tabIndex={0} aria-label={t('vault.routeTokenAria')}>
                       {team.route_token}
                       <button
                         type="button"
                         className="copy-btn"
-                        title="Copy route token"
-                        aria-label="Copy route token"
+                        title={t('vault.copyRouteTokenTitle')}
+                        aria-label={t('vault.copyRouteTokenTitle')}
                         onClick={() => copyField('route_token', team.route_token!)}
                       >
                         {copiedField === 'route_token' ? (
@@ -3373,7 +3386,7 @@ function DetailDrawer(props: {
                   ) : (
                     <div
                       className="drawer-tokenbox drawer-tokenbox-locked"
-                      aria-label="Route token (locked)"
+                      aria-label={t('vault.routeTokenLockedAria')}
                       style={{ color: 'var(--muted-foreground)' }}
                     >
                       <span style={{ letterSpacing: '0.15em' }}>
@@ -3389,17 +3402,16 @@ function DetailDrawer(props: {
                           opacity: 0.75,
                         }}
                       >
-                        Unlock vault to reveal this token.
+                        {t('vault.unlockToRevealToken')}
                       </span>
                     </div>
                   )}
                 </span>
               </div>
               <div className="drawer-field">
-                <span className="k">Source</span>
+                <span className="k">{t('vault.source')}</span>
                 <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
-                  Issued by your team server. Credential material stays in
-                  the local vault — no plaintext in the browser.
+                  {t('vault.teamSourceDesc')}
                 </span>
               </div>
             </div>
@@ -3414,10 +3426,10 @@ function DetailDrawer(props: {
           <div className="drawer-section">
             <div className="drawer-section-title">
               <KeyRoundIcon className="w-3 h-3" />
-              Credential
+              {t('vault.credential')}
             </div>
             <div className="drawer-field">
-              <span className="k">Alias</span>
+              <span className="k">{t('vault.drawerAlias')}</span>
               <span className="v">
                 {/* OAuth: render the email icon on the alias row only when
                     alias and display_identity coincide (the user hasn't
@@ -3436,7 +3448,7 @@ function DetailDrawer(props: {
                   type="button"
                   className="copy-btn"
                   title={`Copy ${alias}`}
-                  aria-label="Copy alias"
+                  aria-label={t('vault.copyAliasAria')}
                   onClick={() => copyField('alias', alias)}
                 >
                   {copiedField === 'alias' ? (
@@ -3445,7 +3457,7 @@ function DetailDrawer(props: {
                     <ClipboardIcon className="w-3 h-3" />
                   )}
                 </button>
-                <span className="ro-pill">EDITABLE</span>
+                <span className="ro-pill">{t('vault.editablePill')}</span>
               </span>
             </div>
             {isPersonal && personal && (
@@ -3523,7 +3535,7 @@ function DetailDrawer(props: {
                       <div className="drawer-field">
                         <span className="k">base_url</span>
                         <span className="v">
-                          <span className="mono dim">unknown provider</span>
+                          <span className="mono dim">{t('vault.unknownProvider')}</span>
                         </span>
                       </div>
                     );
@@ -3535,10 +3547,10 @@ function DetailDrawer(props: {
                   // tells them whether the proxy is using their stored value
                   // or filling in a default.
                   const hintLabel: Record<typeof source, string> = {
-                    'table-host':     'effective upstream (host match)',
-                    'table-provider': 'effective upstream (provider default)',
-                    'stored':         'stored as-is (host not in routes table)',
-                    'official':       'provider default (legacy)',
+                    'table-host':     t('vault.hintEffectiveHostMatch'),
+                    'table-provider': t('vault.hintEffectiveProviderDefault'),
+                    'stored':         t('vault.hintStoredAsIs'),
+                    'official':       t('vault.hintProviderDefaultLegacy'),
                     'unknown':        '',
                   };
 
@@ -3552,8 +3564,8 @@ function DetailDrawer(props: {
                           <button
                             type="button"
                             className="inline-copy"
-                            title="Copy effective upstream URL"
-                            aria-label="Copy base_url"
+                            title={t('vault.copyEffectiveUpstreamUrlTitle')}
+                            aria-label={t('vault.copyEffectiveUpstreamUrlTitle')}
                             onClick={() => copyField('base_url', effectiveUrl!)}
                           >
                             {copiedField === 'base_url' ? (
@@ -3581,7 +3593,7 @@ function DetailDrawer(props: {
                   const copied = copiedField === 'cli_get';
                   return (
                     <div className="drawer-field">
-                      <span className="k">API Key</span>
+                      <span className="k">{t('vault.apiKey')}</span>
                       <span className="v stack" style={{ width: '100%' }}>
                         <div className="secret-view masked" style={{ width: '100%' }}>
                           <div className="plain">
@@ -3619,8 +3631,8 @@ function DetailDrawer(props: {
                           <button
                             type="button"
                             className="inline-copy"
-                            title="Copy reveal command"
-                            aria-label="Copy reveal command"
+                            title={t('vault.copyRevealCommandTitle')}
+                            aria-label={t('vault.copyRevealCommandAria')}
                             onClick={() => copyField('cli_get', cliCmd)}
                           >
                             {copied ? (
@@ -3630,7 +3642,7 @@ function DetailDrawer(props: {
                             )}
                           </button>
                         </span>
-                        <span className="hint">reveal in terminal</span>
+                        <span className="hint">{t('vault.revealInTerminal')}</span>
                       </span>
                     </div>
                   );
@@ -3651,12 +3663,12 @@ function DetailDrawer(props: {
                     <span className="v stack">
                       <span className="mono">{personal.route_url}</span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <span className="hint">SDK base URL (via aikey-proxy)</span>
+                        <span className="hint">{t('vault.sdkBaseUrlHint')}</span>
                         <button
                           type="button"
                           className="inline-copy"
-                          title="Copy route URL (aikey-proxy endpoint)"
-                          aria-label="Copy route_url"
+                          title={t('vault.copyRouteUrlTitle')}
+                          aria-label={t('vault.copyRouteUrlTitle')}
                           onClick={() => copyField('route_url', personal.route_url!)}
                         >
                           {copiedField === 'route_url' ? (
@@ -3686,16 +3698,16 @@ function DetailDrawer(props: {
                   only).
                 */}
                 <div className="drawer-field">
-                  <span className="k">Route token</span>
+                  <span className="k">{t('vault.routeTokenAria')}</span>
                   <span className="v stack">
                     {personal.route_token ? (
-                      <div className="drawer-tokenbox" tabIndex={0} aria-label="Route token">
+                      <div className="drawer-tokenbox" tabIndex={0} aria-label={t('vault.routeTokenAria')}>
                         {personal.route_token}
                         <button
                           type="button"
                           className="copy-btn"
-                          title="Copy route token"
-                          aria-label="Copy route token"
+                          title={t('vault.copyRouteTokenTitle')}
+                          aria-label={t('vault.copyRouteTokenTitle')}
                           onClick={() => copyField('route_token', personal.route_token!)}
                         >
                           {copiedField === 'route_token' ? (
@@ -3708,7 +3720,7 @@ function DetailDrawer(props: {
                     ) : (
                       <div
                         className="drawer-tokenbox drawer-tokenbox-locked"
-                        aria-label="Route token (locked)"
+                        aria-label={t('vault.routeTokenLockedAria')}
                         style={{ color: 'var(--muted-foreground)' }}
                       >
                         <span style={{ letterSpacing: '0.15em' }}>
@@ -3724,7 +3736,7 @@ function DetailDrawer(props: {
                             opacity: 0.75,
                           }}
                         >
-                          Unlock vault to reveal this token.
+                          {t('vault.unlockToRevealToken')}
                         </span>
                       </div>
                     )}
@@ -3752,7 +3764,7 @@ function DetailDrawer(props: {
                   if (!renamed) return null;
                   return (
                     <div className="drawer-field">
-                      <span className="k">Identity</span>
+                      <span className="k">{t('vault.identity')}</span>
                       <span className="v">
                         <MailIcon className="w-3 h-3" />
                         {identity}
@@ -3784,12 +3796,12 @@ function DetailDrawer(props: {
                     <span className="v stack">
                       <span className="mono">{oauth.route_url}</span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <span className="hint">SDK base URL (via aikey-proxy)</span>
+                        <span className="hint">{t('vault.sdkBaseUrlHint')}</span>
                         <button
                           type="button"
                           className="inline-copy"
-                          title="Copy route URL (aikey-proxy endpoint)"
-                          aria-label="Copy route_url"
+                          title={t('vault.copyRouteUrlTitle')}
+                          aria-label={t('vault.copyRouteUrlTitle')}
                           onClick={() => copyField('route_url', oauth.route_url!)}
                         >
                           {copiedField === 'route_url' ? (
@@ -3811,16 +3823,16 @@ function DetailDrawer(props: {
                   real token + copy button. 2026-05-09.
                 */}
                 <div className="drawer-field">
-                  <span className="k">Route token</span>
+                  <span className="k">{t('vault.routeTokenAria')}</span>
                   <span className="v stack">
                     {oauth.route_token ? (
-                      <div className="drawer-tokenbox" tabIndex={0} aria-label="Route token">
+                      <div className="drawer-tokenbox" tabIndex={0} aria-label={t('vault.routeTokenAria')}>
                         {oauth.route_token}
                         <button
                           type="button"
                           className="copy-btn"
-                          title="Copy route token"
-                          aria-label="Copy route token"
+                          title={t('vault.copyRouteTokenTitle')}
+                          aria-label={t('vault.copyRouteTokenTitle')}
                           onClick={() => copyField('route_token', oauth.route_token!)}
                         >
                           {copiedField === 'route_token' ? (
@@ -3833,7 +3845,7 @@ function DetailDrawer(props: {
                     ) : (
                       <div
                         className="drawer-tokenbox drawer-tokenbox-locked"
-                        aria-label="Route token (locked)"
+                        aria-label={t('vault.routeTokenLockedAria')}
                         style={{ color: 'var(--muted-foreground)' }}
                       >
                         <span style={{ letterSpacing: '0.15em' }}>
@@ -3849,7 +3861,7 @@ function DetailDrawer(props: {
                             opacity: 0.75,
                           }}
                         >
-                          Unlock vault to reveal this token.
+                          {t('vault.unlockToRevealToken')}
                         </span>
                       </div>
                     )}
@@ -3871,7 +3883,7 @@ function DetailDrawer(props: {
           <div className="drawer-section">
             <div className="drawer-section-title">
               <WrenchIcon className="w-3 h-3" />
-              Actions
+              {t('vault.actions')}
             </div>
             <div className="drawer-actions">
               {/* Phase 3B R12 (2026-05-11): unified primary CTA — all
@@ -3900,12 +3912,12 @@ function DetailDrawer(props: {
                   {copiedField === 'route_cmd' ? (
                     <>
                       <CheckIcon className="w-3.5 h-3.5" />
-                      Command copied
+                      {t('vault.commandCopied')}
                     </>
                   ) : (
                     <>
                       <ZapIcon className="w-3.5 h-3.5" />
-                      {props.inUse ? 'Active in terminal' : 'Activate in terminal'}
+                      {props.inUse ? t('vault.activeInTerminal') : t('vault.activateInTerminal')}
                     </>
                   )}
                 </button>
@@ -3941,7 +3953,7 @@ function DetailDrawer(props: {
                       {justCopied ? (
                         <>
                           <CheckIcon className="w-3 h-3" />
-                          <span>Copied — paste in a terminal.</span>
+                          <span>{t('vault.copiedPasteInTerminal')}</span>
                         </>
                       ) : (
                         <>
@@ -3959,7 +3971,7 @@ function DetailDrawer(props: {
                     {justCopied ? (
                       <>
                         <CheckIcon className="w-3 h-3" />
-                        <span>Copied — paste in a terminal.</span>
+                        <span>{t('vault.copiedPasteInTerminal')}</span>
                       </>
                     ) : (
                       <>
@@ -3992,10 +4004,10 @@ function DetailDrawer(props: {
                 className="action-btn"
                 onClick={props.onBeginRename}
                 disabled={props.locked}
-                title={lockedTitle ?? 'Rename this alias'}
+                title={lockedTitle ?? t('vault.renameThisAlias')}
               >
                 <EditIcon className="w-3.5 h-3.5" />
-                Rename alias
+                {t('vault.renameAlias')}
               </button>
               <button
                 type="button"
@@ -4004,12 +4016,12 @@ function DetailDrawer(props: {
                 disabled={props.locked || isTeam}
                 title={
                   isTeam
-                    ? 'Team-server keys can only be revoked by the team admin — local delete is not permitted'
-                    : (lockedTitle ?? 'Delete this key — cannot be undone')
+                    ? t('vault.teamDeleteBlockedTitle')
+                    : (lockedTitle ?? t('vault.deleteCannotBeUndone'))
                 }
               >
                 <TrashIcon className="w-3.5 h-3.5" />
-                Delete
+                {t('vault.delete')}
               </button>
               </div>
             </div>
@@ -4031,19 +4043,19 @@ function DetailDrawer(props: {
           <div className="drawer-section drawer-section--meta">
             <div className="drawer-section-title">
               <InfoIcon className="w-3 h-3" />
-              Meta
+              {t('vault.meta')}
             </div>
             <div className="drawer-field">
-              <span className="k">Protocol</span>
+              <span className="k">{t('vault.protocol')}</span>
               <span className="v">
                 {providerName}
                 <span className="ro-pill">RO</span>
               </span>
             </div>
             <div className="drawer-field">
-              <span className="k">Type</span>
+              <span className="k">{t('vault.type')}</span>
               <span className="v">
-                {isTeam ? 'Team key' : isPersonal ? 'KEY' : 'OAuth session'}
+                {isTeam ? t('vault.typeTeamKey') : isPersonal ? 'KEY' : t('vault.typeOAuthSession')}
                 <span className="ro-pill">RO</span>
               </span>
             </div>
@@ -4053,23 +4065,23 @@ function DetailDrawer(props: {
                 missing the data both stay clean. */}
             {oauth?.org_uuid && (
               <div className="drawer-field">
-                <span className="k">Org UUID</span>
+                <span className="k">{t('vault.orgUuid')}</span>
                 <span className="v mono dim">{oauth.org_uuid}</span>
               </div>
             )}
             {oauth?.account_tier && (
               <div className="drawer-field">
-                <span className="k">Tier</span>
+                <span className="k">{t('vault.tier')}</span>
                 <span className="v">{oauth.account_tier}</span>
               </div>
             )}
             <div className="drawer-field">
-              <span className="k">Status</span>
+              <span className="k">{t('vault.colStatus')}</span>
               <span className="v">
                 {r.status === 'active' ? (
                   <>
                     <span className="status-dot" style={{ width: 5, height: 5 }} />
-                    <span style={{ color: 'var(--success)' }}>Active</span>
+                    <span style={{ color: 'var(--success)' }}>{t('vault.statusActiveWord')}</span>
                   </>
                 ) : (
                   <>
@@ -4088,7 +4100,7 @@ function DetailDrawer(props: {
                 there's real data behind. */}
             {(!isTeam || r.last_used_at) && (
               <div className="drawer-field">
-                <span className="k">Last used</span>
+                <span className="k">{t('vault.lastUsed')}</span>
                 <span className="v">
                   {formatRelative(r.last_used_at)}
                   {r.last_used_at && (
@@ -4101,19 +4113,19 @@ function DetailDrawer(props: {
             )}
             {(!isTeam || r.created_at > 0) && (
               <div className="drawer-field">
-                <span className="k">Created</span>
+                <span className="k">{t('vault.created')}</span>
                 <span className="v">{formatCreatedShort(r.created_at)}</span>
               </div>
             )}
             {(!isTeam || (r.use_count ?? 0) > 0) && (
               <div className="drawer-field">
-                <span className="k">Use count</span>
+                <span className="k">{t('vault.useCount')}</span>
                 <span className="v mono">{r.use_count ?? 0}</span>
               </div>
             )}
             {oauth?.token_expires_at && (
               <div className="drawer-field">
-                <span className="k">Expires</span>
+                <span className="k">{t('vault.expires')}</span>
                 <span className="v">
                   {formatExpiresIn(oauth.token_expires_at)}
                   <span className="mono dim">
@@ -4127,12 +4139,12 @@ function DetailDrawer(props: {
                 quietly drops out for team keys without an expiry. */}
             {team?.expires_at && (
               <div className="drawer-field">
-                <span className="k">Expires</span>
+                <span className="k">{t('vault.expires')}</span>
                 <span className="v">{formatExpiresAtIso(team.expires_at)}</span>
               </div>
             )}
             <div className="drawer-field">
-              <span className="k">Target</span>
+              <span className="k">{t('vault.target')}</span>
               <span className="v mono dim">{r.target}</span>
             </div>
           </div>
@@ -4178,6 +4190,7 @@ function TestConnectionPopup(props: {
   onClose: () => void;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   const { record, phase, result, error, onClose, onRetry } = props;
   const lt = result?.last_test ?? null;
   const persistedAt = phase === 'done' && lt ? lt : null;
@@ -4199,7 +4212,7 @@ function TestConnectionPopup(props: {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Connectivity test result"
+        aria-label={t('vault.connectivityTestResultAria')}
         style={{
           position: 'fixed',
           inset: 0,
@@ -4230,7 +4243,7 @@ function TestConnectionPopup(props: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <ActivityIcon className="w-4 h-4" />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>Test connection</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{t('vault.testConnectionPopupTitle')}</div>
               <div
                 className="font-mono"
                 style={{
@@ -4250,8 +4263,8 @@ function TestConnectionPopup(props: {
             type="button"
             className="drawer-close"
             onClick={onClose}
-            title="Close (Esc)"
-            aria-label="Close popup"
+            title={t('vault.closeEsc')}
+            aria-label={t('vault.closePopupAria')}
           >
             <XIcon className="w-4 h-4" />
           </button>
@@ -4281,9 +4294,9 @@ function TestConnectionPopup(props: {
                 style={{ display: 'block', margin: '0 auto 12px' }}
                 aria-hidden="true"
               />
-              <div style={{ fontSize: 13 }}>Probing through aikey-proxy…</div>
+              <div style={{ fontSize: 13 }}>{t('vault.probingThroughProxy')}</div>
               <div className="font-mono" style={{ fontSize: 11, marginTop: 6 }}>
-                This can take 5-30 seconds depending on provider count.
+                {t('vault.probeDurationHint')}
               </div>
             </div>
           )}
@@ -4295,7 +4308,7 @@ function TestConnectionPopup(props: {
             // raw axios message for codes we haven't classified, so
             // we never hide real backend errors — just paper over the
             // most common transient ones.
-            const friendly = friendlyTestError(error);
+            const friendly = friendlyTestError(error, t);
             return (
               <div>
                 <div
@@ -4339,7 +4352,7 @@ function TestConnectionPopup(props: {
                   }}
                 >
                   {error.httpStatus ? `HTTP ${error.httpStatus} · ` : ''}
-                  {error.code ?? 'no-code'}
+                  {error.code ?? t('vault.noCode')}
                   {error.message && error.message !== friendly.detail ? ` · ${error.message}` : ''}
                 </div>
               </div>
@@ -4375,7 +4388,7 @@ function TestConnectionPopup(props: {
                     color: isPass ? 'var(--success)' : 'var(--destructive)',
                   }}
                 >
-                  {isPass ? 'Connection healthy' : 'Connection failed'}
+                  {isPass ? t('vault.connectionHealthy') : t('vault.connectionFailed')}
                 </span>
                 {persistedAt.latency_ms != null && (
                   <span className="font-mono" style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
@@ -4403,7 +4416,7 @@ function TestConnectionPopup(props: {
                     marginBottom: 12,
                   }}
                 >
-                  Note — vault write didn't affect any row (the key may have been deleted just now). The Last test column won't update.
+                  {t('vault.persistNote')}
                 </div>
               )}
               {Array.isArray(persistedAt.suite_results) && persistedAt.suite_results.length > 0 && (
@@ -4430,11 +4443,11 @@ function TestConnectionPopup(props: {
             <button
               type="button"
               onClick={onRetry}
-              title="Run the probe again"
+              title={t('vault.runProbeAgainTitle')}
               style={POPUP_BTN_STYLE}
             >
               <RefreshIcon className="w-3.5 h-3.5" />
-              <span>Run again</span>
+              <span>{t('vault.runAgain')}</span>
             </button>
           )}
           <button
@@ -4442,7 +4455,7 @@ function TestConnectionPopup(props: {
             onClick={onClose}
             style={POPUP_BTN_PRIMARY_STYLE}
           >
-            Close
+            {t('vault.close')}
           </button>
         </div>
       </div>
@@ -4455,6 +4468,7 @@ function TestConnectionPopup(props: {
 // rows). Status comes straight from the CLI's run_connectivity_suite
 // JSON output — see SuiteOutcome.json_results.
 function SuiteResultsTable(props: { rows: unknown[] }) {
+  const { t } = useTranslation();
   const rows = props.rows as Array<Record<string, unknown>>;
   if (!rows.length) return null;
   return (
@@ -4468,11 +4482,11 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
       <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 11 }}>
         <thead>
           <tr style={{ background: 'var(--muted)' }}>
-            <th style={cellHeadStyle}>Provider</th>
-            <th style={cellHeadStyle}>Ping</th>
-            <th style={cellHeadStyle}>API</th>
-            <th style={cellHeadStyle}>Chat</th>
-            <th style={cellHeadStyle}>Latency</th>
+            <th style={cellHeadStyle}>{t('vault.suiteColProvider')}</th>
+            <th style={cellHeadStyle}>{t('vault.suiteColPing')}</th>
+            <th style={cellHeadStyle}>{t('vault.suiteColApi')}</th>
+            <th style={cellHeadStyle}>{t('vault.suiteColChat')}</th>
+            <th style={cellHeadStyle}>{t('vault.suiteColLatency')}</th>
           </tr>
         </thead>
         <tbody>
@@ -4505,7 +4519,7 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
                       background: pingOk ? 'var(--success)' : pingFailColor,
                     }}
                   />{' '}
-                  {pingOk ? 'OK' : 'FAIL'}
+                  {pingOk ? t('vault.probeOk') : t('vault.probeFail')}
                 </td>
                 <td style={cellStyle}>
                   <span
@@ -4517,7 +4531,7 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
                       background: apiOk ? 'var(--success)' : stageFailColor,
                     }}
                   />{' '}
-                  {apiOk ? 'OK' : apiStatus != null ? `HTTP ${apiStatus}` : 'FAIL'}
+                  {apiOk ? t('vault.probeOk') : apiStatus != null ? `HTTP ${apiStatus}` : t('vault.probeFail')}
                 </td>
                 <td style={cellStyle}>
                   <span
@@ -4529,7 +4543,7 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
                       background: chatOk ? 'var(--success)' : stageFailColor,
                     }}
                   />{' '}
-                  {chatOk ? 'OK' : chatStatus != null ? `HTTP ${chatStatus}` : 'FAIL'}
+                  {chatOk ? t('vault.probeOk') : chatStatus != null ? `HTTP ${chatStatus}` : t('vault.probeFail')}
                 </td>
                 <td style={cellStyle} className="font-mono">
                   {latencyMs != null ? `${latencyMs}ms` : '—'}
@@ -4607,6 +4621,7 @@ function parseProviderErrorBody(body: string | null): {
 }
 
 function FailureDetails(props: { rows: unknown[] }) {
+  const { t } = useTranslation();
   const rows = props.rows as Array<Record<string, unknown>>;
   type FailEntry = {
     provider: string;
@@ -4657,7 +4672,7 @@ function FailureDetails(props: { rows: unknown[] }) {
           marginBottom: 8,
         }}
       >
-        Failure details ({failures.length})
+        {t('vault.failureDetailsLabel')}{failures.length})
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {failures.map((f, i) => {
@@ -4818,26 +4833,31 @@ interface AddKeyValidationError {
   field: AddKeyField;
   message: string;
 }
-function validateAddKey(args: {
-  alias: string;
-  secret: string;
-  baseUrl: string;
-}): AddKeyValidationError | null {
+function validateAddKey(
+  args: {
+    alias: string;
+    secret: string;
+    baseUrl: string;
+  },
+  // i18n translator passed in from the calling component (this is a pure
+  // helper, not a React component, so it can't call useTranslation()).
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): AddKeyValidationError | null {
   const alias = args.alias.trim();
-  if (!alias) return { field: 'alias', message: 'Alias is required' };
+  if (!alias) return { field: 'alias', message: t('vault.aliasRequired') };
   if (alias.length < ALIAS_MIN_LEN) {
-    return { field: 'alias', message: `Alias must be at least ${ALIAS_MIN_LEN} characters` };
+    return { field: 'alias', message: t('vault.aliasMinLen', { n: ALIAS_MIN_LEN }) };
   }
   if (alias.length > ALIAS_MAX_LEN) {
-    return { field: 'alias', message: `Alias exceeds ${ALIAS_MAX_LEN} characters` };
+    return { field: 'alias', message: t('vault.aliasMaxLen', { n: ALIAS_MAX_LEN }) };
   }
   // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1F\x7F]/.test(alias)) {
-    return { field: 'alias', message: 'Alias contains control characters' };
+    return { field: 'alias', message: t('vault.aliasControlChars') };
   }
-  if (!args.secret) return { field: 'secret', message: 'Plaintext secret is required' };
+  if (!args.secret) return { field: 'secret', message: t('vault.secretRequired') };
   if (args.secret.length < SECRET_MIN_LEN) {
-    return { field: 'secret', message: `Secret must be at least ${SECRET_MIN_LEN} characters` };
+    return { field: 'secret', message: t('vault.secretMinLen', { n: SECRET_MIN_LEN }) };
   }
   // base_url is optional; when present it must be a parseable absolute
   // http(s) URL — relative paths or missing scheme are common typos.
@@ -4847,10 +4867,10 @@ function validateAddKey(args: {
     try {
       parsed = new URL(baseUrl);
     } catch {
-      return { field: 'baseUrl', message: 'base_url must be a valid URL (e.g. https://api.example.com/v1)' };
+      return { field: 'baseUrl', message: t('vault.baseUrlInvalid') };
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return { field: 'baseUrl', message: 'base_url must use http or https' };
+      return { field: 'baseUrl', message: t('vault.baseUrlScheme') };
     }
   }
   return null;
@@ -4901,6 +4921,7 @@ function AddKeyModal(props: {
    */
   providerToRoute?: Map<string, { base_url: string; version: string }>;
 }) {
+  const { t } = useTranslation();
   const [kind, setKind] = useState<AddKind>('api');
   const [alias, setAlias] = useState('');
   // API-Key kind accepts multiple providers (aggregator gateways like
@@ -5012,7 +5033,7 @@ function AddKeyModal(props: {
     // run the same 4-phase probe — only the entry point differs.
     if (kind === 'oauth') {
       if (!oauthAccountId) {
-        setTestError('OAuth session has no account id yet — finish step 3 on page 1 first.');
+        setTestError(t('vault.oauthNoAccountIdTest'));
         setTestState('error');
         return;
       }
@@ -5025,11 +5046,11 @@ function AddKeyModal(props: {
       } catch (e) {
         const err = e as { code?: string; message?: string; response?: { status?: number } };
         const status = err?.response?.status;
-        let msg = err?.message || 'Test failed for an unknown reason';
+        let msg = err?.message || t('vault.testFailedUnknown');
         if (typeof status === 'number' && status >= 500) {
-          msg = 'Local server is restarting. Try `aikey service restart web` and retry.';
+          msg = t('vault.localServerRestarting');
         } else if (err?.code === 'ERR_NETWORK') {
-          msg = 'Local server unreachable. Run `aikey service start web` and retry.';
+          msg = t('vault.localServerUnreachable');
         }
         setTestError(msg);
         setTestState('error');
@@ -5038,7 +5059,7 @@ function AddKeyModal(props: {
     }
     // API-key kind: pre-save testRaw path (plaintext secret in body).
     if (!secret.trim() || providers.length === 0) {
-      setTestError('Need a secret and at least one protocol to test.');
+      setTestError(t('vault.needSecretAndProtocol'));
       setTestState('error');
       return;
     }
@@ -5060,11 +5081,11 @@ function AddKeyModal(props: {
       // Connection popup, so we keep this terser than friendlyTestError.
       const err = e as { code?: string; message?: string; response?: { status?: number } };
       const status = err?.response?.status;
-      let msg = err?.message || 'Test failed for an unknown reason';
+      let msg = err?.message || t('vault.testFailedUnknown');
       if (typeof status === 'number' && status >= 500) {
-        msg = 'Local server is restarting. Try `aikey service restart web` and retry.';
+        msg = t('vault.localServerRestarting');
       } else if (err?.code === 'ERR_NETWORK') {
-        msg = 'Local server unreachable. Run `aikey service start web` and retry.';
+        msg = t('vault.localServerUnreachable');
       }
       setTestError(msg);
       setTestState('error');
@@ -5082,7 +5103,7 @@ function AddKeyModal(props: {
     // page-level mutation handlers.
     if (kind === 'oauth') {
       if (!oauthAccountId) {
-        setErr('OAuth session has no account id — finish step 3 on page 1 first.');
+        setErr(t('vault.oauthNoAccountIdSave'));
         return;
       }
       const newAlias = alias.trim();
@@ -5107,7 +5128,7 @@ function AddKeyModal(props: {
     // (min length, base_url format) so users see a clear inline error
     // before the round-trip to the CLI bridge. The bridge still
     // re-validates server-side as the source of truth.
-    const v = validateAddKey({ alias, secret, baseUrl });
+    const v = validateAddKey({ alias, secret, baseUrl }, t);
     if (v) {
       setErr(v.message);
       // Re-trigger flash even if same field fails twice in a row
@@ -5172,38 +5193,38 @@ function AddKeyModal(props: {
         <div className="modal-header">
           <span className="inline-flex items-center gap-2 font-semibold text-[13.5px]">
             <PlusCircleIcon className="w-4 h-4" style={{ color: 'var(--primary)' }} />
-            Add key
+            {t('vault.addKeyHeading')}
             <span
               className="text-[10px] font-mono tracking-widest uppercase ml-1"
               style={{ color: 'var(--muted-foreground)' }}
             >
-              · stored locally, never leaves device
+              {t('vault.storedLocallyNeverLeaves')}
             </span>
           </span>
           <div className="header-controls inline-flex items-center gap-2">
             {/* Mode switch (spec §2). Always rendered so the user has
                 a consistent control surface regardless of kind. */}
-            <div className="mode-switch" aria-label="Mode switch">
+            <div className="mode-switch" aria-label={t('vault.modeSwitchAria')}>
               <button
                 type="button"
                 className={mode === 'guided' ? 'active' : ''}
                 onClick={() => setMode('guided')}
               >
-                Guided
+                {t('vault.modeGuided')}
               </button>
               <button
                 type="button"
                 className={mode === 'simple' ? 'active' : ''}
                 onClick={() => setMode('simple')}
               >
-                Simple
+                {t('vault.modeSimple')}
               </button>
             </div>
             <button
               className="icon-btn"
-              title="Close"
+              title={t('vault.close')}
               onClick={props.onClose}
-              aria-label="Close"
+              aria-label={t('vault.close')}
             >
               <XIcon className="w-4 h-4" />
             </button>
@@ -5315,7 +5336,7 @@ function AddKeyModal(props: {
               style={useGuided ? undefined : { color: 'var(--muted-foreground)' }}
             >
               <ShieldCheckIcon className="w-3 h-3" style={{ color: 'var(--success)' }} />
-              {useGuided ? 'encrypted with master key on save' : 'Encrypted with master key on save'}
+              {useGuided ? t('vault.encryptedOnSaveGuided') : t('vault.encryptedOnSaveSimple')}
             </span>
             <div className="actions flex items-center gap-2">
               <button
@@ -5325,7 +5346,7 @@ function AddKeyModal(props: {
               >
                 {/* spec §11: "Not now" hints at draft semantics on
                     guided page 2; falls back to "Cancel" otherwise. */}
-                {useGuided && page === 2 ? 'Not now' : 'Cancel'}
+                {useGuided && page === 2 ? t('vault.notNow') : t('vault.cancel')}
               </button>
               {useGuided && page === 2 && (
                 <button
@@ -5334,7 +5355,7 @@ function AddKeyModal(props: {
                   onClick={() => setPage(1)}
                 >
                   <ChevronLeftIcon className="w-3 h-3" />
-                  Back
+                  {t('vault.back')}
                 </button>
               )}
               {/* Next button visibility (spec §4.4 + §5):
@@ -5349,7 +5370,7 @@ function AddKeyModal(props: {
                   className="btn btn-primary btn-md text-[11px] px-4 py-1.5 flex items-center gap-1"
                   onClick={() => setPage(2)}
                 >
-                  Next
+                  {t('vault.next')}
                   <ChevronRightIcon className="w-3 h-3" />
                 </button>
               )}
@@ -5363,7 +5384,7 @@ function AddKeyModal(props: {
                   className="btn btn-primary btn-primary-dim btn-md text-[11px] px-4 py-1.5 flex items-center gap-1"
                   disabled={props.pending}
                 >
-                  {props.pending ? 'Saving…' : (
+                  {props.pending ? t('vault.saving') : (
                     <>
                       <CheckIcon className="w-3 h-3" />
                       {/* spec §14.1: Save anyway keeps btn-primary
@@ -5374,8 +5395,8 @@ function AddKeyModal(props: {
                           showing "Save anyway" there would baffle the
                           user (no visible failure to disclaim). */}
                       {useGuided && testState === 'done' && testResult?.status === 'fail'
-                        ? 'Save anyway'
-                        : 'Save key'}
+                        ? t('vault.saveAnyway')
+                        : t('vault.saveKey')}
                     </>
                   )}
                 </button>
@@ -5442,11 +5463,12 @@ function baseUrlPlaceholder(
 }
 
 function KindSeg(props: { kind: AddKind; setKind: (k: AddKind) => void; helpHidden?: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className="form-row">
       <span className="form-label">
         <ShapesIcon className="w-3 h-3" />
-        Kind
+        {t('vault.kind')}
       </span>
       <div className="seg">
         <button
@@ -5455,7 +5477,7 @@ function KindSeg(props: { kind: AddKind; setKind: (k: AddKind) => void; helpHidd
           onClick={() => props.setKind('api')}
         >
           <KeyIcon className="w-3 h-3" />
-          API Key
+          {t('vault.kindApiKey')}
         </button>
         <button
           type="button"
@@ -5463,12 +5485,12 @@ function KindSeg(props: { kind: AddKind; setKind: (k: AddKind) => void; helpHidd
           onClick={() => props.setKind('oauth')}
         >
           <UserCheckIcon className="w-3 h-3" />
-          OAuth
+          {t('vault.kindOAuth')}
         </button>
       </div>
       {!props.helpHidden && (
         <span className="form-help">
-          Paste an existing key, or sign in with OAuth.
+          {t('vault.kindHelp')}
         </span>
       )}
     </div>
@@ -5479,6 +5501,7 @@ function KindSeg(props: { kind: AddKind; setKind: (k: AddKind) => void; helpHidd
 // alias + protocols pair. showAlias=false skips alias (Guided mode
 // shows it on page 2's name-strip instead — spec §19.1).
 function ApiFields(props: AddKeyFieldShared & { showAlias: boolean; aliasPlaceholder?: string }) {
+  const { t } = useTranslation();
   const aliasPh = props.aliasPlaceholder || aliasPlaceholder(props.providers);
   return (
     <>
@@ -5487,7 +5510,7 @@ function ApiFields(props: AddKeyFieldShared & { showAlias: boolean; aliasPlaceho
           <div className="form-row">
             <label className="form-label" htmlFor="add-alias-simple">
               <TagIcon className="w-3 h-3" />
-              Alias <span className="req">*</span>
+              {t('vault.aliasLabel')}<span className="req">*</span>
             </label>
             <input
               id="add-alias-simple"
@@ -5503,22 +5526,22 @@ function ApiFields(props: AddKeyFieldShared & { showAlias: boolean; aliasPlaceho
         <div className="form-row">
           <label className="form-label">
             <GlobeIcon className="w-3 h-3" />
-            Protocols <span className="req">*</span>
+            {t('vault.protocols')}<span className="req">*</span>
           </label>
           <ProviderMultiSelect
             values={props.providers}
             onChange={props.setProviders}
-            placeholder="Search or add protocol…"
+            placeholder={t('vault.searchOrAddProtocol')}
           />
           <span className="form-help">
-            Pick the API protocol (e.g. anthropic, openai). For aggregators, choose the underlying one.
+            {t('vault.protocolsHelp')}
           </span>
         </div>
       </div>
       <div className="form-row">
         <label className="form-label" htmlFor="add-secret">
           <KeyIcon className="w-3 h-3" />
-          Plaintext secret <span className="req">*</span>
+          {t('vault.plaintextSecret')}<span className="req">*</span>
         </label>
         <span className="field-input-wrap">
           <input
@@ -5536,15 +5559,15 @@ function ApiFields(props: AddKeyFieldShared & { showAlias: boolean; aliasPlaceho
               type="button"
               className="field-reveal-btn"
               onClick={() => props.setRevealSecret((r: boolean) => !r)}
-              title={props.revealSecret ? 'Hide value' : 'Reveal value'}
-              aria-label={props.revealSecret ? 'Hide secret' : 'Reveal secret'}
+              title={props.revealSecret ? t('vault.hideValueTitle') : t('vault.revealValueTitle')}
+              aria-label={props.revealSecret ? t('vault.hideSecretAria') : t('vault.revealSecretAria')}
             >
               {props.revealSecret ? <EyeOffIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
             </button>
           )}
         </span>
         <span className="form-help">
-          Encrypted locally; never uploaded.
+          {t('vault.secretHelp')}
         </span>
       </div>
       <div className="form-row">
@@ -5555,7 +5578,7 @@ function ApiFields(props: AddKeyFieldShared & { showAlias: boolean; aliasPlaceho
             className="normal-case tracking-normal"
             style={{ color: 'var(--muted-foreground)' }}
           >
-            · optional
+            {t('vault.optionalSuffix')}
           </span>
         </label>
         <span className="field-input-wrap">
@@ -5572,15 +5595,15 @@ function ApiFields(props: AddKeyFieldShared & { showAlias: boolean; aliasPlaceho
               type="button"
               className="field-reveal-btn"
               onClick={() => props.setBaseUrl('')}
-              title="Clear base_url (use provider default)"
-              aria-label="Clear base_url"
+              title={t('vault.clearBaseUrlTitle')}
+              aria-label={t('vault.clearBaseUrlAria')}
             >
               <XIcon className="w-3.5 h-3.5" />
             </button>
           )}
         </span>
         <span className="form-help">
-          Override gateway. Blank = provider default.
+          {t('vault.baseUrlHelp')}
         </span>
       </div>
       {props.err && (
@@ -5600,6 +5623,7 @@ function SimpleBody(props: AddKeyFieldShared & {
     info?: { providerAccountId?: string; displayIdentity?: string },
   ) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="modal-body">
       <KindSeg kind={props.kind} setKind={props.setKind} />
@@ -5618,13 +5642,13 @@ function SimpleBody(props: AddKeyFieldShared & {
           <div className="form-row">
             <label className="form-label" htmlFor="add-alias-oauth-simple">
               <TagIcon className="w-3 h-3" />
-              Alias <span style={{ color: 'var(--muted-foreground)' }}>· optional</span>
+              {t('vault.aliasOptionalLabel')}<span style={{ color: 'var(--muted-foreground)' }}>{t('vault.optionalSuffix')}</span>
             </label>
             <input
               id="add-alias-oauth-simple"
               type="text"
               className={`field-input${props.flashField === 'alias' ? ' field-input-flash' : ''}`}
-              placeholder="Detected identity used if blank"
+              placeholder={t('vault.detectedIdentityUsedIfBlank')}
               value={props.alias}
               onChange={(e) => props.setAlias(e.target.value)}
             />
@@ -5657,15 +5681,17 @@ function probeRowState(
   phase: 'ping' | 'proxy' | 'api' | 'chat',
   testState: 'idle' | 'running' | 'done' | 'error',
   testResult: VaultLastTest | null,
+  // i18n translator threaded from GuidedBody (pure helper, not a component).
+  t: (key: string) => string,
 ): { tone: '' | 'good' | 'warn' | 'bad'; status: string; latency: string } {
   if (testState === 'idle' || testState === 'error') {
-    return { tone: '', status: 'waiting', latency: '-' };
+    return { tone: '', status: t('vault.probeStatusWaiting'), latency: '-' };
   }
   if (testState === 'running') {
     return { tone: '', status: '…', latency: '-' };
   }
   if (!testResult) {
-    return { tone: '', status: 'waiting', latency: '-' };
+    return { tone: '', status: t('vault.probeStatusWaiting'), latency: '-' };
   }
   if (phase === 'proxy') {
     // Read CLI's proxy probe result. Three render branches:
@@ -5682,19 +5708,19 @@ function probeRowState(
     if (typeof rec.proxy_ok !== 'boolean') {
       // Backward compat: aggregator didn't set proxy_* (old CLI / proxy not
       // running on this run). Keep the legacy "skipped" UX rather than empty row.
-      return { tone: '', status: 'skipped', latency: '-' };
+      return { tone: '', status: t('vault.probeStatusSkipped'), latency: '-' };
     }
     const latency = typeof rec.proxy_ms === 'number' && rec.proxy_ms > 0
       ? `${Math.round(rec.proxy_ms)} ms`
       : '-';
     if (rec.proxy_ok) {
-      return { tone: 'good', status: 'ok', latency };
+      return { tone: 'good', status: t('vault.probeStatusOk'), latency };
     }
     // proxy_ok=false → error path. Use proxy_error_code (when present) as the
     // status label so user sees "PROXY_TOO_OLD..." not just "fail"; full hint
     // text is shown in the friendly-error mapping below the table.
     const status = rec.proxy_error_code
-      || (typeof rec.proxy_status === 'number' ? String(rec.proxy_status) : 'fail');
+      || (typeof rec.proxy_status === 'number' ? String(rec.proxy_status) : t('vault.probeStatusFail'));
     return { tone: 'bad', status, latency };
   }
   // Pull per-phase booleans from the aggregated record.
@@ -5718,7 +5744,7 @@ function probeRowState(
     if (typeof v === 'number' && v > 0) latency = `${Math.round(v)} ms`;
   }
   if (ok) {
-    return { tone: 'good', status: 'ok', latency };
+    return { tone: 'good', status: t('vault.probeStatusOk'), latency };
   }
   // Failure phase: use destructive red for ping/api (hard failures),
   // warn for chat (model-policy rejection — auth + network are fine,
@@ -5728,7 +5754,7 @@ function probeRowState(
   // error_code (which is first-failing-phase only). Each phase gets its
   // own HTTP status so the user can read API vs Chat results side-by-
   // side instead of always seeing the same code in two rows.
-  let status = 'fail';
+  let status = t('vault.probeStatusFail');
   if (sr) {
     const phaseStatus = sr[phase === 'ping' ? 'ping_ok' : `${phase}_status`];
     if (typeof phaseStatus === 'number') status = `${phaseStatus}`;
@@ -5742,17 +5768,19 @@ function healthFromResult(
   testState: 'idle' | 'running' | 'done' | 'error',
   testResult: VaultLastTest | null,
   testError: string | null,
+  // i18n translator threaded from GuidedBody (pure helper, not a component).
+  t: (key: string) => string,
 ): { title: string; copy: string; tone: '' | 'good' | 'warn' | 'bad'; repair: { tone: '' | 'good' | 'warn' | 'bad'; text: string } } {
   if (testState === 'idle') {
     return {
-      title: 'Not tested', copy: 'Run now, or save and test later.', tone: '',
-      repair: { tone: '', text: 'Not tested yet. Failed tests can still be saved.' },
+      title: t('vault.healthNotTestedTitle'), copy: t('vault.healthNotTestedCopy'), tone: '',
+      repair: { tone: '', text: t('vault.repairNotTested') },
     };
   }
   if (testState === 'running') {
     return {
-      title: 'Probing…', copy: 'Five to thirty seconds per provider.', tone: '',
-      repair: { tone: '', text: 'Running probes against each protocol.' },
+      title: t('vault.healthProbingTitle'), copy: t('vault.healthProbingCopy'), tone: '',
+      repair: { tone: '', text: t('vault.repairProbing') },
     };
   }
   if (testState === 'error') {
@@ -5761,37 +5789,40 @@ function healthFromResult(
     // Showing "check aikey-proxy" when the real issue is an empty secret
     // confuses the user; the repair card has to point them back to page 1
     // instead.
-    const isValidationErr = !!testError && /Need a secret|at least one protocol/i.test(testError);
+    // Classify "user hasn't filled required inputs yet" vs an infra failure.
+    // Matches both the English validation copy and its zh translation
+    // (vault.needSecretAndProtocol) so the locale doesn't change the branch.
+    const isValidationErr = !!testError && /Need a secret|at least one protocol|需要.*密钥.*协议/i.test(testError);
     return {
-      title: isValidationErr ? 'Missing input' : 'Probe could not run',
-      copy: testError || 'Unknown error.',
+      title: isValidationErr ? t('vault.healthMissingInput') : t('vault.healthProbeCouldNotRun'),
+      copy: testError || t('vault.healthUnknownError'),
       tone: 'bad',
       repair: {
         tone: 'bad',
         text: isValidationErr
-          ? 'Go back to page 1 and fill in the missing field, then return here.'
-          : 'Check that aikey-proxy and the local server are running, then retry.',
+          ? t('vault.repairMissingInput')
+          : t('vault.repairProbeCouldNotRun'),
       },
     };
   }
   // done
   if (!testResult) {
     return {
-      title: 'No result', copy: '', tone: '',
+      title: t('vault.healthNoResult'), copy: '', tone: '',
       repair: { tone: '', text: '' },
     };
   }
   if (testResult.status === 'pass') {
     return {
-      title: 'Healthy', copy: 'All probes passed.', tone: 'good',
-      repair: { tone: 'good', text: 'Ready to save and use.' },
+      title: t('vault.healthHealthy'), copy: t('vault.healthHealthyCopy'), tone: 'good',
+      repair: { tone: 'good', text: t('vault.repairReadyToSave') },
     };
   }
   // Fail — pick first failing phase per spec.
   if (!testResult.ping_ok) {
     return {
-      title: 'Upstream unreachable', copy: 'Direct ping failed. Check base_url or your network/proxy.', tone: 'bad',
-      repair: { tone: 'bad', text: 'Verify base_url is correct and that your network can reach the provider.' },
+      title: t('vault.healthUpstreamUnreachable'), copy: t('vault.healthUpstreamUnreachableCopy'), tone: 'bad',
+      repair: { tone: 'bad', text: t('vault.repairUpstreamUnreachable') },
     };
   }
   // Provider error bodies are JSON ({"error":{"message":"..."}}). Dumping
@@ -5804,14 +5835,14 @@ function healthFromResult(
   const parsed = parseProviderErrorBody(rawMsg);
   if (!testResult.api_ok) {
     return {
-      title: 'Credential rejected', copy: parsed.message || 'Authentication failed.', tone: 'bad',
-      repair: { tone: 'bad', text: 'The provider returned an HTTP error for your secret. Double-check the value.' },
+      title: t('vault.healthCredentialRejected'), copy: parsed.message || t('vault.healthAuthFailed'), tone: 'bad',
+      repair: { tone: 'bad', text: t('vault.repairCredentialRejected') },
     };
   }
   // !chat_ok only
   return {
-    title: 'Chat probe failed', copy: parsed.message || 'Chat probe failed.', tone: 'warn',
-    repair: { tone: 'warn', text: 'Auth works, but the chat probe was rejected (often model-policy). You can still save.' },
+    title: t('vault.healthChatProbeFailed'), copy: parsed.message || t('vault.healthChatProbeFailedCopy'), tone: 'warn',
+    repair: { tone: 'warn', text: t('vault.repairChatProbeFailed') },
   };
 }
 
@@ -5838,21 +5869,22 @@ function GuidedBody(props: AddKeyFieldShared & {
   ) => void;
   aliasPlaceholder: string;
 }) {
-  const health = healthFromResult(props.testState, props.testResult, props.testError);
+  const { t } = useTranslation();
+  const health = healthFromResult(props.testState, props.testResult, props.testError, t);
   return (
     <div className={`body-shell${props.mode === 'simple' ? ' simple-mode' : ''}`}>
       <aside className="rail">
-        <div className="rail-kicker">Guided setup</div>
+        <div className="rail-kicker">{t('vault.guidedSetup')}</div>
         <button
           type="button"
           className={`step${props.page === 1 ? ' active' : ''}`}
           onClick={() => props.setPage(1)}
-          title="Back to step 1"
+          title={t('vault.backToStep1')}
         >
           <span className="step-num">1</span>
           <div className="step-body">
-            <strong>Add credential</strong>
-            <span>API key or browser OAuth.</span>
+            <strong>{t('vault.stepAddCredential')}</strong>
+            <span>{t('vault.stepAddCredentialSub')}</span>
           </div>
         </button>
         <button
@@ -5868,29 +5900,29 @@ function GuidedBody(props: AddKeyFieldShared & {
           }}
           title={
             props.kind === 'api'
-              ? 'Fill secret + protocol first'
-              : (props.oauthAccountId ? 'Go to test' : 'Finish OAuth first')
+              ? t('vault.fillSecretFirst')
+              : (props.oauthAccountId ? t('vault.goToTest') : t('vault.finishOAuthFirst'))
           }
         >
           <span className="step-num">2</span>
           <div className="step-body">
-            <strong>Test and name</strong>
-            <span>Check health, then save.</span>
+            <strong>{t('vault.stepTestAndName')}</strong>
+            <span>{t('vault.stepTestAndNameSub')}</span>
           </div>
         </button>
-        <div className="rail-note">Test first, or save and fix later.</div>
+        <div className="rail-note">{t('vault.railNote')}</div>
       </aside>
       <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Page 1 — Add credential. */}
         <section className={`page${props.page === 1 ? ' active' : ''}`}>
           <div className="page-head">
             <div>
-              <h1 className="page-title">Add credential.</h1>
-              <p className="page-copy">Choose API Key or OAuth. We will test it next.</p>
+              <h1 className="page-title">{t('vault.pageAddCredentialTitle')}</h1>
+              <p className="page-copy">{t('vault.pageAddCredentialCopy')}</p>
             </div>
             <span className="status-chip">
               <ShapesIcon className="w-3 h-3" />
-              page 1 of 2
+              {t('vault.page1of2')}
             </span>
           </div>
           <KindSeg kind={props.kind} setKind={props.setKind} />
@@ -5908,12 +5940,12 @@ function GuidedBody(props: AddKeyFieldShared & {
         <section className={`page${props.page === 2 ? ' active' : ''}`}>
           <div className="page-head">
             <div>
-              <h1 className="page-title">Test, then name.</h1>
-              <p className="page-copy">Runs Ping(D), Proxy, API, and Chat.</p>
+              <h1 className="page-title">{t('vault.pageTestNameTitle')}</h1>
+              <p className="page-copy">{t('vault.pageTestNameCopy')}</p>
             </div>
             <span className="status-chip">
               <ActivityIcon className="w-3 h-3" />
-              page 2 of 2
+              {t('vault.page2of2')}
             </span>
           </div>
           <div className="card">
@@ -5921,7 +5953,7 @@ function GuidedBody(props: AddKeyFieldShared & {
               <div>
                 <div className="card-label">
                   <ActivityIcon className="w-3 h-3" />
-                  Connectivity
+                  {t('vault.connectivity')}
                 </div>
                 <p className={`health-title${health.tone ? ' ' + health.tone : ''}`}>{health.title}</p>
                 <p className="health-copy">{health.copy}</p>
@@ -5941,13 +5973,13 @@ function GuidedBody(props: AddKeyFieldShared & {
                   ? !props.oauthAccountId
                   : (missingSecret || missingProtocols);
                 const blockReason = isOauth
-                  ? (props.oauthAccountId ? '' : 'Finish OAuth on page 1 first.')
+                  ? (props.oauthAccountId ? '' : t('vault.finishOAuthOnPage1'))
                   : missingSecret && missingProtocols
-                    ? 'Fill in secret and protocol on page 1 first.'
+                    ? t('vault.fillSecretAndProtocolPage1')
                     : missingSecret
-                      ? 'Fill in the secret on page 1 first.'
+                      ? t('vault.fillSecretPage1')
                       : missingProtocols
-                        ? 'Pick at least one protocol on page 1 first.'
+                        ? t('vault.pickProtocolPage1')
                         : '';
                 return (
                   <button
@@ -5960,17 +5992,17 @@ function GuidedBody(props: AddKeyFieldShared & {
                     {props.testState === 'running' ? (
                       <>
                         <span className="aikey-spinner" style={{ width: 12, height: 12 }} />
-                        Testing
+                        {t('vault.testing')}
                       </>
                     ) : props.testState === 'done' || props.testState === 'error' ? (
                       <>
                         <RefreshIcon className="w-3 h-3" />
-                        Test again
+                        {t('vault.testAgain')}
                       </>
                     ) : (
                       <>
                         <ActivityIcon className="w-3 h-3" />
-                        Test connectivity
+                        {t('vault.testConnectivity')}
                       </>
                     )}
                   </button>
@@ -5978,21 +6010,30 @@ function GuidedBody(props: AddKeyFieldShared & {
               })()}
             </div>
           </div>
-          <div className="probe-table" aria-label="Connectivity phases">
+          <div className="probe-table" aria-label={t('vault.connectivityPhasesAria')}>
             <div className="probe-head">
-              <div>Phase</div>
-              <div>Status</div>
-              <div>Latency</div>
-              <div>What it proves</div>
+              <div>{t('vault.probeColPhase')}</div>
+              <div>{t('vault.probeColStatus')}</div>
+              <div>{t('vault.probeColLatency')}</div>
+              <div>{t('vault.probeColProves')}</div>
             </div>
             {PROBE_PHASES.map((p) => {
-              const row = probeRowState(p.id, props.testState, props.testResult);
+              const row = probeRowState(p.id, props.testState, props.testResult, t);
+              // Localise the per-phase "what it proves" copy. PROBE_PHASES
+              // keeps English source strings (code-language rule); the key
+              // is derived from the phase id so the data model stays English.
+              const provesKey = {
+                ping: 'vault.probeProvesPing',
+                proxy: 'vault.probeProvesProxy',
+                api: 'vault.probeProvesApi',
+                chat: 'vault.probeProvesChat',
+              }[p.id];
               return (
                 <div key={p.id} className={`probe-row${row.tone ? ' ' + row.tone : ''}`} data-phase={p.id}>
                   <div className="probe-phase"><span className="result-dot" />{p.label}</div>
                   <div className="mono">{row.status}</div>
                   <div className="mono">{row.latency}</div>
-                  <div className="mono">{p.proves}</div>
+                  <div className="mono">{t(provesKey)}</div>
                 </div>
               );
             })}
@@ -6005,7 +6046,7 @@ function GuidedBody(props: AddKeyFieldShared & {
             <div className="form-row">
               <label className="form-label" htmlFor="credential-name">
                 <TagIcon className="w-3 h-3" />
-                Alias (Name shown in Vault)
+                {t('vault.aliasNameShownInVault')}
               </label>
               <input
                 id="credential-name"
@@ -6015,11 +6056,11 @@ function GuidedBody(props: AddKeyFieldShared & {
                 value={props.alias}
                 onChange={(e) => props.setAlias(e.target.value)}
               />
-              <span className="form-help">Blank uses the generated alias.</span>
+              <span className="form-help">{t('vault.blankUsesGeneratedAlias')}</span>
               {props.testState === 'done' && props.testResult?.status === 'fail' && (
                 <span className="risk-line show">
                   <InfoIcon className="w-3 h-3" />
-                  Test did not pass. You can save anyway.
+                  {t('vault.testDidNotPass')}
                 </span>
               )}
             </div>
@@ -6102,13 +6143,14 @@ function OAuthBrokerCard(props: {
     info?: { providerAccountId?: string; displayIdentity?: string },
   ) => void;
 }) {
+  const { t } = useTranslation();
   const [state, setState] = useState<BrokerState>('idle');
   const [session, setSession] = useState<OAuthSession | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   // Claude paste flow.
   const [codeInput, setCodeInput] = useState('');
   const [codeStatus, setCodeStatus] = useState<CodeStatus>('waiting');
-  const [codeHelp, setCodeHelp] = useState('Auto-submit starts after paste.');
+  const [codeHelp, setCodeHelp] = useState(t('vault.autoSubmitAfterPaste'));
 
   // Per-provider flow descriptor (spec §13.2). Centralised so step
   // titles / button labels / state text stay in one place when we
@@ -6124,35 +6166,35 @@ function OAuthBrokerCard(props: {
       showCodeInput: boolean;
     }> = {
       claude: {
-        title: 'Claude setup token',
+        title: t('vault.claudeFlowTitle'),
         pill: 'setup_token',
-        step2Title: 'Get Claude auth URL.',
-        step3Title: 'Paste code.',
-        openButton: 'Open Claude auth',
-        initialState: 'Request an auth URL from local broker.',
+        step2Title: t('vault.claudeStep2Title'),
+        step3Title: t('vault.claudeStep3Title'),
+        openButton: t('vault.openClaudeAuth'),
+        initialState: t('vault.requestAuthUrlFromBroker'),
         showCodeInput: true,
       },
       codex: {
-        title: 'Codex auth code',
+        title: t('vault.codexFlowTitle'),
         pill: 'auth_code',
-        step2Title: 'Get Codex auth URL.',
-        step3Title: 'Wait for callback.',
-        openButton: 'Open Codex auth',
-        initialState: 'Request an auth URL from local broker.',
+        step2Title: t('vault.codexStep2Title'),
+        step3Title: t('vault.codexStep3Title'),
+        openButton: t('vault.openCodexAuth'),
+        initialState: t('vault.requestAuthUrlFromBroker'),
         showCodeInput: false,
       },
       kimi: {
-        title: 'Kimi device code',
+        title: t('vault.kimiFlowTitle'),
         pill: 'device_code',
-        step2Title: 'Get Kimi device URL.',
-        step3Title: 'Approve device code.',
-        openButton: 'Open Kimi device page',
-        initialState: 'Request device code from local broker.',
+        step2Title: t('vault.kimiStep2Title'),
+        step3Title: t('vault.kimiStep3Title'),
+        openButton: t('vault.openKimiDevicePage'),
+        initialState: t('vault.requestDeviceCodeFromBroker'),
         showCodeInput: false,
       },
     };
     return map[props.provider] || map.claude;
-  }, [props.provider]);
+  }, [props.provider, t]);
 
   // Reset everything on provider change — spec §12: switching provider
   // invalidates any in-flight session because broker state is tied to
@@ -6163,8 +6205,8 @@ function OAuthBrokerCard(props: {
     setErrorText(null);
     setCodeInput('');
     setCodeStatus('waiting');
-    setCodeHelp('Auto-submit starts after paste.');
-  }, [props.provider]);
+    setCodeHelp(t('vault.autoSubmitAfterPaste'));
+  }, [props.provider, t]);
 
   // Tell the parent whenever we cross into / out of 'connected'. The
   // token is already in vault at this point — parent uses the signal to
@@ -6202,7 +6244,7 @@ function OAuthBrokerCard(props: {
         }
         if (next.status === 'failed' || next.error) {
           setSession(next);
-          setErrorText(next.error?.message || 'Authorization failed.');
+          setErrorText(next.error?.message || t('vault.authorizationFailed'));
           setState('failed');
           return;
         }
@@ -6210,12 +6252,12 @@ function OAuthBrokerCard(props: {
         if (attempts < MAX_POLL_ATTEMPTS) {
           setTimeout(tick, POLL_INTERVAL_MS);
         } else {
-          setErrorText('Timed out waiting for authorization. Please retry.');
+          setErrorText(t('vault.pollTimedOut'));
           setState('failed');
         }
       } catch (e) {
         if (cancelled) return;
-        setErrorText((e as Error).message || 'Polling failed.');
+        setErrorText((e as Error).message || t('vault.pollingFailed'));
         setState('failed');
       }
     };
@@ -6233,18 +6275,18 @@ function OAuthBrokerCard(props: {
     const trimmed = codeInput.trim();
     if (!trimmed) {
       setCodeStatus('waiting');
-      setCodeHelp('Auto-submit starts after paste.');
+      setCodeHelp(t('vault.autoSubmitAfterPaste'));
       return;
     }
     setCodeStatus('submitting');
-    setCodeHelp('Submitting code to local broker...');
+    setCodeHelp(t('vault.submittingCode'));
     const timer = setTimeout(async () => {
       // Validation: code must contain a # separator (`<code>#<state>`).
       // Spec §19.5 — only check for #, not length / charset (real codes
       // contain `_` and `-`).
       if (!trimmed.includes('#')) {
         setCodeStatus('failed');
-        setCodeHelp('Paste the full code#state value.');
+        setCodeHelp(t('vault.pasteFullCodeState'));
         return;
       }
       try {
@@ -6256,17 +6298,17 @@ function OAuthBrokerCard(props: {
         setSession(next);
         if (next.error || next.status === 'failed') {
           setCodeStatus('failed');
-          setCodeHelp(next.error?.message || 'Broker rejected the code.');
-          setErrorText(next.error?.message || 'Authorization failed.');
+          setCodeHelp(next.error?.message || t('vault.brokerRejectedCode'));
+          setErrorText(next.error?.message || t('vault.authorizationFailed'));
           setState('failed');
         } else {
           setCodeStatus('accepted');
-          setCodeHelp('OAuth session saved locally.');
+          setCodeHelp(t('vault.oauthSessionSavedLocally'));
           setState('connected');
         }
       } catch (e) {
         setCodeStatus('failed');
-        const msg = (e as Error).message || 'Submission failed.';
+        const msg = (e as Error).message || t('vault.submissionFailed');
         setCodeHelp(msg);
       }
     }, CLAUDE_PASTE_DEBOUNCE_MS);
@@ -6296,7 +6338,7 @@ function OAuthBrokerCard(props: {
       }
     } catch (e) {
       const err = e as Error & { code?: string };
-      setErrorText(err.message || 'Failed to start OAuth.');
+      setErrorText(err.message || t('vault.failedToStartOAuth'));
       setState('failed');
     }
   }
@@ -6322,22 +6364,22 @@ function OAuthBrokerCard(props: {
   // → "Paste code…" / "Waiting for callback" / "Polling device authorization"
   // → "OAuth connected" copy.
   let stateText = flowMeta.initialState;
-  if (state === 'opening') stateText = 'Creating session and opening auth.';
-  else if (state === 'awaiting') stateText = 'Paste code#state after authorization.';
-  else if (state === 'polling' && props.provider === 'codex') stateText = 'Waiting for localhost callback.';
-  else if (state === 'polling' && props.provider === 'kimi') stateText = 'Polling device authorization.';
-  else if (state === 'connected') stateText = 'OAuth connected. Continue to test.';
-  else if (state === 'failed') stateText = errorText || 'Authorization failed.';
+  if (state === 'opening') stateText = t('vault.creatingSession');
+  else if (state === 'awaiting') stateText = t('vault.pasteCodeAfterAuth');
+  else if (state === 'polling' && props.provider === 'codex') stateText = t('vault.waitingForCallback');
+  else if (state === 'polling' && props.provider === 'kimi') stateText = t('vault.pollingDeviceAuth');
+  else if (state === 'connected') stateText = t('vault.oauthConnectedContinue');
+  else if (state === 'failed') stateText = errorText || t('vault.authorizationFailed');
 
   // Open-button label tri-state (spec §13.4).
   let openButtonLabel = flowMeta.openButton;
-  if (state === 'opening') openButtonLabel = 'Opening';
-  else if (state === 'awaiting' || state === 'polling') openButtonLabel = props.provider === 'kimi' ? 'Open device page again' : 'Open auth again';
-  else if (state === 'connected') openButtonLabel = 'OAuth connected';
+  if (state === 'opening') openButtonLabel = t('vault.opening');
+  else if (state === 'awaiting' || state === 'polling') openButtonLabel = props.provider === 'kimi' ? t('vault.openDevicePageAgain') : t('vault.openAuthAgain');
+  else if (state === 'connected') openButtonLabel = t('vault.oauthConnected');
 
   // Identity field follows spec §13.5.
-  let identity = 'waiting for browser sign-in';
-  if (state === 'opening' || state === 'awaiting' || state === 'polling') identity = 'detecting identity...';
+  let identity = t('vault.waitingForBrowserSignIn');
+  if (state === 'opening' || state === 'awaiting' || state === 'polling') identity = t('vault.detectingIdentity');
   else if (state === 'connected' && session?.display_identity) identity = session.display_identity;
 
   return (
@@ -6351,7 +6393,7 @@ function OAuthBrokerCard(props: {
         <div className="flow-step">
           <span>1</span>
           <div className="flow-step-body">
-            <div className="flow-step-title">Choose OAuth provider.</div>
+            <div className="flow-step-title">{t('vault.chooseOAuthProvider')}</div>
             <div className="flow-step-control">
               <select
                 className="field-select"
@@ -6362,7 +6404,7 @@ function OAuthBrokerCard(props: {
                 <option value="codex">codex</option>
                 <option value="kimi">kimi</option>
               </select>
-              <span className="form-help">Supported by the local broker.</span>
+              <span className="form-help">{t('vault.supportedByLocalBroker')}</span>
             </div>
           </div>
         </div>
@@ -6396,16 +6438,16 @@ function OAuthBrokerCard(props: {
                   type="button"
                   className="copy-auth-url"
                   onClick={copyAuthUrl}
-                  title="Copy authorization URL"
+                  title={t('vault.copyAuthorizationUrlTitle')}
                 >
                   <ClipboardIcon className="w-3 h-3" />
-                  Copy URL
+                  {t('vault.copyUrl')}
                 </button>
               )}
             </div>
             {props.provider === 'kimi' && state !== 'idle' && session?.user_code && (
               <div className="form-help" style={{ marginTop: 4 }}>
-                Device user code: <span className="font-mono">{session.user_code}</span>
+                {t('vault.deviceUserCode')}<span className="font-mono">{session.user_code}</span>
               </div>
             )}
           </div>
@@ -6421,7 +6463,7 @@ function OAuthBrokerCard(props: {
                   <input
                     type="text"
                     className="field-input mono"
-                    placeholder="paste code#state from Claude"
+                    placeholder={t('vault.pasteCodeStateFromClaude')}
                     value={codeInput}
                     onChange={(e) => setCodeInput(e.target.value)}
                     disabled={state === 'connected'}
@@ -6439,13 +6481,13 @@ function OAuthBrokerCard(props: {
             {!flowMeta.showCodeInput && state === 'polling' && (
               <span className="form-help">
                 {props.provider === 'codex'
-                  ? 'After you authorize in the browser, the local callback completes the flow automatically.'
-                  : 'Approve the device code on the provider page. We will detect it.'}
+                  ? t('vault.codexPollingHelp')
+                  : t('vault.kimiPollingHelp')}
               </span>
             )}
             {state === 'connected' && (
               <span className="form-help" style={{ color: 'var(--success)' }}>
-                OAuth session saved locally. Continue to page 2 to test.
+                {t('vault.oauthSavedContinuePage2')}
               </span>
             )}
           </div>
@@ -6454,7 +6496,7 @@ function OAuthBrokerCard(props: {
       <div className="form-row">
         <label className="form-label">
           <MailIcon className="w-3 h-3" />
-          Detected identity
+          {t('vault.detectedIdentity')}
         </label>
         <input
           className="field-input"
@@ -6462,7 +6504,7 @@ function OAuthBrokerCard(props: {
           readOnly
           tabIndex={-1}
         />
-        <span className="form-help">Detection starts after auth opens.</span>
+        <span className="form-help">{t('vault.detectionStartsAfterAuth')}</span>
       </div>
     </div>
   );

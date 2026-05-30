@@ -16,6 +16,7 @@
  *  - STATUS dot uses success green (decoupled from brand yellow).
  */
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -139,6 +140,7 @@ function shortVkId(id: string): string {
 // "Usage by key today" card. Overview no longer needs it.
 
 export default function UserOverviewPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [range, setRange] = useState<RangeKey>('14D');
@@ -505,10 +507,10 @@ export default function UserOverviewPage() {
           >
             <div className="text-sm">
               <span className="font-mono font-bold mr-2" style={{ color: 'var(--primary)' }}>
-                VAULT NOT SET UP
+                {t('overview.vaultNotSetUp')}
               </span>
               <span style={{ color: 'var(--muted-foreground)' }}>
-                — Set a master password to start storing keys.
+                {t('overview.vaultNotSetUpHint')}
               </span>
             </div>
             <button
@@ -520,7 +522,7 @@ export default function UserOverviewPage() {
               }}
               onClick={() => navigate('/user/vault')}
             >
-              Set Up Now →
+              {t('overview.setUpNow')}
             </button>
           </section>
         )}
@@ -535,19 +537,19 @@ export default function UserOverviewPage() {
             </div>
             <div className="min-w-0">
               <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>
-                Hi, {emailDisplay}
+                {t('overview.greeting', { email: emailDisplay })}
               </div>
               <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                <span>{(me?.role ?? 'MEMBER').toUpperCase()}</span>
+                <span>{me?.role ? me.role.toUpperCase() : t('overview.roleMember')}</span>
                 <span style={{ opacity: 0.4 }}>·</span>
                 <span className="inline-flex items-center gap-1.5" style={{ color: '#4ade80' }}>
                   <span className="status-dot" />
-                  ACTIVE
+                  {t('overview.statusActive')}
                 </span>
                 {me?.created_at && (
                   <>
                     <span style={{ opacity: 0.4 }}>·</span>
-                    <span>Joined {new Date(me.created_at).toLocaleDateString(navigator.language)}</span>
+                    <span>{t('overview.joinedOn', { date: new Date(me.created_at).toLocaleDateString(navigator.language) })}</span>
                   </>
                 )}
               </div>
@@ -559,7 +561,7 @@ export default function UserOverviewPage() {
               onClick={() => window.open('https://github.com/aikeylabs/aikey', '_blank')}
             >
               <BookIcon />
-              Docs
+              {t('overview.docs')}
             </button>
           </div>
         </section>
@@ -572,32 +574,32 @@ export default function UserOverviewPage() {
             <span className="flex-1 min-w-0 truncate text-[12.5px]" style={{ color: 'var(--foreground)' }}>
               {pendingKeys.length > 1 ? (
                 <>
-                  <span className="font-mono">{pendingKeys.length} new keys</span>{' '}
-                  granted to you
+                  <span className="font-mono">{t('overview.bannerNewKeysGranted', { count: pendingKeys.length })}</span>{' '}
+                  {t('overview.bannerGrantedToYou')}
                 </>
               ) : (
                 <>
-                  Granted you{' '}
+                  {t('overview.bannerGrantedYou')}{' '}
                   <span className="font-mono" style={{ color: 'var(--foreground)' }}>
                     {recentAutoClaim.alias}
                   </span>
                 </>
               )}
               <span style={{ color: 'var(--muted-foreground)' }}>
-                {' '}· ready to use
+                {' '}{t('overview.bannerReadyToUse')}
               </span>
             </span>
             <button
               className="ov-link text-[11px] font-mono flex items-center gap-1"
               onClick={() => navigate('/user/virtual-keys')}
             >
-              View keys
+              {t('overview.viewKeys')}
               <ArrowUpRightIcon />
             </button>
             <button
               className="icon-btn"
-              title="Dismiss"
-              aria-label="Dismiss notification"
+              title={t('overview.dismiss')}
+              aria-label={t('overview.dismissNotification')}
               onClick={() => setBannerDismissed(true)}
             >
               <XIcon />
@@ -622,23 +624,23 @@ export default function UserOverviewPage() {
             type="button"
             className="metric linkable text-left"
             onClick={() => navigate('/user/vault')}
-            aria-label={`Accessible keys: ${vaultTotalKeys}, ${vaultActiveKeys} active`}
+            aria-label={t('overview.accessibleKeysAria', { total: vaultTotalKeys, active: vaultActiveKeys })}
           >
             <span className="go"><ChevronRightIcon /></span>
             <div className="label-row">
-              <span className="label">Accessible Keys</span>
+              <span className="label">{t('overview.accessibleKeys')}</span>
               <KeyIcon className="label-icon" />
             </div>
             <div className="value-row">
               <span className="value">{vaultTotalKeys}</span>
               {vaultTotalKeys > 0 && (
                 <span className="value-suffix">
-                  · {vaultActiveKeys} active{vaultIdleKeys > 0 ? ` · ${vaultIdleKeys} idle` : ''}
+                  · {vaultActiveKeys} {t('overview.activeSuffix')}{vaultIdleKeys > 0 ? ` · ${vaultIdleKeys} ${t('overview.idleSuffix')}` : ''}
                 </span>
               )}
             </div>
             <span className="unit">
-              {vaultProviderNamesPreview.length > 0 ? vaultProviderNamesPreview.join(' · ') : 'No keys yet'}
+              {vaultProviderNamesPreview.length > 0 ? vaultProviderNamesPreview.join(' · ') : t('overview.noKeysYet')}
             </span>
             {/* Active / idle split. Renders a flat muted baseline when there
                 are no keys at all — an "up and flat" step chart would falsely
@@ -668,20 +670,24 @@ export default function UserOverviewPage() {
             type="button"
             className="metric linkable text-left"
             onClick={() => navigate('/user/account')}
-            aria-label={`My seats: ${activeSeats.length} active across ${uniqueOrgs} organisations`}
+            aria-label={t('overview.mySeatsAria', { count: activeSeats.length, orgs: uniqueOrgs })}
           >
             <span className="go"><ChevronRightIcon /></span>
             <div className="label-row">
-              <span className="label">My Seats</span>
+              <span className="label">{t('overview.mySeats')}</span>
               <UsersIcon className="label-icon" />
             </div>
             <div className="value-row">
               <span className="value">{activeSeats.length}</span>
-              <span className="value-suffix">active</span>
+              <span className="value-suffix">{t('overview.activeSuffix')}</span>
             </div>
             <span className="unit">
               <BuildingIcon className="w-3 h-3" />
-              {uniqueOrgs > 0 ? `${uniqueOrgs} org${uniqueOrgs > 1 ? 's' : ''}` : 'No organisations yet'}
+              {uniqueOrgs > 0
+                ? (uniqueOrgs > 1
+                  ? t('overview.manyOrgs', { count: uniqueOrgs })
+                  : t('overview.oneOrg', { count: uniqueOrgs }))
+                : t('overview.noOrgsYet')}
             </span>
             {/* slots bar */}
             <svg className="spark" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
@@ -708,21 +714,21 @@ export default function UserOverviewPage() {
             type="button"
             className="metric linkable text-left"
             onClick={() => navigate('/user/usage-ledger')}
-            aria-label={`Today used: ${fmtTok(todayTotalTokens)} tokens`}
+            aria-label={t('overview.todayUsedAria', { tokens: fmtTok(todayTotalTokens) })}
           >
             <span className="go"><ChevronRightIcon /></span>
             <div className="label-row">
-              <span className="label">Today Used</span>
+              <span className="label">{t('overview.todayUsed')}</span>
               <ActivityIcon className="label-icon" />
             </div>
             <div className="value-row">
               <span className="value">{fmtTok(todayTotalTokens)}</span>
-              <span className="value-suffix">tokens</span>
+              <span className="value-suffix">{t('overview.tokensSuffix')}</span>
             </div>
             <span className="unit">
               {todayTotalTokens === 0
-                ? 'No usage yet today'
-                : <>peak at {String(todayPeakHour.hour).padStart(2, '0')}:00 · {fmtTok(todayPeakHour.total_tokens)}</>}
+                ? t('overview.noUsageToday')
+                : t('overview.peakAt', { hour: String(todayPeakHour.hour).padStart(2, '0'), tokens: fmtTok(todayPeakHour.total_tokens) })}
             </span>
             {/* 24-bar intra-day distribution. Hours with activity are
                 primary-coloured; the peak hour is rendered at full
@@ -771,13 +777,13 @@ export default function UserOverviewPage() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
-                  Token usage
+                  {t('overview.tokenUsage')}
                 </h3>
                 <p className="text-[12px]" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
-                  Your consumption across all accessible keys
+                  {t('overview.tokenUsageSubtitle')}
                 </p>
               </div>
-              <div className="seg" role="tablist" aria-label="Time range">
+              <div className="seg" role="tablist" aria-label={t('overview.timeRange')}>
                 {(['1D', '7D', '14D', '30D', '90D'] as const).map((k) => (
                   <button
                     key={k}
@@ -846,7 +852,7 @@ export default function UserOverviewPage() {
                       fontSize: 11,
                       borderRadius: 4,
                     }}
-                    formatter={(v) => [fmtTok(Number(v)), 'tokens']}
+                    formatter={(v) => [fmtTok(Number(v)), t('overview.tokensSuffix')]}
                   />
                   <Area
                     type="monotone"
@@ -874,7 +880,7 @@ export default function UserOverviewPage() {
                       strokeOpacity={0.6}
                       ifOverflow="extendDomain"
                       label={{
-                        value: `avg ${fmtTok(avgPerDay)}`,
+                        value: t('overview.avgLabel', { value: fmtTok(avgPerDay) }),
                         position: 'insideTopRight',
                         fill: 'var(--muted-foreground)',
                         fontSize: 9,
@@ -892,19 +898,19 @@ export default function UserOverviewPage() {
               style={{ borderTop: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
             >
               <span>
-                Total{' '}
+                {t('overview.total')}{' '}
                 <span className="font-semibold" style={{ color: 'var(--foreground)' }}>
-                  {fmtTok(totalTokens)} tokens
+                  {t('overview.totalTokens', { value: fmtTok(totalTokens) })}
                 </span>
               </span>
               <span>
-                Peak{' '}
+                {t('overview.peak')}{' '}
                 <span className="font-semibold" style={{ color: 'var(--foreground)' }}>
                   {peak.total_tokens > 0 ? `${fmtTok(peak.total_tokens)} · ${peak.date}` : '—'}
                 </span>
               </span>
               <span>
-                Avg/day{' '}
+                {t('overview.avgPerDay')}{' '}
                 <span className="font-semibold" style={{ color: 'var(--foreground)' }}>
                   {fmtTok(avgPerDay)}
                 </span>
@@ -917,10 +923,10 @@ export default function UserOverviewPage() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
-                  Top providers
+                  {t('overview.topProviders')}
                 </h3>
                 <p className="text-[12px]" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
-                  Your {range} split
+                  {t('overview.providerSplit', { range })}
                 </p>
               </div>
               <button
@@ -928,7 +934,7 @@ export default function UserOverviewPage() {
                 className="ov-btn ov-btn-ghost text-[11px]"
                 onClick={() => navigate('/user/usage-ledger')}
               >
-                View all
+                {t('overview.viewAll')}
                 <ChevronRightIcon />
               </button>
             </div>
@@ -940,7 +946,7 @@ export default function UserOverviewPage() {
                 in the legend below so the user can see them. */}
             {providerUsage.length === 0 ? (
               <div className="py-8 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                No data
+                {t('overview.noData')}
               </div>
             ) : (
               <>
@@ -973,7 +979,7 @@ export default function UserOverviewPage() {
                           }}
                         />
                         <Label
-                          value="TOKENS"
+                          value={t('overview.donutTokens')}
                           position="center"
                           dy={8}
                           style={{
@@ -1007,7 +1013,7 @@ export default function UserOverviewPage() {
                         key={row.name}
                         className="flex items-center justify-between text-[11.5px]"
                         style={{ opacity: idle ? 0.55 : 1 }}
-                        title={idle ? 'No usage in the selected range' : undefined}
+                        title={idle ? t('overview.noUsageInRange') : undefined}
                       >
                         <span className="flex items-center gap-2 min-w-0">
                           <span
@@ -1015,7 +1021,7 @@ export default function UserOverviewPage() {
                             style={{ background: row.color }}
                           />
                           <span className="truncate" style={{ color: 'var(--foreground)' }}>{row.name}</span>
-                          {idle && <span className="chip idle">idle</span>}
+                          {idle && <span className="chip idle">{t('overview.idleChip')}</span>}
                         </span>
                         <span className="font-mono text-[12px]">
                           <span style={{ color: idle ? 'var(--muted-foreground)' : 'var(--foreground)' }}>
@@ -1035,13 +1041,15 @@ export default function UserOverviewPage() {
               style={{ borderTop: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
             >
               <span>
-                {providerUsage.length} provider{providerUsage.length === 1 ? '' : 's'}
+                {providerUsage.length === 1
+                  ? t('overview.oneProvider', { count: providerUsage.length })
+                  : t('overview.manyProviders', { count: providerUsage.length })}
                 {(() => {
                   const idle = providerUsage.filter((r) => r.pct === 0).length;
-                  return idle > 0 ? ` · ${idle} idle` : '';
+                  return idle > 0 ? ` ${t('overview.idleCount', { count: idle })}` : '';
                 })()}
               </span>
-              <span>Last {days}D</span>
+              <span>{t('overview.lastDays', { days })}</span>
             </div>
           </div>
         </section>
@@ -1062,16 +1070,16 @@ export default function UserOverviewPage() {
           >
             <div className="flex items-center gap-3">
               <h3 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
-                Recent requests
+                {t('overview.recentRequests')}
               </h3>
-              <span className="chip">{(recentRequests.data ?? []).length} shown</span>
+              <span className="chip">{t('overview.shown', { count: (recentRequests.data ?? []).length })}</span>
             </div>
             <button
               type="button"
               className="ov-btn ov-btn-outline text-[11px]"
               onClick={() => navigate('/user/usage-ledger')}
             >
-              View all
+              {t('overview.viewAll')}
               <ArrowRightIcon />
             </button>
           </div>
@@ -1080,24 +1088,24 @@ export default function UserOverviewPage() {
             <table className="vault w-full">
               <thead>
                 <tr>
-                  <th className="px-4 py-2.5">When</th>
-                  <th className="px-4 py-2.5">Provider · Model</th>
-                  <th className="px-4 py-2.5">Key</th>
-                  <th className="px-4 py-2.5 text-left">Tokens</th>
-                  <th className="px-4 py-2.5 text-left">Status</th>
+                  <th className="px-4 py-2.5">{t('overview.colWhen')}</th>
+                  <th className="px-4 py-2.5">{t('overview.colProviderModel')}</th>
+                  <th className="px-4 py-2.5">{t('overview.colKey')}</th>
+                  <th className="px-4 py-2.5 text-left">{t('overview.colTokens')}</th>
+                  <th className="px-4 py-2.5 text-left">{t('overview.colStatus')}</th>
                 </tr>
               </thead>
               <tbody>
                 {recentRequests.isLoading ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                      Loading...
+                      {t('overview.loading')}
                     </td>
                   </tr>
                 ) : (recentRequests.data ?? []).length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                      No requests yet
+                      {t('overview.noRequestsYet')}
                     </td>
                   </tr>
                 ) : (
@@ -1112,7 +1120,7 @@ export default function UserOverviewPage() {
                         <td className="px-4 py-2.5">
                           <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--foreground)' }}>
                             <span className="prov-dot" style={{ backgroundColor: providerColor(rr.provider_code) }} />
-                            {rr.provider_code || 'unknown'}
+                            {rr.provider_code || t('overview.unknownProvider')}
                             <span style={{ color: 'var(--muted-foreground)', opacity: 0.7 }} className="font-mono text-[11px]">
                               · {rr.model || '—'}
                             </span>
@@ -1163,16 +1171,16 @@ export default function UserOverviewPage() {
           >
             <div className="flex items-center gap-3">
               <h3 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
-                Recent team keys
+                {t('overview.recentTeamKeys')}
               </h3>
-              <span className="chip">{allKeys.length} accessible</span>
+              <span className="chip">{t('overview.accessibleChip', { count: allKeys.length })}</span>
             </div>
             <button
               type="button"
               className="ov-btn ov-btn-outline text-[11px]"
               onClick={() => navigate('/user/virtual-keys')}
             >
-              View all
+              {t('overview.viewAll')}
               <ArrowRightIcon />
             </button>
           </div>
@@ -1181,24 +1189,24 @@ export default function UserOverviewPage() {
             <table className="vault w-full">
               <thead>
                 <tr>
-                  <th className="px-4 py-2.5">Alias</th>
-                  <th className="px-4 py-2.5">Protocols</th>
-                  <th className="px-4 py-2.5">Status</th>
-                  <th className="px-4 py-2.5">Expires</th>
-                  <th className="px-4 py-2.5 text-right">Actions</th>
+                  <th className="px-4 py-2.5">{t('overview.colAlias')}</th>
+                  <th className="px-4 py-2.5">{t('overview.colProtocols')}</th>
+                  <th className="px-4 py-2.5">{t('overview.colStatus')}</th>
+                  <th className="px-4 py-2.5">{t('overview.colExpires')}</th>
+                  <th className="px-4 py-2.5 text-right">{t('overview.colActions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {keysLoading ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                      Loading...
+                      {t('overview.loading')}
                     </td>
                   </tr>
                 ) : recentKeys.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                      No team keys assigned yet
+                      {t('overview.noTeamKeysAssigned')}
                     </td>
                   </tr>
                 ) : (
@@ -1216,7 +1224,7 @@ export default function UserOverviewPage() {
                       <td className="px-4 py-2.5">
                         <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--foreground)' }}>
                           <span className="prov-dot" style={{ backgroundColor: providerColor(k.provider_code) }} />
-                          {k.provider_code || 'unknown'}
+                          {k.provider_code || t('overview.unknownProvider')}
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
@@ -1240,7 +1248,7 @@ export default function UserOverviewPage() {
                             style={{ borderColor: 'rgba(250, 204, 21,0.5)', color: 'var(--primary)' }}
                             onClick={() => handleClaim(k.virtual_key_id)}
                           >
-                            Claim
+                            {t('overview.claim')}
                           </button>
                         ) : k.key_status !== 'active' ? (
                           // Revoked / expired keys can't be used — the REVOKED
@@ -1266,9 +1274,9 @@ export default function UserOverviewPage() {
                               <a
                                 href={href}
                                 className="ov-btn ov-btn-outline text-[11px]"
-                                title={`Opens ${href}`}
+                                title={t('overview.opensHref', { href })}
                               >
-                                Use
+                                {t('overview.use')}
                               </a>
                             );
                           }
@@ -1278,7 +1286,7 @@ export default function UserOverviewPage() {
                               className="ov-btn ov-btn-outline text-[11px]"
                               onClick={() => navigate('/user/vault')}
                             >
-                              Use
+                              {t('overview.use')}
                             </button>
                           );
                         })()}
@@ -1299,13 +1307,13 @@ export default function UserOverviewPage() {
         >
           <div className="flex items-center gap-4">
             <a className="ov-link" href="https://github.com/aikeylabs" target="_blank" rel="noreferrer">
-              <BookIcon /> Docs
+              <BookIcon /> {t('overview.docs')}
             </a>
             <a className="ov-link" href="https://github.com/aikeylabs/aikey/issues" target="_blank" rel="noreferrer">
-              <SupportIcon /> Support
+              <SupportIcon /> {t('overview.support')}
             </a>
           </div>
-          <span>{runtimeConfig.buildVersion ? `v${runtimeConfig.buildVersion}` : ''} · aikey vault</span>
+          <span>{runtimeConfig.buildVersion ? `v${runtimeConfig.buildVersion}` : ''} · {t('overview.footerVault')}</span>
         </section>
       </div>
     </div>
@@ -1350,6 +1358,7 @@ function buildProviderRows(
 /* ── Key status chip ───────────────────────────────────────────────── */
 
 function KeyStatusChip({ keyStatus, shareStatus }: { keyStatus: string; shareStatus: string }) {
+  const { t } = useTranslation();
   // Terminal key_status (revoked / expired) wins over share_status. A
   // historical ghost state observed in prod: key_status=revoked +
   // share_status=pending_claim — the user can't claim a revoked key (server
@@ -1367,7 +1376,7 @@ function KeyStatusChip({ keyStatus, shareStatus }: { keyStatus: string; shareSta
   if (shareStatus === 'pending_claim') {
     return (
       <span className="chip" style={{ color: 'var(--primary)', background: 'rgba(250, 204, 21,0.08)', borderColor: 'rgba(250, 204, 21,0.3)' }}>
-        <ClockIcon /> PENDING
+        <ClockIcon /> {t('overview.statusPending')}
       </span>
     );
   }
@@ -1375,7 +1384,7 @@ function KeyStatusChip({ keyStatus, shareStatus }: { keyStatus: string; shareSta
     return (
       <span className="chip" style={{ color: '#4ade80', background: 'rgba(74,222,128,0.08)', borderColor: 'rgba(74,222,128,0.3)' }}>
         <span className="status-dot" style={{ width: 5, height: 5 }} />
-        ACTIVE
+        {t('overview.statusActive')}
       </span>
     );
   }

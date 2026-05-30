@@ -28,6 +28,7 @@
  *   - Virtual scrolling for > 100 drafts
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   importApi,
@@ -154,29 +155,32 @@ function maskSecret(v: string): string {
  * `stage`:"parse" | "confirm"` distinguishes the two mutations for the generic
  * fallback copy.
  */
-const IMPORT_ERROR_HINTS: Record<string, string> = {
-  I_PARSE_TEXT_TOO_LARGE: 'Pasted text is too large — split into smaller chunks (≤ 1 MiB).',
-  I_STDIN_INVALID_JSON:   'Request is malformed. Refresh the page and retry.',
-  I_BAD_REQUEST:          'Request is malformed. Refresh the page and retry.',
-  I_VAULT_LOCKED:         'Vault is locked. Unlock it above and try again.',
-  I_VAULT_NO_SESSION:     'Session expired. Unlock the vault and try again.',
-  I_VAULT_UNLOCK_FAILED:  'Vault key could not be verified. Unlock again with the correct master password.',
-  I_CREDENTIAL_CONFLICT:  'One or more aliases conflict with existing entries. Rename them or choose Replace.',
-  I_INVALID_ALIAS:        'One or more aliases are invalid (empty / too long / contain control chars).',
-  I_CLI_TIMEOUT:          'The local CLI did not respond in time. Retry; if it persists, restart aikey-local-server.',
-  I_CLI_NOT_FOUND:        'The local aikey CLI binary was not found. Install it and retry.',
-  I_CLI_SPAWN_FAILED:     'The local CLI failed to start. See server logs for details.',
-  I_CLI_MALFORMED_REPLY:  'The local CLI returned an invalid response. See server logs for details.',
+// error_code → i18n key. Keeps the central enum mapping while delegating the
+// human-facing copy to the translation catalog (i18n-safe; no inline literals).
+const IMPORT_ERROR_HINT_KEYS: Record<string, string> = {
+  I_PARSE_TEXT_TOO_LARGE: 'import.errTextTooLarge',
+  I_STDIN_INVALID_JSON:   'import.errMalformedRefresh',
+  I_BAD_REQUEST:          'import.errMalformedRefresh',
+  I_VAULT_LOCKED:         'import.errVaultLocked',
+  I_VAULT_NO_SESSION:     'import.errSessionExpired',
+  I_VAULT_UNLOCK_FAILED:  'import.errVaultKeyUnverified',
+  I_CREDENTIAL_CONFLICT:  'import.errAliasConflict',
+  I_INVALID_ALIAS:        'import.errInvalidAlias',
+  I_CLI_TIMEOUT:          'import.errCliTimeout',
+  I_CLI_NOT_FOUND:        'import.errCliNotFound',
+  I_CLI_SPAWN_FAILED:     'import.errCliSpawnFailed',
+  I_CLI_MALFORMED_REPLY:  'import.errCliMalformedReply',
 };
 
 function friendlyImportError(
+  t: (key: string) => string,
   code: string | undefined,
   raw: string | undefined,
   stage: 'parse' | 'confirm',
 ): string {
-  if (code && IMPORT_ERROR_HINTS[code]) return IMPORT_ERROR_HINTS[code];
+  if (code && IMPORT_ERROR_HINT_KEYS[code]) return t(IMPORT_ERROR_HINT_KEYS[code]);
   if (raw && raw.trim().length > 0 && raw.length <= 240) return raw;
-  return stage === 'parse' ? 'Parse failed. Please try again.' : 'Import failed. Please try again.';
+  return stage === 'parse' ? t('import.errParseFailed') : t('import.errImportFailed');
 }
 
 /**
@@ -523,6 +527,7 @@ function importPageCacheFresh(): ImportPageCache | null {
 // ── Main component ───────────────────────────────────────────────────────
 
 export default function UserBulkImportPage() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   // 从模块缓存 hydrate(初始值 lazy init,只在首次 mount 时读一次)
   // F-5: 跑一次 TTL check,过期了返回 null → 所有字段走默认值,避免明文密钥复用
@@ -1121,7 +1126,7 @@ export default function UserBulkImportPage() {
         setUnlockError(null);
         refetchVault();
       } else {
-        setUnlockError(res.error_message || 'unlock failed');
+        setUnlockError(res.error_message || t('import.errUnlockFailed'));
       }
     },
     onError: (e: Error) => setUnlockError(e.message),
@@ -1153,7 +1158,7 @@ export default function UserBulkImportPage() {
         setInitError(null);
         refetchVault();
       } else {
-        setInitError(res.error_message || 'failed to set master password');
+        setInitError(res.error_message || t('import.errSetMasterPasswordFailed'));
       }
     },
     onError: (e: Error) => setInitError(e.message),
@@ -1164,7 +1169,7 @@ export default function UserBulkImportPage() {
     // (aikey-cli/src/main.rs:3384-3391), which only requires that the two
     // entries match. Argon2id + AES-GCM handle any non-empty password.
     if (initPassword !== initConfirm) {
-      setInitError('Passwords do not match');
+      setInitError(t('import.errPasswordsMismatch'));
       return;
     }
     setInitError(null);
@@ -1231,7 +1236,7 @@ export default function UserBulkImportPage() {
     },
     onError: (e: Error & { code?: string }) => {
       if (isAbortError(e)) return; // superseded by newer parse — silent
-      setPageError({ code: e.code, message: friendlyImportError(e.code, e.message, 'parse') });
+      setPageError({ code: e.code, message: friendlyImportError(t, e.code, e.message, 'parse') });
     },
   });
 
@@ -1256,7 +1261,7 @@ export default function UserBulkImportPage() {
     },
     onError: (e: Error & { code?: string }) => {
       if (isAbortError(e)) return; // superseded by newer confirm — silent
-      setPageError({ code: e.code, message: friendlyImportError(e.code, e.message, 'confirm') });
+      setPageError({ code: e.code, message: friendlyImportError(t, e.code, e.message, 'confirm') });
     },
   });
 
@@ -1529,12 +1534,12 @@ export default function UserBulkImportPage() {
         <div className="unlock-banner px-6 py-2.5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 pl-3">
             <LockIcon />
-            <span className="font-mono text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--soft-foreground)' }}>Vault Not Set Up</span>
-            <span className="text-xs font-sans" style={{ color: 'var(--muted-foreground)' }}>— Set a master password to start importing credentials</span>
+            <span className="font-mono text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--soft-foreground)' }}>{t('import.vaultNotSetUp')}</span>
+            <span className="text-xs font-sans" style={{ color: 'var(--muted-foreground)' }}>{t('import.vaultNotSetUpHint')}</span>
           </div>
           <div className="flex items-center gap-3">
             {!initExpanded ? (
-              <button className="btn btn-primary px-4 py-1.5 text-[11px]" onClick={() => setInitExpanded(true)}>SET MASTER PASSWORD</button>
+              <button className="btn btn-primary px-4 py-1.5 text-[11px]" onClick={() => setInitExpanded(true)}>{t('import.setMasterPassword')}</button>
             ) : (
               <div className="flex flex-col items-end gap-1.5">
                 <form
@@ -1544,7 +1549,7 @@ export default function UserBulkImportPage() {
                   <input
                     autoFocus
                     type="password"
-                    placeholder="Master password"
+                    placeholder={t('import.masterPasswordPlaceholder')}
                     className="field-input"
                     style={{ width: 180 }}
                     value={initPassword}
@@ -1552,16 +1557,16 @@ export default function UserBulkImportPage() {
                   />
                   <input
                     type="password"
-                    placeholder="Confirm"
+                    placeholder={t('import.confirmPlaceholder')}
                     className="field-input"
                     style={{ width: 140 }}
                     value={initConfirm}
                     onChange={(e) => setInitConfirm(e.target.value)}
                   />
                   <button type="submit" className="btn btn-primary px-3 py-1.5 text-[11px]" disabled={initMut.isPending || !initPassword || !initConfirm}>
-                    {initMut.isPending ? 'SETTING…' : 'SET'}
+                    {initMut.isPending ? t('import.setting') : t('import.set')}
                   </button>
-                  <button type="button" className="btn btn-ghost text-[11px] px-2 py-1.5" onClick={() => { setInitExpanded(false); setInitPassword(''); setInitConfirm(''); setInitError(null); }}>Cancel</button>
+                  <button type="button" className="btn btn-ghost text-[11px] px-2 py-1.5" onClick={() => { setInitExpanded(false); setInitPassword(''); setInitConfirm(''); setInitError(null); }}>{t('import.cancel')}</button>
                 </form>
                 {initError && (
                   <span className="text-[11px] font-mono text-red-400">{initError}</span>
@@ -1575,12 +1580,12 @@ export default function UserBulkImportPage() {
         <div className="unlock-banner px-6 py-2.5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 pl-3">
             <LockIcon />
-            <span className="font-mono text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--soft-foreground)' }}>Vault Locked</span>
-            <span className="text-xs font-sans" style={{ color: 'var(--muted-foreground)' }}>— Unlock with Master Password to import credentials</span>
+            <span className="font-mono text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--soft-foreground)' }}>{t('import.vaultLocked')}</span>
+            <span className="text-xs font-sans" style={{ color: 'var(--muted-foreground)' }}>{t('import.vaultLockedHint')}</span>
           </div>
           <div className="flex items-center gap-3">
             {!unlockExpanded ? (
-              <button className="btn btn-primary px-4 py-1.5 text-[11px]" onClick={() => setUnlockExpanded(true)}>UNLOCK</button>
+              <button className="btn btn-primary px-4 py-1.5 text-[11px]" onClick={() => setUnlockExpanded(true)}>{t('import.unlock')}</button>
             ) : (
               // Why the extra column wrapper around the form: the inline
               // error message used to sit next to Cancel, which pushed the
@@ -1598,16 +1603,16 @@ export default function UserBulkImportPage() {
                   <input
                     autoFocus
                     type="password"
-                    placeholder="Master Password"
+                    placeholder={t('import.masterPasswordTitlePlaceholder')}
                     className="field-input"
                     style={{ width: 220 }}
                     value={unlockPassword}
                     onChange={(e) => setUnlockPassword(e.target.value)}
                   />
                   <button type="submit" className="btn btn-primary px-3 py-1.5 text-[11px]" disabled={unlockMut.isPending || !unlockPassword}>
-                    {unlockMut.isPending ? 'UNLOCKING…' : 'UNLOCK'}
+                    {unlockMut.isPending ? t('import.unlocking') : t('import.unlock')}
                   </button>
-                  <button type="button" className="btn btn-ghost text-[11px] px-2 py-1.5" onClick={() => { setUnlockExpanded(false); setUnlockError(null); }}>Cancel</button>
+                  <button type="button" className="btn btn-ghost text-[11px] px-2 py-1.5" onClick={() => { setUnlockExpanded(false); setUnlockError(null); }}>{t('import.cancel')}</button>
                 </form>
                 {unlockError && (
                   <span className="text-[11px] font-mono text-red-400">{unlockError}</span>
@@ -1632,7 +1637,7 @@ export default function UserBulkImportPage() {
         >
           <div className="flex items-center gap-3 min-w-0">
             <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: '#f87171' }}>
-              {pageError.code ?? 'Error'}
+              {pageError.code ?? t('import.errorFallbackCode')}
             </span>
             <span className="text-[12px] font-mono truncate" style={{ color: 'var(--foreground)' }} title={pageError.message}>
               {pageError.message}
@@ -1642,7 +1647,7 @@ export default function UserBulkImportPage() {
             type="button"
             className="btn btn-ghost text-[11px] px-2 py-1"
             onClick={() => setPageError(null)}
-            aria-label="Dismiss error"
+            aria-label={t('import.dismissError')}
           >
             ✕
           </button>
@@ -1657,17 +1662,17 @@ export default function UserBulkImportPage() {
         <div className="unlock-banner-ok px-6 py-2 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <UnlockIcon />
-            <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: '#4ade80' }}>Vault Unlocked</span>
+            <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: '#4ade80' }}>{t('import.vaultUnlocked')}</span>
             {liveRemainingSec !== null && (
               <span className="text-[12px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                · auto-lock in{' '}
+                {t('import.autoLockIn')}{' '}
                 <span style={{ color: 'var(--foreground)' }}>
                   {Math.floor(liveRemainingSec / 60)}m {String(liveRemainingSec % 60).padStart(2, '0')}s
                 </span>
               </span>
             )}
           </div>
-          <button className="btn btn-ghost text-[10px] px-2 py-1" onClick={() => lockMut.mutate()}>Lock now</button>
+          <button className="btn btn-ghost text-[10px] px-2 py-1" onClick={() => lockMut.mutate()}>{t('import.lockNow')}</button>
         </div>
       )}
 
@@ -1678,13 +1683,13 @@ export default function UserBulkImportPage() {
             <span className="font-mono text-sm font-bold uppercase tracking-wider" style={{ color: '#6ee7b7' }}>
               {/* v4.1 Stage 5+ fix: "imported" 用户视角 = inserted + replaced
                   (backend 字段拆三个 action;skipped 不算导入,failed 目前不返回) */}
-              Imported {confirmResp.inserted + confirmResp.replaced} credentials
+              {t('import.importedCredentials', { count: confirmResp.inserted + confirmResp.replaced })}
             </span>
             {confirmResp.failed && confirmResp.failed.length > 0 && (
-              <span className="text-[12px] font-mono" style={{ color: '#fca5a5' }}>· {confirmResp.failed.length} failed</span>
+              <span className="text-[12px] font-mono" style={{ color: '#fca5a5' }}>{t('import.nFailed', { count: confirmResp.failed.length })}</span>
             )}
           </div>
-          <button className="btn btn-primary px-3 py-1.5 text-[11px]" onClick={startNewImport}>START NEW IMPORT</button>
+          <button className="btn btn-primary px-3 py-1.5 text-[11px]" onClick={startNewImport}>{t('import.startNewImport')}</button>
         </div>
       )}
 
@@ -1697,24 +1702,24 @@ export default function UserBulkImportPage() {
               type="button"
               className="suggest-close"
               onClick={() => setDismissedSuggestKeyTop(suggestKeyTop)}
-              title="Dismiss this suggestion"
-              aria-label="Dismiss"
+              title={t('import.dismissThisSuggestion')}
+              aria-label={t('import.dismiss')}
             >
               ×
             </button>
             <span className="font-mono" style={{ color: 'var(--primary)', fontWeight: 700 }}>{suggestPctTop}%</span>
-            <span style={{ color: 'var(--foreground)' }}>of drafts look like</span>
+            <span style={{ color: 'var(--foreground)' }}>{t('import.draftsLookLike')}</span>
             <span className={`chip ${providerChipClassFromId(suggestEntryTop[0])}`}>
               {suggestEntryTop[0].toUpperCase()}
             </span>
-            <span style={{ color: 'var(--muted-foreground)' }}>— apply as protocol?</span>
+            <span style={{ color: 'var(--muted-foreground)' }}>{t('import.applyAsProtocol')}</span>
           </div>
           <button
             className="apply-btn"
             onClick={() => applyProviderToAllTop(suggestEntryTop[0])}
-            title={`Fill protocol=${suggestEntryTop[0].toUpperCase()} on ${applyTargetsTop.length} draft(s) that don't already have one`}
+            title={t('import.fillProtocolTitle', { protocol: suggestEntryTop[0].toUpperCase(), count: applyTargetsTop.length })}
           >
-            APPLY TO {applyTargetsTop.length}
+            {t('import.applyToCount', { count: applyTargetsTop.length })}
           </button>
         </div>
       )}
@@ -1739,7 +1744,7 @@ export default function UserBulkImportPage() {
         {/* LEFT pane: textarea (empty) or readonly source (working/done) */}
         <section className="w-[42%] flex flex-col" style={{ background: 'rgba(0,0,0,0.15)' }}>
           <div className="h-10 px-5 flex items-center justify-between flex-shrink-0" style={{ background: 'rgba(23, 23, 25, 0.2)', borderBottom: '1px solid rgba(244, 244, 245, 0.04)' }}>
-            <span className="pane-header">{state === 'empty' ? 'Source · Paste or Add' : state === 'working' ? `Source · ${parseResp?.candidates.length ?? 0} detected` : 'Source · archived'}</span>
+            <span className="pane-header">{state === 'empty' ? t('import.sourcePasteOrAdd') : state === 'working' ? t('import.sourceDetected', { count: parseResp?.candidates.length ?? 0 }) : t('import.sourceArchived')}</span>
             <div className="flex items-center gap-3">
               {/* v4.2: working 态显式 Edit 按钮 —— 把 edit-mode 入口和 "click 行联动右侧"
                   解耦。双击 source 仍是快捷入口(见 SourcePane 外层 onDoubleClick)。 */}
@@ -1752,13 +1757,13 @@ export default function UserBulkImportPage() {
                     savedSourceScroll.current = sourceScrollRef.current?.scrollTop ?? 0;
                     setSourceEditMode(true);
                   }}
-                  title="Edit source text (or double-click the source pane)"
+                  title={t('import.editSourceTitle')}
                 >
-                  ✎ Edit
+                  {t('import.editSource')}
                 </button>
               )}
               <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                {(new Blob([input]).size / 1024).toFixed(1)} KB
+                {t('import.kb', { size: (new Blob([input]).size / 1024).toFixed(1) })}
               </span>
             </div>
           </div>
@@ -1782,7 +1787,7 @@ export default function UserBulkImportPage() {
                 /* 不用 autoFocus —— 浏览器 focus 会滚光标到可见处,覆盖 scrollTop;
                    改为 useLayoutEffect 里 focus({preventScroll:true}) 后手动 scrollTop */
                 className="source-textarea"
-                placeholder={state === 'empty' ? SAMPLE_PLACEHOLDER : undefined}
+                placeholder={state === 'empty' ? t('import.samplePlaceholder') : undefined}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 /* Stage 14+: 持续跟踪 textarea 滚动位置(edit 模式) */
@@ -1804,7 +1809,7 @@ export default function UserBulkImportPage() {
                     setSourceEditMode(true);
                   }
                 }}
-                title={state === 'working' ? 'Single-click a line to jump the card panel · double-click to edit source text' : undefined}
+                title={state === 'working' ? t('import.sourceSingleClickTitle') : undefined}
               >
                 <SourcePane
                   text={input}
@@ -1898,16 +1903,16 @@ export default function UserBulkImportPage() {
       {state !== 'done' && (
         <div className="action-bar px-6 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3 text-[12px] font-mono">
-            <span className="offline-pill"><WifiOffIcon />OFFLINE · NOTHING LEAVES</span>
+            <span className="offline-pill"><WifiOffIcon />{t('import.offlineNothingLeaves')}</span>
             {state === 'working' && (
               <button
                 className="btn btn-outline text-[11px] px-3 py-1.5"
                 /* Stage 13+: Re-PARSE 先弹确认(右侧编辑会被重置) */
                 onClick={() => setConfirmAction('reparse')}
-                title="Re-parse the source text (drafts will be reset)"
+                title={t('import.reparseTitle')}
               >
                 <RefreshIcon />
-                RE-PARSE
+                {t('import.reparse')}
               </button>
             )}
             {state === 'working' && (
@@ -1917,7 +1922,7 @@ export default function UserBulkImportPage() {
                   type="button"
                   className="btn btn-ghost text-[11px] px-3 py-1.5 select-all-btn"
                   onClick={() => setScrollSync((v) => !v)}
-                  title="When on, dragging either pane's scrollbar moves the other pane to keep the matching draft / source line visible."
+                  title={t('import.syncScrollTitle')}
                 >
                   <span
                     className={`check check-inline${scrollSync ? ' checked' : ''}`}
@@ -1925,7 +1930,7 @@ export default function UserBulkImportPage() {
                   >
                     {scrollSync && <span className="text-[10px]">✓</span>}
                   </span>
-                  <span>Sync scroll</span>
+                  <span>{t('import.syncScroll')}</span>
                 </button>
               </>
             )}
@@ -1938,9 +1943,9 @@ export default function UserBulkImportPage() {
                   <button
                     className="btn btn-ghost text-[11px] px-3 py-1.5"
                     onClick={() => setConfirmAction('clear')}
-                    title="Clear source text"
+                    title={t('import.clearSourceTitle')}
                   >
-                    Clear
+                    {t('import.clear')}
                   </button>
                 )}
                 <button
@@ -1948,7 +1953,7 @@ export default function UserBulkImportPage() {
                   disabled={!unlocked || !input.trim() || parseMut.isPending}
                   onClick={() => parseMut.mutate({ text: input, source_type: 'paste' })}
                 >
-                  {parseMut.isPending ? 'PARSING…' : 'PARSE LOCALLY'}
+                  {parseMut.isPending ? t('import.parsing') : t('import.parseLocally')}
                 </button>
               </>
             )}
@@ -1966,7 +1971,7 @@ export default function UserBulkImportPage() {
                       className="btn btn-ghost text-[11px] px-3 py-1.5 select-all-btn"
                       onClick={toggleSelectAll}
                       disabled={total === 0}
-                      title={total === 0 ? 'No drafts' : undefined}
+                      title={total === 0 ? t('import.noDraftsTitle') : undefined}
                     >
                       <span
                         className={`check check-inline${allSelected ? ' checked' : ''}${someSelected ? ' indeterminate' : ''}`}
@@ -1975,7 +1980,7 @@ export default function UserBulkImportPage() {
                         {allSelected && <span className="text-[10px]">✓</span>}
                         {someSelected && <span className="text-[10px] leading-none">−</span>}
                       </span>
-                      <span>{allSelected ? 'Deselect all' : 'Select all'}</span>
+                      <span>{allSelected ? t('import.deselectAll') : t('import.selectAll')}</span>
                     </button>
                   );
                 })()}
@@ -1983,9 +1988,9 @@ export default function UserBulkImportPage() {
                 <button
                   className="btn btn-ghost text-[11px] px-3 py-1.5"
                   onClick={() => setConfirmAction('clear')}
-                  title="Clear all source text and parsed drafts"
+                  title={t('import.clearAllTitle')}
                 >
-                  Clear
+                  {t('import.clear')}
                 </button>
                 <button
                   className="btn btn-primary btn-primary-dim px-5 py-2 text-[12px]"
@@ -1995,15 +2000,17 @@ export default function UserBulkImportPage() {
                   onClick={runImport}
                   title={
                     !unlocked
-                      ? 'Unlock vault to import'
-                      : (readyCount === 0 && selectedOauthCount === 0 ? 'Select at least one draft' : undefined)
+                      ? t('import.unlockVaultToImport')
+                      : (readyCount === 0 && selectedOauthCount === 0 ? t('import.selectAtLeastOne') : undefined)
                   }
                 >
                   {confirmMut.isPending
-                    ? 'IMPORTING…'
+                    ? t('import.importing')
                     : readyCount > 0
-                      ? `IMPORT ${readyCount}${selectedOauthCount > 0 ? ` + ${selectedOauthCount} OAUTH` : ''}`
-                      : `PROCEED · ${selectedOauthCount} OAUTH`}
+                      ? (selectedOauthCount > 0
+                          ? t('import.importCountWithOauth', { count: readyCount, oauth: selectedOauthCount })
+                          : t('import.importCount', { count: readyCount }))
+                      : t('import.proceedOauth', { oauth: selectedOauthCount })}
                   {!confirmMut.isPending && <ArrowRightIcon />}
                 </button>
               </>
@@ -2015,17 +2022,17 @@ export default function UserBulkImportPage() {
       {/* Stage 13+: Clear / Re-PARSE 确认弹窗 */}
       <ConfirmModal
         open={confirmAction === 'clear'}
-        title="Clear everything?"
+        title={t('import.clearEverythingTitle')}
         description={
           <>
-            This will remove all source text and discard parsed drafts on the right.
+            {t('import.clearEverythingDesc')}
             <br />
             <span style={{ color: 'var(--muted-foreground)' }}>
-              This action can't be undone.
+              {t('import.cannotBeUndone')}
             </span>
           </>
         }
-        confirmLabel="Clear"
+        confirmLabel={t('import.clear')}
         variant="danger"
         onConfirm={() => {
           setConfirmAction(null);
@@ -2035,19 +2042,19 @@ export default function UserBulkImportPage() {
       />
       <ConfirmModal
         open={confirmAction === 'reparse'}
-        title="Re-parse source?"
+        title={t('import.reparseSourceTitle')}
         description={
           <>
-            Your edits on the right panel
-            <span style={{ color: '#ca8a04', fontWeight: 600 }}> (alias, providers, base_url, selection) </span>
-            will be discarded and recomputed from the source text.
+            {t('import.reparseDescPrefix')}
+            <span style={{ color: '#ca8a04', fontWeight: 600 }}>{t('import.reparseDescFields')}</span>
+            {t('import.reparseDescSuffix')}
             <br />
             <span style={{ color: 'var(--muted-foreground)' }}>
-              The source text itself stays unchanged.
+              {t('import.reparseDescSourceUnchanged')}
             </span>
           </>
         }
-        confirmLabel="Re-parse"
+        confirmLabel={t('import.reparse')}
         onConfirm={() => {
           setConfirmAction(null);
           parseMut.mutate({ text: input, source_type: 'paste' });
@@ -2061,6 +2068,7 @@ export default function UserBulkImportPage() {
 // ── Empty pane ───────────────────────────────────────────────────────────
 
 function EmptyDraftsCard({ onPasteSample, unlocked }: { onPasteSample: () => void; unlocked: boolean }) {
+  const { t } = useTranslation();
   // Card fills the entire right pane (user request 2026-04-23, per
   // .superdesign/design_iterations/user_bulk_import_empty_3.html).
   // Inner `.nothing-inner` caps readable width so text doesn't sprawl on
@@ -2072,9 +2080,9 @@ function EmptyDraftsCard({ onPasteSample, unlocked }: { onPasteSample: () => voi
     <div className="flex-1 flex p-[18px] min-h-0">
       <div className="nothing-card">
         <div className="nothing-inner">
-          <div className="nothing-title">Nothing here yet</div>
+          <div className="nothing-title">{t('import.nothingHereYet')}</div>
           <p className="nothing-desc">
-            Paste any unstructured text on the left (mixed formats OK), or create a record manually.
+            {t('import.emptyDesc')}
           </p>
           <button
             className="btn btn-outline text-[10px] px-3 py-1.5"
@@ -2082,23 +2090,23 @@ function EmptyDraftsCard({ onPasteSample, unlocked }: { onPasteSample: () => voi
             /* Stage 7+ 规则 4: Paste sample 会触发 setInput,但 empty→working 需要 parse,
                后者需要 vault unlock 才能跑(textarea 也 disabled)。Lock 态直接灰掉避免混淆。 */
             disabled={!unlocked}
-            title={!unlocked ? 'Unlock vault to paste sample' : undefined}
+            title={!unlocked ? t('import.unlockVaultToPasteSample') : undefined}
           >
             <ClipboardPasteIcon />
-            Paste sample
+            {t('import.pasteSample')}
           </button>
           <div className="nothing-divider" />
-          <div className="nothing-parse-title">What we can parse</div>
+          <div className="nothing-parse-title">{t('import.whatWeCanParse')}</div>
           <ul className="nothing-parse-list">
             {[
-              'API keys (sk-ant, sk-proj, AIza, gsk_, ghp_, AKIA, SG., eyJ…)',
-              'Email + password pairs',
-              'OAuth accounts (generates CLI command)',
-              'Third-party gateway base_url',
-            ].map((label) => (
-              <li key={label}>
+              'import.parseListApiKeys',
+              'import.parseListEmailPassword',
+              'import.parseListOauth',
+              'import.parseListGateway',
+            ].map((key) => (
+              <li key={key}>
                 <span className="nothing-dot" />
-                <span>{label}</span>
+                <span>{t(key)}</span>
               </li>
             ))}
           </ul>
@@ -2172,6 +2180,7 @@ function WorkingDrafts({
   hoveredDraft: number | null;
   pinnedDraft: number | null;
 }) {
+  const { t } = useTranslation();
   function toggle(idx: number) {
     setDrafts((prev) => prev.map((d, i) => i === idx ? { ...d, selected: !d.selected } : d));
   }
@@ -2366,20 +2375,20 @@ function WorkingDrafts({
           weak 维度并入 needs review (需复核) 一项。 */}
       <div className="toolbar px-5 py-2 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3 text-[12px] font-mono">
-          <span className="flex items-center gap-1"><span className="tier-dot tier-confirmed" /><span className="font-bold" style={{ color: 'var(--foreground)' }}>{readyCount}</span><span style={{ color: 'var(--muted-foreground)' }}>ready</span></span>
+          <span className="flex items-center gap-1"><span className="tier-dot tier-confirmed" /><span className="font-bold" style={{ color: 'var(--foreground)' }}>{readyCount}</span><span style={{ color: 'var(--muted-foreground)' }}>{t('import.statReady')}</span></span>
           <span style={{ color: 'var(--muted-foreground)' }}>·</span>
-          <span className="flex items-center gap-1"><span className="tier-dot tier-suggested" /><span className="font-bold" style={{ color: 'var(--foreground)' }}>{oauthCount}</span><span style={{ color: 'var(--muted-foreground)' }}>OAuth</span></span>
+          <span className="flex items-center gap-1"><span className="tier-dot tier-suggested" /><span className="font-bold" style={{ color: 'var(--foreground)' }}>{oauthCount}</span><span style={{ color: 'var(--muted-foreground)' }}>{t('import.statOauth')}</span></span>
           <span style={{ color: 'var(--muted-foreground)' }}>·</span>
           <button
             type="button"
             className="stat-clickable flex items-center gap-1"
             onClick={() => onJumpStat?.('weak')}
             disabled={weakCount === 0}
-            title={weakCount === 0 ? undefined : 'Jump to first needs-review draft'}
+            title={weakCount === 0 ? undefined : t('import.jumpToFirstNeedsReview')}
           >
             <span className="tier-dot tier-warn" />
             <span className="font-bold" style={{ color: 'var(--foreground)' }}>{weakCount}</span>
-            <span style={{ color: 'var(--muted-foreground)' }}>needs review</span>
+            <span style={{ color: 'var(--muted-foreground)' }}>{t('import.statNeedsReview')}</span>
           </button>
           {missingProviderCount > 0 && (
             <>
@@ -2388,11 +2397,11 @@ function WorkingDrafts({
                 type="button"
                 className="stat-clickable flex items-center gap-1"
                 onClick={() => onJumpStat?.('missing-provider')}
-                title="Jump to first missing-protocol draft"
+                title={t('import.jumpToFirstMissingProtocol')}
               >
                 <span className="tier-dot" style={{ background: '#f87171' }} />
                 <span className="font-bold" style={{ color: '#fca5a5' }}>{missingProviderCount}</span>
-                <span style={{ color: '#fca5a5' }}>missing protocol</span>
+                <span style={{ color: '#fca5a5' }}>{t('import.statMissingProtocol')}</span>
               </button>
             </>
           )}
@@ -2420,13 +2429,13 @@ function WorkingDrafts({
         })}
         {drafts.length === 0 && (
           <div className="text-[12px] font-mono text-center py-6" style={{ color: 'var(--muted-foreground)' }}>
-            No drafts grouped from the pasted text.
+            {t('import.noDraftsGrouped')}
           </div>
         )}
       </div>
       {orphans.length > 0 && (
         <div className="px-5 py-2.5 flex items-center gap-2 flex-wrap flex-shrink-0" style={{ background: 'rgba(23, 23, 25, 0.2)', borderTop: '1px solid rgba(244, 244, 245, 0.04)' }}>
-          <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'var(--muted-foreground)' }}>Orphans</span>
+          <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'var(--muted-foreground)' }}>{t('import.orphans')}</span>
           {orphans.map((o, i) => (<span key={i} className="orphan-chip">{typeof o === 'string' ? o : o.value}</span>))}
         </div>
       )}
@@ -2599,7 +2608,8 @@ function renderGroupedDrafts({
 }
 
 function EndpointGroupHeader({ group }: { group: EndpointGroup }) {
-  const providerLabel = group.provider ? group.provider.toUpperCase() : 'UNKNOWN';
+  const { t } = useTranslation();
+  const providerLabel = group.provider ? group.provider.toUpperCase() : t('import.unknown');
   const chipClass = providerChipClassFromId(group.provider);
   // 2026-04-23: base_url (e.g. platform.moonshot.cn/console/api-keys)
   // removed from the group header — users reported the long login URL
@@ -2663,6 +2673,7 @@ function DraftRowCard({
    *  与左侧的 boxed (无 glow) 视觉同源。 */
   isPinned: boolean;
 }) {
+  const { t } = useTranslation();
   const { record: r } = row;
   const effectiveType = computeEffectiveType(row);
   const isKeyMode = effectiveType === 'KEY';
@@ -2693,7 +2704,7 @@ function DraftRowCard({
 
   // UI-03: provider_hint 可能是 "unknown oauth" 多词,chip 只取首 token 避免视觉拥挤
   const providerId = r.inferred_provider ?? firstToken(r.provider_hint) ?? undefined;
-  const providerLabelText = providerId ? providerId.toUpperCase() : 'UNKNOWN';
+  const providerLabelText = providerId ? providerId.toUpperCase() : t('import.unknown');
   // 规则 1: 'KEY ONLY' 简化为 'KEY'; 其余按 effectiveType 显示
   const kindChip = isKeyMode
     ? (r.fields.api_key ? 'KEY' : 'URL ONLY')
@@ -2740,7 +2751,7 @@ function DraftRowCard({
              展开/折叠改用右侧 chevron 按钮专属触发,避免误操作 (用户反馈"想跳源行结果意外
              折叠了卡片")。 */
           onClick={onJumpToSource}
-          title="Jump to source"
+          title={t('import.jumpToSource')}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
@@ -2750,7 +2761,7 @@ function DraftRowCard({
             }
           }}
         >
-          <span className="truncate">{previewParts.join(' · ') || '(empty)'}</span>
+          <span className="truncate">{previewParts.join(' · ') || t('import.empty')}</span>
         </span>
         <span className={`chip ${providerChipClassFromId(providerId)}`}>{providerLabelText}</span>
         {/* 规则 3: type 下拉切换 —— 原 chip-kind 改为交互控件 */}
@@ -2759,10 +2770,10 @@ function DraftRowCard({
           value={kindChip === 'URL ONLY' ? 'KEY' : (effectiveType as string)}
           onChange={(e) => onChangeType(e.target.value as 'KEY' | 'OAUTH')}
           onClick={(e) => e.stopPropagation()}
-          title="Switch credential type"
-          aria-label="Credential type"
+          title={t('import.switchCredentialType')}
+          aria-label={t('import.credentialType')}
         >
-          <option value="KEY">{kindChip === 'URL ONLY' ? 'URL ONLY' : 'KEY'}</option>
+          <option value="KEY">{kindChip === 'URL ONLY' ? t('import.kindUrlOnly') : t('import.kindKey')}</option>
           <option value="OAUTH">OAUTH</option>
         </select>
         {/* 2026-04-23 用户反馈:百分比 + 进度条颜色弱化,跟整体卡片视觉强度对齐。
@@ -2784,8 +2795,8 @@ function DraftRowCard({
             e.stopPropagation();
             onToggleExpand();
           }}
-          title={row.expanded ? 'Collapse' : 'Expand'}
-          aria-label={row.expanded ? 'Collapse' : 'Expand'}
+          title={row.expanded ? t('import.collapse') : t('import.expand')}
+          aria-label={row.expanded ? t('import.collapse') : t('import.expand')}
         >
           <ChevronDownIcon up={row.expanded} />
         </button>
@@ -2808,10 +2819,10 @@ function DraftRowCard({
               showRequired={showRequiredFields && missingProvider}
             />
             <FieldRow
-              label="Alias"
+              label={t('import.labelAlias')}
               value={r.alias}
               onChange={(v) => onChangeAlias(v)}
-              placeholder={r.alias ? undefined : '(required — key name in vault)'}
+              placeholder={r.alias ? undefined : t('import.aliasPlaceholder')}
               tier={r.alias ? 'confirmed' : 'unknown'}
             />
           </div>
@@ -2824,17 +2835,17 @@ function DraftRowCard({
           {!isKeyMode && (
             <div className="field-group">
               <FieldRow
-                label="Email"
+                label={t('import.labelEmail')}
                 value={r.fields.email ?? ''}
                 onChange={(v) => onEditField('email', v)}
-                placeholder={r.fields.email === undefined ? '(optional — add if missing)' : undefined}
+                placeholder={r.fields.email === undefined ? t('import.emailOptionalPlaceholder') : undefined}
                 tier={r.fields.email ? 'confirmed' : 'unknown'}
               />
               <FieldRow
-                label="Password"
+                label={t('import.labelPassword')}
                 value={r.fields.password ?? ''}
                 onChange={(v) => onEditField('password', v)}
-                placeholder={r.fields.password === undefined ? '(optional — add if missing)' : undefined}
+                placeholder={r.fields.password === undefined ? t('import.emailOptionalPlaceholder') : undefined}
                 tier={r.fields.password ? 'confirmed' : 'unknown'}
                 sensitive
               />
@@ -2846,12 +2857,12 @@ function DraftRowCard({
           {isKeyMode && (
             <div className="field-group">
               <FieldRow
-                label="API Key"
+                label={t('import.labelApiKey')}
                 value={r.fields.api_key ?? ''}
                 onChange={(v) => onEditField('api_key', v)}
-                placeholder={r.fields.api_key === undefined ? '(required for KEY type)' : undefined}
+                placeholder={r.fields.api_key === undefined ? t('import.apiKeyRequiredPlaceholder') : undefined}
                 /* Stage 14: API Key 拦截后红色 Required hint(与 Provider 对齐) */
-                hint={showRequiredFields && missingApiKey ? '⚠ REQUIRED' : undefined}
+                hint={showRequiredFields && missingApiKey ? t('import.requiredHintWarn') : undefined}
                 hintColor={showRequiredFields && missingApiKey ? '#fca5a5' : undefined}
                 tier={showRequiredFields && missingApiKey ? 'warn' : (r.fields.api_key ? 'confirmed' : 'unknown')}
                 sensitive
@@ -2868,9 +2879,9 @@ function DraftRowCard({
 
           {r.fields.extra_secrets && r.fields.extra_secrets.length > 0 && (
             <div className="field-row">
-              <span className="field-label">Extra</span>
+              <span className="field-label">{t('import.labelExtra')}</span>
               <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                + {r.fields.extra_secrets.length} more secrets in this block (auto-imported with same alias prefix)
+                {t('import.extraSecretsNote', { count: r.fields.extra_secrets.length })}
               </span>
               <span />
               <span className="tier-dot tier-suggested" />
@@ -2916,6 +2927,7 @@ function FieldRow({
    */
   sensitive?: boolean;
 }) {
+  const { t } = useTranslation();
   const [revealed, setRevealed] = useState(false);
   const rowClass = disabled ? 'field-row field-row-disabled' : 'field-row';
   // 遮罩态:显示 masked value 但保持同一个 <input> 组件,便于复用 field-input 样式。
@@ -2947,8 +2959,8 @@ function FieldRow({
             type="button"
             className="field-reveal-btn"
             onClick={() => setRevealed((r) => !r)}
-            title={revealed ? 'Hide value' : 'Reveal full value'}
-            aria-label={revealed ? 'Hide' : 'Reveal'}
+            title={revealed ? t('import.hideValue') : t('import.revealFullValue')}
+            aria-label={revealed ? t('import.hide') : t('import.reveal')}
           >
             {revealed ? <EyeOffIcon /> : <EyeIcon />}
           </button>
@@ -2986,18 +2998,19 @@ function ProviderMultiSelectRow({
   /** v4.1 Stage 13.1+: IMPORT 拦截后,在缺 provider 的 selected draft 显示 "Required" 提示 */
   showRequired: boolean;
 }) {
+  const { t } = useTranslation();
   const selected: string[] = row.record.protocol_types ?? [];
   return (
     <div className="field-row field-row-multi">
-      <span className="field-label">Protocols</span>
+      <span className="field-label">{t('import.labelProtocols')}</span>
       <ProviderMultiSelect
         values={selected}
         onChange={onChange}
         showRequired={showRequired}
       />
       {showRequired && selected.length === 0 ? (
-        <span className="provider-required-hint" title="Protocol is required to import this credential">
-          ⚠ Required
+        <span className="provider-required-hint" title={t('import.protocolRequiredTitle')}>
+          {t('import.requiredHint')}
         </span>
       ) : (
         /* "N selected" source label removed 2026-04-25 — chips inside
@@ -3041,6 +3054,7 @@ function BaseUrlRow({
   onApplyOfficial: (v: string) => void;
   onRevert: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   const record = row.record;
   const official = record.official_base_url;
   const currentValue = record.fields.base_url ?? '';
@@ -3054,13 +3068,13 @@ function BaseUrlRow({
   // hint 文案
   let hint: string;
   if (!isKeyMode) {
-    hint = 'OAUTH mode — N/A';
+    hint = t('import.baseUrlOauthNa');
   } else if (!hasOfficial) {
-    hint = currentValue ? '' : 'provider default unknown';
+    hint = currentValue ? '' : t('import.baseUrlProviderDefaultUnknown');
   } else if (matchesOfficial) {
-    hint = 'official';
+    hint = t('import.baseUrlOfficial');
   } else if (currentValue) {
-    hint = 'custom';
+    hint = t('import.baseUrlCustom');
   } else {
     hint = '';
   }
@@ -3072,17 +3086,17 @@ function BaseUrlRow({
   const btnMode: 'apply' | 'revert' | 'disabled' = canApply
     ? 'apply'
     : (isKeyMode && canRevert ? 'revert' : 'disabled');
-  const btnLabel = btnMode === 'revert' ? 'revert' : 'use official';
+  const btnLabel = btnMode === 'revert' ? t('import.baseUrlBtnRevert') : t('import.baseUrlBtnUseOfficial');
   const btnActive = btnMode !== 'disabled';
 
   let btnTitle: string;
-  if (!isKeyMode)              btnTitle = 'OAUTH mode — N/A';
-  else if (!hasOfficial)       btnTitle = 'No official default for this provider';
-  else if (btnMode === 'apply') btnTitle = `Replace with official: ${official}`;
+  if (!isKeyMode)              btnTitle = t('import.baseUrlOauthNa');
+  else if (!hasOfficial)       btnTitle = t('import.baseUrlNoOfficialDefault');
+  else if (btnMode === 'apply') btnTitle = t('import.baseUrlReplaceWithOfficial', { url: official });
   else if (btnMode === 'revert') btnTitle = row.prevBaseUrl && row.prevBaseUrl.trim()
-    ? `Revert to previous: ${row.prevBaseUrl}`
-    : 'Revert to empty (clear base_url)';
-  else                          btnTitle = 'Already using official base_url';
+    ? t('import.baseUrlRevertToPrevious', { url: row.prevBaseUrl })
+    : t('import.baseUrlRevertToEmpty');
+  else                          btnTitle = t('import.baseUrlAlreadyOfficial');
 
   function handleBtnClick() {
     if (btnMode === 'apply' && official)        onApplyOfficial(official);
@@ -3091,7 +3105,7 @@ function BaseUrlRow({
 
   return (
     <div className={rowClass}>
-      <span className="field-label">base_url</span>
+      <span className="field-label">{t('import.labelBaseUrl')}</span>
       <div className="baseurl-input-wrap">
         <input
           className="field-input"
@@ -3101,8 +3115,8 @@ function BaseUrlRow({
             disabledInput
               ? undefined
               : (hasOfficial
-                  ? `(optional — click "use official" for ${official})`
-                  : '(optional — leave blank for provider default)')
+                  ? t('import.baseUrlOfficialPlaceholder', { url: official })
+                  : t('import.baseUrlBlankPlaceholder'))
           }
           onChange={(e) => onEdit(e.target.value)}
           readOnly={disabledInput}
@@ -3373,6 +3387,7 @@ function ConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -3397,7 +3412,7 @@ function ConfirmModal({
             className="btn btn-ghost text-[11px] px-3 py-1.5"
             onClick={onCancel}
           >
-            {cancelLabel ?? 'Cancel'}
+            {cancelLabel ?? t('import.doneCancel')}
           </button>
           <button
             type="button"
@@ -3476,6 +3491,7 @@ function DoneSummary({
   resp: ConfirmResponse;
   drafts: DraftRow[];
 }) {
+  const { t } = useTranslation();
   // Stage 12+: Done 页只展示 **用户选中** 的 OAuth draft(尊重选择;用户取消勾的不需要处理)
   const oauthDrafts = drafts.filter((d) => d.isOAuth && d.selected);
   const importedItems = (resp.items ?? []).filter((it) => it.action === 'inserted' || it.action === 'replaced');
@@ -3502,22 +3518,22 @@ function DoneSummary({
       <div className="done-stat-strip">
         <div className="done-stat">
           <span className="done-stat-ico done-stat-ico-ok">✓</span>
-          <span className="done-stat-lbl">Imported</span>
+          <span className="done-stat-lbl">{t('import.doneImported')}</span>
           <span className="done-stat-val">{resp.inserted + resp.replaced}</span>
         </div>
         <div className="done-stat">
           <span className="done-stat-ico done-stat-ico-sky">↗</span>
-          <span className="done-stat-lbl">OAuth pending</span>
+          <span className="done-stat-lbl">{t('import.doneOauthPending')}</span>
           <span className="done-stat-val" style={{ color: '#60a5fa' }}>{oauthDrafts.length}</span>
         </div>
         <div className="done-stat">
           <span className="done-stat-ico done-stat-ico-red">!</span>
-          <span className="done-stat-lbl">Failed</span>
+          <span className="done-stat-lbl">{t('import.doneFailed')}</span>
           <span className="done-stat-val" style={{ color: '#f87171' }}>{failedItems.length}</span>
         </div>
         <div className="done-stat">
           <span className="done-stat-ico done-stat-ico-dim">»</span>
-          <span className="done-stat-lbl">Skipped</span>
+          <span className="done-stat-lbl">{t('import.doneSkipped')}</span>
           <span className="done-stat-val" style={{ color: 'var(--muted-foreground)' }}>{skippedItems.length + resp.skipped}</span>
         </div>
       </div>
@@ -3525,16 +3541,13 @@ function DoneSummary({
       {/* OAuth handoffs */}
       {oauthDrafts.length > 0 && (
         <>
-          <DoneSectionTitle color="#60a5fa" label={`OAuth accounts · ${oauthDrafts.length} pending`} meta="one click to finish each" />
+          <DoneSectionTitle color="#60a5fa" label={t('import.oauthAccountsLabel', { count: oauthDrafts.length })} meta={t('import.oauthAccountsMeta')} />
           <div className="oauth-notice">
             <span className="oauth-notice-ico">ⓘ</span>
             <div className="oauth-notice-body">
-              <div className="oauth-notice-title">OAuth accounts can't be bulk-imported yet</div>
+              <div className="oauth-notice-title">{t('import.oauthCannotBulkImport')}</div>
               <div className="oauth-notice-desc">
-                For security, OAuth credentials must be issued by each provider directly.
-                {' '}We've pre-filled the exact command for each account below — just click{' '}
-                <strong>Open login page</strong>{' '}
-                (or copy the command) to finish them one by one.
+                <Trans i18nKey="import.oauthSecurityDesc" components={{ b: <strong /> }} />
               </div>
             </div>
           </div>
@@ -3549,12 +3562,12 @@ function DoneSummary({
       {/* Failed */}
       {failedItems.length > 0 && (
         <>
-          <DoneSectionTitle color="#f87171" label={`Failed · ${failedItems.length}`} meta="see error details below" />
+          <DoneSectionTitle color="#f87171" label={t('import.failedLabel', { count: failedItems.length })} meta={t('import.failedMeta')} />
           <div className="done-rows">
             {failedItems.map((f, i) => (
               <div key={i} className="done-row done-row-failed">
                 <span className="done-row-idx">#{i + 1}</span>
-                <span className="chip chip-failed">Failed</span>
+                <span className="chip chip-failed">{t('import.chipFailed')}</span>
                 <span className="done-row-alias">{f.alias}</span>
                 <span className="done-row-err-code">{f.error_code}</span>
                 <span className="done-row-err-msg" title={f.error_message}>{f.error_message}</span>
@@ -3567,17 +3580,17 @@ function DoneSummary({
       {/* Imported */}
       {importedItems.length > 0 && (
         <>
-          <DoneSectionTitle color="#6ee7b7" label={`Imported · ${importedItems.length}`} meta="ready to use in Virtual Keys" />
+          <DoneSectionTitle color="#6ee7b7" label={t('import.importedLabel', { count: importedItems.length })} meta={t('import.importedMeta')} />
           <div className="done-rows">
             {importedItems.map((it, i) => {
               const d = findDraft(it.alias);
               const provider = d?.record.inferred_provider ?? firstToken(d?.record.provider_hint) ?? 'unknown';
-              const kind = kindLabel(d);
+              const kind = kindLabel(d, t);
               const preview = draftPreview(d, it.alias);
               return (
                 <div key={i} className="done-row done-row-imported">
                   <span className="done-row-idx">#{i + 1}</span>
-                  <span className="chip chip-imported">{it.action === 'replaced' ? 'Replaced' : 'Imported'}</span>
+                  <span className="chip chip-imported">{it.action === 'replaced' ? t('import.chipReplaced') : t('import.chipImported')}</span>
                   <span className={`chip ${providerChipClassFromId(provider)}`}>{provider.toUpperCase()}</span>
                   <span className="chip-kind">{kind}</span>
                   <span className="done-row-preview">{preview}</span>
@@ -3592,12 +3605,12 @@ function DoneSummary({
       {/* Skipped */}
       {skippedItems.length > 0 && (
         <>
-          <DoneSectionTitle color="var(--muted-foreground)" label={`Skipped · ${skippedItems.length}`} meta="alias already exists (on_conflict=skip)" />
+          <DoneSectionTitle color="var(--muted-foreground)" label={t('import.skippedLabel', { count: skippedItems.length })} meta={t('import.skippedMeta')} />
           <div className="done-rows">
             {skippedItems.map((it, i) => (
               <div key={i} className="done-row">
                 <span className="done-row-idx">#{i + 1}</span>
-                <span className="chip chip-skipped">Skipped</span>
+                <span className="chip chip-skipped">{t('import.chipSkipped')}</span>
                 <span className="done-row-alias-mono">{it.alias}</span>
               </div>
             ))}
@@ -3618,15 +3631,15 @@ function DoneSectionTitle({ color, label, meta }: { color: string; label: string
 }
 
 /** Kind chip label:与 DraftRowCard 头部 chip 逻辑对齐 */
-function kindLabel(d: DraftRow | undefined): string {
-  if (!d) return 'KEY';
+function kindLabel(d: DraftRow | undefined, t: (key: string) => string): string {
+  if (!d) return t('import.kindKey');
   const isOAuth = d.isOAuth;
   const f = d.record.fields;
-  if (isOAuth) return 'OAUTH';
-  if (f.api_key && f.email) return 'ACCT + API';
-  if (f.api_key) return 'KEY';
-  if (f.base_url) return 'GATEWAY';
-  return 'KEY';
+  if (isOAuth) return t('import.kindOauth');
+  if (f.api_key && f.email) return t('import.kindAcctApi');
+  if (f.api_key) return t('import.kindKey');
+  if (f.base_url) return t('import.kindGateway');
+  return t('import.kindKey');
 }
 
 /** 用户可见预览:优先 email · secret-tail 拼一行 */
@@ -3652,6 +3665,7 @@ function draftPreview(d: DraftRow | undefined, fallbackAlias: string): string {
  * 待 CLI 加参数后再扩展命令。
  */
 function OAuthHandoffCard({ row, step }: { row: DraftRow; step: number }) {
+  const { t } = useTranslation();
   const r = row.record;
   const loginArg = oauthLoginProvider(r.inferred_provider);
   // Stage 11+: 命令带 `--alias <r.alias>`,跳过 auth login 后的 display name 交互 prompt
@@ -3659,7 +3673,7 @@ function OAuthHandoffCard({ row, step }: { row: DraftRow; step: number }) {
   const aliasArg = r.alias ? ` --alias ${shellQuote(r.alias)}` : '';
   const command = loginArg ? `aikey auth login ${loginArg}${aliasArg}` : null;
   const providerId = r.inferred_provider ?? firstToken(r.provider_hint);
-  const providerLabel = (providerId ?? 'unknown').toUpperCase();
+  const providerLabel = providerId ? providerId.toUpperCase() : t('import.unknown');
   const email = r.fields.email;
   const loginUrl = r.login_url;
   const [copied, setCopied] = useState(false);
@@ -3699,9 +3713,9 @@ function OAuthHandoffCard({ row, step }: { row: DraftRow; step: number }) {
             完成状态由 Vault 页 + `my-keys` 列表天然体现。 */}
       </div>
       <div className="oauth-meta-grid">
-        <span className="oauth-meta-k">Account</span>
-        <span className="oauth-meta-v oauth-meta-v-ok">{email ?? '(no email parsed)'}</span>
-        <span className="oauth-meta-k">Alias</span>
+        <span className="oauth-meta-k">{t('import.metaAccount')}</span>
+        <span className="oauth-meta-v oauth-meta-v-ok">{email ?? t('import.noEmailParsed')}</span>
+        <span className="oauth-meta-k">{t('import.labelAlias')}</span>
         <span className="oauth-meta-v">{r.alias}</span>
       </div>
       {command && (
@@ -3714,9 +3728,9 @@ function OAuthHandoffCard({ row, step }: { row: DraftRow; step: number }) {
             type="button"
             className="oauth-cli-copy"
             onClick={onCopy}
-            title="Copy command to clipboard"
+            title={t('import.copyCommandTitle')}
           >
-            {copied ? '✓ copied' : '⎘ Copy'}
+            {copied ? t('import.copied') : t('import.copy')}
           </button>
         </div>
       )}
@@ -3724,9 +3738,9 @@ function OAuthHandoffCard({ row, step }: { row: DraftRow; step: number }) {
         <span className="oauth-actions-note">
           {command
             ? (loginUrl
-                ? 'Opens your browser to the provider login — token is written back automatically.'
-                : 'Run command in a local terminal — no login URL configured for this provider.')
-            : `No \`aikey auth login\` flow for ${providerId ?? 'unknown'} yet — store as API key manually.`}
+                ? t('import.oauthNoteWithUrl')
+                : t('import.oauthNoteNoUrl'))
+            : t('import.oauthNoFlow', { provider: providerId ?? 'unknown' })}
         </span>
         <div className="oauth-actions-btns">
           {loginUrl && (
@@ -3734,9 +3748,9 @@ function OAuthHandoffCard({ row, step }: { row: DraftRow; step: number }) {
               type="button"
               className="btn-open-login"
               onClick={onOpen}
-              title={`Open ${loginUrl} in a new tab`}
+              title={t('import.openLoginTitle', { url: loginUrl })}
             >
-              ↗ Open login page
+              {t('import.openLoginPage')}
             </button>
           )}
         </div>
@@ -4323,21 +4337,8 @@ const IMPORT_CSS = `
 // letters, mixed case, digits, hex) so the parser still demonstrates
 // the same heuristics (email detection, separator splitting, hex key
 // shape) without exposing credential-looking strings.
-const SAMPLE_PLACEHOLDER = `Paste your credentials here — any format, any separator…
-
-Example:
-
-claude2: SF (pro-04/15)
-xaimqvupceobnl@zerqmail.com
-----khVp3b9tRxM----c742b31f9a5e064a1b837f62cd91de40
-
-claude3: K (pro-03/30)
-邮箱: xUJpzcrlvpeonqcab@cordel.com
-密码: k2p5QW7fVZHdC1
-apikey = 8261d47e209458264913571842067483950
-
-OpenAI: sk-proj-Kp3mQ8rTn7...
-base_url: https://my-gateway.company.com/v1`;
+// SAMPLE_PLACEHOLDER moved to i18n catalog (import.samplePlaceholder). The
+// example body keeps provider proper nouns / fake demo data untranslated.
 
 const SAMPLE_TEXT = `claude2: SF (pro-04/15)
 user@example.com

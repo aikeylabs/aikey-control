@@ -24,6 +24,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Radar,
@@ -118,6 +119,7 @@ function densifyTimeline(points: TimelinePoint[], range: RangeKey): TimelinePoin
 }
 
 export default function UserAppDetailPage() {
+  const { t } = useTranslation();
   const { slug = '' } = useParams<{ slug: string }>();
   const qc = useQueryClient();
 
@@ -283,7 +285,7 @@ export default function UserAppDetailPage() {
       <section className="connected-app-page p-6">
         <style>{APPS_DETAIL_CSS}</style>
         <div className="cap-surface p-8 text-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
-          Loading app…
+          {t('apps.loadingApp')}
         </div>
       </section>
     );
@@ -300,11 +302,11 @@ export default function UserAppDetailPage() {
         >
           <strong>
             {err.code === 'I_APP_NOT_FOUND'
-              ? `App "${slug}" not found.`
-              : 'Failed to load app.'}
+              ? t('apps.appNotFound', { slug })
+              : t('apps.failedToLoadApp')}
           </strong>
           <div className="mt-1" style={{ color: 'var(--muted-foreground)' }}>
-            {err.message || 'Unknown error.'}
+            {err.message || t('apps.unknownError')}
           </div>
           <div className="mt-3">
             <Link
@@ -312,7 +314,7 @@ export default function UserAppDetailPage() {
               className="text-[12px] underline"
               style={{ color: 'var(--muted-foreground)' }}
             >
-              ← Back to Connected Apps
+              {t('apps.backToConnectedApps')}
             </Link>
           </div>
         </div>
@@ -334,10 +336,7 @@ export default function UserAppDetailPage() {
   // front so users don't hit the API just to see an error. Pause /
   // resume stay enabled because they're recoverable.
   const mutationLocked = data.app.slug === 'degrade-detector';
-  const mutationLockedReason =
-    'This app is wired into the AiKey internal pipeline. Revoke / rotate ' +
-    'would break trust-local and the proxy rhythm observer. Use Pause / ' +
-    'Resume to stop it temporarily.';
+  const mutationLockedReason = t('apps.mutationLockedReason');
   const bindingByUpstream = new Map<string, (typeof data.bindings)[number]>();
   data.bindings.forEach((b) => bindingByUpstream.set(b.upstream, b));
   const declaredUpstreamCount = data.app.upstreams.length;
@@ -348,12 +347,12 @@ export default function UserAppDetailPage() {
       <section className="connected-app-page p-6" aria-labelledby="app-detail-title">
           {/* Breadcrumb — kept above the hero so the shell's User → Apps trail is preserved */}
           <nav
-            aria-label="Breadcrumb"
+            aria-label={t('apps.breadcrumbAria')}
             className="text-[12px] mb-4"
             style={{ color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}
           >
             <Link to="/user/apps" style={{ color: 'inherit' }} className="hover:underline">
-              Connected Apps
+              {t('apps.title')}
             </Link>
             <span className="mx-2" style={{ opacity: 0.45 }}>/</span>
             <strong style={{ color: 'var(--foreground)' }}>{data.app.name}</strong>
@@ -372,7 +371,7 @@ export default function UserAppDetailPage() {
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="cap-mono-label mb-1">Connected app detail</div>
+                    <div className="cap-mono-label mb-1">{t('apps.connectedAppDetail')}</div>
                     <h1
                       id="app-detail-title"
                       className="m-0 text-[28px] leading-tight font-extrabold tracking-tight"
@@ -403,7 +402,7 @@ export default function UserAppDetailPage() {
                   ) : null}
                   {data.app.vendor ? (
                     <span className="cap-chip px-3 py-1 text-[11px]">
-                      vendor: {data.app.vendor}
+                      {t('apps.vendorChip', { vendor: data.app.vendor })}
                     </span>
                   ) : null}
                 </div>
@@ -418,20 +417,20 @@ export default function UserAppDetailPage() {
                     type="button"
                     className="cap-btn cap-btn-secondary"
                     disabled={isMutating || vaultLocked}
-                    title={vaultLocked ? 'Unlock vault first' : undefined}
+                    title={vaultLocked ? t('apps.unlockVaultFirst') : undefined}
                     onClick={() => pauseM.mutate()}
                   >
-                    <Pause size={14} /> Pause
+                    <Pause size={14} /> {t('apps.actionPause')}
                   </button>
                 ) : (
                   <button
                     type="button"
                     className="cap-btn cap-btn-secondary"
                     disabled={isMutating || vaultLocked}
-                    title={vaultLocked ? 'Unlock vault first' : undefined}
+                    title={vaultLocked ? t('apps.unlockVaultFirst') : undefined}
                     onClick={() => resumeM.mutate()}
                   >
-                    <Play size={14} /> Resume
+                    <Play size={14} /> {t('apps.actionResume')}
                   </button>
                 )}
                 <button
@@ -442,20 +441,20 @@ export default function UserAppDetailPage() {
                     mutationLocked
                       ? mutationLockedReason
                       : vaultLocked
-                        ? 'Unlock vault first'
+                        ? t('apps.unlockVaultFirst')
                         : undefined
                   }
                   onClick={() => {
                     if (
                       window.confirm(
-                        `Rotate bearer for "${data.app.name}"?\n\nThe agent's existing OPENAI_API_KEY will immediately become invalid. You must copy the new bearer (shown after this completes) into the agent's env, then restart the agent.`,
+                        t('apps.rotateConfirmFull', { name: data.app.name }),
                       )
                     ) {
                       rotateM.mutate();
                     }
                   }}
                 >
-                  <RotateCw size={14} /> Rotate bearer
+                  <RotateCw size={14} /> {t('apps.rotateBearer')}
                 </button>
                 <button
                   type="button"
@@ -465,20 +464,20 @@ export default function UserAppDetailPage() {
                     mutationLocked
                       ? mutationLockedReason
                       : vaultLocked
-                        ? 'Unlock vault first'
+                        ? t('apps.unlockVaultFirst')
                         : undefined
                   }
                   onClick={() => {
                     if (
                       window.confirm(
-                        `Revoke "${data.app.name}"?\n\nAll active keys are immediately invalidated. The agent will return 401 on its next request. This cannot be undone — re-register via CLI to issue a new bearer.`,
+                        t('apps.revokeConfirmDetail', { name: data.app.name }),
                       )
                     ) {
                       revokeM.mutate();
                     }
                   }}
                 >
-                  <Ban size={14} /> Revoke
+                  <Ban size={14} /> {t('apps.actionRevoke')}
                 </button>
                 {data.app.app_kind === 'third-party' && (
                   // Uninstall is third-party ONLY. First-party apps (e.g.
@@ -512,20 +511,20 @@ export default function UserAppDetailPage() {
                     disabled={isMutating || vaultLocked}
                     title={
                       vaultLocked
-                        ? 'Unlock vault first'
-                        : `Remove ${data.app.name} from your list. Deletes the app record + key bindings; previously issued tokens are kept (revoked) for audit. Re-register the same slug to restore.`
+                        ? t('apps.unlockVaultFirst')
+                        : t('apps.uninstallTooltip', { name: data.app.name })
                     }
                     onClick={() => {
                       if (
                         window.confirm(
-                          `Uninstall "${data.app.name}"?\n\nThis will:\n  • Remove the app from your list\n  • Delete the app record and its key bindings\n  • Retain previously issued tokens (status: revoked) for audit history\n  • Your agent's own binary is NOT touched — you manage it\n\nThe agent will return 401 on its next request. To restore, re-register the same slug — a new bearer will be issued.`,
+                          t('apps.uninstallConfirm', { name: data.app.name }),
                         )
                       ) {
                         uninstallM.mutate();
                       }
                     }}
                   >
-                    <Trash2 size={14} /> Uninstall
+                    <Trash2 size={14} /> {t('apps.uninstall')}
                   </button>
                 )}
               </div>
@@ -544,9 +543,9 @@ export default function UserAppDetailPage() {
               className="cap-surface mb-5 p-4"
               style={{ borderColor: 'rgba(202, 138, 4, 0.5)' }}
             >
-              <strong style={{ color: '#ca8a04' }}>New bearer issued.</strong>
+              <strong style={{ color: '#ca8a04' }}>{t('apps.newBearerIssued')}</strong>
               <p className="text-[12px] mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                Copy the block matching your agent's SDK and restart it. This is shown once.
+                {t('apps.copyBlockRestart')}
               </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
@@ -607,13 +606,13 @@ export default function UserAppDetailPage() {
           <section className="cap-section cap-surface mb-5" aria-labelledby="bindings-title">
             <div className="cap-section-header">
               <div>
-                <div id="bindings-title" className="cap-mono-label">Key bindings</div>
+                <div id="bindings-title" className="cap-mono-label">{t('apps.keyBindings')}</div>
                 <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Which provider key the agent uses for each declared upstream.
+                  {t('apps.keyBindingsDesc')}
                 </p>
               </div>
               <span className="cap-chip px-3 py-1 text-[11px]">
-                {declaredUpstreamCount} {declaredUpstreamCount === 1 ? 'upstream' : 'upstreams'}
+                {declaredUpstreamCount} {declaredUpstreamCount === 1 ? t('apps.upstreamSingular') : t('apps.upstreamPlural')}
               </span>
             </div>
 
@@ -626,9 +625,9 @@ export default function UserAppDetailPage() {
                   />
                   <p className="m-0 text-sm leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
                     <strong style={{ color: '#ca8a04' }}>
-                      This app follows your default key.
+                      {t('apps.followsDefaultKey')}
                     </strong>{' '}
-                    It resolves via your active{' '}
+                    {t('apps.followsDefaultKeyPre')}{' '}
                     <code
                       style={{
                         fontFamily: 'var(--font-mono)',
@@ -637,7 +636,7 @@ export default function UserAppDetailPage() {
                     >
                       aikey use
                     </code>{' '}
-                    selection at request time. To change which key it uses, run{' '}
+                    {t('apps.followsDefaultKeyMid')}{' '}
                     <code
                       style={{
                         fontFamily: 'var(--font-mono)',
@@ -646,13 +645,13 @@ export default function UserAppDetailPage() {
                     >
                       aikey use &lt;alias&gt;
                     </code>{' '}
-                    or open the{' '}
+                    {t('apps.followsDefaultKeyOpen')}{' '}
                     <Link
                       to="/user/vault"
                       className="underline"
                       style={{ color: 'var(--foreground)' }}
                     >
-                      Vault page
+                      {t('apps.vaultPage')}
                     </Link>
                     .
                   </p>
@@ -661,7 +660,7 @@ export default function UserAppDetailPage() {
 
               {declaredUpstreamCount === 0 ? (
                 <div className="text-[13px] py-3" style={{ color: 'var(--muted-foreground)' }}>
-                  No upstreams declared at register time.
+                  {t('apps.noUpstreamsDeclared')}
                 </div>
               ) : (
                 <div className="grid gap-2.5">
@@ -686,7 +685,7 @@ export default function UserAppDetailPage() {
                               fontFamily: 'var(--font-mono)',
                             }}
                           >
-                            declared upstream
+                            {t('apps.declaredUpstream')}
                           </div>
                         </div>
 
@@ -706,25 +705,25 @@ export default function UserAppDetailPage() {
                                   fontFamily: 'var(--font-mono)',
                                 }}
                               >
-                                key source: {bindingTypeLabel(binding.key_source_type)}
+                                {t('apps.keySource', { type: bindingTypeLabel(binding.key_source_type) })}
                               </div>
                             </>
                           ) : data.app.follow_user_active ? (
                             <div className="text-[13px]" style={{ color: 'var(--muted-foreground)' }}>
-                              Dynamically resolved from your default key.
+                              {t('apps.dynamicallyResolved')}
                             </div>
                           ) : (
                             <div
                               className="text-[13px]"
                               style={{ color: 'var(--destructive, #ef4444)' }}
                             >
-                              No binding — runtime requests will fail with BINDING_NOT_FOUND. Bind a key to fix.
+                              {t('apps.noBindingWillFail')}
                             </div>
                           )}
                         </div>
 
                         {data.app.follow_user_active ? (
-                          <span className="cap-chip px-3 py-1 text-[11px]">read only</span>
+                          <span className="cap-chip px-3 py-1 text-[11px]">{t('apps.readOnly')}</span>
                         ) : data.app.app_kind === 'first-party' ? (
                           // Mode B (credential-mode-architecture spec, 2026-05-23):
                           // first-party + !follow_user_active means the binding was
@@ -737,9 +736,9 @@ export default function UserAppDetailPage() {
                             type="button"
                             className="cap-btn cap-btn-primary"
                             disabled
-                            title="Binding is frozen at registration (Mode B). Switching is not supported for first-party apps."
+                            title={t('apps.switchFrozenTooltip')}
                           >
-                            <Repeat2 size={14} /> Switch
+                            <Repeat2 size={14} /> {t('apps.switch')}
                           </button>
                         ) : (
                           <button
@@ -752,7 +751,7 @@ export default function UserAppDetailPage() {
                               })
                             }
                           >
-                            <Repeat2 size={14} /> {binding ? 'Switch' : 'Bind'}
+                            <Repeat2 size={14} /> {binding ? t('apps.switch') : t('apps.bind')}
                           </button>
                         )}
                       </div>
@@ -767,12 +766,12 @@ export default function UserAppDetailPage() {
           <section className="cap-section cap-surface mb-5" aria-labelledby="usage-title">
             <div className="cap-section-header">
               <div>
-                <div id="usage-title" className="cap-mono-label">Usage</div>
+                <div id="usage-title" className="cap-mono-label">{t('apps.usage')}</div>
                 <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Daily tokens and requests expose cost drift and runaway request loops.
+                  {t('apps.usageDesc')}
                 </p>
               </div>
-              <div className="flex items-center gap-1.5" aria-label="Range selector">
+              <div className="flex items-center gap-1.5" aria-label={t('apps.rangeSelectorAria')}>
                 {([1, 7, 14, 30] as const).map((r) => (
                   <button
                     key={r}
@@ -789,18 +788,18 @@ export default function UserAppDetailPage() {
             <div className="cap-section-body">
               {!hasIdentity ? (
                 <div className="text-[13px] py-4 text-center" style={{ color: 'var(--muted-foreground)' }}>
-                  Loading identity…
+                  {t('apps.loadingIdentity')}
                 </div>
               ) : usageTimeline.isError || usageByModel.isError ? (
                 <div className="text-[13px] py-4" style={{ color: 'var(--destructive, #ef4444)' }}>
-                  Failed to load usage:{' '}
-                  {((usageTimeline.error ?? usageByModel.error) as Error)?.message ?? 'unknown error'}
+                  {t('apps.failedToLoadUsage')}{' '}
+                  {((usageTimeline.error ?? usageByModel.error) as Error)?.message ?? t('apps.unknownError2')}
                 </div>
               ) : (
                 <>
                   <div className="cap-metric-grid">
                     <div className="cap-metric-card">
-                      <div className="cap-mono-label">Total tokens</div>
+                      <div className="cap-mono-label">{t('apps.totalTokens')}</div>
                       <div
                         className="mt-3 text-[28px] font-extrabold tracking-tight"
                         style={{ color: 'var(--foreground)' }}
@@ -814,12 +813,12 @@ export default function UserAppDetailPage() {
                           fontFamily: 'var(--font-mono)',
                         }}
                       >
-                        {usageRange === 1 ? 'today' : `last ${usageRange} days`}
+                        {usageRange === 1 ? t('apps.today') : t('apps.lastNDays', { count: usageRange })}
                       </div>
                     </div>
 
                     <div className="cap-metric-card">
-                      <div className="cap-mono-label">Requests</div>
+                      <div className="cap-mono-label">{t('apps.requests')}</div>
                       <div
                         className="mt-3 text-[28px] font-extrabold tracking-tight"
                         style={{ color: 'var(--foreground)' }}
@@ -833,7 +832,7 @@ export default function UserAppDetailPage() {
                           fontFamily: 'var(--font-mono)',
                         }}
                       >
-                        proxied calls
+                        {t('apps.proxiedCalls')}
                       </div>
                     </div>
 
@@ -844,7 +843,7 @@ export default function UserAppDetailPage() {
                           hours. Show "Active hours" / 24 then so the
                           label matches what the number actually counts. */}
                       <div className="cap-mono-label">
-                        {usageRange === 1 ? 'Active hours' : 'Active days'}
+                        {usageRange === 1 ? t('apps.activeHours') : t('apps.activeDays')}
                       </div>
                       <div
                         className="mt-3 text-[28px] font-extrabold tracking-tight"
@@ -859,12 +858,12 @@ export default function UserAppDetailPage() {
                           fontFamily: 'var(--font-mono)',
                         }}
                       >
-                        {usageRange === 1 ? 'zero hours rendered honestly' : 'zero days rendered honestly'}
+                        {usageRange === 1 ? t('apps.zeroHoursHonestly') : t('apps.zeroDaysHonestly')}
                       </div>
                     </div>
 
                     <div className="cap-metric-card">
-                      <div className="cap-mono-label">Models used</div>
+                      <div className="cap-mono-label">{t('apps.modelsUsed')}</div>
                       <div
                         className="mt-3 text-[28px] font-extrabold tracking-tight"
                         style={{ color: 'var(--foreground)' }}
@@ -878,7 +877,7 @@ export default function UserAppDetailPage() {
                           fontFamily: 'var(--font-mono)',
                         }}
                       >
-                        top {Math.min(5, usageMetrics.modelCount)} shown
+                        {t('apps.topNShown', { count: Math.min(5, usageMetrics.modelCount) })}
                       </div>
                     </div>
                   </div>
@@ -888,7 +887,7 @@ export default function UserAppDetailPage() {
                     <div className="cap-chart-card cap-surface-subtle">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <div className="cap-mono-label">Consumption trend</div>
+                          <div className="cap-mono-label">{t('apps.consumptionTrend')}</div>
                         </div>
                         <div
                           className="flex gap-4 text-[11px]"
@@ -902,14 +901,14 @@ export default function UserAppDetailPage() {
                               className="inline-block w-3 h-3 rounded-sm"
                               style={{ background: 'var(--cap-token-bar)' }}
                             />
-                            tokens
+                            {t('apps.tokens')}
                           </span>
                           <span className="inline-flex items-center gap-2">
                             <span
                               className="inline-block w-3"
                               style={{ background: 'var(--cap-request-line)', height: 2 }}
                             />
-                            requests
+                            {t('apps.requestsLegend')}
                           </span>
                         </div>
                       </div>
@@ -920,16 +919,14 @@ export default function UserAppDetailPage() {
                             className="h-full grid place-items-center text-[13px]"
                             style={{ color: 'var(--muted-foreground)' }}
                           >
-                            Loading…
+                            {t('apps.loadingEllipsis')}
                           </div>
                         ) : usageMetrics.tokens === 0 && usageMetrics.requests === 0 ? (
                           <div
                             className="h-full grid place-items-center text-center text-[13px] px-4"
                             style={{ color: 'var(--muted-foreground)' }}
                           >
-                            No usage in this window. Zero-baseline rendered honestly
-                            — the bound proxy will populate this once the agent
-                            issues a request.
+                            {t('apps.noUsageInWindow')}
                           </div>
                         ) : (
                           <ResponsiveContainer width="100%" height="100%">
@@ -1022,7 +1019,7 @@ export default function UserAppDetailPage() {
                         className="text-[11px] mt-3"
                         style={{ color: 'var(--muted-foreground)' }}
                       >
-                        Scoped to events tagged with{' '}
+                        {t('apps.scopedToEvents')}{' '}
                         <code
                           style={{
                             fontFamily: 'var(--font-mono)',
@@ -1031,13 +1028,13 @@ export default function UserAppDetailPage() {
                         >
                           app_slug={slug}
                         </code>
-                        . For a global view, see{' '}
+                        {t('apps.forGlobalViewSee')}{' '}
                         <Link
                           to="/user/usage-ledger"
                           className="underline"
                           style={{ color: 'var(--foreground)' }}
                         >
-                          Cost · Usage
+                          {t('apps.costUsage')}
                         </Link>
                         .
                       </p>
@@ -1045,13 +1042,13 @@ export default function UserAppDetailPage() {
 
                     {/* Top models meter list */}
                     <div className="cap-models-card cap-surface-subtle">
-                      <div className="cap-mono-label">Top models</div>
+                      <div className="cap-mono-label">{t('apps.topModels')}</div>
                       <div className="mt-2 mb-4 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                        Ranked by total tokens in this range.
+                        {t('apps.rankedByTokens')}
                       </div>
                       {topModels.length === 0 ? (
                         <div className="text-[13px]" style={{ color: 'var(--muted-foreground)' }}>
-                          No model breakdown yet — empty range.
+                          {t('apps.noModelBreakdown')}
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -1079,7 +1076,7 @@ export default function UserAppDetailPage() {
                                     {fmtCompactInt(m.total_tokens)}
                                   </div>
                                   <div className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
-                                    {fmtInt(m.request_count)} req
+                                    {t('apps.reqSuffix', { value: fmtInt(m.request_count) })}
                                   </div>
                                 </div>
                               </div>
@@ -1098,9 +1095,9 @@ export default function UserAppDetailPage() {
           <section className="cap-section cap-surface mb-5" aria-labelledby="bearer-title">
             <div className="cap-section-header">
               <div>
-                <div id="bearer-title" className="cap-mono-label">Issued bearer</div>
+                <div id="bearer-title" className="cap-mono-label">{t('apps.issuedBearer')}</div>
                 <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                  Active bearer tokens issued for this connected app.
+                  {t('apps.issuedBearerDesc')}
                 </p>
               </div>
               <button
@@ -1111,20 +1108,20 @@ export default function UserAppDetailPage() {
                   mutationLocked
                     ? mutationLockedReason
                     : vaultLocked
-                      ? 'Unlock vault first'
+                      ? t('apps.unlockVaultFirst')
                       : undefined
                 }
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Rotate bearer for "${data.app.name}"?\n\nThe agent's existing OPENAI_API_KEY will immediately become invalid.`,
+                      t('apps.rotateConfirmShort', { name: data.app.name }),
                     )
                   ) {
                     rotateM.mutate();
                   }
                 }}
               >
-                <RotateCw size={14} /> Rotate bearer
+                <RotateCw size={14} /> {t('apps.rotateBearer')}
               </button>
             </div>
             <div className="cap-section-body">
@@ -1165,7 +1162,7 @@ export default function UserAppDetailPage() {
                       </code>
                       <button
                         type="button"
-                        title={`Copy ${row.envName} to clipboard`}
+                        title={t('apps.copyEnvTooltip', { envName: row.envName })}
                         onClick={async () => {
                           try {
                             await navigator.clipboard.writeText(row.url);
@@ -1186,7 +1183,7 @@ export default function UserAppDetailPage() {
                           color: 'var(--primary-foreground, #18181b)',
                         }}
                       >
-                        {copiedBaseUrl === row.sdk ? 'Copied' : 'Copy'}
+                        {copiedBaseUrl === row.sdk ? t('apps.copied') : t('apps.copy')}
                       </button>
                     </div>
                   </div>
@@ -1194,7 +1191,7 @@ export default function UserAppDetailPage() {
               ))}
               {data.active_keys.length === 0 ? (
                 <div className="text-[13px]" style={{ color: 'var(--muted-foreground)' }}>
-                  No active bearer. Re-register via CLI:{' '}
+                  {t('apps.noActiveBearer')}{' '}
                   <span
                     style={{
                       background: 'var(--secondary, #3f3f46)',
@@ -1241,7 +1238,7 @@ export default function UserAppDetailPage() {
                                   fontFamily: 'var(--font-mono)',
                                   wordBreak: 'break-all',
                                 }}
-                                aria-label={tokenIsShown ? 'Bearer token (revealed)' : 'Bearer token (masked)'}
+                                aria-label={tokenIsShown ? t('apps.bearerTokenRevealedAria') : t('apps.bearerTokenMaskedAria')}
                               >
                                 {tokenIsShown
                                   ? revealedToken
@@ -1253,7 +1250,7 @@ export default function UserAppDetailPage() {
                               <button
                                 type="button"
                                 disabled={vaultLocked || revealM.isPending}
-                                title={vaultLocked ? 'Unlock vault first' : undefined}
+                                title={vaultLocked ? t('apps.unlockVaultFirst') : undefined}
                                 onClick={() => {
                                   if (tokenIsShown) {
                                     setRevealedToken(null);
@@ -1269,10 +1266,10 @@ export default function UserAppDetailPage() {
                                 }}
                               >
                                 {revealM.isPending && !tokenIsShown
-                                  ? 'Loading…'
+                                  ? t('apps.loadingEllipsis')
                                   : tokenIsShown
-                                  ? 'Hide'
-                                  : 'Show'}
+                                  ? t('apps.hide')
+                                  : t('apps.show')}
                               </button>
                               {/* Copy: fetch (if not already fetched)
                                   and write to clipboard. Doesn't
@@ -1285,7 +1282,7 @@ export default function UserAppDetailPage() {
                               <button
                                 type="button"
                                 disabled={vaultLocked || revealM.isPending}
-                                title={vaultLocked ? 'Unlock vault first' : 'Copy token to clipboard'}
+                                title={vaultLocked ? t('apps.unlockVaultFirst') : t('apps.copyTokenTooltip')}
                                 onClick={async () => {
                                   let value = revealedToken;
                                   if (value === null) {
@@ -1310,7 +1307,7 @@ export default function UserAppDetailPage() {
                                   color: 'var(--primary-foreground, #18181b)',
                                 }}
                               >
-                                {copiedToken ? 'Copied' : 'Copy'}
+                                {copiedToken ? t('apps.copied') : t('apps.copy')}
                               </button>
                             </div>
                           ) : (
@@ -1318,9 +1315,7 @@ export default function UserAppDetailPage() {
                               className="mt-1 text-xs"
                               style={{ color: 'var(--muted-foreground)' }}
                             >
-                              Older active row (kept during rotation window). The plaintext
-                              for this key_id is no longer accessible — only the most
-                              recent active row is revealable.
+                              {t('apps.olderActiveRow')}
                             </div>
                           )}
                           {isRevealTarget && revealM.error ? (
@@ -1329,7 +1324,7 @@ export default function UserAppDetailPage() {
                               style={{ color: 'var(--destructive, #ef4444)' }}
                               role="alert"
                             >
-                              Reveal failed: {(revealM.error as Error).message}
+                              {t('apps.revealFailed')} {(revealM.error as Error).message}
                             </div>
                           ) : null}
                         </div>
@@ -1340,7 +1335,10 @@ export default function UserAppDetailPage() {
                             fontFamily: 'var(--font-mono)',
                           }}
                         >
-                          issued {relativeTime(k.created_at)} · last used {relativeTime(k.last_used_at)}
+                          {t('apps.issuedLastUsed', {
+                            issued: relativeTime(k.created_at),
+                            lastUsed: relativeTime(k.last_used_at),
+                          })}
                         </div>
                       </div>
                     );
@@ -1352,11 +1350,9 @@ export default function UserAppDetailPage() {
 
           {/* ─── §D Audit Log placeholder ────────────────────────────── */}
           <section className="cap-section cap-audit-placeholder mb-5">
-            <div className="cap-mono-label">Audit log</div>
+            <div className="cap-mono-label">{t('apps.auditLog')}</div>
             <p className="mt-3 mb-0 max-w-3xl text-sm leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
-              App-scoped audit timeline will appear here once the audit endpoint is wired. The
-              bound proxy already emits these events to the local WAL — recoverable but not
-              surfaced here yet.
+              {t('apps.auditLogPlaceholder')}
             </p>
           </section>
 
@@ -1371,8 +1367,8 @@ export default function UserAppDetailPage() {
               }}
               role="alert"
             >
-              Last action failed:{' '}
-              {(pauseM.error || resumeM.error || revokeM.error || rotateM.error)?.message ?? 'unknown'}
+              {t('apps.lastActionFailed')}{' '}
+              {(pauseM.error || resumeM.error || revokeM.error || rotateM.error)?.message ?? t('apps.unknown')}
             </div>
           ) : null}
       </section>

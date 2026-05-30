@@ -14,6 +14,7 @@
  * selection.
  */
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { VerifyRecord } from './api';
 import type { StatusBand, TrustRow } from './derive';
@@ -44,17 +45,18 @@ export function SourceTable({
   onCheck: (row: TrustRow, opts?: { force?: boolean }) => Promise<string | null>;
   onRowClick: (row: TrustRow) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="tc-table-scroll">
       <table className="tc-table">
         <thead>
           <tr>
-            <th>Use</th>
-            <th>Source</th>
-            <th>Model</th>
-            <th>Confidence</th>
-            <th>Checked</th>
-            <th>Action</th>
+            <th>{t('trustCheck.thUse')}</th>
+            <th>{t('trustCheck.thSource')}</th>
+            <th>{t('trustCheck.thModel')}</th>
+            <th>{t('trustCheck.thConfidence')}</th>
+            <th>{t('trustCheck.thChecked')}</th>
+            <th>{t('trustCheck.thAction')}</th>
           </tr>
         </thead>
         <tbody>
@@ -76,7 +78,7 @@ export function SourceTable({
                   if (target.closest('button')) return;
                   onRowClick(row);
                 }}
-                title="Click to view cascade history"
+                title={t('trustCheck.rowClickTitle')}
               >
                 <RowCell primary={row.use_label} secondary={row.use_kind} />
                 <RowCell primary={row.source_name} secondary={row.source_meta} />
@@ -94,11 +96,11 @@ export function SourceTable({
                 </td>
                 <td>
                   {running ? (
-                    <span className="tc-status-running" title="Cascade verify in progress">
+                    <span className="tc-status-running" title={t('trustCheck.verifyInProgressTitle')}>
                       <span className="tc-spin-dot" />
                       {verifyRec?.progress
                         ? `Q${verifyRec.progress.n_done}/${verifyRec.progress.n_total}`
-                        : 'running'}
+                        : t('trustCheck.statusRunning')}
                     </span>
                   ) : (
                     <span className="tc-mono">{row.checked}</span>
@@ -108,16 +110,16 @@ export function SourceTable({
                   <div className="tc-action-cell">
                     {running ? (
                       <button type="button" className="tc-btn tc-btn-primary" disabled>
-                        <SpinDotInline /> Checking
+                        <SpinDotInline /> {t('trustCheck.checkingInline')}
                       </button>
                     ) : (
                       <button
                         type="button"
                         className="tc-btn"
                         onClick={() => void onCheck(row)}
-                        title="Trigger a fresh Check run (POST /v1/verify) — manual is unlimited per M6 decision 3.1"
+                        title={t('trustCheck.checkActionTitle')}
                       >
-                        <ScanIcon /> Check
+                        <ScanIcon /> {t('trustCheck.check')}
                       </button>
                     )}
                     {err && <VerifyErrorChip err={err} />}
@@ -192,6 +194,7 @@ export function ScorePill({
 // ---------------------------------------------------------------------------
 
 export function VerifyErrorChip({ err }: { err: VerifyErrorState }) {
+  const { t } = useTranslation();
   if (err.kind === 'verify_terminal') {
     // 2026-05-22: Stage 2.6 surfaced `'error'` (upstream / config
     // failures, distinct from `fail` / `inconclusive`). Map each
@@ -206,10 +209,10 @@ export function VerifyErrorChip({ err }: { err: VerifyErrorState }) {
           : 'inconclusive';
     const label =
       variant === 'fail'
-        ? 'Verify failed'
+        ? t('trustCheck.errChipVerifyFailed')
         : variant === 'error'
-          ? 'Upstream error'
-          : 'Inconclusive';
+          ? t('trustCheck.errChipUpstreamError')
+          : t('trustCheck.errChipInconclusive');
     return (
       <span className={`tc-err-chip tc-err-${variant}`} title={err.message}>
         {label}
@@ -218,7 +221,7 @@ export function VerifyErrorChip({ err }: { err: VerifyErrorState }) {
   }
   return (
     <span className="tc-err-chip tc-err-generic" title={err.message}>
-      Error
+      {t('trustCheck.errChipError')}
     </span>
   );
 }
