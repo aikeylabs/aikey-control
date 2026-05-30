@@ -6,6 +6,7 @@ import { router } from '@/app/router';
 import { useMasterAuthStore, useUserAuthStore } from '@/store';
 import { runtimeConfig } from '@/app/config/runtime';
 import './index.css';
+import './shared/i18n/i18n';
 
 // ---------------------------------------------------------------------------
 // Fragment auth: pick up JWT from URL hash BEFORE React mounts.

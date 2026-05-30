@@ -20,25 +20,30 @@
  * chart-render hot path, so the cache pays off.
  */
 
+import i18next from 'i18next';
+
 /** UI display locale.
  *
- * Pinned to "en-US" as of 2026-04-24 per CLAUDE.md "代码与 UI 语言"
- * rule: all user-facing UI strings ship in English until a proper
- * i18n layer (message catalogue + user-picked locale) is introduced.
- * Before this change the helper read `navigator.language`, which
- * leaked locale-specific phrasings into places that hadn't actually
- * been translated — e.g. `Intl.RelativeTimeFormat` rendered
+ * As of Phase 0 i18n (2026-05-30) this follows the active i18n
+ * language *explicitly* (the i18next singleton's resolved language),
+ * still defaulting to en-US. It no longer reads raw
+ * `navigator.language`: the earlier navigator-based behaviour leaked
+ * locale-specific phrasings into places that hadn't actually been
+ * translated — e.g. `Intl.RelativeTimeFormat` rendered
  * `rtf.format(0, 'second')` as "现在" / "jetzt" for Chinese / German
  * browsers, producing a mixed-language UI (the label "Updated" was
  * always English, the suffix was not). Numeric date formats
  * ({month/day ordering, weekday names}) were similarly locale-
  * dependent.
  *
- * When real i18n lands, this is the single swap point: return the
- * active locale from the provider (useLocale() / i18n store) and
- * every cached formatter below automatically re-keys under it. */
+ * Now the locale is driven only by the user's explicit i18n choice
+ * (en / zh), so date/time rendering stays in lock-step with the rest
+ * of the translated UI. This is the single swap point: as the message
+ * catalogue grows, every cached formatter below automatically re-keys
+ * under the active language. */
 function locale(): string {
-  return 'en-US';
+  const lng = i18next.resolvedLanguage || i18next.language || 'en';
+  return lng.startsWith('zh') ? 'zh-CN' : 'en-US';
 }
 
 // --- memoised formatters --------------------------------------------------
