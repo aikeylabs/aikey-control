@@ -2133,5 +2133,9 @@
     "deletePhraseConfirm_one": "Delete phrase record \"{{preview}}\"? ({{count}} line)",
     "deletePhraseConfirm_other": "Delete phrase record \"{{preview}}\"? ({{count}} lines)",
     "delete": "Delete"
+  },
+  "appShell": {
+    "groupCompliance": "Compliance",
+    "navPacks": "Packs"
   }
 }

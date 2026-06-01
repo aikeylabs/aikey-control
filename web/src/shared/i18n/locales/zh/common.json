@@ -2133,5 +2133,9 @@
     "deletePhraseConfirm_one": "删除词条记录“{{preview}}”？（{{count}} 行）",
     "deletePhraseConfirm_other": "删除词条记录“{{preview}}”？（{{count}} 行）",
     "delete": "删除"
+  },
+  "appShell": {
+    "groupCompliance": "合规",
+    "navPacks": "合规包"
   }
 }
