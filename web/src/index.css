@@ -425,6 +425,13 @@ body {
   opacity: 0;
   width: 0;
   overflow: hidden;
+  /* Keep the (width:0) label on a single line. Without this, CJK labels
+     (e.g. 置信度检测) break per-character at width:0 and the label's
+     content-height balloons to many lines, growing each nav-item and
+     pushing the bottom Collapse/account controls off-screen in the
+     collapsed rail. Latin labels wrap per-word so the bug only showed in
+     Chinese. (2026-06-01) */
+  white-space: nowrap;
   pointer-events: none;
   margin-left: 0 !important;
 }
