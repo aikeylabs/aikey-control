@@ -51,6 +51,8 @@ import {
 import { runtimeConfig } from '@/app/config/runtime';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { usageApi, type TimelinePoint, type ModelTotal } from '@/shared/api/usage';
+import { CostCell } from '@/shared/ui/CostCell';
+import { formatCost } from '@/shared/utils/formatCost';
 import { appsApi, bindingTypeLabel } from '@/shared/api/user/apps';
 import { importApi } from '@/shared/api/user/import';
 import { SwitchKeyModal } from './SwitchKeyModal';
@@ -262,8 +264,14 @@ export default function UserAppDetailPage() {
       requests += p.request_count;
       if (p.total_tokens > 0 || p.request_count > 0) activeDays++;
     }
-    const modelCount = (usageByModel.data ?? []).length;
-    return { tokens, requests, activeDays, modelCount };
+    const models = usageByModel.data ?? [];
+    const modelCount = models.length;
+    // Estimated spend for THIS app = Σ cost_usd over its by-model totals
+    // (the by-model query is already app_slug-scoped). cost_usd absent on
+    // pre-rc.8 servers → 0. unpriced drives the card's "estimate partial" hint.
+    const spend = models.reduce((s, m) => s + (m.cost_usd ?? 0), 0);
+    const unpriced = models.reduce((s, m) => s + (m.unpriced_request_count ?? 0), 0);
+    return { tokens, requests, activeDays, modelCount, spend, unpriced };
   }, [usageTimeline.data, usageByModel.data]);
 
   const densified = useMemo(
@@ -880,6 +888,36 @@ export default function UserAppDetailPage() {
                         {t('apps.topNShown', { count: Math.min(5, usageMetrics.modelCount) })}
                       </div>
                     </div>
+
+                    {/* Estimated spend (Stage 5) — Σ cost_usd over this
+                        app's by-model totals. "Estimated" + the footnote
+                        below set the reference-not-billed expectation. */}
+                    <div className="cap-metric-card">
+                      <div className="cap-mono-label">{t('usageLedger.kpiEstimatedCost')}</div>
+                      <div
+                        className="mt-3 text-[28px] font-extrabold tracking-tight"
+                        style={{ color: 'var(--foreground)' }}
+                      >
+                        {formatCost(usageMetrics.spend)}
+                      </div>
+                      <div
+                        className="mt-2 text-xs"
+                        style={{
+                          color: 'var(--muted-foreground)',
+                          fontFamily: 'var(--font-mono)',
+                        }}
+                      >
+                        {usageMetrics.unpriced > 0 ? (
+                          <span title={t('usageLedger.unpricedTooltip')}>
+                            ⚠ {t('usageLedger.kpiCostUnpriced', { count: usageMetrics.unpriced })}
+                          </span>
+                        ) : usageRange === 1 ? (
+                          t('apps.today')
+                        ) : (
+                          t('apps.lastNDays', { count: usageRange })
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="cap-usage-grid">
@@ -1038,6 +1076,12 @@ export default function UserAppDetailPage() {
                         </Link>
                         .
                       </p>
+                      <p
+                        className="text-[11px] mt-2"
+                        style={{ color: 'var(--muted-foreground)', opacity: 0.8 }}
+                      >
+                        {t('usageLedger.costFootnote')}
+                      </p>
                     </div>
 
                     {/* Top models meter list */}
@@ -1077,6 +1121,9 @@ export default function UserAppDetailPage() {
                                   </div>
                                   <div className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
                                     {t('apps.reqSuffix', { value: fmtInt(m.request_count) })}
+                                  </div>
+                                  <div className="text-[11px]">
+                                    <CostCell value={m.cost_usd} unpricedCount={m.unpriced_request_count} />
                                   </div>
                                 </div>
                               </div>

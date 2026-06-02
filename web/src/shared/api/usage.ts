@@ -118,6 +118,11 @@ export interface ModelTotal {
   output_tokens?: number;
   total_tokens: number;
   request_count: number;
+  // Cost-pricing (optional) — backend fills these on by-model totals
+  // (Stage 3). Consumed by apps/detail Spend card + top-models cost column.
+  cost_usd?: number;
+  priced_request_count?: number;
+  unpriced_request_count?: number;
 }
 
 /** 2026-05-26 — Performance Top N sessions chart row.

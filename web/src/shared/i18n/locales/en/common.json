@@ -121,6 +121,7 @@
     "noOrgsYet": "No organisations yet",
     "mySeatsAria": "My seats: {{count}} active across {{orgs}} organisations",
     "todayUsed": "Today Used",
+    "estCostScope": "estimated · all keys",
     "tokensSuffix": "tokens",
     "noUsageToday": "No usage yet today",
     "peakAt": "peak at {{hour}}:00 · {{tokens}}",

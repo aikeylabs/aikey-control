@@ -121,6 +121,7 @@
     "noOrgsYet": "暂无组织",
     "mySeatsAria": "我的席位：{{count}} 个活跃，分布于 {{orgs}} 个组织",
     "todayUsed": "今日用量",
+    "estCostScope": "估算 · 全部密钥",
     "tokensSuffix": "令牌",
     "noUsageToday": "今日暂无用量",
     "peakAt": "峰值出现在 {{hour}}:00 · {{tokens}}",

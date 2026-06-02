@@ -32,6 +32,7 @@ import { vaultApi, type VaultListData } from '@/shared/api/user/vault';
 import { usageApi, type TimelinePoint, type ProtocolTotal, type HourlyPoint, type RecentRequest } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
 import { formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
+import { formatCost } from '@/shared/utils/formatCost';
 import {
   OWN_MENU,
   OWN_PERSONAL_MENU,
@@ -463,6 +464,18 @@ export default function UserOverviewPage() {
   const providerUsage = useMemo(() => buildProviderRows(usageProtocols.data ?? [], allKeys, totalTokens),
     [usageProtocols.data, allKeys, totalTokens]);
 
+  // Cost-pricing Stage 5: estimated USD spend for the selected range,
+  // summed from the by-protocol totals already fetched (carry cost_usd /
+  // unpriced_request_count per Stage 3; absent on pre-rc.8 servers → 0).
+  const estCostTotal = useMemo(
+    () => (usageProtocols.data ?? []).reduce((s, p) => s + (p.cost_usd ?? 0), 0),
+    [usageProtocols.data],
+  );
+  const estCostUnpriced = useMemo(
+    () => (usageProtocols.data ?? []).reduce((s, p) => s + (p.unpriced_request_count ?? 0), 0),
+    [usageProtocols.data],
+  );
+
   // todayKeyRows moved to /user/cost (2026-05-06).
 
   const uniqueOrgs = useMemo(() => {
@@ -613,7 +626,7 @@ export default function UserOverviewPage() {
             is what the user typically needs to confirm on landing;
             usage trends sit last and also anchor the reader's eye right
             above the larger Token usage time-series chart below. */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Accessible Keys — 2026-04-24: repointed to Vault.
               Counts Personal + OAuth + Team records in the local vault
               (vaultList.counts.total). The +N auto badge that used to
@@ -761,6 +774,37 @@ export default function UserOverviewPage() {
                   });
                 })()
               )}
+            </svg>
+          </button>
+
+          {/* Estimated Cost (Stage 5) — Σ cost_usd over the range's
+              by-protocol totals (all keys). Links to the full ledger.
+              "Estimated" + footnote there frame it as reference, not billed. */}
+          <button
+            type="button"
+            className="metric linkable text-left"
+            onClick={() => navigate('/user/usage-ledger')}
+            aria-label={t('usageLedger.kpiEstimatedCost')}
+          >
+            <span className="go"><ChevronRightIcon /></span>
+            <div className="label-row">
+              <span className="label">{t('usageLedger.kpiEstimatedCost')}</span>
+              <ActivityIcon className="label-icon" />
+            </div>
+            <div className="value-row">
+              <span className="value">{formatCost(estCostTotal)}</span>
+            </div>
+            <span className="unit">
+              {estCostUnpriced > 0 ? (
+                <span title={t('usageLedger.unpricedTooltip')}>
+                  ⚠ {t('usageLedger.kpiCostUnpriced', { count: estCostUnpriced })}
+                </span>
+              ) : (
+                t('overview.estCostScope')
+              )}
+            </span>
+            <svg className="spark" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true">
+              <rect x="0" y="4" width="100" height="4" rx="2" fill="var(--border)" />
             </svg>
           </button>
         </section>
