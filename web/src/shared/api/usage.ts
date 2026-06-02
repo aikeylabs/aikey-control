@@ -45,6 +45,13 @@ export interface ProtocolTotal {
   protocol_type: string;
   total_tokens: number;
   request_count: number;
+  // Cost-pricing Stage 3 (optional — absent on pre-v1.0.0-rc.8 servers).
+  // cost_usd: estimated Σ billable_amount over USD-priced rows.
+  // priced/unpriced_request_count: request_count split by whether the row
+  // carried a price (they sum to request_count).
+  cost_usd?: number;
+  priced_request_count?: number;
+  unpriced_request_count?: number;
 }
 
 /**
@@ -73,6 +80,10 @@ export interface AppTotal {
   provider_code: string;
   total_tokens: number;
   request_count: number;
+  // Cost-pricing Stage 3 (optional) — see ProtocolTotal for semantics.
+  cost_usd?: number;
+  priced_request_count?: number;
+  unpriced_request_count?: number;
 }
 
 /** Phase 3B R23 (2026-05-11) — raw recent request row surfaced by the
@@ -155,6 +166,10 @@ export interface KeyTotal {
   output_tokens?: number;
   total_tokens: number;
   request_count: number;
+  // Cost-pricing Stage 3 (optional) — see ProtocolTotal for semantics.
+  cost_usd?: number;
+  priced_request_count?: number;
+  unpriced_request_count?: number;
 }
 
 // --- Query params ---

@@ -28,6 +28,8 @@ import { usageApi } from '@/shared/api/usage';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { runtimeConfig } from '@/app/config/runtime';
 import { formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
+import { formatCost } from '@/shared/utils/formatCost';
+import { CostCell } from '@/shared/ui/CostCell';
 
 // Keep in sync with pages/user/overview/index.tsx's PROVIDER_COLORS.
 const PROVIDER_COLORS: Record<string, string> = {
@@ -325,6 +327,15 @@ export default function UserUsageLedgerPage() {
   );
   const protoTotal = protocolData.reduce((s, p) => s + p.total_tokens, 0) || 1;
 
+  // Cost-pricing Stage 4: estimated USD totals derived from the by-protocol
+  // totals (same source as the donut). cost_usd is absent on pre-rc.8
+  // servers → coalesces to 0 so the card shows $0.00, never NaN. totalUnpriced
+  // drives the "estimate partial" hint when some requests hit models not in
+  // the price table.
+  const totalCost = protocolData.reduce((s, p) => s + (p.cost_usd ?? 0), 0);
+  const totalUnpriced = protocolData.reduce((s, p) => s + (p.unpriced_request_count ?? 0), 0);
+  const costPerRequest = totalRequests > 0 ? totalCost / totalRequests : 0;
+
   const padTimelineData = useMemo(() => {
     const data = timeline.data ?? [];
     const today = daysAgo(0);
@@ -417,6 +428,8 @@ export default function UserUsageLedgerPage() {
         provider_code: r.provider_code,
         total_tokens: r.total_tokens,
         request_count: r.request_count,
+        cost_usd: r.cost_usd,
+        unpriced_request_count: r.unpriced_request_count,
         barPct: (r.total_tokens / top) * 100,
         sharePct: (r.total_tokens / grand) * 100,
         color,
@@ -469,8 +482,8 @@ export default function UserUsageLedgerPage() {
       </div>
 
       <div className="space-y-5">
-        {/* ── 3 KPI cards ── */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* ── KPI cards (4th = estimated cost, Stage 4) ── */}
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="kpi">
             <div className="kpi-label">{t('usageLedger.kpiTotalTokens')}</div>
             <div className="kpi-value">{formatTokens(totalTokens)}</div>
@@ -497,6 +510,27 @@ export default function UserUsageLedgerPage() {
               {protocolData.length === 0
                 ? t('usageLedger.noActivityYet')
                 : protocolData.map((p) => p.protocol_type).slice(0, 3).join(' · ')}
+            </div>
+          </div>
+          {/* Estimated cost (Stage 4). "Estimated" framing + footnote below
+              set expectations — these are reference numbers from a published
+              price table, not billed amounts. */}
+          <div className="kpi">
+            <div className="kpi-label">{t('usageLedger.kpiEstimatedCost')}</div>
+            <div className="kpi-value">{formatCost(totalCost)}</div>
+            <div className="kpi-hint">
+              {totalUnpriced > 0 ? (
+                <span title={t('usageLedger.unpricedTooltip')}>
+                  ⚠ {t('usageLedger.kpiCostUnpriced', { count: totalUnpriced })}
+                </span>
+              ) : (
+                <>
+                  {t('usageLedger.kpiHintCostPerReq')}{' '}
+                  <span style={{ color: 'var(--foreground)' }}>
+                    {totalRequests > 0 ? formatCost(costPerRequest) : '—'}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </section>
@@ -821,12 +855,17 @@ export default function UserUsageLedgerPage() {
                       }}
                     />
                   </div>
-                  <span className="font-mono text-[11.5px] text-right whitespace-nowrap">
-                    <span style={{ color: 'var(--foreground)' }}>{formatTokens(k.total_tokens)}</span>
-                    <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
-                      {k.sharePct < 1 ? '<1%' : `${Math.round(k.sharePct)}%`}
+                  <div className="flex flex-col items-end whitespace-nowrap">
+                    <span className="font-mono text-[11.5px]">
+                      <span style={{ color: 'var(--foreground)' }}>{formatTokens(k.total_tokens)}</span>
+                      <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
+                        {k.sharePct < 1 ? '<1%' : `${Math.round(k.sharePct)}%`}
+                      </span>
                     </span>
-                  </span>
+                    <span className="font-mono text-[10px]">
+                      <CostCell value={k.cost_usd} unpricedCount={k.unpriced_request_count} />
+                    </span>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -906,20 +945,31 @@ export default function UserUsageLedgerPage() {
                       }}
                     />
                   </div>
-                  <span className="font-mono text-[11.5px] text-right whitespace-nowrap">
-                    <span style={{ color: 'var(--foreground)' }}>{formatTokens(a.total_tokens)}</span>
-                    <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
-                      {a.sharePct < 1 ? '<1%' : `${Math.round(a.sharePct)}%`}
+                  <div className="flex flex-col items-end whitespace-nowrap">
+                    <span className="font-mono text-[11.5px]">
+                      <span style={{ color: 'var(--foreground)' }}>{formatTokens(a.total_tokens)}</span>
+                      <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
+                        {a.sharePct < 1 ? '<1%' : `${Math.round(a.sharePct)}%`}
+                      </span>
+                      <span className="ml-2" style={{ color: 'var(--muted-foreground)' }}>
+                        {t('usageLedger.reqSuffix', { count: a.request_count })}
+                      </span>
                     </span>
-                    <span className="ml-2" style={{ color: 'var(--muted-foreground)' }}>
-                      {t('usageLedger.reqSuffix', { count: a.request_count })}
+                    <span className="font-mono text-[10px]">
+                      <CostCell value={a.cost_usd} unpricedCount={a.unpriced_request_count} />
                     </span>
-                  </span>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </section>
+
+        {/* ── Estimated-cost footnote (Stage 4) — sets the "reference,
+            not billed" expectation for every cost figure on the page. */}
+        <p className="font-mono text-[10.5px]" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>
+          {t('usageLedger.costFootnote')}
+        </p>
       </div>
     </div>
   );
