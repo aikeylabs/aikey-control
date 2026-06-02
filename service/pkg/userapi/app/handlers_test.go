@@ -577,6 +577,93 @@ func TestSlugOnlyHandlers_NonProtectedSlugPassesThrough(t *testing.T) {
 	}
 }
 
+// TestFilterStatusHandler_NoSession_DoesNotRequireUnlock pins the
+// 2026-06-02 unlock policy for the content-filter status read: like
+// list / get it's metadata-only (one column on app_records, no
+// ciphertext / bearer) so it MUST NOT be gated by an unlocked vault
+// session. The route in pkg/userapi/handlers.go intentionally does NOT
+// wrap FilterStatusHandler in Store.RequireUnlock, and the handler uses
+// invokeBridgeNoVault. Assert the negative invariant: no vault-locked
+// error without a session.
+func TestFilterStatusHandler_NoSession_DoesNotRequireUnlock(t *testing.T) {
+	h := newTestHandlers()
+	body := bytes.NewReader([]byte(`{"slug":"ai-compliance-detector"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/user/apps/filter-status", body)
+	w := httptest.NewRecorder()
+	h.FilterStatusHandler(w, req)
+	var resp struct {
+		ErrorCode string `json:"error_code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.ErrorCode == cli.ErrVaultLocked || resp.ErrorCode == cli.ErrVaultNoSession {
+		t.Errorf("filter-status must not require unlock; got error_code = %q", resp.ErrorCode)
+	}
+}
+
+// TestFilterStatusHandler_MissingSlug_ReturnsBadRequest pins the body
+// gate: empty slug is rejected at the HTTP boundary before Bridge.
+func TestFilterStatusHandler_MissingSlug_ReturnsBadRequest(t *testing.T) {
+	h := newTestHandlers()
+	body := bytes.NewReader([]byte(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/user/apps/filter-status", body)
+	w := httptest.NewRecorder()
+	h.FilterStatusHandler(w, req)
+	if w.Code < 400 {
+		t.Fatalf("expected 4xx for missing slug, got %d", w.Code)
+	}
+	var resp struct {
+		ErrorCode string `json:"error_code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.ErrorCode != cli.ErrBadRequest {
+		t.Errorf("error_code = %q, want %q", resp.ErrorCode, cli.ErrBadRequest)
+	}
+}
+
+// TestFilterSetHandler_NoSession_RequiresUnlock pins the unlock policy
+// for the content-filter mutation: unlike filter-status (a public read),
+// filter-set DISABLES / ENABLES a safety control, so it's treated as
+// security-relevant and must require an unlocked vault session. The
+// route wraps it in Store.RequireUnlock; this direct call exercises the
+// in-handler safety-net branch in invokeBridge (ErrVaultLocked when
+// KeyFrom(ctx) returns false).
+func TestFilterSetHandler_NoSession_RequiresUnlock(t *testing.T) {
+	h := newTestHandlers()
+	body := bytes.NewReader([]byte(`{"slug":"ai-compliance-detector","enable":false}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/user/apps/filter-set", body)
+	w := httptest.NewRecorder()
+	h.FilterSetHandler(w, req)
+	var resp struct {
+		ErrorCode string `json:"error_code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.ErrorCode != cli.ErrVaultLocked {
+		t.Errorf("expected vault-locked error without session, got %q", resp.ErrorCode)
+	}
+}
+
+// TestFilterSetHandler_MissingSlug_ReturnsBadRequest pins the body gate.
+// A session is injected so we exercise the slug-required path, not the
+// unlock guard.
+func TestFilterSetHandler_MissingSlug_ReturnsBadRequest(t *testing.T) {
+	h := newTestHandlers()
+	ctx := vault.InjectKey(context.Background(), "deadbeef")
+	body := bytes.NewReader([]byte(`{"enable":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/user/apps/filter-set", body).WithContext(ctx)
+	w := httptest.NewRecorder()
+	h.FilterSetHandler(w, req)
+	if w.Code < 400 {
+		t.Fatalf("expected 4xx for missing slug, got %d", w.Code)
+	}
+	var resp struct {
+		ErrorCode string `json:"error_code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.ErrorCode != cli.ErrBadRequest {
+		t.Errorf("error_code = %q, want %q", resp.ErrorCode, cli.ErrBadRequest)
+	}
+}
+
 // TestSlugOnlyHandlers_RequireSlug pins the slug-presence guard for the
 // 4 slug-only handlers (revoke / pause / resume / rotate). All four
 // share the slugOnlyAction helper, so testing one would in principle be

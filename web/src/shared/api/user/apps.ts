@@ -303,6 +303,29 @@ export interface AppUninstallResponse {
   status: 'uninstalled';
 }
 
+/**
+ * Response for POST /api/user/apps/filter-status (2026-06-02). Reports
+ * whether the content filter is enabled for an app + which pipeline
+ * stages are active. Backs the local-web "AI compliance detection"
+ * on/off toggle. Matches the CLI's handle_filter_status JSON
+ * ({slug, enabled, stages}).
+ *
+ * `enabled` = (filter_stages is non-NULL). `stages` is the active stage
+ * list (e.g. ["pre_forward"]); empty when disabled.
+ */
+export interface AppFilterStatusData {
+  slug: string;
+  enabled: boolean;
+  stages: string[];
+}
+
+/** Response for POST /api/user/apps/filter-set (2026-06-02). Echoes the
+ *  resulting enabled state. */
+export interface AppFilterSetResponse {
+  slug: string;
+  enabled: boolean;
+}
+
 /** Response for POST /api/user/apps/reveal-token (2026-05-25). Carries
  *  the plaintext bearer + its key_id + the proxy base_url. Detail
  *  page renders the value with a masked-by-default toggle + Copy
@@ -558,5 +581,37 @@ export const appsApi = {
   health: (): Promise<AppHealthData> =>
     callWithErrorExtraction(() =>
       httpClient.get<OkEnvelope<AppHealthData> | ErrEnvelope>('/api/user/apps/health'),
+    ),
+
+  /**
+   * Read whether the content filter is enabled for an app (2026-06-02).
+   * Public read (no unlock) — metadata only. Backs the Settings page
+   * "AI compliance detection" toggle's initial state.
+   */
+  filterStatus: (slug: string): Promise<AppFilterStatusData> =>
+    callWithErrorExtraction(() =>
+      httpClient.post<OkEnvelope<AppFilterStatusData> | ErrEnvelope>(
+        '/api/user/apps/filter-status',
+        { slug },
+      ),
+    ),
+
+  /**
+   * Enable / disable the content filter for an app (2026-06-02).
+   * Requires unlock (disabling turns off a safety control). The CLI
+   * side bumps the vault change_seq; the local proxy reloads within
+   * ~5s and spawns / kills the detector child accordingly — no manual
+   * proxy restart needed.
+   *
+   * Error codes the UI handles via err.code:
+   *   - I_VAULT_LOCKED — needs unlock; surface inline re-unlock prompt
+   *   - I_APP_FILTER_SET_FAILED — generic backend failure; show err.message
+   */
+  filterSet: (slug: string, enable: boolean): Promise<AppFilterSetResponse> =>
+    callWithErrorExtraction(() =>
+      httpClient.post<OkEnvelope<AppFilterSetResponse> | ErrEnvelope>(
+        '/api/user/apps/filter-set',
+        { slug, enable },
+      ),
     ),
 };

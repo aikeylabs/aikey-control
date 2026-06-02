@@ -16,6 +16,8 @@
 //	POST /api/user/apps/rotate         — atomic revoke + reissue with same bindings (body: {slug})
 //	POST /api/user/apps/uninstall      — stop service (first-party) OR remove identity (third-party) + revoke / wipe vault rows (body: {slug}) — third-party support added 2026-05-25
 //	POST /api/user/apps/reveal-token   — re-read the active bearer plaintext for a slug (body: {slug}) — added 2026-05-25 to spare users a Rotate when they only lost the token, not the app
+//	POST /api/user/apps/filter-status  — read content-filter on/off + active stages for a slug (body: {slug}) — added 2026-06-02; backs the local-web AI-compliance toggle
+//	POST /api/user/apps/filter-set     — enable / disable the content filter for a slug (body: {slug, enable}) — added 2026-06-02
 //
 // Unlock policy (revised 2026-05-21):
 //   - list / get        — public read; no unlock required. The data is
@@ -420,6 +422,73 @@ func (h *Handlers) slugOnlyAction(w http.ResponseWriter, r *http.Request, action
 		}
 	}
 	res, ok := h.invokeBridge(w, r, action, req)
+	if !ok {
+		return
+	}
+	cli.WriteEnvelope(w, res)
+}
+
+// ---------------------------------------------------------------------------
+// filter-status / filter-set — content-filter on/off toggle for an app
+//
+// `filter_stages` on app_records drives whether the local proxy spawns a
+// content-filter detector child for that app (NULL = disabled, a
+// non-empty stage list like ["pre_forward"] = scan before forwarding).
+// Today the only consumer is the ai-compliance-detector fast layer, so
+// these endpoints back the local-web "AI compliance detection" on/off
+// toggle. They stay generic (slug-parameterized) to match the rest of
+// the /api/user/apps/* family and the generic CLI
+// `_internal app.filter-status` / `app.filter-set` actions they wrap.
+//
+// Unlock policy (mirrors the family):
+//   - filter-status — read of one metadata column (no ciphertext, no
+//     bearer) → no unlock, like list / get.
+//   - filter-set    — mutation. Disabling compliance turns OFF a safety
+//     control, so it's treated as security-relevant and requires unlock,
+//     same as route / pause / resume. The session is already unlocked
+//     when the user manages apps, so this adds no prompt in the common
+//     path. The CLI side bumps the vault change_seq; the proxy reloads
+//     within ~5s and spawns / kills the detector child accordingly.
+// ---------------------------------------------------------------------------
+
+// FilterStatusHandler reports whether the content filter is enabled for
+// an app + which stages are active. Body: {slug}. Emits the CLI shape
+// {slug, enabled, stages}. Drives the compliance toggle's initial state.
+func (h *Handlers) FilterStatusHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Slug string `json:"slug"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if req.Slug == "" {
+		cli.WriteErr(w, cli.ErrBadRequest, "slug required")
+		return
+	}
+	res, ok := h.invokeBridgeNoVault(w, r, "filter-status", req)
+	if !ok {
+		return
+	}
+	cli.WriteEnvelope(w, res)
+}
+
+// FilterSetHandler enables or disables the content filter for an app.
+// Body: {slug, enable}. enable=true → filter_stages=["pre_forward"]
+// (canonical compliance stage); enable=false → NULL (disabled). Emits
+// {slug, enabled}.
+func (h *Handlers) FilterSetHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Slug   string `json:"slug"`
+		Enable bool   `json:"enable"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if req.Slug == "" {
+		cli.WriteErr(w, cli.ErrBadRequest, "slug required")
+		return
+	}
+	res, ok := h.invokeBridge(w, r, "filter-set", req)
 	if !ok {
 		return
 	}

@@ -311,6 +311,16 @@ func (h *Handlers) Register(
 		// into /get.
 		mux.Handle("POST /api/user/apps/reveal-token",
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.RevealTokenHandler))))
+		// filter-status / filter-set: content-filter on/off toggle. Backs
+		// the local-web "AI compliance detection" switch. filter-status is
+		// a no-unlock metadata read (like list / get); filter-set is a
+		// mutation (disabling a safety control) so it requires unlock, same
+		// as route / pause / resume. See pkg/userapi/app/handlers.go for the
+		// unlock-policy rationale. Added 2026-06-02 (Phase 2 local toggle).
+		mux.Handle("POST /api/user/apps/filter-status",
+			authMW(http.HandlerFunc(h.App.FilterStatusHandler)))
+		mux.Handle("POST /api/user/apps/filter-set",
+			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.FilterSetHandler))))
 		// Health: in-memory "last call status per slug" snapshot from the
 		// local proxy. Public read (no unlock) because the response carries
 		// only status codes + timestamps, no credentials or app keys.
