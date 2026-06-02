@@ -96,6 +96,18 @@ func complianceIngestHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 				logger.Warn("compliance ingest: skipping event missing event_id/action_taken", "event_id", ev.EventID)
 				continue
 			}
+			// Local-store policy (user decision 2026-06-02): do NOT persist
+			// "allow" events (clean scans, no intervention). They are the bulk
+			// of proxy traffic and would bloat the local audit DB — the self-view
+			// audits interventions (mask/block/warn) only. We still ACK the id
+			// (200 + accepted_ids) so the detector's uploader treats it as
+			// delivered and won't retry; it's intentionally dropped at the store,
+			// not a failure. NOTE: local-only — the master/team intake is a
+			// separate path and keeps its own policy.
+			if ev.ActionTaken == "allow" {
+				accepted = append(accepted, ev.EventID)
+				continue
+			}
 			if err := insertComplianceEvent(r.Context(), db, ev); err != nil {
 				logger.Warn("compliance ingest: insert event failed", "event_id", ev.EventID, "error", err)
 				continue
