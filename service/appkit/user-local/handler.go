@@ -40,6 +40,8 @@
 package userlocal
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -70,6 +72,20 @@ type Config struct {
 	// `useQuery` defensively defaults to empty arrays — charts show
 	// empty, no crash).
 	UsageFacade http.Handler
+
+	// ComplianceDB is the local data SQLite DB (control.db) used by the
+	// Phase-3 local compliance self-view store. When non-nil, NewHandler
+	// mounts two routes:
+	//   POST /v1/compliance/events        — ingest (machine endpoint; the
+	//       local detector POSTs here. No auth: the local-server binds
+	//       127.0.0.1 only, and original text never leaves the box — DC5.)
+	//   GET  /api/user/compliance/events  — read the user's own events
+	//       (local_bypass; metadata + redacted snippet only, never原文).
+	// Nil = both routes absent (404). Wired from trial-server cmd/local
+	// (the same *sql.DB serve.Run opened + migrated). The tables
+	// (local_compliance_events / local_compliance_findings) are created by
+	// the rc.9 ComponentData migration.
+	ComplianceDB *sql.DB
 
 	// ReadTeamURL returns the team-server base URL the user has logged
 	// into via `aikey login --control-url`, or "" if not logged in.
@@ -110,6 +126,20 @@ type Config struct {
 	// the vault on every request keeps the badge in lockstep with
 	// login / logout state changes between requests.
 	ReadLoggedInEmail func() (string, error)
+
+	// LogoutCmd, if set, enables POST /system/logout. It's expected to
+	// subprocess to `aikey logout --json` (same as the user typing the
+	// command in their terminal) — that clears vault platform_account,
+	// disables team keys, and wipes ghost bindings in one go. Nil =
+	// endpoint absent (404). Wired in trial-server cmd/local/main.go.
+	LogoutCmd func(ctx context.Context) error
+
+	// SetControlURLCmd, if set, enables POST /system/team-url. It's
+	// expected to subprocess to `aikey account set-url <url> --json`
+	// which atomically updates vault platform_account.control_url +
+	// config.json default URL + aikey-proxy.yaml
+	// events.collector_routes.team. Nil = endpoint absent (404).
+	SetControlURLCmd func(ctx context.Context, url string) error
 
 	// CORSOrigins is the allowlist passed to shared.CORSMiddleware
 	// for the endpoints the **team server's web** is allowed to
@@ -220,6 +250,15 @@ func NewHandler(cfg Config) http.Handler {
 	if cfg.UsageFacade != nil {
 		mux.Handle("/v1/usage/", corsWrap(cfg.UsageFacade))
 	}
+	// Phase 3 local compliance self-view store (control.db). Ingest is a
+	// machine endpoint (no CORS/auth — 127.0.0.1 bind + DC5); read is a
+	// local_bypass browser endpoint wrapped with the same R23 CORS so the
+	// team server's web can cross-fetch the user's own events. See the
+	// Config.ComplianceDB doc + compliance_handlers.go.
+	if cfg.ComplianceDB != nil {
+		mux.Handle("POST /v1/compliance/events", complianceIngestHandler(cfg.ComplianceDB, logger))
+		mux.Handle("GET /api/user/compliance/events", corsWrap(complianceListHandler(cfg.ComplianceDB, logger)))
+	}
 	// Envelope matches FE deliveryApi.allKeys: `httpClient.get<{keys: UserKeyDTO[]}>`
 	// then `res.data.keys ?? []`. Returning bare `[]` here is a footgun because
 	// `[].keys` resolves to `Array.prototype.keys` (the iterator factory function),
@@ -279,6 +318,29 @@ func NewHandler(cfg Config) http.Handler {
 	if cfg.ReadTeamJWT != nil {
 		mux.HandleFunc("GET /system/team-jwt", handleTeamJWT(cfg.ReadTeamJWT, logger))
 	}
+
+	// /system/logout — POST. Same-origin only (no CORS). Clears vault
+	// platform_account + team-key bindings via the injected LogoutCmd.
+	// Used by the Web Console's Settings page sign-out button.
+	if cfg.LogoutCmd != nil {
+		mux.HandleFunc("POST /system/logout", handleLogout(cfg.LogoutCmd, logger))
+	}
+
+	// /system/team-url — POST. Same-origin only (no CORS). Updates the
+	// control URL via the injected SetControlURLCmd (which mirrors
+	// `aikey account set-url <url>`). The matching GET is registered
+	// above under withCrossAppMenuCORS for cross-app menu discovery;
+	// the POST stays same-origin because it mutates vault state.
+	if cfg.SetControlURLCmd != nil {
+		mux.HandleFunc("POST /system/team-url", handleSetTeamURL(cfg.SetControlURLCmd, logger))
+	}
+
+	// /system/team-url/probe — POST. Same-origin only. GET <url>/health
+	// against the user-typed URL with a 5s timeout and report reachable
+	// true/false. Lets the Web Console's "Test connectivity" button
+	// verify a URL before committing it. No injector needed — the
+	// endpoint owns its http.Client.
+	mux.HandleFunc("POST /system/team-url/probe", handleProbeTeamURL(logger))
 
 	// /api/internal/services/<name>/<action> — service-control endpoint
 	// for the trust-check page's "Start service" button (M5 Day 5

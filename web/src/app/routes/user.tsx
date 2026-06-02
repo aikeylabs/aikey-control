@@ -27,6 +27,9 @@ import UserPerformancePage from '../../pages/user/performance';
 // /user/trust-check in the Insights group of the sidebar. Calls
 // trust-local 8801 from Day 2 onwards; Day 1 ships with mock data only.
 import UserTrustCheckPage from '../../pages/user/trust-check';
+// Phase 3 (2026-06-02): local compliance self-view page. /user/compliance in
+// the Quality group; reads the user's own events from local-server control.db.
+import UserCompliancePage from '../../pages/user/compliance';
 // Phase 4 阶段 3 (2026-05-21): third-party Agent management UI.
 // Lives under /user/apps (list) + /user/apps/:slug (detail). Calls
 // /api/user/apps/* (前置 2 — pkg/userapi/app), which subprocess-bridges
@@ -39,6 +42,12 @@ import UserBulkImportPage from '../../pages/user/import';
 import UserVaultPage from '../../pages/user/vault';
 import UserReferralsPage from '../../pages/user/referrals';
 import UserInvitesPage from '../../pages/user/invites';
+// Phase 4G (2026-06-01): Web Console Settings page. Consolidates
+// Control URL edit + Master Password CLI guidance + Sign out into a
+// single page reachable from the top-bar gear icon and the sidebar
+// user-chip. Replaces the prior sidebar-bottom logout button which was
+// a front-end-only `clearAuth()` that left vault state intact.
+import UserSettingsPage from '../../pages/user/settings';
 import CLIGuidePage from '../../pages/user/cli-guide';
 import { GoAliasRedirect } from '../router/go-alias';
 
@@ -84,6 +93,7 @@ export function buildUserRoutes(): RouteObject[] {
         { path: 'performance', element: <UserPerformancePage /> },
         { path: 'cost', element: <Navigate to="/user/performance" replace /> },
         { path: 'trust-check', element: <UserTrustCheckPage /> },
+        { path: 'compliance', element: <UserCompliancePage /> },
         // Phase 4 阶段 3 — third-party Agent management.
         // List shows all registered apps; Detail shows binding + usage + audit.
         // Registration itself happens via CLI (`aikey app register`) — no
@@ -92,6 +102,7 @@ export function buildUserRoutes(): RouteObject[] {
         { path: 'apps/:slug', element: <UserAppDetailPage /> },
         { path: 'referrals', element: <UserReferralsPage /> },
         { path: 'invites', element: <UserInvitesPage /> },
+        { path: 'settings', element: <UserSettingsPage /> },
         // Legacy redirects → overview. Phase 3B R7 removed A's
         // /user/virtual-keys route; the canonical Team Keys page lives
         // on the team server (B). Users who follow my-keys / pending-keys
