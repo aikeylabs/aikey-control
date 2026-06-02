@@ -24,6 +24,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -32,6 +33,12 @@ import (
 
 	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 )
+
+// localComplianceRetentionDays bounds how long local compliance events are kept
+// (user decision 2026-06-02: plaintext store + retention auto-purge). Enforced
+// event-driven on each ingest — NOT a background cron (per the no-periodic-
+// sweep convention). Configurable later if a UI/config knob is needed.
+const localComplianceRetentionDays = 30
 
 // ── Intake wire (mirrors master intakeEventWire MINUS tenant_id) ──────────
 
@@ -63,6 +70,11 @@ type complianceFindingWire struct {
 	EndOffset       int    `json:"end_offset"`
 	Detector        string `json:"detector,omitempty"`
 	RedactedSnippet string `json:"redacted_snippet,omitempty"`
+	// ContextSnippet is the LOCAL-ONLY un-redacted matched text + surrounding
+	// context, shown in the /user/compliance self-view drawer. The detector
+	// sends it ONLY when targeting the local ingest (localhost); the master
+	// path never carries it (DC5). Stored plaintext in control.db (local).
+	ContextSnippet string `json:"context_snippet,omitempty"`
 }
 
 type complianceIngestResponse struct {
@@ -90,7 +102,28 @@ func complianceIngestHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 			}
 			accepted = append(accepted, ev.EventID)
 		}
+		// Event-driven retention purge (no cron): drop events past the window.
+		purgeOldComplianceEvents(r.Context(), db, logger)
 		shared.JSON(w, http.StatusOK, complianceIngestResponse{AcceptedIDs: accepted})
+	}
+}
+
+// purgeOldComplianceEvents deletes local compliance events (and their findings)
+// older than localComplianceRetentionDays. Two explicit DELETEs (findings then
+// events) so it works regardless of the foreign_keys pragma. datetime() on both
+// sides normalizes the RFC3339 stored timestamps vs SQLite's space-form 'now'.
+// Non-fatal: a purge failure must not break ingest (WARN + continue).
+func purgeOldComplianceEvents(ctx context.Context, db *sql.DB, logger *slog.Logger) {
+	cutoff := fmt.Sprintf("-%d days", localComplianceRetentionDays)
+	if _, err := db.ExecContext(ctx, `
+		DELETE FROM local_compliance_findings
+		WHERE event_id IN (SELECT event_id FROM local_compliance_events WHERE datetime(created_at) < datetime('now', ?))`, cutoff); err != nil {
+		logger.Warn("compliance retention: purge findings failed", "error", err)
+		return
+	}
+	if _, err := db.ExecContext(ctx, `
+		DELETE FROM local_compliance_events WHERE datetime(created_at) < datetime('now', ?)`, cutoff); err != nil {
+		logger.Warn("compliance retention: purge events failed", "error", err)
 	}
 }
 
@@ -117,11 +150,11 @@ func insertComplianceEvent(ctx context.Context, db *sql.DB, ev complianceEventWi
 		}
 		if _, err := db.ExecContext(ctx, `
 			INSERT INTO local_compliance_findings
-				(finding_id, event_id, rule_id, category, entity_type, severity, confidence, start_offset, end_offset, detector, redacted_snippet)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				(finding_id, event_id, rule_id, category, entity_type, severity, confidence, start_offset, end_offset, detector, redacted_snippet, context_snippet)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(finding_id) DO NOTHING`,
 			f.FindingID, ev.EventID, nullStr(f.RuleID), f.Category, f.EntityType, f.Severity,
-			f.Confidence, f.StartOffset, f.EndOffset, nullStr(f.Detector), nullStr(f.RedactedSnippet)); err != nil {
+			f.Confidence, f.StartOffset, f.EndOffset, nullStr(f.Detector), nullStr(f.RedactedSnippet), nullStr(f.ContextSnippet)); err != nil {
 			return err
 		}
 	}
@@ -157,6 +190,8 @@ type complianceAuditFinding struct {
 	Confidence      int    `json:"confidence"`
 	Detector        string `json:"detector,omitempty"`
 	RedactedSnippet string `json:"redacted_snippet,omitempty"`
+	// ContextSnippet: local-only un-redacted matched text + context (self-view).
+	ContextSnippet string `json:"context_snippet,omitempty"`
 }
 
 // complianceListHandler returns the user's own compliance events (newest
@@ -272,7 +307,7 @@ func attachComplianceFindings(ctx context.Context, db *sql.DB, ids []any, events
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 	rows, err := db.QueryContext(ctx, `
 		SELECT event_id, finding_id, COALESCE(rule_id,''), category, entity_type, severity,
-		       confidence, COALESCE(detector,''), COALESCE(redacted_snippet,'')
+		       confidence, COALESCE(detector,''), COALESCE(redacted_snippet,''), COALESCE(context_snippet,'')
 		FROM local_compliance_findings
 		WHERE event_id IN (`+placeholders+`)
 		ORDER BY confidence DESC`, ids...)
@@ -284,7 +319,7 @@ func attachComplianceFindings(ctx context.Context, db *sql.DB, ids []any, events
 		var eventID string
 		var f complianceAuditFinding
 		if err := rows.Scan(&eventID, &f.FindingID, &f.RuleID, &f.Category, &f.EntityType,
-			&f.Severity, &f.Confidence, &f.Detector, &f.RedactedSnippet); err != nil {
+			&f.Severity, &f.Confidence, &f.Detector, &f.RedactedSnippet, &f.ContextSnippet); err != nil {
 			return err
 		}
 		if i, ok := idx[eventID]; ok {

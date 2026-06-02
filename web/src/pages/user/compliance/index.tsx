@@ -223,7 +223,15 @@ export default function ComplianceSelfViewPage() {
                       <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{f.category} · {f.confidence}</span>
                     </div>
                     {f.detector && <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.fieldDetector')}: {f.detector}</p>}
-                    {f.redacted_snippet && <p className="text-[11px] font-mono mt-1 break-all" style={{ color: 'var(--muted-foreground)' }}>{f.redacted_snippet}</p>}
+                    {/* Local self-view shows the un-redacted matched text + context
+                        (context_snippet); falls back to the redacted placeholder if
+                        the detector didn't supply it. Local-only — never原文 on the
+                        team view. */}
+                    {(f.context_snippet || f.redacted_snippet) && (
+                      <p className="text-[11px] font-mono mt-1 break-all whitespace-pre-wrap" style={{ color: 'var(--foreground)' }}>
+                        {f.context_snippet || f.redacted_snippet}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

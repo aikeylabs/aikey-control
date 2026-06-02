@@ -22,6 +22,9 @@ export interface ComplianceFindingDTO {
   confidence: number;     // 0-100
   detector?: string;
   redacted_snippet?: string;
+  /** Local-only un-redacted matched text + surrounding context (self-view).
+   *  Only the local store carries this; the master/team path stays redacted. */
+  context_snippet?: string;
 }
 
 export interface ComplianceEventDTO {
