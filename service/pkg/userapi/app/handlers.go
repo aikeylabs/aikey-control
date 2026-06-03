@@ -495,6 +495,31 @@ func (h *Handlers) FilterSetHandler(w http.ResponseWriter, r *http.Request) {
 	cli.WriteEnvelope(w, res)
 }
 
+// FilterRecordAllowHandler sets whether the local self-view records "allow"
+// (clean-scan) events for an app. Body: {slug, enable}. Default off (save
+// space). Bridges to `_internal app.filter-record-allow`, which writes the
+// vault filter_record_allow flag + bumps change_seq so the proxy reload
+// re-spawns the detector with the new AIKEY_COMPLIANCE_RECORD_ALLOW env. Same
+// unlock policy as filter-set (a vault mutation). Emits {slug, record_allow}.
+func (h *Handlers) FilterRecordAllowHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Slug   string `json:"slug"`
+		Enable bool   `json:"enable"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if req.Slug == "" {
+		cli.WriteErr(w, cli.ErrBadRequest, "slug required")
+		return
+	}
+	res, ok := h.invokeBridge(w, r, "filter-record-allow", req)
+	if !ok {
+		return
+	}
+	cli.WriteEnvelope(w, res)
+}
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------

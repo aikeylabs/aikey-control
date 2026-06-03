@@ -321,6 +321,11 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(h.App.FilterStatusHandler)))
 		mux.Handle("POST /api/user/apps/filter-set",
 			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.FilterSetHandler))))
+		// filter-record-allow: sub-toggle for whether the local self-view records
+		// "allow" (clean-scan) events (default off, save space). Vault mutation →
+		// requires unlock (like filter-set). Added 2026-06-03.
+		mux.Handle("POST /api/user/apps/filter-record-allow",
+			authMW(http.HandlerFunc(h.Store.RequireUnlock(h.App.FilterRecordAllowHandler))))
 		// Health: in-memory "last call status per slug" snapshot from the
 		// local proxy. Public read (no unlock) because the response carries
 		// only status codes + timestamps, no credentials or app keys.

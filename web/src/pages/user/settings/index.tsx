@@ -222,6 +222,10 @@ export default function SettingsPage() {
   const [compliance, setCompliance] = useState<ComplianceState>({ kind: 'loading' });
   const [complianceSave, setComplianceSave] = useState<ComplianceSave>({ kind: 'idle' });
   const [complianceCmdCopied, setComplianceCmdCopied] = useState(false);
+  // Sub-toggle: whether the local self-view records "allow" (clean-scan) events
+  // (default off, save space). Tracked separately from the on/off state.
+  const [recordAllow, setRecordAllow] = useState(false);
+  const [recordAllowSave, setRecordAllowSave] = useState<ComplianceSave>({ kind: 'idle' });
   // Inline unlock branch — mirrors apps/AddAppModal + SwitchKeyModal: when a
   // filter-set hits I_VAULT_LOCKED we don't dead-end on a message, we reveal a
   // password field + unlock the same vault session (POST /api/user/vault/unlock
@@ -247,7 +251,10 @@ export default function SettingsPage() {
           return;
         }
         const status = await appsApi.filterStatus(COMPLIANCE_SLUG);
-        if (!cancelled) setCompliance({ kind: 'ready', enabled: status.enabled });
+        if (!cancelled) {
+          setCompliance({ kind: 'ready', enabled: status.enabled });
+          setRecordAllow(status.record_allow ?? false);
+        }
       } catch (err) {
         const msg = (err as Error)?.message ?? String(err);
         if (!cancelled) setCompliance({ kind: 'error', message: msg });
@@ -277,6 +284,26 @@ export default function SettingsPage() {
         setComplianceSave({ kind: 'locked' });
       } else {
         setComplianceSave({ kind: 'fail', message: e.message ?? 'failed' });
+      }
+    }
+  }
+
+  // Sub-toggle: record "allow" (clean-scan) events. Default off. On locked we
+  // show a hint (the main toggle's inline unlock covers the common unlock case);
+  // toggling settings normally happens in an already-unlocked session.
+  async function onToggleRecordAllow(next: boolean) {
+    if (compliance.kind !== 'ready' || recordAllowSave.kind === 'saving') return;
+    setRecordAllowSave({ kind: 'saving' });
+    try {
+      const res = await appsApi.filterRecordAllow(COMPLIANCE_SLUG, next);
+      setRecordAllow(res.record_allow);
+      setRecordAllowSave({ kind: 'applied' });
+    } catch (err) {
+      const e = err as Error & { code?: string };
+      if (e.code === 'I_VAULT_LOCKED' || e.code === 'I_VAULT_NO_SESSION') {
+        setRecordAllowSave({ kind: 'locked' });
+      } else {
+        setRecordAllowSave({ kind: 'fail', message: e.message ?? 'failed' });
       }
     }
   }
@@ -640,6 +667,74 @@ export default function SettingsPage() {
                   </span>
                 )}
               </div>
+
+              {/* Sub-toggle: record "allow" (clean-scan) events. Only relevant
+                  while scanning is on. Default off (save space). */}
+              {compliance.enabled && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                  <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, color: 'var(--foreground)' }}>
+                      {t('settings.compliance.recordAllowLabel')}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={recordAllow}
+                      aria-label={t('settings.compliance.recordAllowLabel')}
+                      disabled={recordAllowSave.kind === 'saving'}
+                      onClick={() => onToggleRecordAllow(!recordAllow)}
+                      style={{
+                        position: 'relative',
+                        width: 44,
+                        height: 24,
+                        borderRadius: 12,
+                        border: 'none',
+                        background: recordAllow ? '#4ade80' : 'var(--border)',
+                        cursor: recordAllowSave.kind === 'saving' ? 'wait' : 'pointer',
+                        transition: 'background 0.15s ease',
+                        flexShrink: 0,
+                        opacity: recordAllowSave.kind === 'saving' ? 0.7 : 1,
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: 2,
+                          left: recordAllow ? 22 : 2,
+                          width: 20,
+                          height: 20,
+                          borderRadius: '50%',
+                          background: '#ffffff',
+                          transition: 'left 0.15s ease',
+                        }}
+                      />
+                    </button>
+                  </div>
+                  <div style={{ minHeight: 16, fontSize: 11 }}>
+                    {recordAllowSave.kind === 'idle' && (
+                      <span style={{ color: 'var(--muted-foreground)' }}>
+                        {t('settings.compliance.recordAllowHint')}
+                      </span>
+                    )}
+                    {recordAllowSave.kind === 'saving' && (
+                      <span style={{ color: 'var(--muted-foreground)' }}>
+                        {t('settings.compliance.statusSaving')}
+                      </span>
+                    )}
+                    {recordAllowSave.kind === 'applied' && (
+                      <span style={{ color: '#4ade80' }}>{t('settings.compliance.statusApplied')}</span>
+                    )}
+                    {recordAllowSave.kind === 'locked' && (
+                      <span style={{ color: '#f59e0b' }}>{t('settings.compliance.statusLocked')}</span>
+                    )}
+                    {recordAllowSave.kind === 'fail' && (
+                      <span style={{ color: '#ef4444' }}>
+                        {t('settings.compliance.statusFail', { msg: recordAllowSave.message })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Inline unlock branch — only when locked. Mirrors the apps
                   modals' unlock UX: password field + button, retry on success. */}

@@ -317,6 +317,9 @@ export interface AppFilterStatusData {
   slug: string;
   enabled: boolean;
   stages: string[];
+  /** Whether the local self-view records "allow" (clean-scan) events. Default
+   *  false (off, save space) — the "record allowed events" sub-toggle. */
+  record_allow?: boolean;
 }
 
 /** Response for POST /api/user/apps/filter-set (2026-06-02). Echoes the
@@ -611,6 +614,20 @@ export const appsApi = {
     callWithErrorExtraction(() =>
       httpClient.post<OkEnvelope<AppFilterSetResponse> | ErrEnvelope>(
         '/api/user/apps/filter-set',
+        { slug, enable },
+      ),
+    ),
+
+  /**
+   * Set whether the local self-view records "allow" (clean-scan) events
+   * (2026-06-03). Default off (save space). Requires unlock (vault mutation).
+   * The proxy reload re-spawns the detector with the new flag so it gates
+   * allow emission at source. Echoes {slug, record_allow}.
+   */
+  filterRecordAllow: (slug: string, enable: boolean): Promise<{ slug: string; record_allow: boolean }> =>
+    callWithErrorExtraction(() =>
+      httpClient.post<OkEnvelope<{ slug: string; record_allow: boolean }> | ErrEnvelope>(
+        '/api/user/apps/filter-record-allow',
         { slug, enable },
       ),
     ),
