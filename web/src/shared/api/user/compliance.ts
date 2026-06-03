@@ -55,6 +55,36 @@ export interface ComplianceListQuery {
   offset?: number;
 }
 
+/** One built-in (embedded baseline) pack effective in the detector. */
+export interface BuiltInPackDTO {
+  name: string;
+  kind: string; // "built-in"
+}
+
+/** One server-distributed pack pulled from master, effective in the detector. */
+export interface PulledPackDTO {
+  pack_id: string;
+  name: string;
+  version: number;
+  status: string; // active | audit_only | ...
+  kind: string; // pack_kind, e.g. "tenant-custom"
+  rule_count: number;
+  phrase_count: number;
+}
+
+export interface EffectivePacksReport {
+  built_in: BuiltInPackDTO[];
+  pulled: PulledPackDTO[];
+  cursor: number;
+}
+
+/** GET /api/user/compliance/packs envelope. available=false when no compliance
+ *  filter is running (compliance off / offline / proxy unreachable). */
+export interface EffectivePacksResponse {
+  available: boolean;
+  report?: EffectivePacksReport;
+}
+
 export const complianceApi = {
   /**
    * List the local user's own compliance events (newest first), with optional
@@ -64,5 +94,15 @@ export const complianceApi = {
   listEvents: (q: ComplianceListQuery): Promise<ComplianceListResponse> =>
     httpClient
       .get<ComplianceListResponse>('/api/user/compliance/events', { params: q })
+      .then((r) => r.data),
+
+  /**
+   * Currently-effective compliance packs in the LIVE detector on this machine:
+   * built-in baseline + server-distributed (pulled from master). Relayed by
+   * local-server → aikey-proxy → detector IPC. Same source the engine uses.
+   */
+  getEffectivePacks: (): Promise<EffectivePacksResponse> =>
+    httpClient
+      .get<EffectivePacksResponse>('/api/user/compliance/packs')
       .then((r) => r.data),
 };

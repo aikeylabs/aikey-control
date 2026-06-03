@@ -25,8 +25,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -333,6 +335,47 @@ func attachComplianceFindings(ctx context.Context, db *sql.DB, ids []any, events
 		}
 	}
 	return rows.Err()
+}
+
+// defaultProxyPort mirrors aikey-cli's proxy_port (the CLI is the single source;
+// override via AIKEY_PROXY_PORT). Same convention as the OAuth relay in
+// pkg/userapi/oauth.
+const defaultProxyPort = "27200"
+
+func proxyAdminBase() string {
+	if p := strings.TrimSpace(os.Getenv("AIKEY_PROXY_PORT")); p != "" {
+		return "http://127.0.0.1:" + p
+	}
+	return "http://127.0.0.1:" + defaultProxyPort
+}
+
+// complianceEffectivePacksHandler relays GET /api/user/compliance/packs to the
+// live aikey-proxy admin endpoint /admin/compliance/packs, which queries the
+// running detector child over the IPC for its currently-effective packs
+// (built-in baseline + server-distributed). local-server is the same-origin
+// relay — the browser can't reach the proxy directly (CORS + unknown port),
+// same posture as the OAuth relay. Proxy unreachable / no filter child →
+// {available:false} with 200, never a 5xx (a missing compliance filter is a
+// normal state: compliance off / offline).
+func complianceEffectivePacksHandler(logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, proxyAdminBase()+"/admin/compliance/packs", nil)
+		if err != nil {
+			shared.JSON(w, http.StatusOK, map[string]any{"available": false})
+			return
+		}
+		resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
+		if err != nil {
+			logger.Warn("compliance packs: proxy admin unreachable", "error", err.Error())
+			shared.JSON(w, http.StatusOK, map[string]any{"available": false})
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(body)
+	}
 }
 
 // ── small helpers ─────────────────────────────────────────────────────────

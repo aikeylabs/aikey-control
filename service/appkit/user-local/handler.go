@@ -259,6 +259,11 @@ func NewHandler(cfg Config) http.Handler {
 		mux.Handle("POST /v1/compliance/events", complianceIngestHandler(cfg.ComplianceDB, logger))
 		mux.Handle("GET /api/user/compliance/events", corsWrap(complianceListHandler(cfg.ComplianceDB, logger)))
 	}
+	// Effective compliance packs (built-in + server-distributed) of the live
+	// detector — relayed to aikey-proxy /admin/compliance/packs. Independent of
+	// the local events DB (it reflects the running filter child), so registered
+	// unconditionally; proxy unreachable → {available:false}.
+	mux.Handle("GET /api/user/compliance/packs", corsWrap(complianceEffectivePacksHandler(logger)))
 	// Envelope matches FE deliveryApi.allKeys: `httpClient.get<{keys: UserKeyDTO[]}>`
 	// then `res.data.keys ?? []`. Returning bare `[]` here is a footgun because
 	// `[].keys` resolves to `Array.prototype.keys` (the iterator factory function),

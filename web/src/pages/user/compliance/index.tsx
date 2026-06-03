@@ -57,6 +57,7 @@ export default function ComplianceSelfViewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selected, setSelected] = useState<ComplianceEventDTO | null>(null);
   const [offset, setOffset] = useState(0);
+  const [packsOpen, setPacksOpen] = useState(false);
 
   const severity = searchParams.get('severity') ?? '';
   const category = searchParams.get('category') ?? '';
@@ -86,6 +87,15 @@ export default function ComplianceSelfViewPage() {
   const events = data?.events ?? [];
   const total = data?.total ?? 0;
 
+  // Effective packs (built-in + server-distributed) — lazily fetched when the
+  // drawer opens. Relayed local-server → proxy → live detector IPC.
+  const packsQuery = useQuery({
+    queryKey: ['compliance-packs'],
+    queryFn: () => complianceApi.getEffectivePacks(),
+    enabled: packsOpen,
+  });
+  const packsReport = packsQuery.data?.available ? packsQuery.data.report : undefined;
+
   const severityOptions = [
     { value: 'critical', label: t('compliancePage.sevCritical') },
     { value: 'high', label: t('compliancePage.sevHigh') },
@@ -105,6 +115,15 @@ export default function ComplianceSelfViewPage() {
       <PageHeader
         title={t('compliancePage.pageTitle')}
         description={t('compliancePage.pageDescription')}
+        actions={
+          <button
+            className="px-3 py-1 rounded border text-xs font-mono"
+            style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+            onClick={() => setPacksOpen(true)}
+          >
+            {t('effectivePacks.viewButton')}
+          </button>
+        }
       />
 
       <FilterBar
@@ -236,6 +255,54 @@ export default function ComplianceSelfViewPage() {
                 ))}
               </div>
             } />
+          </div>
+        )}
+      </DetailDrawer>
+
+      {/* Effective compliance packs (built-in + server-distributed) */}
+      <DetailDrawer
+        open={packsOpen}
+        onClose={() => setPacksOpen(false)}
+        title={t('effectivePacks.drawerTitle')}
+      >
+        {packsQuery.isLoading ? (
+          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.loading')}</p>
+        ) : !packsReport ? (
+          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('effectivePacks.unavailable')}</p>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-[10px] font-mono tracking-wider mb-2" style={{ color: 'var(--muted-foreground)' }}>{t('effectivePacks.builtInSection')}</h3>
+              <div className="space-y-1">
+                {packsReport.built_in.map((p) => (
+                  <div key={p.name} className="flex items-center gap-2 rounded border px-2 py-1" style={{ borderColor: 'var(--border)' }}>
+                    <Badge variant="gray">{t('effectivePacks.builtInBadge')}</Badge>
+                    <span className="text-xs font-mono" style={{ color: 'var(--foreground)' }}>{p.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-[10px] font-mono tracking-wider mb-2" style={{ color: 'var(--muted-foreground)' }}>{t('effectivePacks.distributedSection')}</h3>
+              {packsReport.pulled.length === 0 ? (
+                <p className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('effectivePacks.noDistributed')}</p>
+              ) : (
+                <div className="space-y-1">
+                  {packsReport.pulled.map((p) => (
+                    <div key={p.pack_id} className="rounded border px-2 py-1" style={{ borderColor: 'var(--border)' }}>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={p.status === 'active' ? 'green' : 'gray'}>{p.status.toUpperCase()}</Badge>
+                        <span className="text-xs font-mono font-bold" style={{ color: 'var(--foreground)' }}>{p.name}</span>
+                        <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>v{p.version}</span>
+                      </div>
+                      <p className="text-[10px] font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                        {p.rule_count} {t('effectivePacks.rules')} · {p.phrase_count} {t('effectivePacks.phrases')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </DetailDrawer>
