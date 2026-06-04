@@ -35,6 +35,7 @@ export interface ComplianceEventDTO {
   scenario?: string;
   prompt_length: number;
   action_taken: string;   // allow | mask | block | warn
+  detect_latency_ms?: number;  // detection step's own time (ms), self-view only
   findings: ComplianceFindingDTO[];
 }
 
@@ -72,8 +73,19 @@ export interface PulledPackDTO {
   phrase_count: number;
 }
 
+/** One built-in NLP engine (CRF NER / semantic-recall classifier) effective in
+ *  the detector — runs alongside the YAML packs but is not a pack. */
+export interface BuiltInEngineDTO {
+  name: string; // "ner.char" | "ner.token" | "recall.semantic"
+  kind: string; // "ner-crf" | "semantic-classifier"
+  entities: string[];
+  loaded: boolean;
+  note?: string;
+}
+
 export interface EffectivePacksReport {
   built_in: BuiltInPackDTO[];
+  engines: BuiltInEngineDTO[];
   pulled: PulledPackDTO[];
   cursor: number;
 }

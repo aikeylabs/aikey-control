@@ -232,6 +232,9 @@ export default function ComplianceSelfViewPage() {
             <DrawerField label={t('compliancePage.columnAction')} value={<Badge variant={actionVariant(selected.action_taken)}>{selected.action_taken.toUpperCase()}</Badge>} />
             <DrawerField label={t('compliancePage.columnModel')} value={selected.target_model || '—'} />
             <DrawerField label={t('compliancePage.fieldPromptLength')} value={selected.prompt_length} />
+            {selected.detect_latency_ms != null && (
+              <DrawerField label={t('compliancePage.fieldDetectLatency')} value={`${selected.detect_latency_ms} ms`} />
+            )}
             <DrawerField label={t('compliancePage.columnFindings')} value={
               <div className="space-y-2">
                 {selected.findings.map((f) => (
@@ -282,6 +285,22 @@ export default function ComplianceSelfViewPage() {
                 ))}
               </div>
             </div>
+            {(packsReport.engines ?? []).length > 0 && (
+              <div>
+                <h3 className="text-[10px] font-mono tracking-wider mb-2" style={{ color: 'var(--muted-foreground)' }}>{t('effectivePacks.enginesSection')}</h3>
+                <div className="space-y-1">
+                  {(packsReport.engines ?? []).map((e) => (
+                    <div key={e.name} className="flex items-center gap-2 rounded border px-2 py-1" style={{ borderColor: 'var(--border)' }}>
+                      <Badge variant={e.loaded ? 'green' : 'gray'}>{e.loaded ? t('effectivePacks.engineOn') : t('effectivePacks.engineOff')}</Badge>
+                      <span className="text-xs font-mono" style={{ color: 'var(--foreground)' }}>{e.name}</span>
+                      <span className="text-[10px] font-mono truncate" style={{ color: 'var(--muted-foreground)' }}>
+                        {e.entities.join(', ')}{e.note ? ` · ${e.note}` : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <h3 className="text-[10px] font-mono tracking-wider mb-2" style={{ color: 'var(--muted-foreground)' }}>{t('effectivePacks.distributedSection')}</h3>
               {packsReport.pulled.length === 0 ? (

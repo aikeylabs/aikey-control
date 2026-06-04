@@ -85,7 +85,9 @@
     "invite": "Invite",
     "breadcrumbUser": "User",
     "roleMember": "member",
-    "opensLink": "Opens {{url}}"
+    "opensLink": "Opens {{url}}",
+    "navSettings": "Settings",
+    "navComplianceAudit": "Compliance Audit"
   },
   "teamMenu": {
     "teamKeys": "Team Keys",
@@ -1988,6 +1990,20 @@
     "emptyHintSuffix": " page.",
     "footer": "Team keys are managed by your team server. Local routing decisions live in your CLI vault."
   },
+  "effectivePacks": {
+    "viewButton": "Effective Packs",
+    "drawerTitle": "Effective Compliance Packs",
+    "builtInSection": "Built-in baseline",
+    "enginesSection": "Built-in engines (NLP)",
+    "distributedSection": "Server-distributed",
+    "builtInBadge": "BUILT-IN",
+    "engineOn": "ON",
+    "engineOff": "OFF",
+    "unavailable": "Compliance filter is not running on this machine.",
+    "noDistributed": "None",
+    "rules": "rules",
+    "phrases": "phrases"
+  },
   "compliancePacks": {
     "status": {
       "all": "All statuses",
@@ -2053,6 +2069,62 @@
     "row": {
       "edit": "Edit",
       "delete": "Delete"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Configure your workbench connection and security preferences.",
+    "controlUrl": {
+      "title": "Control URL",
+      "description": "The team server your CLI and Web Console talk to. Changing this is equivalent to running aikey account set-url in your terminal.",
+      "endpointLabel": "ENDPOINT ADDRESS",
+      "statusReadyToTest": "Edit the URL above, then click Test connectivity to verify reachability.",
+      "statusUnchanged": "URL unchanged. Edit above to switch to a different server.",
+      "statusProbing": "Checking connectivity…",
+      "statusReachable": "✓ reachable (HTTP {{status}}, {{ms}} ms) — Save to commit.",
+      "statusFail": "✗ {{msg}}",
+      "statusSaving": "Saving…",
+      "statusSaved": "✓ Saved. Proxy collector URL also updated; refresh other tabs to pick up the new origin.",
+      "statusSaveFail": "✗ Save failed: {{msg}}",
+      "testButton": "Test connectivity",
+      "saveButton": "Save changes",
+      "saveDisabledHint": "Run Test connectivity first — Save unlocks after the probe succeeds."
+    },
+    "masterPassword": {
+      "title": "Master Password",
+      "description": "Changing the vault master password is only available via the terminal for safety and to ensure local decryption keys are rotated correctly. Copy the command below and run it in a terminal.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyTooltip": "Copy the command to clipboard"
+    },
+    "signOut": {
+      "title": "Sign out",
+      "description": "Sign out and clear your session on this device. You will need your master password to re-authenticate. Active CLI shells with cached keys keep working until they themselves time out.",
+      "button": "Sign out",
+      "signingOut": "Signing out…",
+      "failPrefix": "Sign out failed: {{msg}}"
+    },
+    "compliance": {
+      "title": "AI Compliance Detection",
+      "description": "Scan prompts for sensitive content (secrets, personal information, non-compliant sales language) before they are forwarded. Detection runs locally — the original text never leaves this machine. Turning it off stops all scanning.",
+      "toggleLabel": "Enable compliance detection",
+      "statusOn": "On — prompts are scanned before forwarding.",
+      "statusOff": "Off — no scanning.",
+      "statusLoading": "Loading…",
+      "statusSaving": "Applying…",
+      "statusApplied": "✓ Applied. The local proxy picks up the change within a few seconds.",
+      "statusLocked": "Unlock your vault to change this setting.",
+      "statusFail": "✗ Failed: {{msg}}",
+      "notInstalledTitle": "Detector not installed",
+      "notInstalledDesc": "The AI compliance detector is not installed on this device. Install it from a terminal, then return here to turn it on.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "unlockPrompt": "Enter your master password to unlock and apply this change.",
+      "unlockPlaceholder": "Master password",
+      "unlockButton": "Unlock & apply",
+      "unlockBusy": "Unlocking…",
+      "recordAllowLabel": "Record allowed events",
+      "recordAllowHint": "Off by default — only blocked / masked / warned events are recorded. Turn on to also log clean scans (uses more space)."
     }
   },
   "compliancePackDetail": {
@@ -2144,5 +2216,37 @@
   "appShell": {
     "groupCompliance": "Compliance",
     "navPacks": "Packs"
+  },
+  "compliancePage": {
+    "pageTitle": "AI Compliance Audit",
+    "pageDescription": "Compliance events detected on this machine — your own view. Original text never leaves your device.",
+    "sectionTitle": "EVENTS",
+    "recordCount": "{{count}} records",
+    "categoryPlaceholder": "Filter by category…",
+    "allSeverities": "All severities",
+    "allActions": "All actions",
+    "sevCritical": "Critical",
+    "sevHigh": "High",
+    "sevMedium": "Medium",
+    "sevLow": "Low",
+    "actionBlock": "Block",
+    "actionMask": "Mask",
+    "actionWarn": "Warn",
+    "actionAllow": "Allow",
+    "columnTime": "Time",
+    "columnAction": "Action",
+    "columnFindings": "Findings",
+    "columnModel": "Model",
+    "loading": "Loading…",
+    "loadFailed": "Failed to load events.",
+    "noEvents": "No compliance events yet.",
+    "pageRange": "{{from}}–{{to}} of {{total}}",
+    "prev": "Prev",
+    "next": "Next",
+    "drawerTitle": "Event details",
+    "fieldEventId": "Event ID",
+    "fieldPromptLength": "Prompt length",
+    "fieldDetectLatency": "Detection time",
+    "fieldDetector": "Detector"
   }
 }

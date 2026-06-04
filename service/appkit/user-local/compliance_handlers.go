@@ -58,7 +58,12 @@ type complianceEventWire struct {
 	PromptLength int                     `json:"prompt_length"`
 	ActionTaken  string                  `json:"action_taken"`
 	PromptHash   string                  `json:"prompt_hash,omitempty"`
-	Findings     []complianceFindingWire `json:"findings"`
+	// DetectLatencyMs is the detection step's own wall-clock time (ms, float —
+	// often sub-ms), shown in the self-view drawer. Stored in the events.metadata
+	// JSON column (reuses the existing extension column — no schema change).
+	// 0/absent → not stored/shown.
+	DetectLatencyMs float64                 `json:"detect_latency_ms,omitempty"`
+	Findings        []complianceFindingWire `json:"findings"`
 }
 
 type complianceFindingWire struct {
@@ -142,13 +147,21 @@ func insertComplianceEvent(ctx context.Context, db *sql.DB, ev complianceEventWi
 	if created.IsZero() {
 		created = time.Now().UTC()
 	}
+	// Observability extension fields go in the metadata JSON column (reuses the
+	// existing extension column — no schema change). NULL when nothing to store.
+	var metadata any
+	if ev.DetectLatencyMs > 0 {
+		if b, err := json.Marshal(map[string]float64{"detect_latency_ms": ev.DetectLatencyMs}); err == nil {
+			metadata = string(b)
+		}
+	}
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO local_compliance_events
-			(event_id, created_at, user_id, proxy_version, target_model, scenario, prompt_length, action_taken, prompt_hash)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(event_id, created_at, user_id, proxy_version, target_model, scenario, prompt_length, action_taken, prompt_hash, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(event_id) DO NOTHING`,
 		ev.EventID, created.UTC().Format(time.RFC3339), nullStr(ev.UserID), nullStr(ev.ProxyVersion),
-		nullStr(ev.TargetModel), nullStr(ev.Scenario), ev.PromptLength, ev.ActionTaken, nullStr(ev.PromptHash))
+		nullStr(ev.TargetModel), nullStr(ev.Scenario), ev.PromptLength, ev.ActionTaken, nullStr(ev.PromptHash), metadata)
 	if err != nil {
 		return err
 	}
@@ -186,7 +199,10 @@ type complianceAuditEvent struct {
 	Scenario     string                   `json:"scenario,omitempty"`
 	PromptLength int                      `json:"prompt_length"`
 	ActionTaken  string                   `json:"action_taken"`
-	Findings     []complianceAuditFinding `json:"findings"`
+	// DetectLatencyMs: detection step's own time (ms, float), parsed from the
+	// metadata JSON column. Omitted when absent/zero.
+	DetectLatencyMs float64                  `json:"detect_latency_ms,omitempty"`
+	Findings        []complianceAuditFinding `json:"findings"`
 }
 
 type complianceAuditFinding struct {
@@ -264,7 +280,7 @@ func complianceListHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 		pageArgs := append(append([]any{}, args...), limit, offset)
 		rows, err := db.QueryContext(r.Context(), `
 			SELECT e.event_id, e.created_at, COALESCE(e.user_id,''), COALESCE(e.target_model,''),
-			       COALESCE(e.scenario,''), e.prompt_length, e.action_taken
+			       COALESCE(e.scenario,''), e.prompt_length, e.action_taken, COALESCE(e.metadata,'')
 			FROM local_compliance_events e `+whereSQL+`
 			ORDER BY e.created_at DESC
 			LIMIT ? OFFSET ?`, pageArgs...)
@@ -280,11 +296,21 @@ func complianceListHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 		idx := map[string]int{}
 		for rows.Next() {
 			var e complianceAuditEvent
+			var metaRaw string
 			if err := rows.Scan(&e.EventID, &e.CreatedAt, &e.UserID, &e.TargetModel,
-				&e.Scenario, &e.PromptLength, &e.ActionTaken); err != nil {
+				&e.Scenario, &e.PromptLength, &e.ActionTaken, &metaRaw); err != nil {
 				logger.Warn("compliance list: scan event failed", "error", err)
 				cmplErr(w, http.StatusInternalServerError, "query failed")
 				return
+			}
+			// Extension fields live in the metadata JSON column (e.g. detect_latency_ms).
+			if metaRaw != "" {
+				var meta struct {
+					DetectLatencyMs float64 `json:"detect_latency_ms"`
+				}
+				if err := json.Unmarshal([]byte(metaRaw), &meta); err == nil {
+					e.DetectLatencyMs = meta.DetectLatencyMs
+				}
 			}
 			e.Findings = []complianceAuditFinding{}
 			idx[e.EventID] = len(events)

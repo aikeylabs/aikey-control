@@ -85,7 +85,9 @@
     "invite": "邀请",
     "breadcrumbUser": "用户",
     "roleMember": "成员",
-    "opensLink": "打开 {{url}}"
+    "opensLink": "打开 {{url}}",
+    "navSettings": "设置",
+    "navComplianceAudit": "合规审计"
   },
   "teamMenu": {
     "teamKeys": "团队密钥",
@@ -1988,6 +1990,20 @@
     "emptyHintSuffix": "页面导入你自己的密钥。",
     "footer": "团队密钥由你的团队服务器管理。本地路由决策保存在你的 CLI 保管库中。"
   },
+  "effectivePacks": {
+    "viewButton": "生效合规包",
+    "drawerTitle": "当前生效的合规包",
+    "builtInSection": "内建基线",
+    "enginesSection": "内建引擎（NLP）",
+    "distributedSection": "服务端下发",
+    "builtInBadge": "内建",
+    "engineOn": "已启用",
+    "engineOff": "未启用",
+    "unavailable": "本机合规检测未运行。",
+    "noDistributed": "无",
+    "rules": "条规则",
+    "phrases": "条敏感词"
+  },
   "compliancePacks": {
     "status": {
       "all": "全部状态",
@@ -2053,6 +2069,62 @@
     "row": {
       "edit": "编辑",
       "delete": "删除"
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "subtitle": "配置你的服务端连接和安全偏好。",
+    "controlUrl": {
+      "title": "控制服务 URL",
+      "description": "本机 CLI 和 Web 控制台连接的团队服务端地址。在这里改 = 在终端跑 aikey account set-url。",
+      "endpointLabel": "服务端地址",
+      "statusReadyToTest": "编辑上方 URL 后，点「测试连通性」验证可达。",
+      "statusUnchanged": "URL 未变更。编辑上方可切换到其他服务端。",
+      "statusProbing": "正在检查连通性…",
+      "statusReachable": "✓ 可达（HTTP {{status}}，{{ms}} 毫秒）—— 点保存提交。",
+      "statusFail": "✗ {{msg}}",
+      "statusSaving": "保存中…",
+      "statusSaved": "✓ 已保存。Proxy 上报地址同步更新；刷新其他 tab 即可生效。",
+      "statusSaveFail": "✗ 保存失败：{{msg}}",
+      "testButton": "测试连通性",
+      "saveButton": "保存修改",
+      "saveDisabledHint": "请先点「测试连通性」—— 探测成功后才能保存。"
+    },
+    "masterPassword": {
+      "title": "主密码",
+      "description": "为了安全和确保本机加密 key 正确轮转，修改 vault 主密码仅支持在终端中操作。复制下面的命令到终端运行。",
+      "copy": "复制",
+      "copied": "已复制",
+      "copyTooltip": "复制命令到剪贴板"
+    },
+    "signOut": {
+      "title": "退出登录",
+      "description": "退出登录并清除本机会话。下次需要主密码才能再次进入。已在使用的 CLI 终端中缓存的 key 在本身超时之前仍然有效。",
+      "button": "退出登录",
+      "signingOut": "正在退出…",
+      "failPrefix": "退出失败：{{msg}}"
+    },
+    "compliance": {
+      "title": "AI 合规检测",
+      "description": "在请求转发前扫描提示词中的敏感内容（密钥、个人信息、违规营销话术）。检测在本机进行，原文不会离开本机。关闭后将停止所有扫描。",
+      "toggleLabel": "启用合规检测",
+      "statusOn": "已开启 —— 转发前会扫描提示词。",
+      "statusOff": "已关闭 —— 不进行扫描。",
+      "statusLoading": "加载中…",
+      "statusSaving": "应用中…",
+      "statusApplied": "✓ 已应用。本机代理将在几秒内生效。",
+      "statusLocked": "请先解锁保险库再修改此设置。",
+      "statusFail": "✗ 失败：{{msg}}",
+      "notInstalledTitle": "检测器未安装",
+      "notInstalledDesc": "本机尚未安装 AI 合规检测器。请在终端安装后回到此处开启。",
+      "copy": "复制",
+      "copied": "已复制",
+      "unlockPrompt": "输入主密码以解锁并应用此修改。",
+      "unlockPlaceholder": "主密码",
+      "unlockButton": "解锁并应用",
+      "unlockBusy": "解锁中…",
+      "recordAllowLabel": "记录放行事件",
+      "recordAllowHint": "默认关 —— 只记录拦截 / 脱敏 / 告警的事件。开启后也记录干净扫描（更占空间）。"
     }
   },
   "compliancePackDetail": {
@@ -2144,5 +2216,37 @@
   "appShell": {
     "groupCompliance": "合规",
     "navPacks": "合规包"
+  },
+  "compliancePage": {
+    "pageTitle": "AI 合规审计",
+    "pageDescription": "本机检测到的合规事件 —— 自己视角。原文不会离开本机。",
+    "sectionTitle": "事件",
+    "recordCount": "{{count}} 条记录",
+    "categoryPlaceholder": "按类别筛选…",
+    "allSeverities": "全部严重度",
+    "allActions": "全部动作",
+    "sevCritical": "严重",
+    "sevHigh": "高",
+    "sevMedium": "中",
+    "sevLow": "低",
+    "actionBlock": "拦截",
+    "actionMask": "脱敏",
+    "actionWarn": "告警",
+    "actionAllow": "放行",
+    "columnTime": "时间",
+    "columnAction": "动作",
+    "columnFindings": "命中",
+    "columnModel": "模型",
+    "loading": "加载中…",
+    "loadFailed": "加载失败。",
+    "noEvents": "暂无合规事件。",
+    "pageRange": "第 {{from}}–{{to}} 条 / 共 {{total}}",
+    "prev": "上一页",
+    "next": "下一页",
+    "drawerTitle": "事件详情",
+    "fieldEventId": "事件 ID",
+    "fieldPromptLength": "Prompt 长度",
+    "fieldDetectLatency": "检测耗时",
+    "fieldDetector": "检测器"
   }
 }
