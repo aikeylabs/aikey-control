@@ -23,6 +23,10 @@ export function DetailDrawer({ open, onClose, title, subtitle, children }: Detai
       <div
         className="fixed inset-0 z-40 transition-opacity duration-200"
         style={{
+          // margin:0 neutralises any parent `space-y-*` margin that would
+          // otherwise leak onto this fixed element and push it off the top
+          // edge (it renders inline inside the page's vertical-spacing stack).
+          margin: 0,
           backgroundColor: 'rgba(0,0,0,0.5)',
           opacity: open ? 1 : 0,
           pointerEvents: open ? 'auto' : 'none',
@@ -34,6 +38,7 @@ export function DetailDrawer({ open, onClose, title, subtitle, children }: Detai
       <div
         className="fixed top-0 right-0 h-full z-50 flex flex-col transition-transform duration-200"
         style={{
+          margin: 0, // see backdrop note — keep the fixed panel pinned to the viewport top
           width: 480,
           backgroundColor: 'var(--card)',
           borderLeft: '1px solid var(--border)',

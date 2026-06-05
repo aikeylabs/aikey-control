@@ -165,29 +165,30 @@ export default function UserPerformancePage() {
     const grandInput = sorted.reduce((s, k) => s + (k.input_tokens ?? 0), 0);
     return {
       rows: sorted.map((k) => {
-        const inputAll = k.input_tokens ?? 0;
+        // 方案 A: input_tokens is the PURE (uncached) input; cache lives in its own
+        // fields (not a subset of input). Total input context = uncached + cached +
+        // creation. No capping/subtraction needed anymore.
+        const uncached = k.input_tokens ?? 0;
         const cached = k.cached_input_tokens ?? 0;
         const creation = k.cache_creation_input_tokens ?? 0;
-        const cappedCached = Math.min(cached, inputAll);
-        const cappedCreation = Math.min(creation, Math.max(inputAll - cappedCached, 0));
-        const uncached = Math.max(inputAll - cappedCached - cappedCreation, 0);
+        const totalInput = uncached + cached + creation;
         const output = k.output_tokens ?? 0;
-        const denom = uncached + cappedCreation + cappedCached + output > 0
-          ? uncached + cappedCreation + cappedCached + output
+        const denom = uncached + creation + cached + output > 0
+          ? uncached + creation + cached + output
           : 1;
         return {
           ...k,
           uncached,
-          creation: cappedCreation,
-          cached: cappedCached,
+          creation,
+          cached,
           output,
           uncachedPctOfRow: (uncached / denom) * 100,
-          creationPctOfRow: (cappedCreation / denom) * 100,
-          cachedPctOfRow: (cappedCached / denom) * 100,
+          creationPctOfRow: (creation / denom) * 100,
+          cachedPctOfRow: (cached / denom) * 100,
           outputPctOfRow: (output / denom) * 100,
           barPct: (k.total_tokens / top) * 100,
           sharePct: (k.total_tokens / grand) * 100,
-          hitRate: inputAll > 0 ? cappedCached / inputAll : 0,
+          hitRate: totalInput > 0 ? cached / totalInput : 0,
         };
       }),
       grandTotal: sorted.reduce((s, k) => s + k.total_tokens, 0),
@@ -195,7 +196,9 @@ export default function UserPerformancePage() {
       grandCreation,
       grandInput,
       grandReqs,
-      grandHitRate: grandInput > 0 ? grandCached / grandInput : 0,
+      // 方案 A: grandInput is now pure; total input context = pure + cache + creation.
+      grandHitRate: (grandInput + grandCached + grandCreation) > 0
+        ? grandCached / (grandInput + grandCached + grandCreation) : 0,
       keyCount: sorted.length,
     };
   }, [byKeyRecent.data, t]);
@@ -216,29 +219,29 @@ export default function UserPerformancePage() {
     const grandInput = sorted.reduce((s, m) => s + (m.input_tokens ?? 0), 0);
     return {
       rows: sorted.map((m) => {
-        const inputAll = m.input_tokens ?? 0;
+        // 方案 A: input_tokens is the PURE (uncached) input; cache is separate.
+        // Total input context = uncached + cached + creation.
+        const uncached = m.input_tokens ?? 0;
         const cached = m.cached_input_tokens ?? 0;
         const creation = m.cache_creation_input_tokens ?? 0;
-        const cappedCached = Math.min(cached, inputAll);
-        const cappedCreation = Math.min(creation, Math.max(inputAll - cappedCached, 0));
-        const uncached = Math.max(inputAll - cappedCached - cappedCreation, 0);
+        const totalInput = uncached + cached + creation;
         const output = m.output_tokens ?? 0;
-        const denom = uncached + cappedCreation + cappedCached + output > 0
-          ? uncached + cappedCreation + cappedCached + output
+        const denom = uncached + creation + cached + output > 0
+          ? uncached + creation + cached + output
           : 1;
         return {
           ...m,
           uncached,
-          creation: cappedCreation,
-          cached: cappedCached,
+          creation,
+          cached,
           output,
           uncachedPctOfRow: (uncached / denom) * 100,
-          creationPctOfRow: (cappedCreation / denom) * 100,
-          cachedPctOfRow: (cappedCached / denom) * 100,
+          creationPctOfRow: (creation / denom) * 100,
+          cachedPctOfRow: (cached / denom) * 100,
           outputPctOfRow: (output / denom) * 100,
           barPct: (m.total_tokens / top) * 100,
           sharePct: (m.total_tokens / grand) * 100,
-          hitRate: inputAll > 0 ? cappedCached / inputAll : 0,
+          hitRate: totalInput > 0 ? cached / totalInput : 0,
         };
       }),
       grandTotal: sorted.reduce((s, m) => s + m.total_tokens, 0),
@@ -246,7 +249,9 @@ export default function UserPerformancePage() {
       grandCreation,
       grandInput,
       grandReqs,
-      grandHitRate: grandInput > 0 ? grandCached / grandInput : 0,
+      // 方案 A: grandInput is now pure; total input context = pure + cache + creation.
+      grandHitRate: (grandInput + grandCached + grandCreation) > 0
+        ? grandCached / (grandInput + grandCached + grandCreation) : 0,
       modelCount: sorted.length,
     };
   }, [byModelRecent.data]);
@@ -492,7 +497,7 @@ export default function UserPerformancePage() {
                     </div>
                   </button>
                   <div className="key-bar">
-                    <span style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: '#facc15' }} />
+                    <span className="key-bar-fill" style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: '#facc15' }} />
                   </div>
                   <span className="font-mono text-[11.5px] text-right whitespace-nowrap">
                     <span style={{ color: 'var(--foreground)' }}>{fmtTok(s.total_tokens)}</span>

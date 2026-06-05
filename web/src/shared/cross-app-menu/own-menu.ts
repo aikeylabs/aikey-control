@@ -91,6 +91,22 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
     visibility: 'always',
     icon: 'trust-check',
   },
+  // Phase 3 (2026-06-03): Compliance Audit. Belongs to QUALITY alongside
+  // Trust Check — both surface "did anything detected go wrong with my
+  // local AI traffic". /api/user/compliance/events lives on A's
+  // local-server (reads control.db); team server has no such endpoint
+  // by design (original prompt text must never leave the user's
+  // machine). With this trailer entry, B's sidebar surfaces "Compliance
+  // Audit" pointing at the user's local-server (8090) where the page
+  // actually works. Same pattern as Trust Check.
+  {
+    id: 'personal-compliance',
+    group: 'QUALITY',
+    label: 'Compliance Audit',
+    path: '/user/compliance',
+    visibility: 'always',
+    icon: 'compliance',
+  },
 
   // Phase 3B R16 (2026-05-11): Account intentionally NOT exposed via
   // cross-app. Both A and B have a local /user/account route showing
@@ -101,4 +117,21 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
   // (clicking on B-side Account on A would show team-server account
   // details that aren't useful in personal context).
   // Spec: requirements/2026-05-11-aikey-web-local-first-team-merge.md R16.
+
+  // Phase 4F invites (2026-05-30): expose Invites via cross-app so the
+  // Team SPA sidebar can also show the entry. Master/web's local
+  // Invites navGroups item is personalOnly (the /local-api endpoints
+  // it calls need installer_id from the user's machine — only present
+  // on a Personal install). With this trailer entry, the master
+  // navGroups Invites slot finds a path-matching cross-app entry and
+  // renders it pointing at the user's local-server (8090) where the
+  // page actually works. Same pattern as Vault / Import.
+  {
+    id: 'personal-invites',
+    group: 'ACCOUNT',
+    label: 'Invites',
+    path: '/user/invites',
+    visibility: 'always',
+    icon: 'invite',
+  },
 ];

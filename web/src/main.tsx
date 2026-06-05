@@ -5,6 +5,7 @@ import { AppProviders } from '@/app/providers';
 import { router } from '@/app/router';
 import { useMasterAuthStore, useUserAuthStore } from '@/store';
 import { runtimeConfig } from '@/app/config/runtime';
+import { resolveStoreFromPathname } from '@/app/router/go-alias';
 import './index.css';
 import './shared/i18n/i18n';
 
@@ -23,6 +24,17 @@ import './shared/i18n/i18n';
 // hydration happens at store creation time (import), which runs BEFORE
 // this function — so writing only to localStorage would leave the
 // in-memory state as null, causing a false redirect to session-expired.
+//
+// Store-selection (2026-06-02 bugfix): the CLI sends users to
+// `/go/<alias>#auth_token=<jwt>`, which redirects to the real path via
+// GoAliasRedirect. A naive `pathname.startsWith('/user')` check on the
+// CURRENT pathname misclassifies `/go/*` as master because the redirect
+// hasn't fired yet. Result: user JWTs wrote to the master store, leaving
+// the user store empty → AuthGuard kicked the user to /user/session-expired
+// (reproduced 2026-06-02). The fix resolves /go/<alias> through the same
+// GO_TARGETS table the router uses, so the store choice tracks the final
+// destination, not the current intermediate path. Forward-compatible: if
+// future aliases point at /master/*, this still routes correctly.
 // ---------------------------------------------------------------------------
 (function ingestFragmentToken() {
   if (runtimeConfig.authMode === 'local_bypass') return;
@@ -49,9 +61,10 @@ import './shared/i18n/i18n';
     // keep defaults
   }
 
-  // Update the Zustand in-memory store directly (works outside React).
-  const isUser = window.location.pathname.startsWith('/user');
-  if (isUser) {
+  // Route the token to the correct store. resolveStoreFromPathname lives
+  // in go-alias.tsx so its decision table stays bound to GO_TARGETS at
+  // compile time (single source of truth — see godoc on the function).
+  if (resolveStoreFromPathname(window.location.pathname) === 'user') {
     useUserAuthStore.getState().setAuth(token, user);
   } else {
     useMasterAuthStore.getState().setAuth(token, user);

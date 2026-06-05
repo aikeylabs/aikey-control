@@ -5,6 +5,29 @@
 export interface RuntimeConfig {
   apiBaseUrl: string;
   authMode: 'jwt' | 'local_bypass';
+  /** 2026-06-03: which deployment kind hosts this bundle, used by UserShell
+   *  to short-circuit the otherBaseUrl-based `isSingleBinaryComposed`
+   *  detection.
+   *
+   *  - 'trial'      : aikey-full-trial single binary serving master + user
+   *                   on one port. The "other side" doesn't exist — sidebar
+   *                   nav must render every item locally (no cross-app
+   *                   trailers). Without this signal, a stale
+   *                   `aikey-cross-app:personal-base-url` localStorage
+   *                   entry (left over from a past `aikey login` to a
+   *                   team server) makes the detection think a team URL
+   *                   exists, and Vault / Performance / Apps / Trust Check /
+   *                   Compliance Audit / Invites all silently render as
+   *                   cross-app trailers pointing at that stale URL.
+   *  - 'personal'   : Personal local-server (Standalone aikey-local-server,
+   *                   port 8090, user routes only). The other side (when
+   *                   present) IS a real team server.
+   *  - 'production' : Team / production server (Standalone). The other
+   *                   side is the user's personal local-server (loopback).
+   *  - undefined    : unknown / default. Detection falls back to the
+   *                   otherBaseUrl origin comparison, same as pre-fix.
+   */
+  controlPlaneMode?: 'trial' | 'personal' | 'production';
   featureFlags: {
     usageLedger: boolean;
     controlEvents: boolean;

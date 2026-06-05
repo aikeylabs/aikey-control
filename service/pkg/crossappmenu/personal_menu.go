@@ -86,12 +86,43 @@ var PersonalMenu = []Entry{
 		Visibility: VisibilityAlways,
 		Icon:       "trust-check",
 	},
+	// Phase 3 (2026-06-03): Compliance Audit. Same shape as trust-check —
+	// /api/user/compliance/events lives on A's local-server (reads
+	// control.db); team server has no equivalent endpoint by design
+	// (original prompt text never leaves the user's machine). B's
+	// sidebar surfaces the Compliance Audit entry via this cross-app
+	// trailer, pointing at the user's local-server (8090). Pairs with
+	// the TS OWN_PERSONAL_MENU entry of the same ID.
+	{
+		ID:         "personal-compliance",
+		Group:      GroupQuality,
+		Label:      "Compliance Audit",
+		Path:       "/user/compliance",
+		Visibility: VisibilityAlways,
+		Icon:       "compliance",
+	},
 	// Phase 3B R16 (2026-05-11): Account intentionally NOT exposed via
 	// cross-app — both A and B have local /user/account routes showing
 	// side-relevant data. Each side renders its own Account NavLink
 	// locally; exposing the other side as cross-app would surface a
 	// duplicate Account trailer in the same group.
 	// Spec: requirements/2026-05-11-aikey-web-local-first-team-merge.md R16.
+
+	// Phase 4F invites (2026-05-30): Invites cross-jumps to A's
+	// /user/invites. B's local navGroups item is personalOnly because
+	// the /local-api/invites/* endpoints it calls need installer_id
+	// from the user's machine — only present on a Personal install.
+	// Surfacing via cross-app lets B's sidebar render an Invites slot
+	// pointing back at A's local-server where the page actually works.
+	// Sits in the ACCOUNT group, same as the local navGroups item.
+	{
+		ID:         "personal-invites",
+		Group:      GroupAccount,
+		Label:      "Invites",
+		Path:       "/user/invites",
+		Visibility: VisibilityAlways,
+		Icon:       "invite",
+	},
 }
 
 // personalMenuZhLabels maps each PersonalMenu entry's stable ID to its
@@ -116,4 +147,6 @@ var personalMenuZhLabels = map[string]string{
 	"personal-cost":        "性能", // Label "Performance"; ID kept for back-compat.
 	"personal-apps":        "应用",
 	"personal-trust-check": "置信度检测",
+	"personal-compliance":  "合规审计",
+	"personal-invites":     "邀请码",
 }

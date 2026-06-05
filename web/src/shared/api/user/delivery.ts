@@ -18,6 +18,14 @@ export interface PendingKeyDTO {
   expires_at?: string;
 }
 
+// One (metric, period) quota row for a key's seat: current-period used + limit.
+export interface SeatQuotaItem {
+  metric: string; // "usd" | "tokens"
+  period: string; // "monthly" | "daily"
+  used: number;
+  limit: number;
+}
+
 export interface UserKeyDTO {
   virtual_key_id: string;
   org_id: string;
@@ -27,6 +35,9 @@ export interface UserKeyDTO {
   key_status: string;
   share_status: string;
   expires_at?: string;
+  // Seat-level quota (one entry per rule) for the usage/limit bar. Absent when the
+  // seat has no quota or the server edition doesn't wire quota.
+  seat_quota?: SeatQuotaItem[];
 }
 
 // One fallback candidate within a protocol slot.

@@ -53,7 +53,15 @@ func DomainErrorResponse(w http.ResponseWriter, err *DomainError) {
 func domainErrorStatus(code string) int {
 	switch code {
 	// ── 400 Bad Request ────────────────────────────────────────────────────────
-	case CodeDataInvalidBody, CodeDataMissingField, CodeDataInvalidField:
+	// CodeBizAuthWrongCurrentPwd / CodeBizAuthWeakPassword (added 2026-06-02):
+	// 400, not 401 — the caller IS already authenticated (JWT verified by
+	// middleware). The request body is "bad" because it carries either the
+	// wrong current password or a new password that violates the policy.
+	// Mapping to 401 here would trip the web client's response interceptor
+	// (which clears the session + redirects to /master/login on 401), which
+	// is exactly the wrong UX for "you typed the current password wrong".
+	case CodeDataInvalidBody, CodeDataMissingField, CodeDataInvalidField,
+		CodeBizAuthWrongCurrentPwd, CodeBizAuthWeakPassword:
 		return http.StatusBadRequest
 
 	// ── 401 Unauthorised ──────────────────────────────────────────────────────

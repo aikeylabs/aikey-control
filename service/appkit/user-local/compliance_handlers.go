@@ -259,9 +259,16 @@ func complianceListHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 			where = append(where, "EXISTS (SELECT 1 FROM local_compliance_findings f WHERE f.event_id = e.event_id AND f.severity = ?)")
 			args = append(args, sev)
 		}
+		// Free-text search box (param kept as `category` for wire compat): an
+		// event matches if any of its findings' category, entity type, OR matched
+		// content snippet contains the query (case-insensitive partial). This makes
+		// the box a real search — "phone" finds CN_PHONE, "pii" finds the category,
+		// "赵六" finds the snippet — instead of an exact-category picker that only
+		// matched the literal enum value.
 		if cat := q.Get("category"); cat != "" {
-			where = append(where, "EXISTS (SELECT 1 FROM local_compliance_findings f WHERE f.event_id = e.event_id AND f.category = ?)")
-			args = append(args, cat)
+			where = append(where, "EXISTS (SELECT 1 FROM local_compliance_findings f WHERE f.event_id = e.event_id AND (f.category LIKE ? OR f.entity_type LIKE ? OR f.context_snippet LIKE ?))")
+			like := "%" + cat + "%"
+			args = append(args, like, like, like)
 		}
 		whereSQL := ""
 		if len(where) > 0 {

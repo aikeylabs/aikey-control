@@ -53,7 +53,7 @@ export function FilterBar({
           </svg>
           <input
             type="text"
-            className="pl-9 pr-3 py-1.5 text-xs w-52"
+            className="pl-9 pr-3 py-2 text-sm w-56"
             placeholder={resolvedSearchPlaceholder}
             value={searchValue ?? ''}
             onChange={(e) => onSearchChange(e.target.value)}

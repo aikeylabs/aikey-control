@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { __testInternals } from './managed-keys';
-import type { TeamVaultRecord } from '../../types/team-vault';
+import type { TeamVaultRecord } from '@/shared/types/team-vault';
 
 const { rawToTeamRecord } = __testInternals;
 

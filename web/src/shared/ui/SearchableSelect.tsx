@@ -142,15 +142,23 @@ export function SearchableSelect({
         className="w-full px-3 py-2 text-sm text-left rounded border flex items-center justify-between"
         style={{
           backgroundColor: 'var(--card)',
-          borderColor: 'var(--border)',
+          // Amber border + ring when open, mirroring the global input:focus
+          // treatment so the select and the search box read as one family.
+          borderColor: open ? 'var(--primary)' : 'var(--border)',
+          boxShadow: open ? '0 0 0 1px rgba(250, 204, 21, 0.2)' : 'none',
           color: selectedLabel ? 'var(--foreground)' : 'var(--muted-foreground)',
           opacity: disabled ? 0.5 : 1,
           cursor: disabled ? 'not-allowed' : 'pointer',
           fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+          transition: 'border-color 150ms ease, box-shadow 150ms ease',
         }}
       >
         <span className="truncate">{selectedLabel || resolvedPlaceholder}</span>
-        <svg className="w-3.5 h-3.5 shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <svg
+          className="w-3.5 h-3.5 shrink-0 ml-2"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms ease' }}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}
+        >
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>

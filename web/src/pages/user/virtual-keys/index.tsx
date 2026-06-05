@@ -94,6 +94,31 @@ function shareLabel(s: string | undefined, t: TFunction): string {
   return s || t('teamKeys.shareValueUnknown');
 }
 
+/** Format a quota amount: usd as "$0.77" / "$100", tokens as "1.2k" / "340". The
+ *  "$" vs plain-number already conveys the metric, so no extra label is needed.
+ *  Kept short so the cell stays narrow and never squeezes the actions column. */
+function fmtQuota(metric: string, n: number): string {
+  if (metric === 'usd') {
+    return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  }
+  if (n >= 1000) {
+    return (n / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'k';
+  }
+  return n.toLocaleString('en-US');
+}
+
+/** Next quota-period reset (when `used` rolls back to 0): the start of the next
+ *  calendar month (monthly) or next day (daily), in UTC — matching the server's
+ *  period-key boundary. Localised date string, in lock-step with the page's
+ *  other dates. */
+function nextResetLabel(period: string): string {
+  const now = new Date();
+  const d = period === 'daily'
+    ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
 /** "expires Mar 5, 2026" / "expired" / null when no expiry. Date is
  *  formatted via datetime-intl (locale-aware, in lock-step with the
  *  active i18n language); the surrounding phrase comes from the
@@ -414,7 +439,7 @@ export default function UserVirtualKeysPage() {
                         {t('teamKeys.colStatus')}
                         {sortKey === 'status' && <span className="th-sort-arrow">↓</span>}
                       </th>
-                      <th style={{ width: '12%' }}>{t('teamKeys.colShare')}</th>
+                      <th style={{ width: '13%' }}>{t('teamKeys.colUsage')}</th>
                       <th
                         style={{ width: '12%' }}
                         className={`th-sortable ${sortKey === 'expires' ? 'active' : ''}`}
@@ -678,20 +703,76 @@ const Row = React.memo(function Row(props: {
           {status.chipClass === 'danger'  && <span className="status-dot error" style={{ width: 5, height: 5 }} />}
           {status.label}
         </span>
+        {/* claim/share status relocated here — the former 共享 column is now the
+            usage/limit bar; this preserves the claim dimension. */}
+        <div className="alias-sub" style={{ marginTop: 3 }}>{shareLabel(r.share_status, t)}</div>
       </td>
 
+      {/* usage / limit — one progress bar per seat quota rule (used vs limit). */}
       <td>
-        <span className="text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>
-          {shareLabel(r.share_status, t)}
-        </span>
+        {!r.seat_quota || r.seat_quota.length === 0 ? (
+          <span className="text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>—</span>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {r.seat_quota.map((q, i) => {
+              const pct = q.limit > 0 ? (q.used / q.limit) * 100 : 0;
+              const shown = Math.min(100, Math.max(0, Math.round(pct)));
+              const over = q.limit > 0 && q.used >= q.limit;
+              return (
+                <div key={i} title={`${fmtQuota(q.metric, q.used)} / ${fmtQuota(q.metric, q.limit)}`}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'baseline',
+                      gap: 6,
+                      fontSize: 10.5,
+                      lineHeight: 1.2,
+                      whiteSpace: 'nowrap',
+                      color: 'var(--muted-foreground)',
+                    }}
+                  >
+                    <span className="font-mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {fmtQuota(q.metric, q.used)}
+                      <span style={{ opacity: 0.55 }}> / {fmtQuota(q.metric, q.limit)}</span>
+                    </span>
+                    <span style={{ fontWeight: 600, color: over ? 'var(--destructive)' : 'var(--muted-foreground)' }}>
+                      {shown}%
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      height: 5,
+                      borderRadius: 3,
+                      background: 'var(--muted)',
+                      overflow: 'hidden',
+                      marginTop: 3,
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: 'block',
+                        height: '100%',
+                        width: `${Math.max(shown, 1.5)}%`,
+                        background: over ? 'var(--destructive)' : 'var(--primary)',
+                        borderRadius: 3,
+                        transition: 'width 200ms ease',
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </td>
 
       <td className="font-mono text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>
         {expiresStr ?? '—'}
       </td>
 
-      <td style={{ textAlign: 'right' }}>
-        <div className="row-actions">
+      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+        <div className="row-actions" style={{ whiteSpace: 'nowrap' }}>
           {r.share_status === 'pending_claim' ? (
             <button
               type="button"
@@ -840,6 +921,49 @@ function DetailDrawer(props: {
               </span>
             </div>
           </div>
+
+          {/* Usage / Limit section — the seat's quota (used vs limit per rule),
+              the same data as the team-keys list column, shown larger here. */}
+          {r.seat_quota && r.seat_quota.length > 0 && (
+            <div className="drawer-section">
+              <div className="drawer-section-title">
+                <ZapIcon className="w-3 h-3" />
+                {t('teamKeys.sectionUsage')}
+              </div>
+              {r.seat_quota.map((q, i) => {
+                const pct = q.limit > 0 ? (q.used / q.limit) * 100 : 0;
+                const shown = Math.min(100, Math.max(0, Math.round(pct)));
+                const over = q.limit > 0 && q.used >= q.limit;
+                return (
+                  <div key={i} className="drawer-field" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                      <span className="v mono">
+                        {fmtQuota(q.metric, q.used)} / {fmtQuota(q.metric, q.limit)}
+                      </span>
+                      <span className="v" style={{ fontWeight: 600, color: over ? 'var(--destructive)' : undefined }}>
+                        {shown}%
+                      </span>
+                    </div>
+                    <div style={{ height: 6, borderRadius: 3, background: 'var(--muted)', overflow: 'hidden' }}>
+                      <span
+                        style={{
+                          display: 'block',
+                          height: '100%',
+                          width: `${Math.max(shown, 1.5)}%`,
+                          background: over ? 'var(--destructive)' : 'var(--primary)',
+                          borderRadius: 3,
+                          transition: 'width 200ms ease',
+                        }}
+                      />
+                    </div>
+                    <div className="mono" style={{ fontSize: 10, color: 'var(--muted-foreground)', opacity: 0.7, marginTop: 1 }}>
+                      {t('teamKeys.quotaResetAt', { date: nextResetLabel(q.period) })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Routing section — protocol slots from KeySummaryDTO */}
           <div className="drawer-section">

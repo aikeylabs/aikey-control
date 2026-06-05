@@ -159,12 +159,13 @@ export interface KeyTotal {
   app_slug?: string;
   // Anthropic prompt-caching tuple — all optional so non-Anthropic providers
   // and pre-v1.0.5 servers serialise without them.
-  //   - input_tokens         = total prompt input (already includes cached + creation;
-  //                            see proxy provider/anthropic.go totalInput())
+  //   - input_tokens         = PURE (uncached) input — 方案 A: cache is NOT included
+  //                            here (proxy provider/anthropic.go reports usage.input_tokens)
   //   - cached_input_tokens  = Anthropic cache_read_input_tokens (legacy column name)
   //   - cache_creation_input_tokens = Anthropic cache_creation_input_tokens
   //   - output_tokens        = output
-  // Therefore: uncached = input_tokens - cached_input_tokens - cache_creation_input_tokens
+  // Therefore: total input context = input_tokens + cached_input_tokens + cache_creation_input_tokens
+  //            (uncached = input_tokens directly; no subtraction)
   input_tokens?: number;
   cached_input_tokens?: number;
   cache_creation_input_tokens?: number;

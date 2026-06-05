@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
 import { useUserAuthStore } from '@/store';
+import { runtimeConfig } from '@/app/config/runtime';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
 import {
@@ -122,6 +123,28 @@ const ICON_SHIELD =
 const ICON_USER_PLUS =
   'M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z';
 
+// lucide "fingerprint" (outline) — Compliance Audit (2026-06-02) sidebar
+// glyph. First attempted clipboard-check (rectangle + tab + tick), but at
+// 16×16 the silhouette reads as a generic small box and gets lost next to
+// adjacent rectangular icons (Vault shield, Apps bot rect, Receipt). The
+// fingerprint's concentric-arc silhouette is unique in this shell, scales
+// well to small sidebar size, and the "on-device detection / privacy"
+// connotation matches the page's data-locality story (original text never
+// leaves the machine — see compliancePage.pageDescription i18n). Multi-
+// arc lucide path compiled into one `d` via M subpaths so NavIcon's
+// single-path renderer works (same trick as ICON_APPS / ICON_SETTINGS).
+const ICON_FINGERPRINT =
+  'M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4 M14 13.12c0 2.38 0 6.38-1 8.88 M17.29 21.02c.12-.6.43-2.3.5-3.02 M2 12a10 10 0 0 1 18-6 M2 16h.01 M21.8 16c.2-2 .131-5.354 0-6 M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2 M8.65 22c.21-.66.45-1.32.57-2 M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2';
+
+// lucide "settings" (outline) — Phase 4G (2026-06-01) Settings page gear
+// glyph. Used in (a) the top-bar gear button that navigates to
+// /user/settings, (b) the sidebar Account-group nav entry, and (c) the
+// cross-app menu's `settings` icon name (master-side renders it when
+// surfacing the personal-settings cross-app entry). Compiled into one
+// `d` via M subpaths so NavIcon's single-path renderer works.
+const ICON_SETTINGS =
+  'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z';
+
 // lucide "bot" (outline) — Connected Apps glyph (refreshed 2026-05-23
 // per design_iterations/vault_logo_layout_refine_3.html mockup).
 // Renders a rounded robot head: body rect, antenna stem + top bar,
@@ -164,6 +187,8 @@ function UploadCloudIcon() { return <NavIcon d={ICON_UPLOAD_CLOUD} />; }
 function AppsIcon()        { return <NavIcon d={ICON_APPS} />; }
 function UserPlusIcon()    { return <NavIcon d={ICON_USER_PLUS} />; }
 function ShieldIcon()      { return <NavIcon d={ICON_SHIELD} />; }
+function FingerprintIcon() { return <NavIcon d={ICON_FINGERPRINT} />; }
+function SettingsIcon()    { return <NavIcon d={ICON_SETTINGS} />; }
 
 // Phase 3B R17 (2026-05-11): Team Usage glyph — bar chart at the
 // bottom + two small head circles above, to read as "team's
@@ -261,6 +286,13 @@ function crossAppIconFor(iconName: string | undefined): React.ReactNode {
     case 'cost':         return <DollarIcon />;
     case 'apps':         return <AppsIcon />;
     case 'trust-check':  return <RadarIcon />;
+    case 'compliance':   return <FingerprintIcon />;
+    // 2026-05-30: mirrored from master/web for symmetry. A-side never
+    // fetches personal-invites via cross-app (Personal advertises but
+    // doesn't consume its own menu), but keeping the switch symmetric
+    // avoids future drift if the protocol ever surfaces invites on
+    // both directions.
+    case 'invite':       return <UserPlusIcon />;
     case 'user':
     case 'team-account': return <UserIcon />;
     default:
@@ -309,6 +341,9 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   vault:          { label: 'Vault',      originName: 'My Vault' },
   'usage-ledger': { label: 'Usage',      originName: 'Usage Ledger' },
   'trust-check':  { label: 'Trust Check' },
+  compliance:     { label: 'Compliance Audit' },
+  // Phase 4G (2026-06-01): Web Console Settings page breadcrumb label.
+  settings:       { label: 'Settings' },
   import:         { label: 'Import',     originName: 'Bulk Import' },
 };
 
@@ -339,8 +374,14 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
   Performance: 'navPerformance',
   Apps: 'navApps',
   'Trust Check': 'navTrustCheck',
+  'Compliance Audit': 'navComplianceAudit',
   Account: 'navAccount',
   Invites: 'navInvites',
+  // Phase 4G (2026-06-01): Settings page breadcrumb. Not in any
+  // sidebar navGroups (Settings is reached via the top-bar gear icon
+  // and the sidebar user-chip click only); listed here so the
+  // breadcrumb renders the localized label when on /user/settings.
+  Settings: 'navSettings',
 };
 
 const GROUP_TITLE_I18N_KEY: Record<string, string> = {
@@ -419,7 +460,13 @@ export function UserShell() {
   const meQuery = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   const identityEmail = meQuery.data?.email ?? user?.email;
   const identityRole = meQuery.data?.role ?? user?.role;
-  const clearAuth = useUserAuthStore((s) => s.clearAuth);
+  // Phase 4G (2026-06-01): the sidebar bottom button no longer calls
+  // `clearAuth` directly — it navigates to /user/settings where the
+  // proper /system/logout endpoint runs (clears vault row + team-key
+  // bindings, not just the React store). `useUserAuthStore` stays
+  // imported above because the SettingsPage may invalidate it via
+  // localStorage clears + hard navigate; UserShell itself no longer
+  // reads it here.
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const breadcrumb = useBreadcrumb();
@@ -485,6 +532,25 @@ export function UserShell() {
   // See roadmap update 20260510-personal-team-数据隔离与合并显示.md decision 4.
   const [otherMenu, setOtherMenu] = React.useState<CrossAppMenuEntry[]>(() => readOtherMenu());
   const [otherBaseUrl, setOtherBaseUrlState] = React.useState<string | null>(() => getOtherBaseUrl());
+
+  // Phase 4G (2026-06-01): single helper that opens the Settings page.
+  // Personal (A) has /user/settings as a real route, so React Router
+  // handles it. Team (B) has no such route — the canonical Settings
+  // page lives on the user's local-server (8090) because it edits
+  // vault state (Control URL write, /system/logout, etc., none of which
+  // make sense to expose on the team server origin). We cross-jump to
+  // A's URL when discoverable; if A's local-server isn't reachable
+  // (no otherBaseUrl), we fall back to internal navigation so the gear
+  // button doesn't dead-end — master/web's router will surface a 404
+  // which is a better failure than a silent no-op click.
+  const onOpenSettings = React.useCallback(() => {
+    if (!IS_PERSONAL_SIDE && otherBaseUrl) {
+      window.location.href = `${otherBaseUrl.replace(/\/$/, '')}/user/settings`;
+      return;
+    }
+    navigate('/user/settings');
+  }, [navigate, otherBaseUrl]);
+
   const visState = useVisibilityState();
 
   // Phase 3B R21 (2026-05-11): single-binary composed detection.
@@ -507,6 +573,21 @@ export function UserShell() {
   // is unaffected — different origins, isSingleBinaryComposed=false,
   // R7 filter and cross-app rendering work as before.
   const isSingleBinaryComposed = React.useMemo(() => {
+    // 2026-06-03: explicit `controlPlaneMode === 'trial'` signal short-
+    // circuits the origin-comparison heuristic below. trial Go server
+    // injects this via window.__AIKEY_CONFIG__ in the served index.html.
+    //
+    // Why explicit signal needed: the origin-comparison heuristic
+    // (otherBaseUrl.origin === window.location.origin) breaks when a
+    // stale `aikey-cross-app:personal-base-url` localStorage entry
+    // exists from a past `aikey login` to a team server. trial bundle
+    // then thinks "other side" is that stale team URL, even though
+    // trial actually serves master + user on one port — and renders
+    // Vault / Performance / Apps / Trust Check / Compliance Audit /
+    // Invites as cross-app trailers pointing at the stale URL, which
+    // breaks click-through on unauth state. See bugfix
+    // "20260603-trial-single-binary-detection-stale-cache.md".
+    if (runtimeConfig.controlPlaneMode === 'trial') return true;
     if (!otherBaseUrl) return false;
     try {
       return new URL(otherBaseUrl).origin === window.location.origin;
@@ -525,33 +606,72 @@ export function UserShell() {
   // and patches in fresh data when network resolves.
   React.useEffect(() => {
     let cancelled = false;
-    (async () => {
+
+    // refreshOtherBaseUrl writes localStorage + clears the stale team
+    // menu on mismatch internally; this hook just syncs React state so
+    // the sidebar re-renders. Reading the latest cached value via
+    // getOtherBaseUrl() avoids stale-closure reads of the otherBaseUrl
+    // state variable captured at mount — visibilitychange fires long
+    // after mount.
+    const runDiscovery = async () => {
       const discovered = await refreshOtherBaseUrl();
       if (cancelled) return;
-      const effectiveUrl = discovered ?? otherBaseUrl;
-      if (discovered && discovered !== otherBaseUrl) {
-        setOtherBaseUrlState(discovered);
+      if (discovered != null) {
+        setOtherBaseUrlState((prev) => (prev === discovered ? prev : discovered));
       }
+      const effectiveUrl = discovered ?? getOtherBaseUrl();
       if (!effectiveUrl) return;
       if (!isOtherMenuStale()) return;
       const freshMenu = await refreshOtherMenu(effectiveUrl);
       if (cancelled) return;
       if (freshMenu) setOtherMenu(freshMenu);
-    })();
+    };
+
+    runDiscovery();
+
+    // 2026-05-30: also re-run when the tab becomes visible. UserShell is
+    // a route LAYOUT — soft navigations within the SPA do NOT remount
+    // it, so without this listener the team-base-url cache from a prior
+    // `aikey login` survives across "run `aikey login --control-url
+    // <new>` then come back to the browser tab" flows until a full
+    // browser reload. visibilitychange covers: terminal refocus, laptop
+    // wake / OS-level resume, browser back/forward between top-level
+    // pages. See workflow/CI/bugfix/20260530-cross-app-menu-stale-
+    // localStorage-after-relogin.md.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void runDiscovery();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
     };
-    // Mount-only fetch — re-running on otherBaseUrl change would loop
-    // when refresh updates the state; the cancelled flag handles
-    // unmount. localStorage updates take effect on next route mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Map cross-app Group enum (KEYS/INSIGHTS/ACCOUNT) to existing
-   * sidebar group title casing ("Keys"/"Insights"/"Account"). */
+  /** Map cross-app Group enum (KEYS/INSIGHTS/ACCOUNT/QUALITY) to existing
+   * sidebar group title casing ("Keys"/"Insights"/"Account"/"Quality").
+   *
+   * 2026-05-30: aliases table covers display renames where the local
+   * group title diverged from the cross-app protocol enum. Phase 4
+   * (2026-05-21) renamed the "Insights" group to "Cost" on both
+   * user/web and master/web for product reasons, but the cross-app
+   * protocol kept group="INSIGHTS" for backwards compat with v1.0.0
+   * clients. Without this alias, all INSIGHTS-group personal entries
+   * (Usage / Performance / Apps) silently dropped from the master
+   * sidebar — see workflow/CI/bugfix/20260530-cross-app-menu-group-
+   * rename-misses-insights-entries.md. */
   function matchesGroup(crossAppGroup: CrossAppMenuGroup, navGroupTitle: string | undefined): boolean {
     if (!navGroupTitle) return false;
-    return navGroupTitle.toUpperCase() === crossAppGroup;
+    const TITLE_TO_GROUP_ALIASES: Record<string, CrossAppMenuGroup> = {
+      COST: 'INSIGHTS', // Phase 4 阶段 3 (2026-05-21) display rename
+    };
+    const normalized = navGroupTitle.toUpperCase();
+    const aliased = TITLE_TO_GROUP_ALIASES[normalized] ?? normalized;
+    return aliased === crossAppGroup;
   }
 
   // Nav layout — grouped navigation (2026-04-23). Overview stays at the
@@ -685,6 +805,12 @@ export function UserShell() {
         // personalOnly because the page calls trust-local on 8801,
         // which only lives on the user's machine.
         { path: '/user/trust-check', icon: <RadarIcon />, label: 'Trust Check', personalOnly: true },
+        // Phase 3 (2026-06-02): local compliance self-view. personalOnly
+        // because the page calls the local-server /api/user/compliance/events
+        // which reads control.db on the user's own machine (same constraint
+        // as the other personalOnly local pages). Master/Production users use
+        // the team audit page at /master/compliance/audit instead.
+        { path: '/user/compliance', icon: <FingerprintIcon />, label: 'Compliance Audit', personalOnly: true },
       ],
     },
     {
@@ -1070,11 +1196,23 @@ export function UserShell() {
           <span className="sidebar-toggle-label">{collapsed ? t('userShell.expand') : t('userShell.collapse')}</span>
         </button>
 
-        {/* Bottom: User info — rounded surface card, no top border. The
-            `.nav-user` / `.nav-user-who` / `.nav-user-signout` hooks
-            let the global collapse CSS hide the who / signout bits
-            while keeping the avatar visible. */}
-        <div className="nav-user flex-shrink-0">
+        {/* Bottom: User info — rounded surface card, no top border. Phase
+            4G (2026-06-01): the whole chip is now a button that navigates
+            to /user/settings. The previous sidebar-bottom logout button
+            was a front-end-only `clearAuth()` that left the vault row
+            intact (bug: reopening the SPA silently re-authenticated). It
+            has moved to the Settings page where it can call the real
+            /system/logout endpoint. The hook class names
+            (`.nav-user-who` etc.) stay so the existing collapse CSS
+            hides the email / role bits while keeping the avatar visible
+            in icon-only mode. */}
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="nav-user flex-shrink-0"
+          title={t('settings.title')}
+          aria-label={t('settings.title')}
+        >
           <div className="nav-user-avatar">
             {identityEmail ? initials(identityEmail) : 'U'}
           </div>
@@ -1090,17 +1228,8 @@ export function UserShell() {
               {(identityRole ?? t('userShell.roleMember')).toUpperCase()}
             </div>
           </div>
-          <button
-            onClick={clearAuth}
-            className="nav-user-signout"
-            title={t('userShell.signOut')}
-            aria-label={t('userShell.signOut')}
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-            </svg>
-          </button>
-        </div>
+          <SettingsIcon />
+        </button>
       </aside>
 
       {/* ── Main ── */}
@@ -1119,6 +1248,19 @@ export function UserShell() {
           </div>
           <div className="flex items-center gap-3">
             <LanguageSwitcher />
+            {/* Phase 4G (2026-06-01): top-bar Settings entry. Gear icon-
+                only button, ghost variant so it sits visually quieter
+                than the Invite CTA next to it. `onOpenSettings`
+                cross-jumps to A's local-server when running on B side. */}
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="btn btn-ghost text-[10px] px-2 py-1.5 flex items-center"
+              title={t('settings.title')}
+              aria-label={t('settings.title')}
+            >
+              <SettingsIcon />
+            </button>
             <button
               onClick={() => navigate('/user/invites')}
               className="btn btn-outline text-[10px] px-3 py-1.5 flex items-center gap-1.5"

@@ -3481,47 +3481,67 @@ function DetailDrawer(props: {
                     glance at the upstream URL first to confirm which provider
                     endpoint a key targets, then deal with the secret. */}
                 {(() => {
-                  // v4.3 (2026-05-01): show the EFFECTIVE upstream URL — what
-                  // the proxy will actually route to — computed via the same
-                  // host→provider_routes lookup as aikey-proxy's stitch step
-                  // (pkg/providerroutes.Stitch). This unblocks debugging
-                  // when several keys share the same provider_code (e.g.
-                  // 5 kimi entries) but route to different upstream hosts:
-                  // before the change, raw `base_url` reads identically
-                  // (kimi.com/coding/v1) for entries that actually go to
-                  // moonshot vs kimi-coding; the effective URL exposes
-                  // the real destination.
+                  // v4.4 (2026-06-03): show the EFFECTIVE upstream URL the
+                  // proxy will actually route to. Matches aikey-proxy's
+                  // pkg/providerroutes.Stitch byte-for-byte for the two
+                  // load-bearing cases — see bugfix
+                  // "20260603-drawer-base-url-source-of-truth-split.md".
                   //
-                  // Resolution order (matches proxy stitch):
-                  //   1. user-supplied base_url's host hits hostToRoute →
-                  //      base_url + version (table-canonical)
-                  //   2. provider_code hits providerToRoute → first row's
-                  //      base_url + version (yaml-first canonical)
-                  //   3. fall back to user-supplied base_url verbatim, or
-                  //      official_base_url, then "unknown provider"
+                  // History (2026-05-01 v4.3 → 2026-06-03 v4.4): the prior
+                  // version had a third fallback that looked up
+                  // providerToRoute.get(provider_code) and showed the
+                  // provider's official endpoint when the user-stored host
+                  // wasn't in the routes table. This silently lied — Stitch
+                  // does NOT do that swap. A user who pasted the wrong URL
+                  // (e.g. "https://platform.claude.com/settings/keys" into
+                  // an anthropic entry) saw "https://api.anthropic.com/v1"
+                  // here while the proxy actually forwarded to
+                  // platform.claude.com and 404'd. Removed the fallback so
+                  // the drawer surfaces the real destination.
+                  //
+                  // Resolution order (mirrors Stitch §resolveStitchComponents):
+                  //   1. user-supplied base_url host hits hostToRoute →
+                  //      table-canonical base_url + version (table replaces
+                  //      vault path; Stitch does the same — discards user
+                  //      path, uses table base_url path)
+                  //   2. host miss → keep vault's scheme/host/path verbatim,
+                  //      no version re-attach (Stitch "fail open with a
+                  //      best-effort path stitch", stitch.go §88-93)
+                  //   3. stored is null but official_base_url known → show
+                  //      official as last-resort (rare; entries created via
+                  //      provider templates with no user URL ever set)
+                  //   4. nothing usable → "unknown provider" placeholder
                   const stored = personal.base_url ?? null;
                   let effectiveUrl: string | null = null;
-                  let source: 'table-host' | 'table-provider' | 'stored' | 'official' | 'unknown' = 'unknown';
+                  let source: 'table-host' | 'stored' | 'official' | 'unknown' = 'unknown';
 
                   if (stored) {
                     try {
-                      const host = new URL(stored).hostname.toLowerCase();
+                      const u = new URL(stored);
+                      const host = u.hostname.toLowerCase();
                       const route = hostToRoute.get(host);
                       if (route) {
+                        // Host in table: use table-canonical base_url +
+                        // version. Stitch discards vault path entirely in
+                        // this branch (stitch.go §79-86).
                         effectiveUrl = route.version
                           ? `${route.base_url}${route.version}`
                           : route.base_url;
                         source = 'table-host';
+                      } else {
+                        // Host miss: keep vault scheme/host + trimmed path.
+                        // This mirrors Stitch §88-93 — proxy forwards to
+                        // this same host (does NOT swap to provider default).
+                        // Showing provider_code default here would be a lie:
+                        // legitimate BYOK proxies route on custom hosts and
+                        // expect to remain untouched.
+                        const cleanPath = u.pathname.replace(/\/$/, '');
+                        effectiveUrl = `${u.protocol}//${u.host}${cleanPath}`;
+                        source = 'stored';
                       }
-                    } catch { /* invalid URL — fall through */ }
-                  }
-                  if (!effectiveUrl && personal.provider_code) {
-                    const route = providerToRoute.get(personal.provider_code);
-                    if (route) {
-                      effectiveUrl = route.version
-                        ? `${route.base_url}${route.version}`
-                        : route.base_url;
-                      source = 'table-provider';
+                    } catch {
+                      // Malformed URL — fall through to raw-stored display
+                      // so the user sees their broken input verbatim.
                     }
                   }
                   if (!effectiveUrl && stored) {
@@ -3544,17 +3564,17 @@ function DetailDrawer(props: {
                     );
                   }
 
-                  // Hint = where the value came from. Keeps the user oriented
-                  // when 5 same-provider keys all show the same effective URL
-                  // (because the table maps them all the same way) — the hint
-                  // tells them whether the proxy is using their stored value
-                  // or filling in a default.
+                  // Hint = where the value came from. 2026-06-03: dropped
+                  // 'table-provider' (was the lie surface — see comment
+                  // block above). 'hintEffectiveProviderDefault' i18n key
+                  // kept in locale files (unused at this call site) until a
+                  // sweep removes it; safer than removing now and breaking
+                  // some other future reader.
                   const hintLabel: Record<typeof source, string> = {
-                    'table-host':     t('vault.hintEffectiveHostMatch'),
-                    'table-provider': t('vault.hintEffectiveProviderDefault'),
-                    'stored':         t('vault.hintStoredAsIs'),
-                    'official':       t('vault.hintProviderDefaultLegacy'),
-                    'unknown':        '',
+                    'table-host': t('vault.hintEffectiveHostMatch'),
+                    'stored':     t('vault.hintStoredAsIs'),
+                    'official':   t('vault.hintProviderDefaultLegacy'),
+                    'unknown':    '',
                   };
 
                   return (
@@ -6240,7 +6260,14 @@ function OAuthBrokerCard(props: {
           ? await oauthApi.poll({ session_id: session.id })
           : await oauthApi.status(session.id);
         if (cancelled) return;
-        if (next.status === 'completed' && next.account_id) {
+        // Broker contract: status='success' on completion (types.go:66
+        // `pending / success / failed / expired`). Earlier this check
+        // expected 'completed' which never matched — OAuth would
+        // succeed at the broker but the UI would loop on "正在检测身份…"
+        // until poll-attempt timeout. CLI poll path already expected
+        // 'success' (aikey-cli commands_auth/mod.rs:590), so the two
+        // clients had drifted on the same wire field.
+        if (next.status === 'success' && next.account_id) {
           setSession(next);
           setState('connected');
           return;

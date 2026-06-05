@@ -124,6 +124,8 @@ var zhMessages = map[string]string{
 	CodeBizAuthTokenRecycled:      "令牌已被回收",
 	CodeBizAuthTokenNotActive:     "令牌不处于激活状态",
 	CodeBizAuthAccessDenied:       "访问被拒绝",
+	CodeBizAuthWrongCurrentPwd:    "当前密码不正确",
+	CodeBizAuthWeakPassword:       "新密码不符合复杂度要求（至少 8 位且包含字母和数字）",
 
 	// BIZ — Organization
 	CodeBizOrgNotFound: "组织 {{id}} 不存在",
@@ -199,6 +201,16 @@ const (
 	CodeBizAuthTokenRecycled      = "BIZ_AUTH_TOKEN_RECYCLED"
 	CodeBizAuthTokenNotActive     = "BIZ_AUTH_TOKEN_NOT_ACTIVE"
 	CodeBizAuthAccessDenied       = "BIZ_AUTH_ACCESS_DENIED"
+	// CodeBizAuthWrongCurrentPwd is returned when /v1/accounts/me/password is
+	// called with a current_password that fails bcrypt verification. Distinct
+	// from BIZ_AUTH_INVALID_CREDENTIALS (login flow) because the caller is
+	// already authenticated — we want the UI to surface "current password is
+	// wrong" not "invalid email or password". Added 2026-06-02.
+	CodeBizAuthWrongCurrentPwd    = "BIZ_AUTH_WRONG_CURRENT_PWD"
+	// CodeBizAuthWeakPassword is returned when a new password does not meet
+	// the policy (≥8 chars, ≥1 letter, ≥1 digit). Same policy enforced
+	// client-side; server side is the authoritative gate. Added 2026-06-02.
+	CodeBizAuthWeakPassword       = "BIZ_AUTH_WEAK_PASSWORD"
 
 	// BIZ — Organization
 	CodeBizOrgNotFound = "BIZ_ORG_NOT_FOUND"
@@ -300,6 +312,13 @@ func BizAuthTokenNotActive() *DomainError {
 }
 func BizAuthAccessDenied() *DomainError {
 	return &DomainError{Code: CodeBizAuthAccessDenied, Message: "access denied"}
+}
+func BizAuthWrongCurrentPwd() *DomainError {
+	return &DomainError{Code: CodeBizAuthWrongCurrentPwd, Message: "current password is incorrect"}
+}
+func BizAuthWeakPassword() *DomainError {
+	return &DomainError{Code: CodeBizAuthWeakPassword,
+		Message: "new password is too weak (need at least 8 chars with a letter and a digit)"}
 }
 
 func BizOrgNotFound(id string) *DomainError {

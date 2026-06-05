@@ -20,7 +20,7 @@
  * §4 + §5 for the wire contract and data flow.
  */
 
-import type { TeamVaultRecord } from '../../types/team-vault';
+import type { TeamVaultRecord } from '@/shared/types/team-vault';
 
 const TEAM_URL_ENDPOINT = '/system/team-url';
 const TEAM_JWT_ENDPOINT = '/system/team-jwt';

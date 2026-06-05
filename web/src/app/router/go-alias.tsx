@@ -23,6 +23,13 @@
  */
 import { Navigate, useParams } from 'react-router-dom';
 
+// FALLBACK is shared between GoAliasRedirect (router-time) and
+// resolveStoreFromPathname (main.tsx ingest-time) so an unknown alias
+// gets the same destination either way. Exported so main.tsx + tests
+// don't drift from the router's behaviour. See 2026-06-02 bugfix
+// "ak-web-token-wrong-store" for the desync that motivated this split.
+export const FALLBACK = '/user/overview';
+
 export const GO_TARGETS: Record<string, string> = {
   // Canonical aliases — local-server-served pages on A.
   overview: '/user/overview',
@@ -62,11 +69,43 @@ export const GO_TARGETS: Record<string, string> = {
   'team-keys': '/user/overview',
 };
 
-const FALLBACK = '/user/overview';
-
 export function GoAliasRedirect() {
   const { target } = useParams<{ target: string }>();
   const key = (target ?? '').toLowerCase();
   const dest = GO_TARGETS[key] ?? FALLBACK;
   return <Navigate to={dest} replace />;
+}
+
+/**
+ * Decide which auth store (`'user'` vs `'master'`) should receive a JWT
+ * extracted from the URL fragment, based on the current pathname.
+ *
+ * Why this lives next to GO_TARGETS (2026-06-02 bugfix):
+ *   `aikey web` opens `/go/<alias>#auth_token=<jwt>`. main.tsx ingests
+ *   the fragment BEFORE GoAliasRedirect fires, so a naive
+ *   `pathname.startsWith('/user')` sees the intermediate `/go/*` path
+ *   and writes the token to the wrong store. The user is then kicked to
+ *   /user/session-expired despite the token being valid.
+ *
+ *   Fix: resolve `/go/<alias>` through the same GO_TARGETS table the
+ *   router uses, so the store choice tracks the FINAL destination. The
+ *   FALLBACK constant is shared with GoAliasRedirect so unknown aliases
+ *   land in the same place at ingest-time as at router-time —
+ *   eliminates the second desync class.
+ *
+ *   Forward-compatible: if a future alias points at `/master/*`, this
+ *   correctly writes to the master store with no extra changes.
+ *
+ *   The fragment-ingest contract that go-alias.tsx assumes (see comments
+ *   on the GoAliasRedirect block above) is now bound to GO_TARGETS in
+ *   code rather than scattered across files. Tests pin every row of the
+ *   decision table — see go-alias.test.ts.
+ */
+export function resolveStoreFromPathname(pathname: string): 'user' | 'master' {
+  let targetPath = pathname;
+  if (pathname.startsWith('/go/')) {
+    const alias = pathname.slice(4).toLowerCase();
+    targetPath = GO_TARGETS[alias] ?? FALLBACK;
+  }
+  return targetPath.startsWith('/user') ? 'user' : 'master';
 }

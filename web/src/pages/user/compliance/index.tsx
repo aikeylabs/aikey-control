@@ -23,7 +23,7 @@ import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterBar } from '@/shared/ui/FilterBar';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 15;
 
 function severityVariant(s: string): 'red' | 'yellow' | 'green' | 'gray' {
   switch (s) {
@@ -50,16 +50,6 @@ function topSeverity(e: ComplianceEventDTO): string {
     if (top === '' || (SEV_RANK[f.severity] ?? -1) > (SEV_RANK[top] ?? -1)) top = f.severity;
   }
   return top;
-}
-
-// Left color-strip per row — reuses the existing severity tokens (no new colors).
-function severityStripColor(s: string): string {
-  switch (s) {
-    case 'critical': return 'var(--destructive)';      // #ef4444
-    case 'high': return 'var(--warning)';              // #f97316
-    case 'medium': return 'var(--muted-foreground)';   // #a1a1aa
-    default: return 'var(--border)';
-  }
 }
 
 // Highlight planner mask tokens in the audit snippet so the redacted spans
@@ -137,7 +127,9 @@ export default function ComplianceSelfViewPage() {
         limit: 1,
         offset: 0,
       }),
-      enabled: cardsOpen,
+      // Always fetched (cheap limit:1 count) so the collapsed summary bar can
+      // show the action breakdown inline without the user expanding the card.
+      enabled: true,
     });
   const sumAll = countQ(undefined, 'all');
   const sumMask = countQ('mask', 'mask');
@@ -171,33 +163,49 @@ export default function ComplianceSelfViewPage() {
         description={t('compliancePage.pageDescription')}
         actions={
           <button
-            className="px-3 py-1 rounded border text-xs font-mono"
-            style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs font-mono transition-colors"
+            style={{ borderColor: 'rgba(250,204,21,0.35)', color: 'var(--primary)', backgroundColor: 'rgba(250,204,21,0.06)' }}
             onClick={() => setPacksOpen(true)}
           >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
             {t('effectivePacks.viewButton')}
           </button>
         }
       />
 
       {/* Collapsible summary — at-a-glance action breakdown (default collapsed). */}
-      <div className="rounded border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--card)' }}>
+      <div className="rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--card)' }}>
         <button
-          className="w-full px-4 py-2 flex items-center justify-between text-xs font-mono"
+          className="w-full px-4 py-2 flex items-center justify-between gap-3 text-xs font-mono"
           style={{ color: 'var(--muted-foreground)' }}
           onClick={() => setCardsOpen((o) => !o)}
         >
-          <span className="tracking-wider">
-            {t('compliancePage.summaryTitle')} · {t('compliancePage.recordCount', { count: total })}
+          <span className="flex items-center gap-3 tracking-wider min-w-0">
+            <span className="shrink-0">
+              {t('compliancePage.summaryTitle')} · {t('compliancePage.recordCount', { count: total })}
+            </span>
+            {/* collapsed: inline text breakdown of the stat cards (遮蔽 / 放行 / 拦截) */}
+            {!cardsOpen && (
+              <span className="flex items-center gap-2.5 truncate">
+                <span style={{ color: 'var(--border)' }}>|</span>
+                {summaryCards.slice(1).map((c) => (
+                  <span key={c.label} className="shrink-0">
+                    {c.label} <b style={{ color: c.color }}>{c.q.isLoading ? '…' : (c.q.data?.total ?? 0)}</b>
+                  </span>
+                ))}
+              </span>
+            )}
           </span>
           <span aria-hidden style={{ color: 'var(--muted-foreground)' }}>{cardsOpen ? '▾' : '▸'}</span>
         </button>
         {cardsOpen && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 pb-4">
             {summaryCards.map((c) => (
-              <div key={c.label} className="rounded border px-3 py-2" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                <div className="text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{c.label}</div>
-                <div className="text-lg font-mono font-bold mt-0.5" style={{ color: c.color }}>
+              <div key={c.label} className="rounded-md border px-3 py-2.5" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.025)', borderLeft: `2px solid ${c.color}` }}>
+                <div className="text-[10px] font-mono tracking-wider uppercase" style={{ color: 'var(--muted-foreground)' }}>{c.label}</div>
+                <div className="text-xl font-mono font-bold mt-1" style={{ color: c.color }}>
                   {c.q.isLoading ? '…' : (c.q.data?.total ?? 0)}
                 </div>
               </div>
@@ -215,20 +223,23 @@ export default function ComplianceSelfViewPage() {
         onStatusChange={(v) => updateFilter('severity', v)}
         statusPlaceholder={t('compliancePage.allSeverities')}
         actions={
-          <SearchableSelect
-            options={actionOptions}
-            value={action}
-            onChange={(v) => updateFilter('action', v)}
-            placeholder={t('compliancePage.allActions')}
-            style={{ minWidth: 140 }}
-          />
+          <>
+            <span aria-hidden style={{ width: 1, height: 22, background: 'var(--border)' }} />
+            <SearchableSelect
+              options={actionOptions}
+              value={action}
+              onChange={(v) => updateFilter('action', v)}
+              placeholder={t('compliancePage.allActions')}
+              style={{ minWidth: 140 }}
+            />
+          </>
         }
       />
 
-      <div className="rounded border overflow-hidden" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}>
-        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+      <div className="rounded-md border overflow-hidden" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}>
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.sectionTitle')}</h2>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded border" style={{ color: 'var(--muted-foreground)', borderColor: 'var(--border)' }}>
+          <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full border" style={{ color: 'var(--primary)', borderColor: 'rgba(250,204,21,0.35)', backgroundColor: 'rgba(250,204,21,0.06)' }}>
             {t('compliancePage.recordCount', { count: total })}
           </span>
         </div>
@@ -243,7 +254,7 @@ export default function ComplianceSelfViewPage() {
                   'compliancePage.columnFindings',
                   'compliancePage.columnModel',
                 ].map((k) => (
-                  <th key={k} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--background)', position: 'sticky', top: 0, zIndex: 1 }}>
+                  <th key={k} className="px-5 py-3 text-[10px] font-mono font-semibold tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.5)', position: 'sticky', top: 0, zIndex: 1 }}>
                     {t(k)}
                   </th>
                 ))}
@@ -258,8 +269,8 @@ export default function ComplianceSelfViewPage() {
                 <tr><td colSpan={4} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.noEvents')}</td></tr>
               ) : (
                 events.map((e) => (
-                  <tr key={e.event_id} className="cursor-pointer hover:bg-white/5" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => setSelected(e)}>
-                    <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)', boxShadow: `inset 3px 0 0 ${severityStripColor(topSeverity(e))}` }}>{new Date(e.created_at).toLocaleString()}</td>
+                  <tr key={e.event_id} className="cursor-pointer hover:bg-[rgba(250,204,21,0.035)] hover:shadow-[inset_2px_0_0_0_rgba(250,204,21,0.6)]" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => setSelected(e)}>
+                    <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{new Date(e.created_at).toLocaleString()}</td>
                     <td className="px-5 py-3"><Badge variant={actionVariant(e.action_taken)}>{e.action_taken.toUpperCase()}</Badge></td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -281,7 +292,7 @@ export default function ComplianceSelfViewPage() {
         {/* Pagination */}
         <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
           <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-            {t('compliancePage.pageRange', { from: total === 0 ? 0 : offset + 1, to: Math.min(offset + PAGE_SIZE, total), total })}
+            {t('compliancePage.pageOf', { page: Math.floor(offset / PAGE_SIZE) + 1, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)) })}
           </span>
           <div className="flex gap-2">
             <button
@@ -317,13 +328,18 @@ export default function ComplianceSelfViewPage() {
               <DrawerField label={t('compliancePage.fieldDetectLatency')} value={`${selected.detect_latency_ms} ms`} />
             )}
             <DrawerField label={t('compliancePage.columnFindings')} value={
-              <div className="space-y-2">
-                {selected.findings.map((f) => (
-                  <div key={f.finding_id} className="rounded border p-2" style={{ borderColor: 'var(--border)' }}>
-                    <div className="flex items-center gap-2 mb-1">
+              <div className="space-y-3 pt-1.5 pl-1.5">
+                {selected.findings.map((f, idx) => (
+                  <div key={f.finding_id} className="rounded-md border p-2.5" style={{ position: 'relative', borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                    {/* sequence badge — overhangs the card's top-left corner (出框) */}
+                    <span
+                      className="inline-flex items-center justify-center text-[10px] font-mono font-bold rounded-full shrink-0"
+                      style={{ position: 'absolute', top: -9, left: -9, width: 20, height: 20, color: 'var(--primary)', border: '1px solid rgba(250,204,21,0.45)', backgroundColor: 'var(--card)', zIndex: 1 }}
+                    >{idx + 1}</span>
+                    <div className="flex items-center gap-2 mb-1.5">
                       <Badge variant={severityVariant(f.severity)}>{f.severity.toUpperCase()}</Badge>
                       <span className="text-xs font-mono font-bold" style={{ color: 'var(--foreground)' }}>{f.entity_type}</span>
-                      <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{f.category} · {f.confidence}</span>
+                      <span className="text-[10px] font-mono ml-auto whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>{f.category} · {f.confidence}</span>
                     </div>
                     {f.detector && <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.fieldDetector')}: {f.detector}</p>}
                     {/* Local self-view shows the un-redacted matched text + context
