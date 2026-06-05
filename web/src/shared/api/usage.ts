@@ -12,6 +12,9 @@ export interface TimelinePoint {
   date: string;       // YYYY-MM-DD
   total_tokens: number;
   request_count: number;
+  /** USD billable summed for the day (anthropic/openai priced rows; non-USD or
+   * unpriced excluded). Optional: pre-rc.8 servers omit it. */
+  cost_usd?: number;
 }
 
 export interface HourlyPoint {
@@ -21,6 +24,8 @@ export interface HourlyPoint {
   hour: number;
   total_tokens: number;
   request_count: number;
+  /** USD billable summed for the hour. Optional: pre-rc.8 servers omit it. */
+  cost_usd?: number;
 }
 
 export interface ProtocolTimelinePoint {

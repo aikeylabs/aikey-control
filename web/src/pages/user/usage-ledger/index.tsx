@@ -259,6 +259,7 @@ export default function UserUsageLedgerPage() {
           date: String(h.hour).padStart(2, '0') + ':00',
           total_tokens: h.total_tokens,
           request_count: h.request_count,
+          cost_usd: h.cost_usd ?? 0,
         }));
       }
       return usageApi.personalTimeline(identity!, startDate, endDate);
@@ -346,7 +347,7 @@ export default function UserUsageLedgerPage() {
       for (let i = 0; i < minDays; i++) {
         const d = daysAgo(i);
         if (!existing.has(d)) {
-          result.push({ date: d, total_tokens: 0, request_count: 0 });
+          result.push({ date: d, total_tokens: 0, request_count: 0, cost_usd: 0 });
         }
       }
     }
@@ -562,6 +563,10 @@ export default function UserUsageLedgerPage() {
                   />
                   {t('usageLedger.legendRequests')}
                 </span>
+                <span className="item">
+                  <span className="dot" style={{ background: '#2dd4bf' }} />
+                  {t('usageLedger.legendCost')}
+                </span>
               </div>
             </div>
             {/* Dual-axis composed chart (2026-04-23 swap): tokens as Bar on
@@ -604,14 +609,22 @@ export default function UserUsageLedgerPage() {
                       width={44}
                       tickCount={8}
                     />
+                    {/* Requests rides a HIDDEN axis (line still renders): the
+                        visible right axis is reserved for Cost ($) per the design.
+                        Request magnitude reads off the tooltip. */}
+                    <YAxis yAxisId="requests" orientation="right" allowDecimals={false} hide />
+                    {/* Cost ($) on the visible right axis — teal ticks tie it to
+                        the cost line. $ scale differs from tokens by orders of
+                        magnitude, hence its own axis. */}
                     <YAxis
-                      yAxisId="requests"
+                      yAxisId="cost"
                       orientation="right"
-                      allowDecimals={false}
-                      tick={{ fontSize: 9, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
+                      domain={[0, 'auto']}
+                      tickFormatter={(v: number) => '$' + Math.round(Number(v)).toLocaleString('en-US')}
+                      tick={{ fontSize: 9, fontFamily: 'monospace', fill: '#2dd4bf' }}
                       tickLine={false}
                       axisLine={false}
-                      width={36}
+                      width={46}
                       tickCount={8}
                     />
                     <Tooltip
@@ -623,11 +636,11 @@ export default function UserUsageLedgerPage() {
                         fontSize: 11,
                         borderRadius: 4,
                       }}
-                      formatter={(v, name) =>
-                        name === 'Requests'
-                          ? [Number(v).toLocaleString(), t('usageLedger.legendRequests')]
-                          : [formatTokens(Number(v)), t('usageLedger.legendTokens')]
-                      }
+                      formatter={(v, name) => {
+                        if (name === 'Requests') return [Number(v).toLocaleString('en-US'), t('usageLedger.legendRequests')];
+                        if (name === 'Cost') return ['$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }), t('usageLedger.legendCost')];
+                        return [formatTokens(Number(v)), t('usageLedger.legendTokens')];
+                      }}
                     />
                     <Bar
                       yAxisId="tokens"
@@ -645,6 +658,18 @@ export default function UserUsageLedgerPage() {
                       stroke="#71717a"
                       strokeWidth={1.4}
                       strokeDasharray="4 2"
+                      dot={false}
+                    />
+                    {/* Cost ($) curve — teal, solid + slightly thicker so it reads
+                        as the highlight metric vs the subtle gray request line;
+                        teal is a cool complement to the warm gold token bars. */}
+                    <Line
+                      yAxisId="cost"
+                      type="monotone"
+                      dataKey="cost_usd"
+                      name="Cost"
+                      stroke="#2dd4bf"
+                      strokeWidth={1.8}
                       dot={false}
                     />
                   </ComposedChart>

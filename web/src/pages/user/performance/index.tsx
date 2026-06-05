@@ -14,7 +14,7 @@
  */
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { usageApi, type TimelinePoint, type SessionTotal } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
@@ -124,6 +124,10 @@ export default function UserPerformancePage() {
     queryFn: () => usageApi.personalByKeyTotal(usageIdentity!, activeDate, activeDate, pinnedSession ?? undefined),
     enabled: !!usageIdentity,
     refetchInterval: 60_000,
+    // Keep showing the previous result while a filter change (date / session
+    // pin) refetches — avoids the loading-placeholder collapse that made the
+    // page jump on every filter click.
+    placeholderData: keepPreviousData,
   });
 
   const byModelRecent = useQuery({
@@ -131,6 +135,7 @@ export default function UserPerformancePage() {
     queryFn: () => usageApi.personalByModelTotal(usageIdentity!, activeDate, activeDate, undefined, pinnedSession ?? undefined),
     enabled: !!usageIdentity,
     refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
   });
 
   // Top N sessions for the active day. Deliberately NOT filtered by
@@ -142,6 +147,7 @@ export default function UserPerformancePage() {
     queryFn: () => usageApi.personalBySessionTotal(usageIdentity!, activeDate, activeDate, 10),
     enabled: !!usageIdentity,
     refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
   });
 
   // 4-segment bar (uncached / creation / cached / output) per account, share-of-day.
@@ -497,7 +503,7 @@ export default function UserPerformancePage() {
                     </div>
                   </button>
                   <div className="key-bar">
-                    <span className="key-bar-fill" style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: '#facc15' }} />
+                    <span className="key-bar-fill" style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: '#a16207' }} />
                   </div>
                   <span className="font-mono text-[11.5px] text-right whitespace-nowrap">
                     <span style={{ color: 'var(--foreground)' }}>{fmtTok(s.total_tokens)}</span>
