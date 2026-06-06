@@ -19,6 +19,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -221,7 +222,28 @@ function deriveAppSubtitle(
 
 export default function UserUsageLedgerPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [range, setRange] = useState<RangeKey>(30);
+
+  // Clickable X-axis date tick → drill to /user/usage-detail?date=. Only the
+  // daily view (YYYY-MM-DD) is clickable; the 1D hourly view ("HH:00") isn't a
+  // date so it stays plain. Renders the same style as the default tick config.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- recharts' custom-tick render props are not exported as a usable type
+  const renderDateTick = (props: any) => {
+    const { x = 0, y = 0, payload } = props;
+    const v = String(payload?.value ?? '');
+    const isDay = /^\d{4}-\d{2}-\d{2}$/.test(v);
+    return (
+      <text
+        x={x} y={y + 10} textAnchor="middle" fontSize={9} fontFamily="monospace"
+        fill="var(--muted-foreground)"
+        style={isDay ? { cursor: 'pointer' } : undefined}
+        onClick={isDay ? () => navigate(`/user/usage-detail?date=${v}`) : undefined}
+      >
+        {formatDateShort(v)}
+      </text>
+    );
+  };
   // For 1D, both ends collapse to today — aggregate endpoints work
   // unchanged with the narrowed window. The hourly endpoints below
   // ignore start/end anyway and use today's date implicitly via
@@ -308,15 +330,42 @@ export default function UserUsageLedgerPage() {
   //   4. `personal:` prefix         — strip it
   //   5. `session_<hex>`            — bare session → `OAuth · <hex8>…`
   //   6. raw id / empty             — fallback
-  const keyData = (byKey.data ?? []).map((k) => ({
-    ...k,
-    label: deriveKeyLabel(k, t),
-    // App attribution subtitle (2026-05-26). Empty string suppresses the
-    // subtitle row; non-empty renders the small grey caption under the
-    // primary label. Keeps OAuth multi-session rows distinguishable when
-    // the same email shows up under different clients.
-    appSubtitle: deriveAppSubtitle(k.app_slug, k.identity, t),
-  }));
+  // 2026-06-05 — group the raw per-(app/session) rows by the underlying
+  // CREDENTIAL/ACCOUNT so the by-key list reconciles to the page total. Many
+  // rows are the SAME OAuth account running different apps (app:claude-mem,
+  // app:chat-history-rag, oauth:session claude-code, probe:…) — all carry the
+  // same `identity` email. We roll those up under the account; personal /
+  // managed VK rows (no identity) group by their alias. Label = account email
+  // (OAuth) or key alias — never an app/tool name (apps live in "Usage by App").
+  // Without this, one account's usage was split across many rows and the list
+  // summed to far less than the page total.
+  const keyData = useMemo(() => {
+    type Group = {
+      label: string; identity: string; virtual_key_id: string; rawVkId: string; app_slug: string; appSubtitle: string;
+      total_tokens: number; cost_usd: number;
+      request_count: number; priced_request_count: number; unpriced_request_count: number;
+    };
+    const groups = new Map<string, Group>();
+    for (const k of byKey.data ?? []) {
+      const identity = (k.identity ?? '').trim();
+      const label = identity || deriveKeyLabel(k, t);
+      // rawVkId = the group's first real virtual_key_id, used for the drill-down
+      // to /user/usage-detail?key=. Exact for real keys (one vk → one label);
+      // for an OAuth identity (one identity spanning N vks) it's the first vk
+      // (partial) — acceptable until the detail page grows an identity filter.
+      const g: Group = groups.get(label) ?? {
+        label, identity, virtual_key_id: label, rawVkId: k.virtual_key_id, app_slug: '', appSubtitle: identity ? 'OAuth' : '',
+        total_tokens: 0, cost_usd: 0, request_count: 0, priced_request_count: 0, unpriced_request_count: 0,
+      };
+      g.total_tokens += k.total_tokens ?? 0;
+      g.cost_usd += k.cost_usd ?? 0;
+      g.request_count += k.request_count ?? 0;
+      g.priced_request_count += k.priced_request_count ?? 0;
+      g.unpriced_request_count += k.unpriced_request_count ?? 0;
+      groups.set(label, g);
+    }
+    return [...groups.values()];
+  }, [byKey.data, t]);
 
   const totalTokens = timeline.data?.reduce((s, p) => s + p.total_tokens, 0) ?? 0;
   const totalRequests = timeline.data?.reduce((s, p) => s + p.request_count, 0) ?? 0;
@@ -425,6 +474,7 @@ export default function UserUsageLedgerPage() {
       return {
         key: `${r.app_slug}|${r.provider_code}`,
         label,
+        app_slug: r.app_slug,
         kind: isRegistered ? (isFirstParty ? ('first-party' as const) : ('third-party' as const)) : ('direct' as const),
         provider_code: r.provider_code,
         total_tokens: r.total_tokens,
@@ -521,9 +571,13 @@ export default function UserUsageLedgerPage() {
             <div className="kpi-value">{formatCost(totalCost)}</div>
             <div className="kpi-hint">
               {totalUnpriced > 0 ? (
-                <span title={t('usageLedger.unpricedTooltip')}>
+                <Link
+                  to="/user/usage-detail?filter=unpriced"
+                  title={t('usageLedger.unpricedTooltip')}
+                  style={{ color: 'var(--destructive)', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                >
                   ⚠ {t('usageLedger.kpiCostUnpriced', { count: totalUnpriced })}
-                </span>
+                </Link>
               ) : (
                 <>
                   {t('usageLedger.kpiHintCostPerReq')}{' '}
@@ -589,10 +643,9 @@ export default function UserUsageLedgerPage() {
                     <CartesianGrid strokeDasharray="2 3" stroke="var(--border)" vertical={false} />
                     <XAxis
                       dataKey="date"
-                      tick={{ fontSize: 9, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
+                      tick={renderDateTick}
                       tickLine={false}
                       axisLine={{ stroke: 'var(--border)' }}
-                      tickFormatter={(d: string) => formatDateShort(d)}
                       interval={Math.max(Math.floor(padTimelineData.length / 6) - 1, 0)}
                     />
                     {/* Usage is the dedicated analytics page — denser gridlines
@@ -711,9 +764,20 @@ export default function UserUsageLedgerPage() {
                             className="inline-block w-2 h-2 rounded-sm flex-shrink-0"
                             style={{ background: color }}
                           />
-                          <span className="text-[12.5px] font-medium truncate" style={{ color: 'var(--foreground)' }}>
-                            {p.protocol_type}
-                          </span>
+                          {idle ? (
+                            <span className="text-[12.5px] font-medium truncate" style={{ color: 'var(--foreground)' }}>
+                              {p.protocol_type}
+                            </span>
+                          ) : (
+                            <Link
+                              to={`/user/usage-detail?protocol=${encodeURIComponent(p.protocol_type)}`}
+                              className="text-[12.5px] font-medium truncate ledger-drill"
+                              title={t('usageLedger.drillToDetail')}
+                              style={{ color: 'var(--foreground)' }}
+                            >
+                              {p.protocol_type}
+                            </Link>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 font-mono text-[12px]">
                           <span style={{ color: idle ? 'var(--muted-foreground)' : 'var(--foreground)' }}>
@@ -792,10 +856,9 @@ export default function UserUsageLedgerPage() {
                   <CartesianGrid strokeDasharray="2 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 9, fontFamily: 'monospace', fill: 'var(--muted-foreground)' }}
+                    tick={renderDateTick}
                     tickLine={false}
                     axisLine={{ stroke: 'var(--border)' }}
-                    tickFormatter={(d: string) => formatDateShort(d)}
                     interval={Math.max(Math.floor(stackedData.length / 6) - 1, 0)}
                   />
                   <YAxis
@@ -853,13 +916,16 @@ export default function UserUsageLedgerPage() {
                 // sessions collapse per (email, app).
                 <li key={`${k.identity || k.virtual_key_id}|${k.app_slug ?? ''}`} className="key-row">
                   <div className="flex flex-col min-w-0">
-                    <span
-                      className="font-mono text-[11.5px] truncate"
-                      title={k.label}
+                    <Link
+                      to={k.identity
+                        ? `/user/usage-detail?identity=${encodeURIComponent(k.identity)}`
+                        : `/user/usage-detail?key=${encodeURIComponent(k.rawVkId)}`}
+                      className="font-mono text-[11.5px] truncate ledger-drill"
+                      title={t('usageLedger.drillToDetail')}
                       style={{ color: 'var(--foreground)' }}
                     >
                       {k.label}
-                    </span>
+                    </Link>
                     {k.appSubtitle ? (
                       <span
                         className="font-mono text-[10px] truncate"
@@ -932,7 +998,11 @@ export default function UserUsageLedgerPage() {
                     }
                     style={{ color: 'var(--foreground)' }}
                   >
-                    <span className="truncate">{a.label}</span>
+                    {a.app_slug ? (
+                      <Link to={`/user/usage-detail?app=${encodeURIComponent(a.app_slug)}`} className="truncate ledger-drill" title={t('usageLedger.drillToDetail')} style={{ color: 'var(--foreground)' }}>{a.label}</Link>
+                    ) : (
+                      <span className="truncate">{a.label}</span>
+                    )}
                     {a.kind === 'first-party' ? (
                       <span
                         className="text-[9px] font-mono uppercase tracking-wider px-1 py-0 rounded"
@@ -1022,6 +1092,11 @@ function Placeholder({ children }: { children: React.ReactNode }) {
 /* ── Scoped CSS ─────────────────────────────────────────────────────── */
 
 const USAGE_CSS = `
+/* Drill-to-detail row labels (by-key / by-app) — underline on hover so users
+   know the label links to /user/usage-detail filtered to that key / app. */
+.usage-page .ledger-drill { cursor: pointer; }
+.usage-page .ledger-drill:hover { text-decoration: underline; text-underline-offset: 2px; }
+
 .usage-page .seg {
   display: inline-flex;
   padding: 2px;

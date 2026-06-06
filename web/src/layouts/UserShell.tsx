@@ -340,6 +340,7 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   'virtual-keys': { label: 'Team Keys',  originName: 'Virtual Keys' },
   vault:          { label: 'Vault',      originName: 'My Vault' },
   'usage-ledger': { label: 'Usage',      originName: 'Usage Ledger' },
+  'usage-detail': { label: 'Usage Detail' },
   'trust-check':  { label: 'Trust Check' },
   compliance:     { label: 'Compliance Audit' },
   // Phase 4G (2026-06-01): Web Console Settings page breadcrumb label.
@@ -370,6 +371,7 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
   Import: 'navImport',
   'Team Keys': 'navTeamKeys',
   Usage: 'navUsage',
+  'Usage Detail': 'navUsageDetail',
   'Team Usage': 'navTeamUsage',
   Performance: 'navPerformance',
   Apps: 'navApps',
@@ -929,28 +931,43 @@ export function UserShell() {
             }}
           >
             <div
-              className="nav-brand-mark w-8 h-8 rounded-[10px] flex items-center justify-center flex-shrink-0"
+              className="nav-brand-mark w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0"
               style={{
-                // Dark-amber treatment (2026-05-23 v3): solid #facc15 box
-                // read as "too loud" in the dark sidebar. Switched to the
-                // same dim-amber pattern used elsewhere — cli-guide brand
-                // ⌘ glyph, vault IdentityStrip icon box: subtle amber-
-                // tinted bg + amber 22% border + bright amber content +
-                // soft amber halo. Keeps the brand mark in the amber
-                // family without overpowering surrounding nav items.
+                // Favicon-aligned treatment (2026-06-06): the previous
+                // dim-amber chip (faint amber fill + 22% border + pure
+                // amber text) read soft against the dark sidebar. The
+                // browser-tab favicon (public/favicon.svg) is the
+                // brand's most-seen letterform — a solid dark square +
+                // amber-700 stroke + warm cream "AK". Aligning the
+                // sidebar chip with that treatment gives the brand a
+                // single recognisable letterform across favicon /
+                // sidebar / printed material, and the inset darker
+                // fill + crisp stroke read as a small engraved chip
+                // rather than a tinted patch — more premium texture.
                 //
-                // Size bumped 28→32 (2026-05-23 v4) per user feedback
-                // "稍微大一点点". Radius scaled 9→10, font 12→13 to
-                // keep proportions; halo nudged 10→12 to match the
-                // slightly larger box.
-                background: 'rgba(250, 204, 21, 0.085)',
-                color: 'var(--primary)',
-                border: '1px solid rgba(250, 204, 21, 0.22)',
+                // Geometry: rx 10→8 to match the favicon's 16/64≈25%
+                // rounding ratio at the 32px scale.
+                // Fill: solid #0c0c0e sits ~1 step darker than the
+                // sidebar zinc-900, giving the chip a subtle inset
+                // depth without any explicit drop shadow.
+                // Stroke: solid #ca8a04 amber-700 — the favicon's
+                // stroke color.
+                // Text: #fef3c7 amber-100 cream — the favicon's text
+                // color. Warmer than #facc15 amber-400, reads as
+                // polished rather than electric.
+                // Halo: amber outer glow 10% (2026-06-06 v2 — was
+                // 18%, user feedback "外发光弱一些"). Subtle enough to
+                // read as a faint warmth at the chip's edge rather
+                // than a glow; the inset top 1px white@4% still
+                // provides a specular chip-face highlight.
+                background: '#0c0c0e',
+                color: '#fef3c7',
+                border: '1px solid #ca8a04',
                 fontFamily: 'var(--font-display)',
                 fontWeight: 700,
                 fontSize: 13,
                 letterSpacing: '-0.02em',
-                boxShadow: '0 0 12px rgba(250, 204, 21, 0.08)',
+                boxShadow: '0 0 10px rgba(250, 204, 21, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
               }}
               aria-hidden="true"
             >

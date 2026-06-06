@@ -13,6 +13,7 @@
  * legend) so the two Insights pages read as a coherent set.
  */
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { userAccountsApi } from '@/shared/api/user/accounts';
@@ -71,6 +72,11 @@ function deriveKeyLabel(
 
 export default function UserPerformancePage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  // Drill-down to the per-request Usage Detail page (no nav entry; reached via
+  // these links). Carries the row's dimension as a filter param.
+  const drillTo = (params: Record<string, string>) =>
+    navigate(`/user/usage-detail?${new URLSearchParams(params).toString()}`);
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
 
   // Same usage-identity logic as Overview (see overview/index.tsx for rationale).
@@ -162,7 +168,34 @@ export default function UserPerformancePage() {
   const todayKeyRows = useMemo(() => {
     const data = (byKeyRecent.data ?? []).map((k) => ({ ...k, label: deriveKeyLabel(k, t('performance.unlabeled')) }));
     const nonZero = data.filter((k) => k.total_tokens > 0);
-    const sorted = [...nonZero].sort((a, b) => b.total_tokens - a.total_tokens);
+    // Aggregate per label (2026-06-05): the backend GROUPs BY (identity,
+    // app_slug) so an OAuth identity used across N apps comes back as N
+    // rows sharing the same `identity` + same vk_id `oauth:session_<hex>`.
+    // Performance's by-virtual-key chart wants ONE row per VK / identity
+    // (the chart title is "by virtual key", not "by app"), so we sum the
+    // per-app rows here client-side — same pattern usage-ledger uses on
+    // its by-key chart. Without this collapse the chart shows what looks
+    // like duplicate "jakegogogo@gmail.com" rows. Per-app breakdown lives
+    // on the "Usage by App" chart in usage-ledger; users who need the
+    // drill-down go there, not this chart.
+    const groups = new Map<string, typeof nonZero[number]>();
+    for (const k of nonZero) {
+      const existing = groups.get(k.label);
+      if (existing) {
+        existing.input_tokens = (existing.input_tokens ?? 0) + (k.input_tokens ?? 0);
+        existing.cached_input_tokens = (existing.cached_input_tokens ?? 0) + (k.cached_input_tokens ?? 0);
+        existing.cache_creation_input_tokens = (existing.cache_creation_input_tokens ?? 0) + (k.cache_creation_input_tokens ?? 0);
+        existing.output_tokens = (existing.output_tokens ?? 0) + (k.output_tokens ?? 0);
+        existing.total_tokens = (existing.total_tokens ?? 0) + (k.total_tokens ?? 0);
+        existing.request_count = (existing.request_count ?? 0) + (k.request_count ?? 0);
+      } else {
+        // Shallow copy so subsequent merges don't mutate the underlying
+        // useQuery cache entry (would propagate to other components).
+        groups.set(k.label, { ...k });
+      }
+    }
+    const merged = Array.from(groups.values());
+    const sorted = [...merged].sort((a, b) => b.total_tokens - a.total_tokens);
     const top = sorted[0]?.total_tokens ?? 1;
     const grand = sorted.reduce((s, k) => s + k.total_tokens, 0) || 1;
     const grandReqs = sorted.reduce((s, k) => s + k.request_count, 0);
@@ -561,11 +594,20 @@ export default function UserPerformancePage() {
           ) : (
             <ul className="mt-4 space-y-2.5">
               {todayKeyRows.rows.map((k) => (
-                <li key={k.virtual_key_id} className="key-row">
+                // React key = the (post-aggregation) row label. After
+                // the per-label merge in todayKeyRows above, each row's
+                // label is unique within the chart, so this is a stable
+                // identity across renders. vk_id alone is NOT unique
+                // (OAuth identity used across N apps shares the same
+                // `oauth:session_<hex>` vk_id) — using it as key caused
+                // the 2026-06-05 "缓存利用率图重复行" bug where switching
+                // dates left stale DOM siblings around.
+                <li key={k.label} className="key-row">
                   <span
-                    className="font-mono text-[11.5px] truncate"
-                    title={k.label}
-                    style={{ color: 'var(--foreground)' }}
+                    className="font-mono text-[11.5px] truncate detail-link"
+                    title={t('performance.drillToDetail')}
+                    onClick={() => drillTo({ key: k.virtual_key_id })}
+                    style={{ color: 'var(--foreground)', cursor: 'pointer' }}
                   >
                     {k.label}
                   </span>
@@ -724,9 +766,10 @@ export default function UserPerformancePage() {
               {todayModelRows.rows.map((m) => (
                 <li key={m.model} className="key-row">
                   <span
-                    className="font-mono text-[11.5px] truncate"
-                    title={m.model}
-                    style={{ color: 'var(--foreground)' }}
+                    className="font-mono text-[11.5px] truncate detail-link"
+                    title={t('performance.drillToDetail')}
+                    onClick={() => drillTo({ model: m.model })}
+                    style={{ color: 'var(--foreground)', cursor: 'pointer' }}
                   >
                     {m.model}
                   </span>
@@ -847,6 +890,10 @@ const COST_CSS = `
   border-radius: 8px;
   padding: 1rem 1.1rem;
 }
+/* Drill-to-detail row labels (by-key / by-model): look clickable — brighten +
+   underline on hover so users know they jump to the Usage Detail page. */
+.performance-page .detail-link { cursor: pointer; transition: color 120ms ease; }
+.performance-page .detail-link:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
 .performance-page .chart-title {
   font-family: var(--font-mono);
   font-size: 12px;

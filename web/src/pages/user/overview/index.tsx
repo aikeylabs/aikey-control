@@ -1121,7 +1121,17 @@ export default function UserOverviewPage() {
             <button
               type="button"
               className="ov-btn ov-btn-outline text-[11px]"
-              onClick={() => navigate('/user/usage-ledger')}
+              // 2026-06-06: Recent Requests "view all" lands on the per-
+              // request drill-down (`/user/usage-detail`), not the
+              // aggregated `usage-ledger` charts page. The card itself
+              // shows individual request rows (event_time / model /
+              // status / tokens) — the natural "see more" target is
+              // the same shape at full scale, not the aggregated
+              // by-key / by-protocol charts. The other two viewAll
+              // buttons on this page (provider donut → usage-ledger,
+              // virtual keys → virtual-keys) stay pointed at their
+              // aggregated / list targets.
+              onClick={() => navigate('/user/usage-detail')}
             >
               {t('overview.viewAll')}
               <ArrowRightIcon />

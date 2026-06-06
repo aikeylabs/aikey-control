@@ -106,6 +106,31 @@ export interface RecentRequest {
   request_status: string; // "success" | "error" | ...
 }
 
+/** One per-request row for the Usage Detail page (last 7 days, drill-down).
+ *  billable_amount is null for 未计价 (failed / no-usage / unknown-model) rows. */
+export interface UsageDetailRow {
+  event_time_ms: number;
+  model: string;
+  provider_code: string;
+  request_status: string;
+  http_status_code: number;
+  error_code: string;    // from ODS (JOIN); failure detail
+  error_message: string; // from ODS (JOIN); shown in the row expand
+  latency_ms: number;    // finished_at - started_at (ODS); 0 if no timing
+  input_tokens: number; // PURE (uncached)
+  cached_input_tokens: number;
+  cache_creation_input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  billable_amount: string | null; // null = 未计价
+  currency: string;
+  endpoint_url: string;
+  session_id: string;
+  virtual_key_id: string;
+  virtual_key_alias: string;
+  app_slug: string;
+}
+
 /** Per-model usage breakdown row powering `/user/performance`'s "Usage by
  *  model" chart. Same 4-segment Anthropic cache shape as KeyTotal so
  *  the FE can render with the existing stacked-bar idiom (uncached /
@@ -302,6 +327,31 @@ export const usageApi = {
     if (sessionId) params.session_id = sessionId;
     const res = await httpClient.get<KeyTotal[]>('/v1/usage/personal/by-key/total', { params });
     return res.data;
+  },
+
+  /**
+   * Usage Detail page (2026-06-05): per-request rows for the given range
+   * (the page passes the last-7-days window; a single day = start==end),
+   * with optional drill-down filters (filter=unpriced / model / key / session).
+   * Reads the local ODS server-side; rows are newest-first.
+   */
+  personalDetail: async (
+    id: PersonalIdentity,
+    opts: { startDate?: string; endDate?: string; filter?: string; model?: string; key?: string; sessionId?: string; appSlug?: string; protocol?: string; identity?: string } = {},
+  ): Promise<UsageDetailRow[]> => {
+    const range = opts.startDate && opts.endDate
+      ? { start_date: opts.startDate, end_date: opts.endDate }
+      : defaultRange();
+    const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
+    if (opts.filter) params.filter = opts.filter;
+    if (opts.model) params.model = opts.model;
+    if (opts.key) params.key = opts.key;
+    if (opts.sessionId) params.session_id = opts.sessionId;
+    if (opts.appSlug) params.app_slug = opts.appSlug;
+    if (opts.protocol) params.protocol = opts.protocol;
+    if (opts.identity) params.identity = opts.identity;
+    const res = await httpClient.get<{ rows: UsageDetailRow[] }>('/v1/usage/personal/detail', { params });
+    return res.data.rows ?? [];
   },
 
   /**

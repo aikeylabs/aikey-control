@@ -22,6 +22,7 @@ import MyAccountPage from '../../pages/user/account';
 // Removing only A's route entry: same file, two consumers (A no, B yes).
 // Spec: requirements/2026-05-11-aikey-web-local-first-team-merge.md R7.
 import UserUsageLedgerPage from '../../pages/user/usage-ledger';
+import UserUsageDetailPage from '../../pages/user/usage-detail';
 import UserPerformancePage from '../../pages/user/performance';
 // M5 Day 1 (2026-05-21): degrade-detector trust-check page. Sits under
 // /user/trust-check in the Insights group of the sidebar. Calls
@@ -84,6 +85,10 @@ export function buildUserRoutes(): RouteObject[] {
         { path: 'vault', element: <UserVaultPage /> },
         { path: 'import', element: <UserBulkImportPage /> },
         { path: 'usage-ledger', element: <UserUsageLedgerPage /> },
+        // 2026-06-05: per-request Usage Detail (last 7d). NO sidebar entry —
+        // reached only via drill-down links (cost card 未计价 / by-key/model/
+        // session / day bar). Route exists for those links + bookmarks.
+        { path: 'usage-detail', element: <UserUsageDetailPage /> },
         // 2026-05-21: full rename `/user/cost` → `/user/performance`
         // (URL + sidebar label + page H1 + directory + function + CSS
         // class). Trailer ID `personal-cost` and icon `cost` kept on

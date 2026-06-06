@@ -68,6 +68,14 @@ function renderMaskedSnippet(text: string) {
   );
 }
 
+// Locked timestamp (YYYY-MM-DD HH:mm:ss) so the audit time reads the same
+// regardless of browser locale — cleaner than locale toLocaleString().
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 export default function ComplianceSelfViewPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -176,9 +184,9 @@ export default function ComplianceSelfViewPage() {
       />
 
       {/* Collapsible summary — at-a-glance action breakdown (default collapsed). */}
-      <div className="rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--card)' }}>
+      <div className="rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--card)', boxShadow: 'inset 0 -1px 0 0 var(--border)' }}>
         <button
-          className="w-full px-4 py-2 flex items-center justify-between gap-3 text-xs font-mono"
+          className="w-full px-4 py-2.5 flex items-center justify-between gap-3 text-xs font-mono"
           style={{ color: 'var(--muted-foreground)' }}
           onClick={() => setCardsOpen((o) => !o)}
         >
@@ -236,7 +244,7 @@ export default function ComplianceSelfViewPage() {
         }
       />
 
-      <div className="rounded-md border overflow-hidden" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}>
+      <div className="rounded-md border overflow-hidden" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: 'inset 0 -1px 0 0 var(--border)' }}>
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.sectionTitle')}</h2>
           <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full border" style={{ color: 'var(--primary)', borderColor: 'rgba(250,204,21,0.35)', backgroundColor: 'rgba(250,204,21,0.06)' }}>
@@ -245,16 +253,24 @@ export default function ComplianceSelfViewPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full whitespace-nowrap text-left border-collapse">
+          <table className="w-full whitespace-nowrap text-left border-collapse table-fixed">
+            <colgroup>
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '24%' }} />
+              <col style={{ width: '41%' }} />
+              <col style={{ width: '10%' }} />
+            </colgroup>
             <thead>
               <tr>
                 {[
                   'compliancePage.columnTime',
                   'compliancePage.columnAction',
                   'compliancePage.columnFindings',
+                  'compliancePage.columnPreview',
                   'compliancePage.columnModel',
                 ].map((k) => (
-                  <th key={k} className="px-5 py-3 text-[10px] font-mono font-semibold tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.5)', position: 'sticky', top: 0, zIndex: 1 }}>
+                  <th key={k} className="px-4 py-3 text-[10px] font-mono font-semibold tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.35)', position: 'sticky', top: 0, zIndex: 1 }}>
                     {t(k)}
                   </th>
                 ))}
@@ -262,26 +278,39 @@ export default function ComplianceSelfViewPage() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={4} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.loading')}</td></tr>
+                <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.loading')}</td></tr>
               ) : isError ? (
-                <tr><td colSpan={4} className="px-5 py-10 text-center text-xs font-mono" style={{ color: '#f87171' }}>{t('compliancePage.loadFailed')}</td></tr>
+                <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: '#f87171' }}>{t('compliancePage.loadFailed')}</td></tr>
               ) : events.length === 0 ? (
-                <tr><td colSpan={4} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.noEvents')}</td></tr>
+                <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.noEvents')}</td></tr>
               ) : (
                 events.map((e) => (
-                  <tr key={e.event_id} className="cursor-pointer hover:bg-[rgba(250,204,21,0.035)] hover:shadow-[inset_2px_0_0_0_rgba(250,204,21,0.6)]" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => setSelected(e)}>
-                    <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{new Date(e.created_at).toLocaleString()}</td>
-                    <td className="px-5 py-3"><Badge variant={actionVariant(e.action_taken)}>{e.action_taken.toUpperCase()}</Badge></td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2 flex-wrap">
+                  <tr key={e.event_id} className="cursor-pointer transition-colors hover:bg-[rgba(250,204,21,0.045)]" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => setSelected(e)}>
+                    <td className="px-4 py-3.5 text-xs font-mono" style={{ color: 'var(--foreground)' }}>{fmtTime(e.created_at)}</td>
+                    <td className="px-4 py-3.5"><Badge variant={actionVariant(e.action_taken)}>{e.action_taken.toUpperCase()}</Badge></td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
                         {topSeverity(e) && <Badge variant={severityVariant(topSeverity(e))}>{topSeverity(e).toUpperCase()}</Badge>}
-                        <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{e.findings.length}</span>
                         {[...new Set(e.findings.map((f) => f.category))].map((c) => (
-                          <span key={c} className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--muted-foreground)', border: '1px solid var(--border)' }}>{c}</span>
+                          <span key={c} className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--muted-foreground)' }}>{c}</span>
                         ))}
+                        <span className="text-[10px] font-mono tabular-nums" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>×{e.findings.length}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{e.target_model || '—'}</td>
+                    <td className="px-4 py-3.5">
+                      {(() => {
+                        const f0 = e.findings[0];
+                        const snip = (f0?.context_snippet || f0?.redacted_snippet || '').replace(/\s+/g, ' ').trim();
+                        return snip ? (
+                          <div className="text-[11px] font-mono truncate" style={{ color: 'var(--muted-foreground)' }}>
+                            {renderMaskedSnippet(snip)}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.4 }}>—</span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-5 py-3.5 text-xs font-mono whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>{e.target_model || '—'}</td>
                   </tr>
                 ))
               )}
@@ -292,15 +321,22 @@ export default function ComplianceSelfViewPage() {
         {/* Pagination */}
         <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
           <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-            {t('compliancePage.pageOf', { page: Math.floor(offset / PAGE_SIZE) + 1, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)) })}
+            {t('compliancePage.pageRange', {
+              from: total === 0 ? 0 : offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total,
+            })}
           </span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button
               className="px-3 py-1 rounded border text-xs font-mono disabled:opacity-40"
               style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
               disabled={offset === 0}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >{t('compliancePage.prev')}</button>
+            <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+              {t('compliancePage.pageOf', { page: Math.floor(offset / PAGE_SIZE) + 1, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)) })}
+            </span>
             <button
               className="px-3 py-1 rounded border text-xs font-mono disabled:opacity-40"
               style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
@@ -334,7 +370,7 @@ export default function ComplianceSelfViewPage() {
                     {/* sequence badge — overhangs the card's top-left corner (出框) */}
                     <span
                       className="inline-flex items-center justify-center text-[10px] font-mono font-bold rounded-full shrink-0"
-                      style={{ position: 'absolute', top: -9, left: -9, width: 20, height: 20, color: 'var(--primary)', border: '1px solid rgba(250,204,21,0.45)', backgroundColor: 'var(--card)', zIndex: 1 }}
+                      style={{ position: 'absolute', top: -9, left: -9, width: 20, height: 20, color: 'var(--primary-dim)', border: '1px solid rgba(202,138,4,0.5)', backgroundColor: 'var(--card)', zIndex: 1 }}
                     >{idx + 1}</span>
                     <div className="flex items-center gap-2 mb-1.5">
                       <Badge variant={severityVariant(f.severity)}>{f.severity.toUpperCase()}</Badge>
@@ -347,9 +383,9 @@ export default function ComplianceSelfViewPage() {
                         the detector didn't supply it. Local-only — never原文 on the
                         team view. */}
                     {(f.context_snippet || f.redacted_snippet) && (
-                      <p className="text-[11px] font-mono mt-1 break-all whitespace-pre-wrap" style={{ color: 'var(--foreground)' }}>
+                      <div className="text-[11px] font-mono mt-2 break-all whitespace-pre-wrap rounded px-2 py-1.5 leading-relaxed" style={{ color: 'var(--foreground)', backgroundColor: 'rgba(0,0,0,0.28)', border: '1px solid var(--border)' }}>
                         {renderMaskedSnippet(f.context_snippet || f.redacted_snippet || '')}
-                      </p>
+                      </div>
                     )}
                   </div>
                 ))}

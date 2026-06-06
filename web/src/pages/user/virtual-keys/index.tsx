@@ -20,7 +20,7 @@
  *     `import UserVirtualKeysPage from 'aikey-control-web/pages/virtual-keys'`.
  *     This is the canonical Team Keys page on the team server.
  */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -105,6 +105,98 @@ function fmtQuota(metric: string, n: number): string {
     return (n / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'k';
   }
   return n.toLocaleString('en-US');
+}
+
+/** useCountUp animates a number toward `target` (ease-out cubic, ~700ms) ONLY when
+ *  `target` changes from what was last shown. The initial render snaps to the value
+ *  (no roll), so a plain page load / first paint does NOT animate. react-query keeps
+ *  the previous value cached across menu switches, so on return the cached value
+ *  paints first and the count-up fires only if a focus-refetch brings a different
+ *  value — i.e. animation = "the data changed since you last saw it", never load. */
+function useCountUp(target: number, durationMs = 700): number {
+  const [val, setVal] = useState(target);
+  const fromRef = useRef(target);
+  useEffect(() => {
+    const from = fromRef.current;
+    if (Math.abs(from - target) < 1e-9) {
+      fromRef.current = target;
+      setVal(target);
+      return;
+    }
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const cur = from + (target - from) * eased;
+      fromRef.current = cur;
+      setVal(cur);
+      if (t < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = target;
+        setVal(target);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, durationMs]);
+  return val;
+}
+
+/** One seat-quota row: the used amount + percent count up and the progress bar
+ *  fills smoothly on change. Extracted to a component so useCountUp (a hook) can
+ *  run per quota row (hooks can't live inside the .map() callback). */
+function QuotaUsageBar({ q }: { q: { metric: string; used: number; limit: number } }) {
+  const pct = q.limit > 0 ? (q.used / q.limit) * 100 : 0;
+  const shown = Math.min(100, Math.max(0, pct));
+  const over = q.limit > 0 && q.used >= q.limit;
+  const animUsed = useCountUp(q.used);
+  const animPct = useCountUp(shown);
+  return (
+    <div title={`${fmtQuota(q.metric, q.used)} / ${fmtQuota(q.metric, q.limit)}`}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          gap: 6,
+          fontSize: 10.5,
+          lineHeight: 1.2,
+          whiteSpace: 'nowrap',
+          color: 'var(--muted-foreground)',
+        }}
+      >
+        <span className="font-mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {fmtQuota(q.metric, animUsed)}
+          <span style={{ opacity: 0.55 }}> / {fmtQuota(q.metric, q.limit)}</span>
+        </span>
+        <span style={{ fontWeight: 600, color: over ? 'var(--destructive)' : 'var(--muted-foreground)' }}>
+          {Math.round(animPct)}%
+        </span>
+      </div>
+      <div
+        style={{
+          height: 5,
+          borderRadius: 3,
+          background: 'var(--muted)',
+          overflow: 'hidden',
+          marginTop: 3,
+        }}
+      >
+        <span
+          style={{
+            display: 'block',
+            height: '100%',
+            width: `${Math.max(animPct, 1.5)}%`,
+            background: over ? 'var(--destructive)' : 'var(--primary)',
+            borderRadius: 3,
+            transition: 'width 120ms linear',
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 /** Next quota-period reset (when `used` rolls back to 0): the start of the next
@@ -714,55 +806,9 @@ const Row = React.memo(function Row(props: {
           <span className="text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>—</span>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {r.seat_quota.map((q, i) => {
-              const pct = q.limit > 0 ? (q.used / q.limit) * 100 : 0;
-              const shown = Math.min(100, Math.max(0, Math.round(pct)));
-              const over = q.limit > 0 && q.used >= q.limit;
-              return (
-                <div key={i} title={`${fmtQuota(q.metric, q.used)} / ${fmtQuota(q.metric, q.limit)}`}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'baseline',
-                      gap: 6,
-                      fontSize: 10.5,
-                      lineHeight: 1.2,
-                      whiteSpace: 'nowrap',
-                      color: 'var(--muted-foreground)',
-                    }}
-                  >
-                    <span className="font-mono" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {fmtQuota(q.metric, q.used)}
-                      <span style={{ opacity: 0.55 }}> / {fmtQuota(q.metric, q.limit)}</span>
-                    </span>
-                    <span style={{ fontWeight: 600, color: over ? 'var(--destructive)' : 'var(--muted-foreground)' }}>
-                      {shown}%
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      height: 5,
-                      borderRadius: 3,
-                      background: 'var(--muted)',
-                      overflow: 'hidden',
-                      marginTop: 3,
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: 'block',
-                        height: '100%',
-                        width: `${Math.max(shown, 1.5)}%`,
-                        background: over ? 'var(--destructive)' : 'var(--primary)',
-                        borderRadius: 3,
-                        transition: 'width 200ms ease',
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+            {r.seat_quota.map((q, i) => (
+              <QuotaUsageBar key={i} q={q} />
+            ))}
           </div>
         )}
       </td>
