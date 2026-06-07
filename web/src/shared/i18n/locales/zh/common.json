@@ -2270,6 +2270,10 @@
   "compliancePage": {
     "pageTitle": "AI 合规审计",
     "pageDescription": "本机检测到的合规事件 —— 自己视角。原文不会离开本机。",
+    "toggleLabel": "合规检测",
+    "toggleLocked": "金库已锁定，请先解锁再切换",
+    "toggleFailed": "切换失败",
+    "toggleNotInstalled": "合规检测器未安装",
     "sectionTitle": "事件",
     "recordCount": "{{count}} 条记录",
     "summaryTitle": "概况",

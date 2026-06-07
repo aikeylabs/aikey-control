@@ -2270,6 +2270,10 @@
   "compliancePage": {
     "pageTitle": "AI Compliance Audit",
     "pageDescription": "Compliance events detected on this machine — your own view. Original text never leaves your device.",
+    "toggleLabel": "Compliance detection",
+    "toggleLocked": "Vault locked — unlock before toggling",
+    "toggleFailed": "Toggle failed",
+    "toggleNotInstalled": "Compliance detector not installed",
     "sectionTitle": "EVENTS",
     "recordCount": "{{count}} records",
     "summaryTitle": "OVERVIEW",

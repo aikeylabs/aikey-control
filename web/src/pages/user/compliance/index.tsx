@@ -12,11 +12,12 @@
  * prompt/column, and the FilterBar search box is repurposed for the category
  * filter (there's no tenant to search).
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { complianceApi, type ComplianceEventDTO } from '@/shared/api/user/compliance';
+import { appsApi } from '@/shared/api/user/apps';
 import { Badge } from '@/shared/ui/Badge';
 import { PageHeader } from '@/shared/ui/PageHeader';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
@@ -61,7 +62,17 @@ const MASK_TEST = /^(\*\*\*[^*\s]{1,20}\*\*\*|\[[^\]\n]{1,24}\])$/;
 function renderMaskedSnippet(text: string) {
   return text.split(MASK_SPLIT).filter((p) => p !== '').map((part, i) =>
     MASK_TEST.test(part) ? (
-      <span key={i} className="font-bold" style={{ color: 'var(--primary)', backgroundColor: 'rgba(250,204,21,0.12)', borderRadius: 2, padding: '0 2px' }}>{part}</span>
+      // 2026-06-06: dimmed from var(--primary) #facc15 → var(--primary-dim)
+      // #ca8a04 (yellow-600) and bg 0.12 → 0.08. The audit table renders
+      // ~15 rows × 2 mask markers each = 30+ amber patches on screen
+      // simultaneously; at the previous yellow-400 + 12% alpha those
+      // tiny tokens summed to a "刺眼" amber speckle that overwhelmed
+      // the row text. yellow-600 stays warm and still reads as a
+      // masked-token highlight, but no longer competes with the page's
+      // real CTAs (生效合规包 button, 4893 条记录 chip) which still use
+      // the bright --primary and visually outrank the noisy in-cell
+      // highlights now.
+      <span key={i} className="font-bold" style={{ color: 'var(--primary-dim)', backgroundColor: 'rgba(202,138,4,0.08)', borderRadius: 2, padding: '0 2px' }}>{part}</span>
     ) : (
       <span key={i}>{part}</span>
     ),
@@ -82,6 +93,56 @@ export default function ComplianceSelfViewPage() {
   const [selected, setSelected] = useState<ComplianceEventDTO | null>(null);
   const [offset, setOffset] = useState(0);
   const [packsOpen, setPacksOpen] = useState(false);
+
+  // ── Compliance master switch (feature on/off) ────────────────────────────
+  // Reuses the app filter enable/disable: filter_stages NULL = off, set = on;
+  // the CLI bumps vault change_seq → the local proxy reloads within ~5s and
+  // spawns / kills the detector child. Mirrors the toggle in /user/settings
+  // (2nd usage — replicate the pattern, don't abstract prematurely). G3 adds
+  // the master-policy `locked` state (org-mandated on → can't disable here).
+  const COMPLIANCE_SLUG = 'ai-compliance-detector';
+  const [filterState, setFilterState] = useState<
+    { kind: 'loading' } | { kind: 'not-installed' } | { kind: 'ready'; enabled: boolean } | { kind: 'error' }
+  >({ kind: 'loading' });
+  const [filterSaving, setFilterSaving] = useState(false);
+  const [filterMsg, setFilterMsg] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await appsApi.list();
+        if (!list.apps.some((a) => a.slug === COMPLIANCE_SLUG)) {
+          if (!cancelled) setFilterState({ kind: 'not-installed' });
+          return;
+        }
+        const status = await appsApi.filterStatus(COMPLIANCE_SLUG);
+        if (!cancelled) setFilterState({ kind: 'ready', enabled: status.enabled });
+      } catch {
+        if (!cancelled) setFilterState({ kind: 'error' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function onToggleFilter(next: boolean) {
+    if (filterState.kind !== 'ready' || filterSaving) return;
+    setFilterSaving(true);
+    setFilterMsg('');
+    try {
+      const res = await appsApi.filterSet(COMPLIANCE_SLUG, next);
+      setFilterState({ kind: 'ready', enabled: res.enabled });
+    } catch (err) {
+      const e = err as Error & { code?: string };
+      setFilterMsg(
+        e.code === 'I_VAULT_LOCKED' || e.code === 'I_VAULT_NO_SESSION'
+          ? t('compliancePage.toggleLocked')
+          : (e.message ?? t('compliancePage.toggleFailed')),
+      );
+    } finally {
+      setFilterSaving(false);
+    }
+  }
 
   const severity = searchParams.get('severity') ?? '';
   const category = searchParams.get('category') ?? '';
@@ -170,18 +231,53 @@ export default function ComplianceSelfViewPage() {
         title={t('compliancePage.pageTitle')}
         description={t('compliancePage.pageDescription')}
         actions={
-          <button
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs font-mono transition-colors"
-            style={{ borderColor: 'rgba(250,204,21,0.35)', color: 'var(--primary)', backgroundColor: 'rgba(250,204,21,0.06)' }}
-            onClick={() => setPacksOpen(true)}
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            {t('effectivePacks.viewButton')}
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Feature master switch — distinct from the pack-level info (layered:
+                whole-detection on/off here, which packs are effective in the drawer). */}
+            {filterState.kind === 'ready' && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                  {t('compliancePage.toggleLabel')}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={filterState.enabled}
+                  aria-label={t('compliancePage.toggleLabel')}
+                  disabled={filterSaving}
+                  onClick={() => onToggleFilter(!filterState.enabled)}
+                  style={{
+                    position: 'relative', width: 44, height: 24, borderRadius: 12, border: 'none',
+                    background: filterState.enabled ? '#4ade80' : 'var(--border)',
+                    cursor: filterSaving ? 'wait' : 'pointer', flexShrink: 0, opacity: filterSaving ? 0.7 : 1,
+                    transition: 'background 0.15s ease',
+                  }}
+                >
+                  <span style={{ position: 'absolute', top: 2, left: filterState.enabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.15s ease' }} />
+                </button>
+              </div>
+            )}
+            <button
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs font-mono transition-colors"
+              style={{ borderColor: 'rgba(250,204,21,0.35)', color: 'var(--primary)', backgroundColor: 'rgba(250,204,21,0.06)' }}
+              onClick={() => setPacksOpen(true)}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              {t('effectivePacks.viewButton')}
+            </button>
+          </div>
         }
       />
+
+      {/* Toggle status line: surface a save error / vault-lock / not-installed
+          hint. Quiet when the switch is ready + idle. */}
+      {(filterMsg || filterState.kind === 'not-installed') && (
+        <div className="text-xs font-mono" style={{ color: filterState.kind === 'not-installed' ? 'var(--muted-foreground)' : '#f87171' }}>
+          {filterState.kind === 'not-installed' ? t('compliancePage.toggleNotInstalled') : filterMsg}
+        </div>
+      )}
 
       {/* Collapsible summary — at-a-glance action breakdown (default collapsed). */}
       <div className="rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--card)', boxShadow: 'inset 0 -1px 0 0 var(--border)' }}>
