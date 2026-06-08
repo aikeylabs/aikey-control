@@ -68,7 +68,8 @@ func domainErrorStatus(code string) int {
 	case CodeBizAuthInvalidCredentials, CodeBizAuthTokenInvalid,
 		CodeBizRefreshTokenInvalid,
 		CodeBizLoginSessionNotFound, CodeBizLoginSessionExpired,
-		CodeBizLoginTokenInvalid, CodeBizLoginTokenAlreadyUsed:
+		CodeBizLoginTokenInvalid, CodeBizLoginTokenAlreadyUsed,
+		CodeBizJoinTokenInvalid:
 		return http.StatusUnauthorized
 
 	// ── 403 Forbidden ─────────────────────────────────────────────────────────

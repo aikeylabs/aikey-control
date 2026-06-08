@@ -155,6 +155,7 @@ var zhMessages = map[string]string{
 	CodeBizLoginSessionTerminated: "该登录会话已结束，请重新运行 `aikey account login` 开始新的会话",
 	CodeBizLoginTokenInvalid:      "登录令牌无效或与会话不匹配",
 	CodeBizLoginTokenAlreadyUsed:  "登录令牌已被使用",
+	CodeBizJoinTokenInvalid:       "加入令牌无效、已撤销或已过期",
 	CodeBizRefreshTokenInvalid:    "刷新令牌无效或已过期，请重新运行 aikey login",
 	CodeBizRefreshTokenRevoked:    "刷新令牌已被吊销，请重新运行 aikey login",
 
@@ -248,6 +249,9 @@ const (
 	CodeBizLoginSessionTerminated    = "BIZ_LOGIN_SESSION_TERMINATED"
 	CodeBizLoginTokenInvalid         = "BIZ_LOGIN_TOKEN_INVALID"
 	CodeBizLoginTokenAlreadyUsed     = "BIZ_LOGIN_TOKEN_ALREADY_USED"
+	// CodeBizJoinTokenInvalid: the org join token presented at digital-employee
+	// self-registration is unknown, revoked, or expired (v1.0.1-alpha.2).
+	CodeBizJoinTokenInvalid          = "BIZ_JOIN_TOKEN_INVALID"
 	CodeBizRefreshTokenInvalid       = "BIZ_REFRESH_TOKEN_INVALID"
 	CodeBizRefreshTokenRevoked       = "BIZ_REFRESH_TOKEN_REVOKED"
 
@@ -439,6 +443,10 @@ func BizLoginTokenInvalid() *DomainError {
 func BizLoginTokenAlreadyUsed() *DomainError {
 	return &DomainError{Code: CodeBizLoginTokenAlreadyUsed,
 		Message: "login token has already been used"}
+}
+func BizJoinTokenInvalid() *DomainError {
+	return &DomainError{Code: CodeBizJoinTokenInvalid,
+		Message: "join token is invalid, revoked, or expired"}
 }
 func BizRefreshTokenInvalid() *DomainError {
 	return &DomainError{Code: CodeBizRefreshTokenInvalid,
