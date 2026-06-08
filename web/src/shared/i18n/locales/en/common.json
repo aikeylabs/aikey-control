@@ -2274,6 +2274,8 @@
     "toggleLocked": "Vault locked — unlock before toggling",
     "toggleFailed": "Toggle failed",
     "toggleNotInstalled": "Compliance detector not installed",
+    "toggleOrgEnforced": "Enforced by your organization policy — cannot be disabled",
+    "toggleOrgEnforcedShort": "Org-enforced",
     "sectionTitle": "EVENTS",
     "recordCount": "{{count}} records",
     "summaryTitle": "OVERVIEW",

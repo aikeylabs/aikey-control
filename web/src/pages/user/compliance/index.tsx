@@ -102,7 +102,7 @@ export default function ComplianceSelfViewPage() {
   // the master-policy `locked` state (org-mandated on → can't disable here).
   const COMPLIANCE_SLUG = 'ai-compliance-detector';
   const [filterState, setFilterState] = useState<
-    { kind: 'loading' } | { kind: 'not-installed' } | { kind: 'ready'; enabled: boolean } | { kind: 'error' }
+    { kind: 'loading' } | { kind: 'not-installed' } | { kind: 'ready'; enabled: boolean; locked: boolean } | { kind: 'error' }
   >({ kind: 'loading' });
   const [filterSaving, setFilterSaving] = useState(false);
   const [filterMsg, setFilterMsg] = useState('');
@@ -117,7 +117,7 @@ export default function ComplianceSelfViewPage() {
           return;
         }
         const status = await appsApi.filterStatus(COMPLIANCE_SLUG);
-        if (!cancelled) setFilterState({ kind: 'ready', enabled: status.enabled });
+        if (!cancelled) setFilterState({ kind: 'ready', enabled: status.enabled, locked: status.locked ?? false });
       } catch {
         if (!cancelled) setFilterState({ kind: 'error' });
       }
@@ -126,16 +126,18 @@ export default function ComplianceSelfViewPage() {
   }, []);
 
   async function onToggleFilter(next: boolean) {
-    if (filterState.kind !== 'ready' || filterSaving) return;
+    if (filterState.kind !== 'ready' || filterSaving || filterState.locked) return;
     setFilterSaving(true);
     setFilterMsg('');
     try {
       const res = await appsApi.filterSet(COMPLIANCE_SLUG, next);
-      setFilterState({ kind: 'ready', enabled: res.enabled });
+      setFilterState({ kind: 'ready', enabled: res.enabled, locked: false });
     } catch (err) {
       const e = err as Error & { code?: string };
       setFilterMsg(
-        e.code === 'I_VAULT_LOCKED' || e.code === 'I_VAULT_NO_SESSION'
+        e.code === 'I_APP_COMPLIANCE_LOCKED'
+          ? t('compliancePage.toggleOrgEnforced')
+          : e.code === 'I_VAULT_LOCKED' || e.code === 'I_VAULT_NO_SESSION'
           ? t('compliancePage.toggleLocked')
           : (e.message ?? t('compliancePage.toggleFailed')),
       );
@@ -239,17 +241,26 @@ export default function ComplianceSelfViewPage() {
                 <span className="text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
                   {t('compliancePage.toggleLabel')}
                 </span>
+                {/* Locked by org policy (G3): the switch is greyed + a lock note
+                    explains it; the master mandate force-runs the detector. */}
+                {filterState.locked && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ color: 'var(--muted-foreground)', backgroundColor: 'var(--border)' }} title={t('compliancePage.toggleOrgEnforced')}>
+                    🔒 {t('compliancePage.toggleOrgEnforcedShort')}
+                  </span>
+                )}
                 <button
                   type="button"
                   role="switch"
                   aria-checked={filterState.enabled}
                   aria-label={t('compliancePage.toggleLabel')}
-                  disabled={filterSaving}
+                  disabled={filterSaving || filterState.locked}
+                  title={filterState.locked ? t('compliancePage.toggleOrgEnforced') : undefined}
                   onClick={() => onToggleFilter(!filterState.enabled)}
                   style={{
                     position: 'relative', width: 44, height: 24, borderRadius: 12, border: 'none',
                     background: filterState.enabled ? '#4ade80' : 'var(--border)',
-                    cursor: filterSaving ? 'wait' : 'pointer', flexShrink: 0, opacity: filterSaving ? 0.7 : 1,
+                    cursor: filterState.locked ? 'not-allowed' : filterSaving ? 'wait' : 'pointer',
+                    flexShrink: 0, opacity: filterSaving || filterState.locked ? 0.6 : 1,
                     transition: 'background 0.15s ease',
                   }}
                 >

@@ -320,6 +320,9 @@ export interface AppFilterStatusData {
   /** Whether the local self-view records "allow" (clean-scan) events. Default
    *  false (off, save space) — the "record allowed events" sub-toggle. */
   record_allow?: boolean;
+  /** G3: true when the org compliance master policy enforces ON — the local
+   *  toggle is locked (greyed) and cannot be disabled. */
+  locked?: boolean;
 }
 
 /** Response for POST /api/user/apps/filter-set (2026-06-02). Echoes the

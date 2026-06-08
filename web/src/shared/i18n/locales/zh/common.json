@@ -2274,6 +2274,8 @@
     "toggleLocked": "金库已锁定，请先解锁再切换",
     "toggleFailed": "切换失败",
     "toggleNotInstalled": "合规检测器未安装",
+    "toggleOrgEnforced": "由企业策略强制开启，不可关闭",
+    "toggleOrgEnforcedShort": "企业强制",
     "sectionTitle": "事件",
     "recordCount": "{{count}} 条记录",
     "summaryTitle": "概况",
