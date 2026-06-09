@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Trans, useTranslation } from 'react-i18next';
 
 interface ActionDialogProps {
@@ -47,7 +48,14 @@ export function ActionDialog({
   const confirmBg = variant === 'danger' ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)';
   const confirmBorder = variant === 'danger' ? 'rgba(239,68,68,0.4)' : 'rgba(245,158,11,0.4)';
 
-  return (
+  // Portal to document.body for the same reason as DetailDrawer: the
+  // backdrop + dialog are siblings in a fragment, and caller pages
+  // commonly wrap content in `.space-y-5`, which would inject a 20px
+  // margin-top on the second sibling. See DetailDrawer.tsx for the
+  // full bug story.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <>
       <div
         className="fixed inset-0 z-50"
@@ -122,6 +130,7 @@ export function ActionDialog({
           </button>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }

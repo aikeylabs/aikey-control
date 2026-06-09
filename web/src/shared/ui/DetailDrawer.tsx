@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 interface DetailDrawerProps {
   open: boolean;
@@ -17,16 +18,26 @@ export function DetailDrawer({ open, onClose, title, subtitle, children }: Detai
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  return (
+  // Portal to document.body so the drawer escapes whatever page container
+  // wraps the caller. Background story (2026-06-08 bugfix): the caller
+  // pages (seats, bindings, provider-accounts, virtual-keys) wrap their
+  // content in `.p-6.space-y-5`. Tailwind's `space-y-5` injects
+  // `margin-top: 20px` on every non-first child — including the
+  // `position: fixed` backdrop + drawer this component renders as a
+  // fragment. The unintended `margin-top: 20px` pushed both the backdrop
+  // and the drawer 20px below the viewport top, leaving a horizontal
+  // strip uncovered above the overlay across every page that opens this
+  // component. Rendering into document.body sidesteps the issue once and
+  // for all (and survives any future caller-side spacing utilities).
+  // SSR-safe: skip portal during prerender, where document is undefined.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-40 transition-opacity duration-200"
         style={{
-          // margin:0 neutralises any parent `space-y-*` margin that would
-          // otherwise leak onto this fixed element and push it off the top
-          // edge (it renders inline inside the page's vertical-spacing stack).
-          margin: 0,
           backgroundColor: 'rgba(0,0,0,0.5)',
           opacity: open ? 1 : 0,
           pointerEvents: open ? 'auto' : 'none',
@@ -38,7 +49,6 @@ export function DetailDrawer({ open, onClose, title, subtitle, children }: Detai
       <div
         className="fixed top-0 right-0 h-full z-50 flex flex-col transition-transform duration-200"
         style={{
-          margin: 0, // see backdrop note — keep the fixed panel pinned to the viewport top
           width: 480,
           backgroundColor: 'var(--card)',
           borderLeft: '1px solid var(--border)',
@@ -77,7 +87,8 @@ export function DetailDrawer({ open, onClose, title, subtitle, children }: Detai
           {children}
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
 

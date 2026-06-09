@@ -1,0 +1,47 @@
+/*
+ * Checkbox visual states (hover / focus).
+ *
+ * Inline styles in Checkbox.tsx handle the base look + filled/empty/indeterminate
+ * variants. CSS lives here because :hover and :focus-visible pseudo-classes
+ * can't be expressed as inline `style` props. Same split as ProviderMultiSelect.tsx
+ * + .css in this folder — established pattern.
+ *
+ * Selectors are scoped to .ak-check-box so they never collide with native
+ * checkboxes used by other components (radio groups, form libs) that don't
+ * adopt this primitive.
+ */
+
+/* Hover on the wrapping label brightens the un-filled box's border to
+ * primary-dim, signalling "this is clickable and you're aimed at it".
+ * Filled boxes get a slight outer amber glow to echo the favicon /
+ * sidebar AK chip treatment for cross-page visual coherence.
+ */
+label:hover > span > .ak-check-box {
+  border-color: var(--primary-dim);
+}
+label:hover > span > .ak-check-box[data-filled="true"] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 0 0 3px rgba(250, 204, 21, 0.10);
+}
+
+/* Disabled state — neutralize hover so a disabled checkbox doesn't
+ * pretend to be interactive. .cursor-not-allowed already conveys
+ * non-interactivity for mouse users; this kills the colour shift.
+ */
+label[aria-disabled="true"]:hover > span > .ak-check-box,
+label.cursor-not-allowed:hover > span > .ak-check-box {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* Keyboard focus ring. :focus-visible (not :focus) so mouse clicks don't
+ * trigger the ring — that's the modern convention; native browser checkboxes
+ * follow it too. The ring uses primary at low alpha to match the rest of
+ * the admin's focus treatment.
+ */
+.ak-check-box:has(input:focus-visible),
+input:focus-visible + .ak-check-box {
+  outline: 2px solid rgba(250, 204, 21, 0.55);
+  outline-offset: 2px;
+}

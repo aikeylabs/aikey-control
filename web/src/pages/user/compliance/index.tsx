@@ -238,16 +238,17 @@ export default function ComplianceSelfViewPage() {
                 whole-detection on/off here, which packs are effective in the drawer). */}
             {filterState.kind === 'ready' && (
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                  {t('compliancePage.toggleLabel')}
-                </span>
-                {/* Locked by org policy (G3): the switch is greyed + a lock note
-                    explains it; the master mandate force-runs the detector. */}
+                {/* Locked by org policy (G3): a lock note explains the org mandate
+                    force-runs the detector; the switch is also greyed + disabled. */}
                 {filterState.locked && (
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ color: 'var(--muted-foreground)', backgroundColor: 'var(--border)' }} title={t('compliancePage.toggleOrgEnforced')}>
                     🔒 {t('compliancePage.toggleOrgEnforcedShort')}
                   </span>
                 )}
+                {/* Pill toggle — mirrors the Trust Check (置信度检测) realtime toggle
+                    (.tc-realtime-toggle in trust-check/trust-check-css.ts) for
+                    cross-page consistency: same pill + track/knob/label structure +
+                    exact values. Keep the two in sync if either changes. */}
                 <button
                   type="button"
                   role="switch"
@@ -257,14 +258,37 @@ export default function ComplianceSelfViewPage() {
                   title={filterState.locked ? t('compliancePage.toggleOrgEnforced') : undefined}
                   onClick={() => onToggleFilter(!filterState.enabled)}
                   style={{
-                    position: 'relative', width: 44, height: 24, borderRadius: 12, border: 'none',
-                    background: filterState.enabled ? '#4ade80' : 'var(--border)',
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                    padding: '6px 12px 6px 8px', borderRadius: 6,
+                    background: '#1f1f23', border: '1px solid var(--border)',
+                    color: 'var(--foreground)', fontSize: 12,
+                    fontFamily: "var(--font-mono, 'JetBrains Mono', ui-monospace, monospace)",
+                    fontWeight: 600, letterSpacing: '0.04em',
                     cursor: filterState.locked ? 'not-allowed' : filterSaving ? 'wait' : 'pointer',
-                    flexShrink: 0, opacity: filterSaving || filterState.locked ? 0.6 : 1,
-                    transition: 'background 0.15s ease',
+                    opacity: filterSaving || filterState.locked ? 0.5 : 1,
+                    transition: 'background 120ms ease, border-color 120ms ease',
                   }}
                 >
-                  <span style={{ position: 'absolute', top: 2, left: filterState.enabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.15s ease' }} />
+                  <span aria-hidden style={{
+                    position: 'relative', display: 'inline-block', width: 28, height: 16,
+                    background: filterState.enabled ? 'var(--primary-dim)' : '#3f3f46',
+                    borderRadius: 999, flexShrink: 0, transition: 'background 140ms ease',
+                  }}>
+                    <span style={{
+                      position: 'absolute', top: 2, left: 2, width: 12, height: 12,
+                      background: filterState.enabled ? 'var(--primary-foreground, #18181b)' : 'var(--foreground)',
+                      borderRadius: '50%',
+                      transform: filterState.enabled ? 'translateX(12px)' : 'none',
+                      transition: 'transform 140ms ease',
+                    }} />
+                  </span>
+                  <span style={{
+                    fontSize: 11, letterSpacing: '0.06em', whiteSpace: 'nowrap',
+                    color: filterState.enabled ? undefined : 'var(--muted-foreground)',
+                    opacity: filterState.enabled ? 1 : 0.85,
+                  }}>
+                    {t('compliancePage.toggleLabel')}
+                  </span>
                 </button>
               </div>
             )}

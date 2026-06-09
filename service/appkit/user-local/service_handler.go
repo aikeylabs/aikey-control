@@ -24,6 +24,7 @@
 package userlocal
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -120,10 +121,29 @@ func HandleServiceAction(logger *slog.Logger) http.HandlerFunc {
 		// so we don't re-implement that here — just translate the
 		// JSON envelope into our HTTP response.
 		binPath := aikeyBinaryPath()
-		ctx, cancel := contextWithTimeout(r.Context(), 10*time.Second)
+		// Context must stay ABOVE the CLI's healthz probe deadline
+		// (PROBE_DEADLINE_SECS = 30s in commands_service/commands.rs).
+		// Otherwise a legitimately-slow cold start (PyInstaller onefile
+		// re-extraction balloons to ~20s under machine load) gets the CLI
+		// killed mid-probe ("signal: killed") instead of surfacing the
+		// real "did not become reachable" detail. 40s = 30s probe + margin.
+		ctx, cancel := contextWithTimeout(r.Context(), 40*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, binPath, "service", action, name, "--json")
-		out, err := cmd.CombinedOutput()
+		// Read stdout and stderr SEPARATELY. Protocol contract: the CLI
+		// emits its JSON envelope on stdout; stderr carries human /
+		// diagnostic lines — and notably the CLI's top-level error handler
+		// (main.rs json_output::error) ALSO prints an envelope to stderr
+		// on non-zero exit. The earlier CombinedOutput() concatenated both
+		// into two back-to-back JSON objects, which json.Unmarshal rejects
+		// with "Extra data", masking the real failure detail behind a
+		// generic "exit status 1". Parsing stdout alone keeps it clean;
+		// stderr is retained only for the failure log.
+		var stdoutBuf, stderrBuf bytes.Buffer
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+		err := cmd.Run()
+		out := stdoutBuf.Bytes()
 		// Even on non-zero exit the CLI emits the JSON envelope on
 		// stdout — we still try to parse it before falling back to
 		// the raw spawn error.
@@ -147,7 +167,8 @@ func HandleServiceAction(logger *slog.Logger) http.HandlerFunc {
 				"name", name, "action", action,
 				"binary", binPath,
 				"error.message", err.Error(),
-				"raw_output", string(out),
+				"stdout", stdoutBuf.String(),
+				"stderr", stderrBuf.String(),
 			)
 			writeJSONErr(w, http.StatusBadGateway, "CLI_SPAWN_FAILED",
 				"aikey CLI invocation failed: "+err.Error())
