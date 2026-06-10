@@ -1,0 +1,31 @@
+# CI gate — runs unit/in-process tests on every push and PR.
+# Project rule: 持续交付 = CI/CD 失败即失败. A non-zero exit blocks the PR.
+# The Go module lives under service/ (not repo root), so the job runs there.
+# Scope: native `go test ./...` only (no docker/PG); heavier integration is
+# left to nightly/opt-in so this gate needs nothing beyond a hosted runner.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: service/go.mod
+          cache-dependency-path: service/go.sum
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./... -count=1

@@ -263,3 +263,60 @@ func TestCORS_ControlPanelURLSentinel_AppliesAtRequestTime(t *testing.T) {
 		t.Errorf("non-matching origin: ACAO=%q, want empty", got)
 	}
 }
+
+// TestRequireNonServiceAccount mirrors the production master-plane auth chain
+// — JWTMiddleware(RequireNonServiceAccount(handler)) — and asserts a digital-
+// employee service JWT is rejected (403) while human / legacy / missing tokens
+// behave as before. This is the P0 regression guard
+// (requirements/2026-06-10-digital-employee-authz-boundary.md R1): a service
+// account's refresh-minted JWT must not reach admin endpoints.
+func TestRequireNonServiceAccount(t *testing.T) {
+	ts := testTokenService(t)
+	// Exact production composition (see cmd/main.go masterAuth).
+	masterAuth := func(h http.Handler) http.Handler {
+		return JWTMiddleware(ts)(RequireNonServiceAccount(h))
+	}
+	reached := false
+	handler := masterAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	serviceJWT, _ := ts.IssueAccessToken("acc-svc", "bot@openclaw.local", AccountTypeService)
+	humanJWT, _ := ts.IssueAccessToken("acc-h", "user@example.com", AccountTypeHumanForTest)
+	legacyJWT, _ := ts.IssueAccessToken("acc-legacy", "old@example.com", "") // pre-alpha.2: no type
+
+	cases := []struct {
+		name       string
+		bearer     string
+		wantStatus int
+		wantReach  bool
+	}{
+		{"service account → 403", serviceJWT, http.StatusForbidden, false},
+		{"human → 200", humanJWT, http.StatusOK, true},
+		{"legacy empty-type → 200", legacyJWT, http.StatusOK, true},
+		{"missing token → 401", "", http.StatusUnauthorized, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reached = false
+			req := httptest.NewRequest(http.MethodPost, "/orgs/o1/virtual-keys", nil)
+			if tc.bearer != "" {
+				req.Header.Set("Authorization", "Bearer "+tc.bearer)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+			if reached != tc.wantReach {
+				t.Errorf("handler reached = %v, want %v", reached, tc.wantReach)
+			}
+		})
+	}
+}
+
+// AccountTypeHumanForTest is the literal "human" account_type used in this test.
+// We don't reference identity.AccountTypeHuman here because shared must not
+// import identity (lower layer); a fence test in master asserts equality.
+const AccountTypeHumanForTest = "human"

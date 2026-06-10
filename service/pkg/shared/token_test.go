@@ -34,6 +34,35 @@ func TestTokenService_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestAccessToken_CarriesAccountType locks the alpha.2 contract that an access
+// token embeds account_type so RequireNonServiceAccount can authorize without a
+// DB lookup. A service token must round-trip AccountType="service"; a human
+// token (empty type) must round-trip empty.
+func TestAccessToken_CarriesAccountType(t *testing.T) {
+	ts := testTokenService(t)
+
+	svc, err := ts.IssueAccessToken("acc-svc", "bot@openclaw.local", AccountTypeService)
+	if err != nil {
+		t.Fatalf("IssueAccessToken(service): %v", err)
+	}
+	claims, err := ts.Verify(svc)
+	if err != nil {
+		t.Fatalf("Verify(service): %v", err)
+	}
+	if claims.AccountType != AccountTypeService {
+		t.Errorf("service AccountType = %q, want %q", claims.AccountType, AccountTypeService)
+	}
+
+	human, _ := ts.IssueAccessToken("acc-h", "user@example.com", "")
+	hClaims, err := ts.Verify(human)
+	if err != nil {
+		t.Fatalf("Verify(human): %v", err)
+	}
+	if hClaims.AccountType != "" {
+		t.Errorf("human AccountType = %q, want empty", hClaims.AccountType)
+	}
+}
+
 func TestTokenService_InvalidSignature(t *testing.T) {
 	ts1 := testTokenService(t)
 	ts2 := NewTokenService([]byte(strings.Repeat("y", 32)))

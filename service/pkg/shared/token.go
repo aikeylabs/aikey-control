@@ -26,10 +26,22 @@ const TokenTTL = 24 * time.Hour
 // both flows have the same "one workday before refresh" cadence.
 const AccessTokenTTL = 24 * time.Hour
 
+// AccountTypeService is the account_type value for a digital-employee machine
+// identity. Duplicated here (canonical home is identity.AccountTypeService in
+// aikey-control-master) because shared is the lower layer and must not import
+// identity; a fence test in master asserts the two strings stay equal. Used by
+// RequireNonServiceAccount to keep service-account JWTs off the master/admin
+// surface (see requirements/2026-06-10-digital-employee-authz-boundary.md R1).
+const AccountTypeService = "service"
+
 // Claims are the payload fields embedded in every JWT issued by this service.
 type Claims struct {
 	AccountID string `json:"account_id"`
 	Email     string `json:"email"`
+	// AccountType mirrors global_accounts.account_type ("human" / "service").
+	// Empty on legacy tokens issued before alpha.2 — treated as non-service
+	// (human) by RequireNonServiceAccount, so old human tokens keep working.
+	AccountType string `json:"account_type,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -64,11 +76,16 @@ func (ts *TokenService) Issue(accountID, email string) (string, error) {
 // `AccessTokenTTL`, currently 24 h). Use this instead of Issue for tokens
 // issued through the aikey login flow — they round-trip the
 // access/refresh pair the CLI silently renews.
-func (ts *TokenService) IssueAccessToken(accountID, email string) (string, error) {
+//
+// accountType embeds global_accounts.account_type into the JWT so middleware
+// can authorize without a DB lookup (e.g. RequireNonServiceAccount). Pass
+// account.AccountType; empty is acceptable and treated as non-service.
+func (ts *TokenService) IssueAccessToken(accountID, email, accountType string) (string, error) {
 	now := time.Now()
 	claims := Claims{
-		AccountID: accountID,
-		Email:     email,
+		AccountID:   accountID,
+		Email:       email,
+		AccountType: accountType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(AccessTokenTTL)),

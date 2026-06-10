@@ -133,8 +133,27 @@ function relativeTime(iso?: string): string {
 }
 
 function shortVkId(id: string): string {
+  // 2026-06-09 (v2 — user feedback follow-up): keep any `kind:` prefix
+  // INTACT (e.g. `oauth:`, `probe:`), then take 6 chars of the body and
+  // 5 chars of the tail, separated by `…`. Earlier v1 (`first6 of whole
+  // id`) silently swallowed the kind marker as the "first 6" — for
+  // `oauth:session_…` you'd see `oauth:…e95a5` and the user had no
+  // visibility into the body. Format is now:
+  //   - `oauth:session_966…` → `oauth:sessio…e95a5`
+  //   - `probe:FreySilvaqzs…` → `probe:FreySi…e.com`
+  //   - plain UUID (no `:`) → `5f9758…61eb6` (same as v1)
+  //
+  // Threshold logic: only truncate when the trunc form is SHORTER than
+  // the full id. trunc form length = prefix.length + 6 + 1 + 5.
+  const colonIdx = id.indexOf(':');
+  if (colonIdx >= 0 && colonIdx < id.length - 1) {
+    const prefix = id.slice(0, colonIdx + 1); // includes the colon
+    const body = id.slice(colonIdx + 1);
+    if (body.length <= 12) return id;
+    return `${prefix}${body.slice(0, 6)}…${body.slice(-5)}`;
+  }
   if (id.length <= 12) return id;
-  return `${id.slice(0, 6)}…${id.slice(-3)}`;
+  return `${id.slice(0, 6)}…${id.slice(-5)}`;
 }
 
 // deriveKeyLabel moved to /user/cost (2026-05-06) along with the

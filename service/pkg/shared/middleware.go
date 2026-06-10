@@ -117,6 +117,32 @@ func JWTMiddleware(ts *TokenService) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireNonServiceAccount rejects requests whose JWT belongs to a
+// digital-employee machine account (account_type='service'). It must be
+// composed INSIDE an auth middleware that has already injected Claims (e.g.
+// JWTMiddleware(RequireNonServiceAccount(handler))) — it reads the claims set
+// in context, it does not parse the token itself.
+//
+// Why: a service account's daemon refresh_token can mint a normal access JWT
+// (CLILoginService.Refresh intentionally does not reject service accounts so
+// the daemon can pull its own assigned key). That JWT must NOT reach the
+// master/admin surface (issue/list virtual keys, mint join tokens) — VKs are
+// assigned by an admin, never self-issued. This enforces, at the API layer,
+// the "master console is admin-only" design that was previously only a UI
+// property. See requirements/2026-06-10-digital-employee-authz-boundary.md R1.
+//
+// Tokens with an empty account_type (legacy / human) pass through unchanged.
+func RequireNonServiceAccount(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if c, ok := r.Context().Value(claimsKey).(*Claims); ok && c != nil &&
+			c.AccountType == AccountTypeService {
+			DomainErrorResponse(w, BizAuthAccessDenied())
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // CORSAllowControlPanelURL is the sentinel value that, when present in
 // allowedOrigins, makes CORSMiddleware reflect the Origin matching
 // `controlPanelUrl` from `~/.aikey/config/config.json` (Phase 3B R20).
