@@ -54,12 +54,13 @@ var zhWriteErrMessages = map[string]string{
 	"I_STDIN_INVALID_JSON":        "请求数据格式无效",
 
 	// Credential / team-key business-state codes
-	"I_CREDENTIAL_CONFLICT":  "凭据已存在，发生冲突",
-	"I_CREDENTIAL_NOT_FOUND": "未找到对应凭据",
-	"I_KEY_DISABLED":         "该密钥已被禁用",
-	"I_KEY_NOT_DELIVERED":    "该密钥尚未下发",
-	"I_KEY_STALE":            "密钥缓存已过期，请重新同步",
-	"I_KEY_NO_PROVIDER":      "该密钥未分配服务提供方",
+	"I_CREDENTIAL_CONFLICT":     "凭据已存在，发生冲突",
+	"I_CREDENTIAL_NOT_FOUND":    "未找到对应凭据",
+	"I_KEY_DISABLED":            "该密钥已被禁用",
+	"I_KEY_NOT_DELIVERED":       "该密钥尚未下发",
+	"I_KEY_STALE":               "密钥缓存已过期，请重新同步",
+	"I_KEY_NO_PROVIDER":         "该密钥未分配服务提供方",
+	"I_CLUSTER_NODE_UNRESOLVED": "集群密钥的中央节点暂时无法连接，请稍后重试",
 
 	// Dependency / internal
 	"I_PROXY_NOT_RUNNING": "代理未运行",

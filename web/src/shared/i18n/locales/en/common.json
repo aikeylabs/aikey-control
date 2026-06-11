@@ -2124,6 +2124,15 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Configure your workbench connection and security preferences.",
+    "account": {
+      "title": "Current account",
+      "description": "The account this console is signed in with. Confirm it's the right one before changing anything below.",
+      "emailLabel": "Login email",
+      "notLoggedIn": "(not logged in — run `aikey login` in your terminal)",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyTooltip": "Copy email to clipboard"
+    },
     "controlUrl": {
       "title": "Control URL",
       "description": "The team server your CLI and Web Console talk to. Changing this is equivalent to running aikey account set-url in your terminal.",

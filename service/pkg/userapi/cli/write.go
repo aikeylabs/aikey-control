@@ -108,7 +108,12 @@ func WriteErr(w http.ResponseWriter, code, msg string) {
 		status = http.StatusConflict
 	case ErrUnlockRateLimited:
 		status = http.StatusTooManyRequests
-	case ErrCliNotFound, "I_PROXY_NOT_RUNNING":
+	case ErrCliNotFound, "I_PROXY_NOT_RUNNING", "I_CLUSTER_NODE_UNRESOLVED":
+		// I_CLUSTER_NODE_UNRESOLVED (2026-06-11): a cluster team-key probe
+		// couldn't resolve/reach its central node — a transient connectivity
+		// state, not a missing credential. 503 (retryable) keeps the Web
+		// "Test Connection" out of the misleading 404 path. Bug:
+		// 20260611-cluster-form1-connectivity-test-404.md
 		// 503: feature requires a local dependency that isn't running.
 		//   - I_CLI_NOT_FOUND: aikey binary missing on the host (e.g., a
 		//     production control-service container that doesn't ship the

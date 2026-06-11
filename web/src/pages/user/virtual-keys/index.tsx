@@ -205,10 +205,24 @@ function QuotaUsageBar({ q }: { q: { metric: string; used: number; limit: number
  *  other dates. */
 function nextResetLabel(period: string): string {
   const now = new Date();
-  const d = period === 'daily'
-    ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
-    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  let d: Date;
+  if (period === 'daily') {
+    d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  } else if (period === 'weekly') {
+    // Next Monday 00:00 UTC — matches aikey-proxy quota.PeriodResetAt (ISO week,
+    // Mon start). getUTCDay() is Sun=0..Sat=6, so offset to make Monday the start.
+    const daysSinceMonday = (now.getUTCDay() + 6) % 7;
+    d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceMonday + 7));
+  } else {
+    d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  }
+  // Period boundaries are always midnight UTC, so include the 00:00 time so the
+  // user sees the exact reset instant (e.g. "2026年6月15日 00:00"); the i18n string
+  // appends （UTC）. hour12:false keeps it 00:00 across locales.
+  return d.toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC',
+  });
 }
 
 /** "expires Mar 5, 2026" / "expired" / null when no expiry. Date is
@@ -981,7 +995,7 @@ function DetailDrawer(props: {
                 const shown = Math.min(100, Math.max(0, Math.round(pct)));
                 const over = q.limit > 0 && q.used >= q.limit;
                 return (
-                  <div key={i} className="drawer-field" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                  <div key={i} className="drawer-field" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                       <span className="v mono">
                         {fmtQuota(q.metric, q.used)} / {fmtQuota(q.metric, q.limit)}
@@ -1033,7 +1047,7 @@ function DetailDrawer(props: {
               </div>
             )}
             {props.summary && props.summary.slots.map((slot) => (
-              <div key={slot.protocol_type} className="drawer-field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+              <div key={slot.protocol_type} className="drawer-field" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
                 <span className="k">{slot.protocol_type.toUpperCase()}</span>
                 <span className="v" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4, width: '100%' }}>
                   {slot.targets.map((t) => (

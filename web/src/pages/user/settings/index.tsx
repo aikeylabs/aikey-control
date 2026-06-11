@@ -151,6 +151,56 @@ export default function SettingsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
+  // ── Current Account state ──────────────────────────────────────────
+  // We surface the logged-in email at the top of Settings so users can
+  // confirm WHICH account this control panel belongs to before they touch
+  // dangerous actions (change URL, change password, logout). Read from
+  // /accounts/me — same endpoint the sidebar identity chip uses, so the
+  // two stay in lockstep. Empty/local-bypass auth (`local@aikey.local`,
+  // `personal-local`) renders as "(not logged in)" rather than the
+  // placeholder string, which would confuse a real Trial / Production
+  // user who saw the local-only stub leak in.
+  const [currentEmail, setCurrentEmail] = useState<string>('');
+  const [emailCopied, setEmailCopied] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/accounts/me', {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          credentials: 'omit',
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { email?: string };
+        const email = (data.email ?? '').trim();
+        if (cancelled) return;
+        // Filter the local-bypass placeholder. The local-server returns
+        // `local@aikey.local` when no JWT is attached; that's a Personal-
+        // edition sentinel, not a real user — don't expose it as if it
+        // were the user's account.
+        if (email && email !== 'local@aikey.local') {
+          setCurrentEmail(email);
+        }
+      } catch {
+        /* network blip — leave empty; UI shows "not logged in" */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  async function onCopyEmail() {
+    if (!currentEmail) return;
+    try {
+      await navigator.clipboard.writeText(currentEmail);
+      setEmailCopied(true);
+      window.setTimeout(() => setEmailCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — user can still select + copy from the input */
+    }
+  }
+
   // ── Control URL state ──────────────────────────────────────────────
   const [currentURL, setCurrentURL] = useState<string>('');
   const [urlInput, setUrlInput] = useState<string>('');
@@ -390,6 +440,95 @@ export default function SettingsPage() {
         >
           {t('settings.subtitle')}
         </p>
+
+        {/* ── Card 0: Current Account ─────────────────────────────────
+            Surface the logged-in email at the top so users can confirm
+            which account this control panel belongs to before touching
+            any destructive setting below. Read-only display + one-tap
+            copy — no save action — keeps this card light and lets the
+            "real" settings cards below do the heavy lifting. */}
+        <section
+          className="rounded-md"
+          style={{
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            padding: 24,
+            marginBottom: 24,
+          }}
+        >
+          <h2
+            className="mb-3"
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 18,
+              fontWeight: 600,
+              color: 'var(--display-foreground)',
+            }}
+          >
+            {t('settings.account.title')}
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--soft-foreground)', marginBottom: 14 }}>
+            {t('settings.account.description')}
+          </p>
+          <label
+            className="block mb-1"
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--muted-foreground)',
+            }}
+          >
+            {t('settings.account.emailLabel')}
+          </label>
+          {/* Read-only "input" + copy chip mirrors the visual language
+              of the Control URL card just below — same height, same
+              border, same monospace bg — so the two cards read as a
+              consistent identity-strip rather than two unrelated
+              widgets. The actual control is a plain input[readOnly]
+              (not a <span>) so the user can still triple-click +
+              Cmd-C as a copy fallback when navigator.clipboard is
+              blocked (e.g. http on a non-loopback IP). */}
+          <div className="flex gap-2 items-stretch">
+            <input
+              type="text"
+              value={currentEmail || t('settings.account.notLoggedIn')}
+              readOnly
+              spellCheck={false}
+              className="flex-1"
+              style={{
+                background: '#000000',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                color: currentEmail ? 'var(--foreground)' : 'var(--muted-foreground)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 14,
+                padding: '10px 12px',
+              }}
+            />
+            <button
+              type="button"
+              onClick={onCopyEmail}
+              disabled={!currentEmail}
+              title={t('settings.account.copyTooltip')}
+              aria-label={t('settings.account.copyTooltip')}
+              className="px-4 rounded-md"
+              style={{
+                background: emailCopied ? 'var(--primary)' : 'transparent',
+                border: '1px solid var(--border)',
+                color: emailCopied ? 'var(--primary-foreground)' : 'var(--foreground)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 13,
+                cursor: currentEmail ? 'pointer' : 'not-allowed',
+                opacity: currentEmail ? 1 : 0.5,
+                transition: 'background 120ms ease, color 120ms ease',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {emailCopied ? t('settings.account.copied') : t('settings.account.copy')}
+            </button>
+          </div>
+        </section>
 
         {/* ── Card 1: Control URL ───────────────────────────────────── */}
         <section
