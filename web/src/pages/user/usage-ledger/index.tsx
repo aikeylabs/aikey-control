@@ -388,6 +388,14 @@ export default function UserUsageLedgerPage() {
 
   const padTimelineData = useMemo(() => {
     const data = timeline.data ?? [];
+    // 1D mode: data is hourly ("HH:00"), NOT calendar dates. The daily min-days
+    // padding below would inject daysAgo() date rows (e.g. "2026-06-10") into the
+    // hourly series whenever there were <3 active hours — making the X axis show
+    // multiple days. Latent since the 1D dimension was added (2026-05-28); only
+    // surfaces on sparse-hour days. Hourly data needs no calendar padding.
+    if (isHourly) {
+      return [...data].sort((a, b) => a.date.localeCompare(b.date));
+    }
     const today = daysAgo(0);
     const existing = new Set(data.map((d) => d.date));
     const result = [...data.filter((d) => d.date <= today)];
@@ -402,7 +410,7 @@ export default function UserUsageLedgerPage() {
     }
     result.sort((a, b) => a.date.localeCompare(b.date));
     return result;
-  }, [timeline.data]);
+  }, [timeline.data, isHourly]);
 
   // Stacked data by protocol, ordered so biggest stack bottom.
   const protocolNames = useMemo(
