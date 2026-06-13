@@ -36,6 +36,20 @@ export const TEAM_MENU_FALLBACK: CrossAppMenuEntry[] = [
     visibility: 'team-logged-in',
     icon: 'team-chart',
   },
+  // P4b (20260611 集中化网关归因改造): member compliance self-view on the
+  // team server — the member's OWN team events at /user/compliance. MUST mirror
+  // B's OWN_TEAM_MENU (aikey-control-master own-menu.ts + Go team_menu.go); this
+  // fallback is what A renders when the runtime cross-app-menu fetch fails (e.g.
+  // team server's nginx not proxying /system/*), which is exactly the
+  // centralized-gateway case this entry is for.
+  {
+    id: 'team-compliance',
+    group: 'QUALITY', // same group as Personal's local Compliance → crossAppPreferred absorbs in-place (2026-06-12)
+    label: 'Compliance',
+    path: '/user/compliance',
+    visibility: 'team-logged-in',
+    icon: 'compliance',
+  },
   // Phase 3B R22 (2026-05-11, supersedes R16): Account is teamOnly —
   // A side renders this as cross-app slot pointing at the team server
   // since A's local /user/account stub returns local-owner synthetic

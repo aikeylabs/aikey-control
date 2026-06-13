@@ -87,7 +87,47 @@ function fmtTime(iso: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-export default function ComplianceSelfViewPage() {
+const COMPLIANCE_SLUG = 'ai-compliance-detector';
+
+// Pluggable data source so this exact page (full UI: masked-snippet column, pill
+// badges, summary cards, packs drawer, detail drawer) is reused verbatim by BOTH
+// the Personal local self-view AND the team-server member self-view. Only the
+// data source differs (2026-06-12 用户需求: 完全复用, 仅数据只看自己).
+//   - Personal (A side): LOCAL_SOURCE below — local-server endpoints + app toggle.
+//   - Team member (master /user/compliance): injects member-scoped endpoints +
+//     filterControl:undefined → switch renders read-only "企业已强制开启".
+export interface ComplianceFilterControl {
+  probe: () => Promise<{ installed: boolean; enabled: boolean; locked: boolean }>;
+  set: (next: boolean) => Promise<{ enabled: boolean }>;
+}
+export interface ComplianceViewSource {
+  listEvents: typeof complianceApi.listEvents;
+  getEffectivePacks: typeof complianceApi.getEffectivePacks;
+  /** undefined = org-enforced read-only (team member can't toggle org compliance). */
+  filterControl?: ComplianceFilterControl;
+  titleKey: string;
+  descriptionKey: string;
+}
+
+const LOCAL_SOURCE: ComplianceViewSource = {
+  listEvents: complianceApi.listEvents,
+  getEffectivePacks: complianceApi.getEffectivePacks,
+  filterControl: {
+    probe: async () => {
+      const list = await appsApi.list();
+      if (!list.apps.some((a) => a.slug === COMPLIANCE_SLUG)) {
+        return { installed: false, enabled: false, locked: false };
+      }
+      const s = await appsApi.filterStatus(COMPLIANCE_SLUG);
+      return { installed: true, enabled: s.enabled, locked: s.locked ?? false };
+    },
+    set: (next) => appsApi.filterSet(COMPLIANCE_SLUG, next),
+  },
+  titleKey: 'compliancePage.pageTitle',
+  descriptionKey: 'compliancePage.pageDescription',
+};
+
+export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { source?: ComplianceViewSource } = {}) {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selected, setSelected] = useState<ComplianceEventDTO | null>(null);
@@ -100,7 +140,6 @@ export default function ComplianceSelfViewPage() {
   // spawns / kills the detector child. Mirrors the toggle in /user/settings
   // (2nd usage — replicate the pattern, don't abstract prematurely). G3 adds
   // the master-policy `locked` state (org-mandated on → can't disable here).
-  const COMPLIANCE_SLUG = 'ai-compliance-detector';
   const [filterState, setFilterState] = useState<
     { kind: 'loading' } | { kind: 'not-installed' } | { kind: 'ready'; enabled: boolean; locked: boolean } | { kind: 'error' }
   >({ kind: 'loading' });
@@ -110,27 +149,32 @@ export default function ComplianceSelfViewPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // No filterControl = team member self-view: org compliance is enforced and
+      // not member-toggleable → render the switch read-only "已强制开启" (locked).
+      if (!source.filterControl) {
+        if (!cancelled) setFilterState({ kind: 'ready', enabled: true, locked: true });
+        return;
+      }
       try {
-        const list = await appsApi.list();
-        if (!list.apps.some((a) => a.slug === COMPLIANCE_SLUG)) {
-          if (!cancelled) setFilterState({ kind: 'not-installed' });
-          return;
-        }
-        const status = await appsApi.filterStatus(COMPLIANCE_SLUG);
-        if (!cancelled) setFilterState({ kind: 'ready', enabled: status.enabled, locked: status.locked ?? false });
+        const st = await source.filterControl.probe();
+        if (cancelled) return;
+        setFilterState(st.installed
+          ? { kind: 'ready', enabled: st.enabled, locked: st.locked }
+          : { kind: 'not-installed' });
       } catch {
         if (!cancelled) setFilterState({ kind: 'error' });
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [source]);
 
   async function onToggleFilter(next: boolean) {
     if (filterState.kind !== 'ready' || filterSaving || filterState.locked) return;
+    if (!source.filterControl) return; // enforced read-only (team member)
     setFilterSaving(true);
     setFilterMsg('');
     try {
-      const res = await appsApi.filterSet(COMPLIANCE_SLUG, next);
+      const res = await source.filterControl.set(next);
       setFilterState({ kind: 'ready', enabled: res.enabled, locked: false });
     } catch (err) {
       const e = err as Error & { code?: string };
@@ -162,7 +206,7 @@ export default function ComplianceSelfViewPage() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['compliance-self', { severity, category, action, offset }],
-    queryFn: () => complianceApi.listEvents({
+    queryFn: () => source.listEvents({
       severity: severity || undefined,
       category: category || undefined,
       action: action || undefined,
@@ -178,7 +222,7 @@ export default function ComplianceSelfViewPage() {
   // drawer opens. Relayed local-server → proxy → live detector IPC.
   const packsQuery = useQuery({
     queryKey: ['compliance-packs'],
-    queryFn: () => complianceApi.getEffectivePacks(),
+    queryFn: () => source.getEffectivePacks(),
     enabled: packsOpen,
   });
   const packsReport = packsQuery.data?.available ? packsQuery.data.report : undefined;
@@ -191,7 +235,7 @@ export default function ComplianceSelfViewPage() {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useQuery({
       queryKey: ['compliance-count', key, { severity, category }],
-      queryFn: () => complianceApi.listEvents({
+      queryFn: () => source.listEvents({
         severity: severity || undefined,
         category: category || undefined,
         action: act,
@@ -230,8 +274,8 @@ export default function ComplianceSelfViewPage() {
   return (
     <div className="p-6 space-y-5">
       <PageHeader
-        title={t('compliancePage.pageTitle')}
-        description={t('compliancePage.pageDescription')}
+        title={t(source.titleKey)}
+        description={t(source.descriptionKey)}
         actions={
           <div className="flex items-center gap-3">
             {/* Feature master switch — distinct from the pack-level info (layered:

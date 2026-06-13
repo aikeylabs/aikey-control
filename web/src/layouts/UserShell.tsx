@@ -408,6 +408,7 @@ const GROUP_TITLE_I18N_KEY: Record<string, string> = {
 const TEAM_MENU_I18N_KEY: Record<string, string> = {
   'team-keys': 'teamKeys',
   'team-usage': 'teamUsage',
+  'team-compliance': 'teamCompliance',
   'team-account': 'account',
 };
 
@@ -807,12 +808,18 @@ export function UserShell() {
         // personalOnly because the page calls trust-local on 8801,
         // which only lives on the user's machine.
         { path: '/user/trust-check', icon: <RadarIcon />, label: 'Trust Check', personalOnly: true },
-        // Phase 3 (2026-06-02): local compliance self-view. personalOnly
-        // because the page calls the local-server /api/user/compliance/events
-        // which reads control.db on the user's own machine (same constraint
-        // as the other personalOnly local pages). Master/Production users use
-        // the team audit page at /master/compliance/audit instead.
-        { path: '/user/compliance', icon: <FingerprintIcon />, label: 'Compliance Audit', personalOnly: true },
+        // Compliance — `crossAppPreferred` (was personalOnly until 2026-06-12),
+        // same pattern as Account. WHY the change: at a centralized gateway
+        // (form ①) a member's events live on the team server, so when logged
+        // into team we want the ONE compliance entry to point THERE (the
+        // team self-view at the team server's /user/compliance), in-place —
+        // not a second "Team Compliance" row next to a now-empty local one.
+        // crossAppPreferred absorbs the team-compliance cross-app entry into
+        // this slot (used.add → no duplicate trailer). Logged-out / Personal
+        // (no team) falls back to the LOCAL self-view NavLink, which reads the
+        // local-server /api/user/compliance/events (control.db on the user's
+        // own machine). Admins still use /master/compliance/audit.
+        { path: '/user/compliance', icon: <FingerprintIcon />, label: 'Compliance Audit', originName: 'Compliance Audit', crossAppPreferred: true },
       ],
     },
     {
@@ -1125,6 +1132,17 @@ export function UserShell() {
                           </a>
                         );
                       } else {
+                        // B-side crossAppPreferred renders a LOCAL NavLink here.
+                        // Consume any same-path cross-app entry so the opposite
+                        // side's matching entry (e.g. Personal's compliance) does
+                        // NOT also render as a trailing extra → duplicate row
+                        // (2026-06-12). Scoped to crossAppPreferred only, so
+                        // Usage/Team-Usage (which intentionally coexist) are
+                        // unaffected.
+                        if (item.crossAppPreferred && otherBaseUrl) {
+                          const xaSame = crossAppItems.find((e) => e.path === item.path);
+                          if (xaSame) used.add(xaSame.id);
+                        }
                         renderedItems.push(
                           <NavLink
                             key={item.path}

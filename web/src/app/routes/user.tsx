@@ -76,6 +76,9 @@ export function buildUserRoutes(): RouteObject[] {
         </AuthGuard>
       ),
       children: [
+        // Bare /user → default landing (2026-06-12). Without this the UserShell
+        // renders with an empty <Outlet/>. Keep target in sync with first nav item.
+        { index: true, element: <Navigate to="/user/overview" replace /> },
         { path: 'overview', element: <UserOverviewPage /> },
         { path: 'account', element: <MyAccountPage /> },
         // /user/virtual-keys removed from A's routes — see import-block
