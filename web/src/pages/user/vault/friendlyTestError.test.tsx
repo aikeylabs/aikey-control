@@ -52,6 +52,18 @@ describe('friendlyTestError matching order', () => {
     expect(out.title).toBe('aikey-proxy is not running');
   });
 
+  it('I_CLUSTER_NODE_UNRESOLVED wins over httpStatus 503 (not "Local server is unavailable")', () => {
+    // 2026-06-17 cluster follow-up: write.go maps this code to 503 but
+    // the UI had no case → it fell through to the 5xx "restart web"
+    // message for cluster team keys. Pin the cluster destination.
+    const out = friendlyTestError({
+      code: 'I_CLUSTER_NODE_UNRESOLVED',
+      httpStatus: 503,
+      message: 'team key is a cluster key; node resolved but probe target could not be built',
+    });
+    expect(out.title).toBe('Cluster node not ready');
+  });
+
   it('I_CREDENTIAL_NOT_FOUND wins over httpStatus 500', () => {
     // The credential was deleted between click and probe. Server may
     // wrap this in a 500 (it currently maps to 404, but pin the UI

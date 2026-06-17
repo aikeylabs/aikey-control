@@ -24,6 +24,9 @@ import type React from 'react';
  * Cases (in match order):
  *   • I_PROXY_NOT_RUNNING    — aikey-proxy isn't running (CLI's
  *                              dedicated error code from handle_test).
+ *   • I_CLUSTER_NODE_UNRESOLVED — cluster team-key probe: node resolved
+ *                              but no probe target could be built
+ *                              (transient hub/control connectivity).
  *   • I_CREDENTIAL_NOT_FOUND — alias / id resolved to nothing (rare,
  *                              implies the row was deleted between
  *                              the test click and the backend run).
@@ -73,6 +76,26 @@ export function friendlyTestError(
           {tr('vault.errProxyNotRunningActionPrefix', 'Start it in a terminal: ')}
           <code className="font-bold">aikey service start proxy</code>.
         </>
+      ),
+    };
+  }
+  if (code === 'I_CLUSTER_NODE_UNRESOLVED') {
+    // 2026-06-17: the 2026-06-11 cluster work added this code to write.go
+    // (mapped to 503) but NOT here, so a cluster team-key probe whose
+    // target couldn't be built fell through to the 5xx "Local server is
+    // unavailable" branch — the same wrong-target bug I_PROXY_NOT_RUNNING
+    // had. This case keeps it pointed at the cluster, not at restarting
+    // web. Bugfix: 20260523-test-connection-proxy-down-shows-local-server-
+    // error.md (cluster follow-up).
+    return {
+      title: tr('vault.errClusterNodeUnresolvedTitle', 'Cluster node not ready'),
+      detail: tr(
+        'vault.errClusterNodeUnresolvedDetail',
+        "This team key's credential lives on the cluster's central node. The node resolved but the connectivity probe target couldn't be built — usually a transient state.",
+      ),
+      action: tr(
+        'vault.errClusterNodeUnresolvedAction',
+        'Retry. If it keeps failing, run `aikey use <alias>` to refresh the key, or check control / hub connectivity.',
       ),
     };
   }
