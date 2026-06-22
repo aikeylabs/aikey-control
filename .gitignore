@@ -25,3 +25,7 @@ vendor/
 
 # OS
 Thumbs.db
+
+# Editor/backup files (e.g. *.bak-YYYYMMDD left by tooling)
+*.bak
+*.bak-*
