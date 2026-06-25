@@ -81,19 +81,22 @@ func domainErrorStatus(code string) int {
 
 	// ── 404 Not Found ─────────────────────────────────────────────────────────
 	case CodeBizOrgNotFound, CodeBizSeatNotFound, CodeBizKeyNotFound,
-		CodeBizBindNotFound, CodeBizCredNotFound, CodeBizProvNotFound:
+		CodeBizBindNotFound, CodeBizCredNotFound, CodeBizProvNotFound,
+		CodeBizSeatGroupNotFound:
 		return http.StatusNotFound
 
 	// ── 409 Conflict ──────────────────────────────────────────────────────────
 	case CodeBizAuthEmailTaken, CodeBizSeatEmailTaken,
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
+		CodeBizSeatGroupCredInUse, CodeBizSeatGroupRatioRejected,
 		CodeBizLoginSessionTerminated:
 		return http.StatusConflict
 
 	// ── 422 Unprocessable ─────────────────────────────────────────────────────
 	case CodeBizSeatAlreadyClaimed, CodeBizKeyNotActive,
 		CodeBizKeyDuplicateProtocol, CodeBizBindProtocolMismatch,
-		CodeBizCredInactive:
+		CodeBizCredInactive, CodeBizSeatGroupDefaultProtected,
+		CodeBizSeatGroupDisabled, CodeBizBindTargetInvalid:
 		return http.StatusUnprocessableEntity
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────
