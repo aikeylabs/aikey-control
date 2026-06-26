@@ -998,6 +998,109 @@ function DetailDrawer(props: {
             </div>
           </div>
 
+          {/* seat_group (Stage A): pool candidate accounts behind this group VK —
+              identity / provider / priority + the master-assigned default. Mirrors
+              the vault page's 池账号 section so both drawers read identically.
+              "Default" is master's STATIC rank-0 pick; the proxy's live selection
+              (cooled-account fallback) is Stage B. */}
+          {r.seat_group_id && (
+            <div className="drawer-section">
+              <div className="drawer-section-title">
+                <KeyRoundIcon className="w-3 h-3" />
+                {t('teamKeys.seatGroupGroupAccounts')}
+              </div>
+              {(r.group_accounts ?? []).length === 0 ? (
+                <div className="drawer-field">
+                  <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
+                    {t('teamKeys.seatGroupNoAccounts')}
+                  </span>
+                </div>
+              ) : (
+                (r.group_accounts ?? [])
+                  .slice()
+                  .sort((a, b) => a.priority - b.priority)
+                  .map((a) => (
+                    // Custom stacked layout (NOT drawer-field): identity is a value,
+                    // not a field label — drawer-field's .k uppercases + letter-spaces
+                    // it (reads as garbled). Identity on its own line, the
+                    // provider/type/priority meta below it.
+                    <div
+                      key={a.account_id}
+                      style={{
+                        padding: '9px 11px',
+                        marginTop: 6,
+                        borderRadius: 8,
+                        border: `1px solid ${a.assigned ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
+                        background: a.assigned ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--foreground)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
+                        {a.assigned && <span className="chip success">{t('teamKeys.seatGroupDefault')}</span>}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--muted-foreground)',
+                          marginTop: 5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span
+                            className="prov-dot"
+                            style={{ background: providerBrandColor(a.provider_code), width: 6, height: 6 }}
+                          />
+                          {a.provider_code}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>
+                          {a.credential_type === 'oauth_account'
+                            ? t('teamKeys.seatGroupTypeOauth')
+                            : t('teamKeys.seatGroupTypeKey')}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>{t('teamKeys.seatGroupPriority', { priority: a.priority })}</span>
+                      </div>
+                    </div>
+                  ))
+              )}
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <span
+                  style={{
+                    color: 'var(--muted-foreground)',
+                    fontSize: 11,
+                    fontStyle: 'italic',
+                    lineHeight: 1.5,
+                    display: 'block',
+                  }}
+                >
+                  {t('teamKeys.seatGroupDefaultHint')}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Usage / Limit section — the seat's quota (used vs limit per rule),
               the same data as the team-keys list column, shown larger here. */}
           {r.seat_quota && r.seat_quota.length > 0 && (

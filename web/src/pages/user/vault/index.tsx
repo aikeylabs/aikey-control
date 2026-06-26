@@ -91,6 +91,7 @@ interface SeatGroupAccountRef {
   provider_code: string;
   priority: number;
   assigned: boolean; // master-assigned default (static)
+  credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
 }
 
 interface TeamRowRecord {
@@ -1122,18 +1123,30 @@ export default function UserVaultPage() {
         // schema change adds a third cache key).
         qc.refetchQueries({ queryKey: ['vault-list'] });
       })
-      .catch((err: Error & { code?: string; response?: { status?: number } }) => {
-        // Surface the raw HTTP status alongside the (CLI / axios) error
-        // code so the popup's friendly-text mapping can branch on
-        // 5xx-class failures without re-inspecting the thrown object.
-        const httpStatus = err.response?.status;
-        setTestError({
-          code: err.code,
-          httpStatus,
-          message: err.message || 'Test failed for an unknown reason',
-        });
-        setTestPhase('error');
-      });
+      .catch(
+        (err: Error & {
+          code?: string;
+          response?: { status?: number; data?: { error?: string; message?: string } };
+        }) => {
+          // Surface the raw HTTP status alongside the error code so the popup's
+          // friendly-text mapping can branch correctly. PREFER the backend's
+          // error_code (response body `error`, e.g. I_PROXY_NOT_RUNNING) over the
+          // axios transport code (ERR_BAD_RESPONSE for any 5xx): friendlyTestError
+          // keys on the I_* code, so falling back to the axios code collapsed every
+          // mapped failure (proxy down / cluster node / credential not found) into
+          // the generic 5xx "restart web" copy — the wrong next-step. Same for the
+          // message: the backend's human message beats axios's bare "Request failed
+          // with status code 503". Bugfix 2026-06-26-vault-test-error-code-not-surfaced.
+          const httpStatus = err.response?.status;
+          const data = err.response?.data;
+          setTestError({
+            code: data?.error ?? err.code,
+            httpStatus,
+            message: data?.message || err.message || 'Test failed for an unknown reason',
+          });
+          setTestPhase('error');
+        },
+      );
   }
 
   function closeTestPopup() {
@@ -2580,11 +2593,18 @@ const Row = React.memo(function Row(props: {
   const r = props.record;
   const inUse = recordInUseForGroup(r, props.groupProvider);
   const lockedTitle = props.locked ? t('vault.unlockToUseAction') : undefined;
-  const providerName = providerDisplayName(r);
   const isTeam = r.target === 'team';
   const isOAuth = r.target === 'oauth';
   const aliasMono = isMonoAlias(r.alias);
-  const kindLabel = isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY';
+  // Group VK = shared OAuth pool: it has no single protocol_family of its own
+  // (would render "unknown"), so derive the Provider column from the pool's
+  // default (or first) account; and its kind chip reads TEAM-OAUTH (English,
+  // matching the adjacent TEAM/OAUTH/KEY pills — no mixed CN/EN).
+  const isTeamOAuthGroup = isTeam && !!(r as TeamRowRecord).seat_group_id;
+  const groupAccts = isTeamOAuthGroup ? (r as TeamRowRecord).group_accounts : null;
+  const groupProto = (groupAccts?.find((a) => a.assigned) ?? groupAccts?.[0])?.provider_code;
+  const providerName = groupProto || providerDisplayName(r);
+  const kindLabel = isTeamOAuthGroup ? 'TEAM-OAUTH' : isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY';
   const kindClass = isTeam ? ' team' : isOAuth ? ' oauth' : '';
 
   // Secondary alias line: route_token tail + contextual hint.
@@ -3248,7 +3268,12 @@ function DetailDrawer(props: {
   // fields walled off behind isOAuth.
   const oauth = isOAuth ? (r as OAuthVaultRecord) : null;
   const team = isTeam ? (r as TeamRowRecord) : null;
-  const providerName = providerDisplayName(r);
+  // Group VK derives its protocol from the pool's default/first account (it has
+  // no single protocol_family of its own — see the row component for rationale).
+  const groupProto = team?.seat_group_id
+    ? (team.group_accounts?.find((a) => a.assigned) ?? team.group_accounts?.[0])?.provider_code
+    : undefined;
+  const providerName = groupProto || providerDisplayName(r);
 
   return (
     <>
@@ -3270,7 +3295,7 @@ function DetailDrawer(props: {
                   {providerName}
                 </span>
                 <span className={`kind-pill${isTeam ? ' team' : isOAuth ? ' oauth' : ''}`}>
-                  {isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY'}
+                  {team?.seat_group_id ? 'TEAM-OAUTH' : isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY'}
                 </span>
               </span>
               {r.status === 'active' ? (
@@ -3480,25 +3505,81 @@ function DetailDrawer(props: {
                   .slice()
                   .sort((a, b) => a.priority - b.priority)
                   .map((a) => (
-                    <div className="drawer-field" key={a.account_id}>
-                      <span className="k">
-                        {a.identity}
-                        {a.assigned && (
-                          <span className="chip success" style={{ marginLeft: 6 }}>
-                            {t('vault.seatGroupDefault')}
-                          </span>
-                        )}
-                      </span>
-                      <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
-                        {a.provider_code} · {t('vault.seatGroupPriority', { priority: a.priority })}
-                      </span>
+                    // Custom stacked layout (NOT drawer-field): identity is a
+                    // value, not a field label — drawer-field's .k uppercases +
+                    // letter-spaces it (reads as garbled) and the .k/.v side-by-side
+                    // collides two long strings. Identity on its own line, the
+                    // type/provider/priority meta below it.
+                    <div
+                      key={a.account_id}
+                      style={{
+                        padding: '9px 11px',
+                        marginTop: 6,
+                        borderRadius: 8,
+                        border: `1px solid ${a.assigned ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
+                        background: a.assigned ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--foreground)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
+                        {a.assigned && <span className="chip success">{t('vault.seatGroupDefault')}</span>}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--muted-foreground)',
+                          marginTop: 5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span
+                            className="prov-dot"
+                            style={{ background: providerBrandColor(a.provider_code), width: 6, height: 6 }}
+                          />
+                          {a.provider_code}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>
+                          {a.credential_type === 'oauth_account'
+                            ? t('vault.seatGroupTypeOauth')
+                            : t('vault.seatGroupTypeKey')}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>{t('vault.seatGroupPriority', { priority: a.priority })}</span>
+                      </div>
                     </div>
                   ))
               )}
-              <div className="drawer-field">
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border)',
+                }}
+              >
                 <span
-                  className="v"
-                  style={{ color: 'var(--muted-foreground)', fontSize: 11, fontStyle: 'italic' }}
+                  style={{
+                    color: 'var(--muted-foreground)',
+                    fontSize: 11,
+                    fontStyle: 'italic',
+                    lineHeight: 1.5,
+                    display: 'block',
+                  }}
                 >
                   {t('vault.seatGroupDefaultHint')}
                 </span>

@@ -38,6 +38,7 @@ export interface GroupAccountRef {
   provider_code: string;
   priority: number;
   assigned: boolean; // master-assigned default (static)
+  credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
 }
 
 export interface UserKeyDTO {
