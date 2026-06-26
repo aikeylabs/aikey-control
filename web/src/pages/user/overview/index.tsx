@@ -1292,6 +1292,23 @@ export default function UserOverviewPage() {
                           style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}
                         >
                           {shortVkId(k.virtual_key_id)}
+                          {/* seat_group (Stage A): shared-group marker + the
+                              master-assigned DEFAULT pool account identity. */}
+                          {k.seat_group_id && (
+                            <>
+                              <span className="mx-1 opacity-50">·</span>
+                              <span style={{ color: 'var(--primary-dim)' }}>{t('overview.seatGroupShared')}</span>
+                              {(() => {
+                                const def = k.group_accounts?.find((a) => a.assigned) ?? k.group_accounts?.[0];
+                                return def ? (
+                                  <>
+                                    <span className="mx-1 opacity-50">·</span>
+                                    <span title={t('overview.seatGroupDefaultAccount')}>{def.identity}</span>
+                                  </>
+                                ) : null;
+                              })()}
+                            </>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5">

@@ -791,6 +791,22 @@ const Row = React.memo(function Row(props: {
         <div className="alias-main">{r.alias || t('teamKeys.unnamed')}</div>
         <div className="alias-sub">
           <span className="font-mono" title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
+          {/* seat_group (Stage A): shared-group marker + master-assigned default account. */}
+          {r.seat_group_id && (
+            <>
+              <span className="mx-1 opacity-50">·</span>
+              <span style={{ color: 'var(--primary-dim)' }}>{t('teamKeys.seatGroupShared')}</span>
+              {(() => {
+                const def = r.group_accounts?.find((a) => a.assigned) ?? r.group_accounts?.[0];
+                return def ? (
+                  <>
+                    <span className="mx-1 opacity-50">·</span>
+                    <span title={t('teamKeys.seatGroupDefaultAccount')}>{def.identity}</span>
+                  </>
+                ) : null;
+              })()}
+            </>
+          )}
         </div>
       </td>
 

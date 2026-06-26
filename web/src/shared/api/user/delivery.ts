@@ -26,6 +26,20 @@ export interface SeatQuotaItem {
   limit: number;
 }
 
+/**
+ * A candidate pool account behind a seat-group VK (master snapshot projection —
+ * the SAME shape the local vault gets, single source of truth). `assigned` is
+ * master's static rank-0 default pick; the proxy's live selection (cooled-account
+ * fallback) is a later stage.
+ */
+export interface GroupAccountRef {
+  account_id: string;
+  identity: string; // email / alias for display
+  provider_code: string;
+  priority: number;
+  assigned: boolean; // master-assigned default (static)
+}
+
 export interface UserKeyDTO {
   virtual_key_id: string;
   org_id: string;
@@ -38,6 +52,11 @@ export interface UserKeyDTO {
   // Seat-level quota (one entry per rule) for the usage/limit bar. Absent when the
   // seat has no quota or the server edition doesn't wire quota.
   seat_quota?: SeatQuotaItem[];
+  // seat_group projection (Stage A): when this VK targets a seat_group, the shared
+  // group + candidate pool accounts. Absent for direct-bind VKs. Same source as
+  // the vault page (master snapshot.GroupAccounts).
+  seat_group_id?: string;
+  group_accounts?: GroupAccountRef[];
 }
 
 // One fallback candidate within a protocol slot.

@@ -80,6 +80,19 @@ type SortKey = 'created' | 'last_test' | 'alias';
 //     team rows don't open the drawer in this phase.
 //   - in_use_for: future Phase 3B work (Active state for team rows
 //     was deferred per design decision 8).
+/**
+ * A candidate pool account behind a seat-group VK (N6 projection, Stage A).
+ * The `assigned` one is master's static rank-0 default pick — the proxy's live
+ * selection (which may fall back when an account is cooled/exhausted) is Stage B.
+ */
+interface SeatGroupAccountRef {
+  account_id: string;
+  identity: string; // email / alias for display
+  provider_code: string;
+  priority: number;
+  assigned: boolean; // master-assigned default (static)
+}
+
 interface TeamRowRecord {
   target: 'team';
   id: string; // == virtual_key_id, used as the rowKey scope segment
@@ -113,6 +126,15 @@ interface TeamRowRecord {
    * survives every `aikey key sync`.
    */
   extra?: VaultExtra | null;
+  /**
+   * N6 seat_group projection (Stage A): when this team VK is bound to a
+   * credential-sharing group, `seat_group_id` is the group and `group_accounts`
+   * is the candidate pool (identity / provider / priority + master's assigned
+   * default). null/absent for direct-bind VKs. Emitted by the CLI's
+   * `_internal query` from the vault cache.
+   */
+  seat_group_id?: string | null;
+  group_accounts?: SeatGroupAccountRef[] | null;
 }
 
 /** Row union for the unified vault table — broader than `VaultRecord`
@@ -2588,9 +2610,27 @@ const Row = React.memo(function Row(props: {
     // about the team-managed lifecycle so users aren't surprised when
     // the team admin's rotation kicks in.
     const expires = formatExpiresAtIso(r.expires_at, t);
+    // N6 seat_group (Stage A): on a group VK, surface the shared-group marker +
+    // the master-assigned DEFAULT pool account identity (the one routed to by
+    // default). The full candidate list is in the drawer. NOTE: "default" is
+    // master's static rank-0 pick; the proxy's live selection (which may fall
+    // back when an account is cooled) is Stage B.
+    const defaultAcct = r.group_accounts?.find((a) => a.assigned) ?? r.group_accounts?.[0];
     subLine = (
       <>
         {t('vault.teamKeyPrefix')}{teamShareLabel(r.share_status, t)}
+        {r.seat_group_id && (
+          <>
+            <span className="mx-1 opacity-40">·</span>
+            <span style={{ color: 'var(--primary-dim)' }}>{t('vault.seatGroupShared')}</span>
+            {defaultAcct && (
+              <>
+                <span className="mx-1 opacity-40">·</span>
+                <span title={t('vault.seatGroupDefaultAccount')}>{defaultAcct.identity}</span>
+              </>
+            )}
+          </>
+        )}
         {expires && (
           <>
             <span className="mx-1 opacity-40">·</span>
@@ -3415,6 +3455,52 @@ function DetailDrawer(props: {
                 <span className="k">{t('vault.source')}</span>
                 <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
                   {t('vault.teamSourceDesc')}
+                </span>
+              </div>
+            </div>
+          )}
+          {/* N6 seat_group (Stage A): pool candidate accounts behind this group
+              VK — identity / provider / priority + the master-assigned default.
+              "Default" is master's STATIC rank-0 pick; the proxy's live selection
+              (which may fall back when an account is cooled) is Stage B. */}
+          {isTeam && team && team.seat_group_id && (
+            <div className="drawer-section">
+              <div className="drawer-section-title">
+                <KeyRoundIcon className="w-3 h-3" />
+                {t('vault.seatGroupGroupAccounts')}
+              </div>
+              {(team.group_accounts ?? []).length === 0 ? (
+                <div className="drawer-field">
+                  <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
+                    {t('vault.seatGroupNoAccounts')}
+                  </span>
+                </div>
+              ) : (
+                (team.group_accounts ?? [])
+                  .slice()
+                  .sort((a, b) => a.priority - b.priority)
+                  .map((a) => (
+                    <div className="drawer-field" key={a.account_id}>
+                      <span className="k">
+                        {a.identity}
+                        {a.assigned && (
+                          <span className="chip success" style={{ marginLeft: 6 }}>
+                            {t('vault.seatGroupDefault')}
+                          </span>
+                        )}
+                      </span>
+                      <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
+                        {a.provider_code} · {t('vault.seatGroupPriority', { priority: a.priority })}
+                      </span>
+                    </div>
+                  ))
+              )}
+              <div className="drawer-field">
+                <span
+                  className="v"
+                  style={{ color: 'var(--muted-foreground)', fontSize: 11, fontStyle: 'italic' }}
+                >
+                  {t('vault.seatGroupDefaultHint')}
                 </span>
               </div>
             </div>
