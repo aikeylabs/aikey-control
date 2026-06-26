@@ -144,6 +144,7 @@ var zhMessages = map[string]string{
 	CodeBizBindNotFound:         "绑定 {{id}} 不存在",
 	CodeBizBindProtocolMismatch: "绑定协议 {{binding_protocol}} 与凭据供应商协议 {{cred_protocol}} 不匹配",
 	CodeBizBindDuplicateTarget:  "该虚拟密钥上已存在协议 {{protocol_type}} / 供应商 {{provider_id}} 的激活绑定",
+	CodeBizBindOAuthDirect:      "OAuth 账号凭据只能通过席位组分配，不能直接绑定到席位",
 	CodeBizBindNoActive:         "未找到该令牌的激活协议绑定",
 	CodeBizBindNotDelivered:     "绑定已存在，但无法下发至代理",
 
@@ -281,6 +282,11 @@ const (
 	// CodeBizBindTargetInvalid: a binding must target exactly one of credential /
 	// seat_group, and an issuance can't mix credential + group (or two groups). 422.
 	CodeBizBindTargetInvalid = "BIZ_BIND_TARGET_INVALID"
+	// CodeBizBindOAuthDirect: an OAuth-account credential was used as a DIRECT
+	// binding target. OAuth accounts can only be assigned through a seat group
+	// (their token is delivered at runtime via channel ③, not as a static key),
+	// so direct-binding one would silently produce an unusable VK. 422.
+	CodeBizBindOAuthDirect = "BIZ_BIND_OAUTH_DIRECT"
 
 	// DATA — client input validation
 	CodeDataInvalidBody  = "DATA_INVALID_BODY"
@@ -386,6 +392,16 @@ func BizBindProtocolMismatch(bindingProtocol, credProtocol string) *DomainError 
 		Message: fmt.Sprintf("binding protocol %q does not match credential provider protocol %q",
 			bindingProtocol, credProtocol),
 		Meta: map[string]any{"binding_protocol": bindingProtocol, "cred_protocol": credProtocol}}
+}
+
+// BizBindOAuthDirect — an OAuth-account credential was used as a direct binding
+// target. OAuth accounts are runtime-delivered (channel ③) and only routable
+// through a seat group; a direct bind would yield an unusable VK, so reject it
+// up front and point the admin at seat groups.
+func BizBindOAuthDirect(credentialID string) *DomainError {
+	return &DomainError{Code: CodeBizBindOAuthDirect,
+		Message: "OAuth account credentials can only be assigned through a seat group, not bound directly to a seat",
+		Meta:    map[string]any{"credential_id": credentialID}}
 }
 func BizBindDuplicateTarget(protocol, providerID string) *DomainError {
 	return &DomainError{Code: CodeBizBindDuplicateTarget,
