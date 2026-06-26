@@ -2643,10 +2643,20 @@ const Row = React.memo(function Row(props: {
           <>
             <span className="mx-1 opacity-40">·</span>
             <span style={{ color: 'var(--primary-dim)' }}>{t('vault.seatGroupShared')}</span>
-            {defaultAcct && (
+            {defaultAcct ? (
               <>
                 <span className="mx-1 opacity-40">·</span>
                 <span title={t('vault.seatGroupDefaultAccount')}>{defaultAcct.identity}</span>
+              </>
+            ) : (
+              // Empty candidate set: the seat was unbound from the group, or the
+              // group has no enabled accounts → this group key can't route. Surface
+              // it so the member isn't left thinking a blank "Shared group" is fine.
+              <>
+                <span className="mx-1 opacity-40">·</span>
+                <span style={{ color: '#f59e0b' }} title={t('vault.seatGroupNoAccessHint')}>
+                  {t('vault.seatGroupNoAccess')}
+                </span>
               </>
             )}
           </>

@@ -269,18 +269,18 @@ const (
 	// BIZ — Provider
 	CodeBizProvNotFound = "BIZ_PROV_NOT_FOUND"
 
-	// BIZ — Seat Group (通用凭证共享组 / seat_group)
-	CodeBizSeatGroupNotFound         = "BIZ_SEAT_GROUP_NOT_FOUND"
-	CodeBizSeatGroupDefaultProtected = "BIZ_SEAT_GROUP_DEFAULT_PROTECTED"
-	CodeBizSeatGroupCredInUse        = "BIZ_SEAT_GROUP_CRED_IN_USE"
-	// CodeBizSeatGroupRatioRejected: issuing to a group would push seats:accounts
+	// BIZ — Seat Group (通用凭证共享组 / oauth_group)
+	CodeBizOauthGroupNotFound         = "BIZ_OAUTH_GROUP_NOT_FOUND"
+	CodeBizOauthGroupDefaultProtected = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
+	CodeBizOauthGroupCredInUse        = "BIZ_OAUTH_GROUP_CRED_IN_USE"
+	// CodeBizOauthGroupRatioRejected: issuing to a group would push seats:accounts
 	// past the reject threshold (N4 capacity gate). 409 (capacity conflict).
-	CodeBizSeatGroupRatioRejected = "BIZ_SEAT_GROUP_RATIO_REJECTED"
-	// CodeBizSeatGroupDisabled: a group binding target was requested but the
-	// seat_group feature is off (SEAT_GROUP_ENABLED). 422.
-	CodeBizSeatGroupDisabled = "BIZ_SEAT_GROUP_DISABLED"
+	CodeBizOauthGroupRatioRejected = "BIZ_OAUTH_GROUP_RATIO_REJECTED"
+	// CodeBizOauthGroupDisabled: a group binding target was requested but the
+	// oauth_group feature is off (OAUTH_GROUP_ENABLED). 422.
+	CodeBizOauthGroupDisabled = "BIZ_OAUTH_GROUP_DISABLED"
 	// CodeBizBindTargetInvalid: a binding must target exactly one of credential /
-	// seat_group, and an issuance can't mix credential + group (or two groups). 422.
+	// oauth_group, and an issuance can't mix credential + group (or two groups). 422.
 	CodeBizBindTargetInvalid = "BIZ_BIND_TARGET_INVALID"
 	// CodeBizBindOAuthDirect: an OAuth-account credential was used as a DIRECT
 	// binding target. OAuth accounts can only be assigned through a seat group
@@ -429,46 +429,46 @@ func BizCredInactive(id string) *DomainError {
 		Meta:    map[string]any{"id": id}}
 }
 
-// BizSeatGroupNotFound — a seat group (or a sub-resource keyed by id within the
+// BizOauthGroupNotFound — a seat group (or a sub-resource keyed by id within the
 // seat-group domain) was not found / not in this org.
-func BizSeatGroupNotFound(id string) *DomainError {
-	return &DomainError{Code: CodeBizSeatGroupNotFound,
+func BizOauthGroupNotFound(id string) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupNotFound,
 		Message: fmt.Sprintf("seat group %q not found", id),
 		Meta:    map[string]any{"id": id}}
 }
 
-// BizSeatGroupDefaultProtected — the per-org default group cannot be deleted.
-func BizSeatGroupDefaultProtected() *DomainError {
-	return &DomainError{Code: CodeBizSeatGroupDefaultProtected,
+// BizOauthGroupDefaultProtected — the per-org default group cannot be deleted.
+func BizOauthGroupDefaultProtected() *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupDefaultProtected,
 		Message: "the default seat group cannot be deleted"}
 }
 
-// BizSeatGroupCredInUse — a credential already belongs to a seat group
+// BizOauthGroupCredInUse — a credential already belongs to a seat group
 // (credential_id UNIQUE: 1 credential ∈ at most 1 group).
-func BizSeatGroupCredInUse(credentialID string) *DomainError {
-	return &DomainError{Code: CodeBizSeatGroupCredInUse,
+func BizOauthGroupCredInUse(credentialID string) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupCredInUse,
 		Message: fmt.Sprintf("credential %q already belongs to a seat group", credentialID),
 		Meta:    map[string]any{"credential_id": credentialID}}
 }
 
-// BizSeatGroupRatioRejected — issuing to a group would push the seats:accounts
+// BizOauthGroupRatioRejected — issuing to a group would push the seats:accounts
 // ratio past the reject threshold (N4). The user must add accounts to the group
 // (relieve the bottleneck at the source) before issuing more seats.
-func BizSeatGroupRatioRejected(seats, accounts int, limit float64) *DomainError {
-	return &DomainError{Code: CodeBizSeatGroupRatioRejected,
+func BizOauthGroupRatioRejected(seats, accounts int, limit float64) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupRatioRejected,
 		Message: fmt.Sprintf("seat group is over capacity: %d seats vs %d accounts exceeds the %.0f:1 limit — add accounts before issuing more keys", seats, accounts, limit),
 		Meta:    map[string]any{"seats": seats, "accounts": accounts, "reject_ratio": limit}}
 }
 
-// BizSeatGroupDisabled — a group binding target was requested but the seat_group
+// BizOauthGroupDisabled — a group binding target was requested but the oauth_group
 // feature is not enabled in this deployment.
-func BizSeatGroupDisabled() *DomainError {
-	return &DomainError{Code: CodeBizSeatGroupDisabled,
+func BizOauthGroupDisabled() *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupDisabled,
 		Message: "seat group binding targets are not enabled in this deployment"}
 }
 
 // BizBindTargetInvalid — a binding's target shape is invalid (must be exactly one
-// of credential / seat_group; an issuance can't mix credential + group or span
+// of credential / oauth_group; an issuance can't mix credential + group or span
 // two groups).
 func BizBindTargetInvalid(reason string) *DomainError {
 	return &DomainError{Code: CodeBizBindTargetInvalid,

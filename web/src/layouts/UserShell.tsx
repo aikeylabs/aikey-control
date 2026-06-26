@@ -325,7 +325,10 @@ function crossAppIconFor(iconName: string | undefined): React.ReactNode {
 // - "Virtual Keys"  → "Team Keys"
 // - "Usage Ledger"  → "Usage"
 // - "Bulk Import"   → "Quick Import" → "Import"  (origin = oldest display)
-type RouteMeta = { label: string; originName?: string };
+// `parent` (2026-06-26): a route segment key in ROUTE_LABELS this page
+// nests under, rendered as an intermediate clickable breadcrumb crumb.
+// Used for 导入下沉: Import is a sub-page of Vault → 用户 / 保管库 / 导入.
+type RouteMeta = { label: string; originName?: string; parent?: string };
 
 const ROUTE_LABELS: Record<string, RouteMeta> = {
   overview:       { label: 'Overview' },
@@ -345,14 +348,34 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   compliance:     { label: 'Compliance Audit' },
   // Phase 4G (2026-06-01): Web Console Settings page breadcrumb label.
   settings:       { label: 'Settings' },
-  import:         { label: 'Import',     originName: 'Bulk Import' },
+  // Import sank into the Vault page (导入下沉 2026-06-26); it is no longer a
+  // sidebar item but still a sub-page of Vault, so its breadcrumb nests
+  // under Vault: 用户 / 保管库 / 导入.
+  import:         { label: 'Import',     originName: 'Bulk Import', parent: 'vault' },
 };
 
-function useBreadcrumb(): RouteMeta {
+type Crumb = { label: string; originName?: string; path?: string };
+
+/** Breadcrumb trail from the top-most ancestor down to the current page.
+ *  Most routes are flat (trail = [current]). A route with a `parent` in
+ *  ROUTE_LABELS contributes an intermediate, clickable crumb (e.g. Import
+ *  → Vault). The leading "用户/User" root is rendered separately by the
+ *  header and is not part of this trail. */
+function useBreadcrumbTrail(): Crumb[] {
   const { pathname } = useLocation();
   const segments = pathname.split('/').filter(Boolean);
   const last = segments[segments.length - 1];
-  return ROUTE_LABELS[last] ?? { label: last };
+  const meta = ROUTE_LABELS[last] ?? { label: last };
+  const trail: Crumb[] = [{ label: meta.label, originName: meta.originName }];
+  let parentKey = meta.parent;
+  const seen = new Set<string>(); // cycle guard
+  while (parentKey && ROUTE_LABELS[parentKey] && !seen.has(parentKey)) {
+    seen.add(parentKey);
+    const pm = ROUTE_LABELS[parentKey];
+    trail.unshift({ label: pm.label, originName: pm.originName, path: `/user/${parentKey}` });
+    parentKey = pm.parent;
+  }
+  return trail;
 }
 
 // ── i18n label maps ──────────────────────────────────────────────────────────
@@ -389,6 +412,7 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
 const GROUP_TITLE_I18N_KEY: Record<string, string> = {
   Keys: 'groupKeys',
   Cost: 'groupCost',
+  Apps: 'groupApps',
   Quality: 'groupQuality',
   Account: 'groupAccount',
 };
@@ -472,7 +496,7 @@ export function UserShell() {
   // reads it here.
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const breadcrumb = useBreadcrumb();
+  const breadcrumbTrail = useBreadcrumbTrail();
   /* Single brand label shared with `runtimeConfig.branding.logoText`
      (defaults to "AiKey", server may override). Renamed from
      "AiKey Vault" → "AiKey" 2026-04-22 to match the unified product
@@ -746,11 +770,12 @@ export function UserShell() {
     {
       title: 'Keys',
       items: [
-        // Vault + Import live on A only (Personal credential storage).
-        // On B side, cross-app from A surfaces them as `Personal Vault`
-        // and `Personal Import` pointing at the user's local-server.
+        // Vault lives on A only (Personal credential storage). On B side,
+        // cross-app from A surfaces it as `Personal Vault` pointing at the
+        // user's local-server. Import (2026-06-26) is no longer a sidebar
+        // item — it sank into the Vault page as an action button (导入下沉);
+        // the cross-app personal-import entry was dropped accordingly.
         { path: '/user/vault',        icon: <ShieldIcon />,      label: 'Vault',      originName: 'My Vault',   personalOnly: true },
-        { path: '/user/import',       icon: <UploadCloudIcon />, label: 'Import',     originName: 'Bulk Import', personalOnly: true },
         // Team Keys live on B only (canonical /user/virtual-keys page is
         // the team server's). On A side, cross-app from B surfaces it as
         // `Team Keys` pointing at the remote team URL. Phase 3B R7
@@ -763,22 +788,21 @@ export function UserShell() {
     {
       // Phase 4 阶段 3 (2026-05-21): "Insights" group renamed to "Cost".
       // Rationale: every item in this group answers a "how much / where
-      // did the money go" question — Usage (token spend), Performance
-      // (cost-vs-output analysis, formerly the "Cost" sub-item), and
-      // Apps (which agents are spending). Renaming the GROUP to Cost
-      // pins the mental model; the previous "Cost" sub-item became
-      // "Performance" so the cost-related items don't collide on names.
+      // did the money go" question — Usage (token spend) and Performance
+      // (cost-vs-output analysis, formerly the "Cost" sub-item). Renaming
+      // the GROUP to Cost pins the mental model; the previous "Cost"
+      // sub-item became "Performance" so the names don't collide.
+      // 2026-06-26: Apps moved out of this group into its own "Apps" group.
       title: 'Cost',
       items: [
-        // Phase 3B R18 (2026-05-11): Insights split into 3 explicit
-        // items so A↔B order is consistent. (See git history for the
+        // Phase 3B R18 (2026-05-11): Insights split into explicit items
+        // so A↔B order is consistent. (See git history for the
         // pre-2026-05-21 cross-app slot reasoning — still applies.)
         //
         // Order (after 2026-05-21 rename):
         //   - Usage       (personalOnly)  → ReceiptIcon
         //   - Team Usage  (teamOnly)      → TeamUsageIcon
         //   - Performance (personalOnly)  → DollarIcon (was: "Cost")
-        //   - Apps        (personalOnly)  → AppsIcon — Phase 4 阶段 3 new
         { path: '/user/usage-ledger', icon: <ReceiptIcon />,   label: 'Usage',       originName: 'Usage Ledger', personalOnly: true },
         { path: '/user/usage-ledger', icon: <TeamUsageIcon />, label: 'Team Usage',                              teamOnly: true     },
         // 2026-05-21 (later same day): URL also renamed `/user/cost` →
@@ -787,11 +811,6 @@ export function UserShell() {
         // on "cost" (internal-only identifiers, not user-facing). Old
         // `/user/cost` URL still works via redirect in routes/user.tsx.
         { path: '/user/performance',  icon: <DollarIcon />,    label: 'Performance', originName: 'Cost',          personalOnly: true },
-        // Phase 4 阶段 3 (2026-05-21) — Connected Apps list. personalOnly
-        // because the /api/user/apps/* endpoints read app_records /
-        // app_keys from the personal vault, which only lives on the
-        // user's machine (same constraint as Vault / Usage / Performance).
-        { path: '/user/apps',         icon: <AppsIcon />,      label: 'Apps',        originName: 'Connected Apps', personalOnly: true },
       ],
     },
     {
@@ -820,6 +839,21 @@ export function UserShell() {
         // local-server /api/user/compliance/events (control.db on the user's
         // own machine). Admins still use /master/compliance/audit.
         { path: '/user/compliance', icon: <FingerprintIcon />, label: 'Compliance Audit', originName: 'Compliance Audit', crossAppPreferred: true },
+      ],
+    },
+    {
+      // 2026-06-26: Apps split out of the Cost group into its own
+      // standalone "Apps" group (cross-app group enum 'APPS', see
+      // shared/cross-app-menu/types.ts). personalOnly because the
+      // /api/user/apps/* endpoints read app_records / app_keys from the
+      // personal vault, which only lives on the user's machine. On B side
+      // the cross-app entry (id personal-apps, group APPS) re-slots into
+      // this group by path; a header-less top-level item could not (a
+      // group with no title yields no matchesGroup candidates on B).
+      // Placed after Quality & Compliance (2026-06-26 user decision).
+      title: 'Apps',
+      items: [
+        { path: '/user/apps', icon: <AppsIcon />, label: 'Apps', originName: 'Connected Apps', personalOnly: true },
       ],
     },
     {
@@ -1272,14 +1306,33 @@ export function UserShell() {
         <header className="vault-header h-16 flex items-center justify-between px-6 flex-shrink-0 z-10">
           <div className="flex items-center text-sm font-mono" style={{ color: 'var(--muted-foreground)' }}>
             <span data-origin-name="User Console">{t('userShell.breadcrumbUser')}</span>
-            <span className="mx-2 opacity-50">/</span>
-            <span
-              className="font-bold"
-              style={{ color: 'var(--display-foreground)' }}
-              {...(breadcrumb.originName ? { 'data-origin-name': breadcrumb.originName } : {})}
-            >
-              {tNavLabel(breadcrumb.label)}
-            </span>
+            {breadcrumbTrail.map((crumb, i) => {
+              const isLast = i === breadcrumbTrail.length - 1;
+              return (
+                <React.Fragment key={`${crumb.label}-${i}`}>
+                  <span className="mx-2 opacity-50">/</span>
+                  {isLast || !crumb.path ? (
+                    <span
+                      className="font-bold"
+                      style={{ color: 'var(--display-foreground)' }}
+                      {...(crumb.originName ? { 'data-origin-name': crumb.originName } : {})}
+                    >
+                      {tNavLabel(crumb.label)}
+                    </span>
+                  ) : (
+                    // Intermediate ancestor (e.g. Vault for the Import sub-page):
+                    // muted + clickable, inherits the row's muted-foreground color.
+                    <NavLink
+                      to={crumb.path}
+                      className="hover:underline"
+                      {...(crumb.originName ? { 'data-origin-name': crumb.originName } : {})}
+                    >
+                      {tNavLabel(crumb.label)}
+                    </NavLink>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
           <div className="flex items-center gap-3">
             <LanguageSwitcher />

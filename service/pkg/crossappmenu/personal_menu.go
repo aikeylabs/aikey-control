@@ -27,14 +27,10 @@ var PersonalMenu = []Entry{
 		Visibility: VisibilityAlways,
 		Icon:       "vault",
 	},
-	{
-		ID:         "personal-import",
-		Group:      GroupKeys,
-		Label:      "Import",
-		Path:       "/user/import",
-		Visibility: VisibilityAlways,
-		Icon:       "import",
-	},
+	// "personal-import" removed 2026-06-26: Import sank into the Vault page
+	// as an action button (导入下沉); it is no longer a standalone sidebar
+	// destination. The /user/import route still exists. Must stay in sync
+	// with own-menu.ts (cross-app-menu-check lint).
 	{
 		ID:         "personal-usage",
 		Group:      GroupInsights,
@@ -66,9 +62,11 @@ var PersonalMenu = []Entry{
 	// surface a cross-app link back to A's /user/apps page.
 	// /api/user/apps/* lives on A's local-server; B has no own
 	// /user/apps route.
+	// 2026-06-26: Group moved INSIGHTS → APPS (Apps split into its own
+	// sidebar group). Must match own-menu.ts and UserShell's 'Apps' group.
 	{
 		ID:         "personal-apps",
-		Group:      GroupInsights,
+		Group:      GroupApps,
 		Label:      "Apps",
 		Path:       "/user/apps",
 		Visibility: VisibilityAlways,
@@ -142,7 +140,6 @@ var PersonalMenu = []Entry{
 // can't silently fall back to English for zh users.
 var personalMenuZhLabels = map[string]string{
 	"personal-vault":       "保管库",
-	"personal-import":      "导入",
 	"personal-usage":       "用量",
 	"personal-cost":        "性能", // Label "Performance"; ID kept for back-compat.
 	"personal-apps":        "应用",

@@ -33,14 +33,11 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
     visibility: 'always',
     icon: 'vault',
   },
-  {
-    id: 'personal-import',
-    group: 'KEYS',
-    label: 'Import',
-    path: '/user/import',
-    visibility: 'always',
-    icon: 'import',
-  },
+  // 'personal-import' removed 2026-06-26: Import is no longer a standalone
+  // sidebar destination — it sank into the Vault page as an action button
+  // (导入下沉). The /user/import route still exists; the Vault page links to
+  // it. Dropping the cross-app entry keeps the Team side from rendering a
+  // stray standalone "Import" row. Must stay in sync with personal_menu.go.
 
   // INSIGHTS group
   {
@@ -71,9 +68,12 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
   // Phase 4 阶段 3 (2026-05-21): Apps — surface A's local Connected
   // Apps list to B's sidebar. /api/user/apps/* lives on A's
   // local-server; B has no own /user/apps route.
+  // 2026-06-26: Apps moved from INSIGHTS to its own APPS group (split out
+  // of the Cost group into a standalone sidebar group). Must match
+  // personal_menu.go's GroupApps and the new 'Apps' navGroup in UserShell.
   {
     id: 'personal-apps',
-    group: 'INSIGHTS',
+    group: 'APPS',
     label: 'Apps',
     path: '/user/apps',
     visibility: 'always',

@@ -26,8 +26,14 @@ export const CROSS_APP_MENU_SCHEMA_VERSION = 1;
  * within a group come from BOTH sides interleaved by the order they
  * appear in the entries array (no per-entry order field — array order
  * IS the order). */
-export type CrossAppMenuGroup = 'KEYS' | 'INSIGHTS' | 'ACCOUNT' | 'QUALITY';
+export type CrossAppMenuGroup = 'KEYS' | 'INSIGHTS' | 'ACCOUNT' | 'QUALITY' | 'APPS';
 // 'QUALITY' added 2026-05-21 for the degrade-detector Trust Check entry.
+// 'APPS' added 2026-06-26: Apps split out of the INSIGHTS/Cost group into
+// its own sidebar group. A header-less top-level item (like Overview) can't
+// surface cross-app on the Team side (matchesGroup() returns false for a
+// group with no title), so Apps needs its own group enum to bucket the
+// cross-app entry on B. Older peers don't know APPS → matchesGroup() drops
+// it; harmless graceful degradation (same pattern as QUALITY).
 // Keep this union in sync with service/pkg/crossappmenu/types.go's
 // Group constants — both sides must list the same set or matchesGroup()
 // silently drops cross-app entries from unrecognised groups.
