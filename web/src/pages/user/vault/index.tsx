@@ -81,11 +81,11 @@ type SortKey = 'created' | 'last_test' | 'alias';
 //   - in_use_for: future Phase 3B work (Active state for team rows
 //     was deferred per design decision 8).
 /**
- * A candidate pool account behind a seat-group VK (N6 projection, Stage A).
+ * A candidate pool account behind a oauth-group VK (N6 projection, Stage A).
  * The `assigned` one is master's static rank-0 default pick — the proxy's live
  * selection (which may fall back when an account is cooled/exhausted) is Stage B.
  */
-interface SeatGroupAccountRef {
+interface OauthGroupAccountRef {
   account_id: string;
   identity: string; // email / alias for display
   provider_code: string;
@@ -128,14 +128,14 @@ interface TeamRowRecord {
    */
   extra?: VaultExtra | null;
   /**
-   * N6 seat_group projection (Stage A): when this team VK is bound to a
-   * credential-sharing group, `seat_group_id` is the group and `group_accounts`
+   * N6 oauth_group projection (Stage A): when this team VK is bound to a
+   * credential-sharing group, `oauth_group_id` is the group and `group_accounts`
    * is the candidate pool (identity / provider / priority + master's assigned
    * default). null/absent for direct-bind VKs. Emitted by the CLI's
    * `_internal query` from the vault cache.
    */
-  seat_group_id?: string | null;
-  group_accounts?: SeatGroupAccountRef[] | null;
+  oauth_group_id?: string | null;
+  group_accounts?: OauthGroupAccountRef[] | null;
 }
 
 /** Row union for the unified vault table — broader than `VaultRecord`
@@ -2600,7 +2600,7 @@ const Row = React.memo(function Row(props: {
   // (would render "unknown"), so derive the Provider column from the pool's
   // default (or first) account; and its kind chip reads TEAM-OAUTH (English,
   // matching the adjacent TEAM/OAUTH/KEY pills — no mixed CN/EN).
-  const isTeamOAuthGroup = isTeam && !!(r as TeamRowRecord).seat_group_id;
+  const isTeamOAuthGroup = isTeam && !!(r as TeamRowRecord).oauth_group_id;
   const groupAccts = isTeamOAuthGroup ? (r as TeamRowRecord).group_accounts : null;
   const groupProto = (groupAccts?.find((a) => a.assigned) ?? groupAccts?.[0])?.provider_code;
   const providerName = groupProto || providerDisplayName(r);
@@ -2630,7 +2630,7 @@ const Row = React.memo(function Row(props: {
     // about the team-managed lifecycle so users aren't surprised when
     // the team admin's rotation kicks in.
     const expires = formatExpiresAtIso(r.expires_at, t);
-    // N6 seat_group (Stage A): on a group VK, surface the shared-group marker +
+    // N6 oauth_group (Stage A): on a group VK, surface the shared-group marker +
     // the master-assigned DEFAULT pool account identity (the one routed to by
     // default). The full candidate list is in the drawer. NOTE: "default" is
     // master's static rank-0 pick; the proxy's live selection (which may fall
@@ -2639,14 +2639,14 @@ const Row = React.memo(function Row(props: {
     subLine = (
       <>
         {t('vault.teamKeyPrefix')}{teamShareLabel(r.share_status, t)}
-        {r.seat_group_id && (
+        {r.oauth_group_id && (
           <>
             <span className="mx-1 opacity-40">·</span>
-            <span style={{ color: 'var(--primary-dim)' }}>{t('vault.seatGroupShared')}</span>
+            <span style={{ color: 'var(--primary-dim)' }}>{t('vault.oauthGroupShared')}</span>
             {defaultAcct ? (
               <>
                 <span className="mx-1 opacity-40">·</span>
-                <span title={t('vault.seatGroupDefaultAccount')}>{defaultAcct.identity}</span>
+                <span title={t('vault.oauthGroupDefaultAccount')}>{defaultAcct.identity}</span>
               </>
             ) : (
               // Empty candidate set: the seat was unbound from the group, or the
@@ -2654,8 +2654,8 @@ const Row = React.memo(function Row(props: {
               // it so the member isn't left thinking a blank "Shared group" is fine.
               <>
                 <span className="mx-1 opacity-40">·</span>
-                <span style={{ color: '#f59e0b' }} title={t('vault.seatGroupNoAccessHint')}>
-                  {t('vault.seatGroupNoAccess')}
+                <span style={{ color: '#f59e0b' }} title={t('vault.oauthGroupNoAccessHint')}>
+                  {t('vault.oauthGroupNoAccess')}
                 </span>
               </>
             )}
@@ -3280,7 +3280,7 @@ function DetailDrawer(props: {
   const team = isTeam ? (r as TeamRowRecord) : null;
   // Group VK derives its protocol from the pool's default/first account (it has
   // no single protocol_family of its own — see the row component for rationale).
-  const groupProto = team?.seat_group_id
+  const groupProto = team?.oauth_group_id
     ? (team.group_accounts?.find((a) => a.assigned) ?? team.group_accounts?.[0])?.provider_code
     : undefined;
   const providerName = groupProto || providerDisplayName(r);
@@ -3305,7 +3305,7 @@ function DetailDrawer(props: {
                   {providerName}
                 </span>
                 <span className={`kind-pill${isTeam ? ' team' : isOAuth ? ' oauth' : ''}`}>
-                  {team?.seat_group_id ? 'TEAM-OAUTH' : isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY'}
+                  {team?.oauth_group_id ? 'TEAM-OAUTH' : isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY'}
                 </span>
               </span>
               {r.status === 'active' ? (
@@ -3494,20 +3494,20 @@ function DetailDrawer(props: {
               </div>
             </div>
           )}
-          {/* N6 seat_group (Stage A): pool candidate accounts behind this group
+          {/* N6 oauth_group (Stage A): pool candidate accounts behind this group
               VK — identity / provider / priority + the master-assigned default.
               "Default" is master's STATIC rank-0 pick; the proxy's live selection
               (which may fall back when an account is cooled) is Stage B. */}
-          {isTeam && team && team.seat_group_id && (
+          {isTeam && team && team.oauth_group_id && (
             <div className="drawer-section">
               <div className="drawer-section-title">
                 <KeyRoundIcon className="w-3 h-3" />
-                {t('vault.seatGroupGroupAccounts')}
+                {t('vault.oauthGroupGroupAccounts')}
               </div>
               {(team.group_accounts ?? []).length === 0 ? (
                 <div className="drawer-field">
                   <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
-                    {t('vault.seatGroupNoAccounts')}
+                    {t('vault.oauthGroupNoAccounts')}
                   </span>
                 </div>
               ) : (
@@ -3541,7 +3541,7 @@ function DetailDrawer(props: {
                         }}
                       >
                         <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
-                        {a.assigned && <span className="chip success">{t('vault.seatGroupDefault')}</span>}
+                        {a.assigned && <span className="chip success">{t('vault.oauthGroupDefault')}</span>}
                       </div>
                       <div
                         style={{
@@ -3564,11 +3564,11 @@ function DetailDrawer(props: {
                         <span style={{ opacity: 0.35 }}>·</span>
                         <span>
                           {a.credential_type === 'oauth_account'
-                            ? t('vault.seatGroupTypeOauth')
-                            : t('vault.seatGroupTypeKey')}
+                            ? t('vault.oauthGroupTypeOauth')
+                            : t('vault.oauthGroupTypeKey')}
                         </span>
                         <span style={{ opacity: 0.35 }}>·</span>
-                        <span>{t('vault.seatGroupPriority', { priority: a.priority })}</span>
+                        <span>{t('vault.oauthGroupPriority', { priority: a.priority })}</span>
                       </div>
                     </div>
                   ))
@@ -3591,7 +3591,7 @@ function DetailDrawer(props: {
                     display: 'block',
                   }}
                 >
-                  {t('vault.seatGroupDefaultHint')}
+                  {t('vault.oauthGroupDefaultHint')}
                 </span>
               </div>
             </div>

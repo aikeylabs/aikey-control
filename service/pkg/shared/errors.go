@@ -430,7 +430,7 @@ func BizCredInactive(id string) *DomainError {
 }
 
 // BizOauthGroupNotFound — a seat group (or a sub-resource keyed by id within the
-// seat-group domain) was not found / not in this org.
+// oauth-group domain) was not found / not in this org.
 func BizOauthGroupNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupNotFound,
 		Message: fmt.Sprintf("seat group %q not found", id),

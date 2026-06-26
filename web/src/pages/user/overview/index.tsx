@@ -1292,18 +1292,18 @@ export default function UserOverviewPage() {
                           style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}
                         >
                           {shortVkId(k.virtual_key_id)}
-                          {/* seat_group (Stage A): shared-group marker + the
+                          {/* oauth_group (Stage A): shared-group marker + the
                               master-assigned DEFAULT pool account identity. */}
-                          {k.seat_group_id && (
+                          {k.oauth_group_id && (
                             <>
                               <span className="mx-1 opacity-50">·</span>
-                              <span style={{ color: 'var(--primary-dim)' }}>{t('overview.seatGroupShared')}</span>
+                              <span style={{ color: 'var(--primary-dim)' }}>{t('overview.oauthGroupShared')}</span>
                               {(() => {
                                 const def = k.group_accounts?.find((a) => a.assigned) ?? k.group_accounts?.[0];
                                 return def ? (
                                   <>
                                     <span className="mx-1 opacity-50">·</span>
-                                    <span title={t('overview.seatGroupDefaultAccount')}>{def.identity}</span>
+                                    <span title={t('overview.oauthGroupDefaultAccount')}>{def.identity}</span>
                                   </>
                                 ) : null;
                               })()}
@@ -1316,7 +1316,7 @@ export default function UserOverviewPage() {
                           // Group VK = shared OAuth pool with no single provider_code of its
                           // own; derive the protocol from the pool's default/first account.
                           const proto =
-                            (k.seat_group_id &&
+                            (k.oauth_group_id &&
                               (k.group_accounts?.find((a) => a.assigned) ?? k.group_accounts?.[0])?.provider_code) ||
                             k.provider_code;
                           return (
@@ -1324,7 +1324,7 @@ export default function UserOverviewPage() {
                               <span className="prov-dot" style={{ backgroundColor: providerColor(proto) }} />
                               {proto || t('overview.unknownProvider')}
                               {/* Group VK → TEAM-OAUTH chip beside the protocol (English, no mixed CN/EN). */}
-                              {k.seat_group_id && (
+                              {k.oauth_group_id && (
                                 <span
                                   className="text-[9px] font-mono px-1.5 py-0.5 rounded border"
                                   style={{ color: 'var(--primary-dim)', borderColor: 'rgba(250,204,21,0.3)', backgroundColor: 'rgba(250,204,21,0.06)' }}
