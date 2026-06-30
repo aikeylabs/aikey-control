@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveStoreFromPathname, GO_TARGETS, FALLBACK } from './go-alias';
+import { resolveStoreFromPathname, collapseLeadingSlashes, GO_TARGETS, FALLBACK } from './go-alias';
 
 /**
  * Regression test for 2026-06-02 bugfix
@@ -97,5 +97,40 @@ describe('resolveStoreFromPathname', () => {
       expect(GO_TARGETS, `alias=${a}`).toHaveProperty(a);
       expect(resolveStoreFromPathname(`/go/${a}`)).toBe('user');
     }
+  });
+});
+
+/**
+ * Regression test for 2026-06-30 bugfix "ak-web-double-slash-securityerror".
+ *
+ * The bug: a control_url stored WITH a trailing slash made `aikey web` open
+ * `http://host:3000//go/overview#auth_token=...`. The browser reads a leading
+ * `//` as a PROTOCOL-RELATIVE URL (host `go`), so the fragment-ingest's
+ * history.replaceState('//go/overview') threw a cross-origin SecurityError and
+ * white-screened the whole SPA; resolveStoreFromPathname also missed `/go/`.
+ * collapseLeadingSlashes is the defense-in-depth normalization (the CLI side is
+ * fixed too). These pin that the leading run collapses while interior slashes
+ * and the already-clean single-slash case are untouched.
+ */
+describe('collapseLeadingSlashes', () => {
+  it('collapses a leading double slash to one (the crash repro)', () => {
+    expect(collapseLeadingSlashes('//go/overview')).toBe('/go/overview');
+  });
+
+  it('collapses any leading run of slashes to one', () => {
+    expect(collapseLeadingSlashes('///user/vault')).toBe('/user/vault');
+  });
+
+  it('leaves an already-clean path unchanged', () => {
+    expect(collapseLeadingSlashes('/go/overview')).toBe('/go/overview');
+  });
+
+  it('leaves interior slashes intact (only the leading run is the hazard)', () => {
+    expect(collapseLeadingSlashes('/go/a//b')).toBe('/go/a//b');
+  });
+
+  it('normalized output routes to the correct store again', () => {
+    // The end-to-end point: after normalization the store decision works.
+    expect(resolveStoreFromPathname(collapseLeadingSlashes('//go/overview'))).toBe('user');
   });
 });
