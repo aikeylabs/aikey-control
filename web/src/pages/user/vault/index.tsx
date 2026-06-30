@@ -92,6 +92,11 @@ interface OauthGroupAccountRef {
   priority: number;
   assigned: boolean; // master-assigned default (static)
   credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
+  // login_status (RW8 per-member): the viewer's own per-member token state for this
+  // pool account — 'logged_in' | 'needs_login' | 'auth_failed' | 'revoked'. Lets the
+  // drawer show which pool account you've signed into (team OAuth). Absent on
+  // api_key candidates / older snapshots → no badge.
+  login_status?: string;
 }
 
 interface TeamRowRecord {
@@ -3549,6 +3554,14 @@ function DetailDrawer(props: {
                       >
                         <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
                         {a.assigned && <span className="chip success">{t('vault.oauthGroupDefault')}</span>}
+                        {/* RW8 per-member: which pool account the viewer has signed into (team OAuth). */}
+                        {a.credential_type === 'oauth_account' && a.login_status && (
+                          <span
+                            className={`chip ${a.login_status === 'logged_in' ? 'success' : a.login_status === 'needs_login' ? 'warning' : 'danger'}`}
+                          >
+                            {t(`vault.oauthLoginStatus.${a.login_status}`, a.login_status)}
+                          </span>
+                        )}
                       </div>
                       <div
                         style={{
