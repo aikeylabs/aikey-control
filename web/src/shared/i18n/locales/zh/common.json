@@ -64,6 +64,7 @@
     "navVault": "保管库",
     "navImport": "导入",
     "navTeamKeys": "团队密钥",
+    "navOauthContribute": "贡献 OAuth",
     "navUsage": "用量",
     "navUsageDetail": "用量明细",
     "navTeamUsage": "团队用量",
@@ -92,6 +93,7 @@
     "navComplianceAudit": "合规审计"
   },
   "teamMenu": {
+    "oauthContribute": "贡献 OAuth",
     "teamKeys": "团队密钥",
     "teamUsage": "团队用量",
     "teamCompliance": "团队合规",

@@ -241,6 +241,30 @@ function RadarIcon() {
   );
 }
 
+// lucide "share-2" — Contribute OAuth (N3b) glyph (2026-06-29). Three nodes
+// linked by two edges: reads as "share / contribute your account into the org
+// pool". Replaces the old KeyIcon, which made Contribute OAuth visually
+// identical to the adjacent Team Keys entry in the KEYS group. Multi-path, so
+// inline like RadarIcon / TeamUsageIcon instead of the single-path NavIcon.
+function ShareIcon() {
+  return (
+    <svg
+      className="w-4 h-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
+    </svg>
+  );
+}
+
 /**
  * Phase 3B R8 (2026-05-11): map a cross-app-menu entry's `icon` string
  * (semantic name from the wire contract) to one of the existing NavIcon
@@ -272,6 +296,9 @@ function RadarIcon() {
  *                       cross-app — kept for backward-compat with
  *                       cached/fallback menu snapshots)
  *   - 'team-account' → UserIcon (legacy, see 'user' note)
+ *   - 'oauth-contribute' → ShareIcon (2026-06-29 — B's Contribute OAuth
+ *                       cross-app rendering on A; distinct from Team Keys'
+ *                       KeyIcon. Server-gated by OAUTH_GROUP_ENABLED.)
  *
  * Unknown / future icon names fall back to a small generic dot so the
  * link still renders rather than crashing on schema drift.
@@ -287,6 +314,7 @@ function crossAppIconFor(iconName: string | undefined): React.ReactNode {
     case 'apps':         return <AppsIcon />;
     case 'trust-check':  return <RadarIcon />;
     case 'compliance':   return <FingerprintIcon />;
+    case 'oauth-contribute': return <ShareIcon />;
     // 2026-05-30: mirrored from master/web for symmetry. A-side never
     // fetches personal-invites via cross-app (Personal advertises but
     // doesn't consume its own menu), but keeping the switch symmetric
@@ -341,6 +369,7 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   // selectors yet.
   account:        { label: 'Account',    originName: 'My Account' },
   'virtual-keys': { label: 'Team Keys',  originName: 'Virtual Keys' },
+  'oauth-contribute': { label: 'Contribute OAuth' },
   vault:          { label: 'Vault',      originName: 'My Vault' },
   'usage-ledger': { label: 'Usage',      originName: 'Usage Ledger' },
   'usage-detail': { label: 'Usage Detail' },
@@ -393,6 +422,7 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
   Vault: 'navVault',
   Import: 'navImport',
   'Team Keys': 'navTeamKeys',
+  'Contribute OAuth': 'navOauthContribute',
   Usage: 'navUsage',
   'Usage Detail': 'navUsageDetail',
   'Team Usage': 'navTeamUsage',
@@ -417,23 +447,45 @@ const GROUP_TITLE_I18N_KEY: Record<string, string> = {
   Account: 'groupAccount',
 };
 
-// Cross-app TEAM menu labels (i18n). The cross-app menu entries carry an
-// English `label` from the wire contract / fallback snapshot (see
-// CrossAppMenuEntry.label — "Today English-only; i18n hook is a follow-up").
-// We translate at the render boundary by mapping the entry's stable `id`
-// (which never changes across releases — see types.ts) to a `teamMenu.*`
-// sub-key. The English label stays in the data (it doubles as the offline
-// fallback display); unmapped ids fall through to the raw label so a
-// newly-added cross-app entry still renders rather than showing a bare key.
+// Cross-app menu labels (i18n). Cross-app menu entries carry an English
+// `label` from the wire contract / fallback snapshot (see CrossAppMenuEntry.label
+// — "Today English-only; i18n hook is a follow-up"). We translate at the render
+// boundary by mapping the entry's stable `id` (which never changes across
+// releases — see types.ts) to a fully-qualified i18n key. The English label
+// stays in the data (it doubles as the offline fallback display); unmapped ids
+// fall through to the raw label so a newly-added cross-app entry still renders
+// rather than showing a bare key.
 //
-// Why key off `id` and not `label`: `id` is the wire-contract stable
-// identity (renaming a label is allowed, changing an id breaks cross-app
-// active-state), so it's the durable anchor for the translation lookup.
-const TEAM_MENU_I18N_KEY: Record<string, string> = {
-  'team-keys': 'teamKeys',
-  'team-usage': 'teamUsage',
-  'team-compliance': 'teamCompliance',
-  'team-account': 'account',
+// BOTH directions MUST be covered (2026-06-29 i18n-mix bugfix): on A (Personal)
+// side we render B's TEAM entries (`team-*` ids); on B (Team) side we render A's
+// PERSONAL entries (`personal-*` ids). The original map only had `team-*`, so on
+// B side every personal-* cross-app row fell back to its English wire label while
+// the local rows were translated → "half Chinese, half English" sidebar. Personal
+// ids reuse the existing `userShell.nav*` keys (same labels as the local sidebar
+// items) so there's no duplicated translation / split source-of-truth.
+//
+// Why key off `id` and not `label`: `id` is the wire-contract stable identity
+// (renaming a label is allowed, changing an id breaks cross-app active-state),
+// so it's the durable anchor for the translation lookup.
+const CROSS_APP_LABEL_I18N_KEY: Record<string, string> = {
+  // Team entries — rendered on A (Personal) side. These come from master/web's
+  // OWN_TEAM_MENU (B publishes, A consumes); team-oauth-contribute is flag-gated
+  // server-side so A only sees it when the team enables OAUTH_GROUP — but the
+  // i18n mapping must exist regardless or it leaks its English wire label.
+  'team-keys': 'teamMenu.teamKeys',
+  'team-usage': 'teamMenu.teamUsage',
+  'team-compliance': 'teamMenu.teamCompliance',
+  'team-account': 'teamMenu.account',
+  'team-oauth-contribute': 'teamMenu.oauthContribute',
+  // Personal entries — rendered on B (Team) side. Reuse the sidebar nav
+  // labels; note `personal-cost`'s display label is "Performance".
+  'personal-vault': 'userShell.navVault',
+  'personal-usage': 'userShell.navUsage',
+  'personal-cost': 'userShell.navPerformance',
+  'personal-apps': 'userShell.navApps',
+  'personal-trust-check': 'userShell.navTrustCheck',
+  'personal-compliance': 'userShell.navComplianceAudit',
+  'personal-invites': 'userShell.navInvites',
 };
 
 function initials(email: string): string {
@@ -467,13 +519,14 @@ export function UserShell() {
     },
     [t],
   );
-  // Translate a cross-app TEAM menu entry label by its stable `id`,
-  // falling back to the wire/fallback English label when the id is not in
-  // the `teamMenu` namespace (forward-compat with new cross-app entries).
+  // Translate a cross-app menu entry label by its stable `id`, falling back
+  // to the wire/fallback English label when the id is unmapped (forward-compat
+  // with new cross-app entries). Map values are fully-qualified i18n keys so
+  // both directions resolve: team-* → teamMenu.*, personal-* → userShell.nav*.
   const tTeamMenuLabel = React.useCallback(
     (id: string, fallbackLabel: string) => {
-      const key = TEAM_MENU_I18N_KEY[id];
-      return key ? t(`teamMenu.${key}`) : fallbackLabel;
+      const key = CROSS_APP_LABEL_I18N_KEY[id];
+      return key ? t(key) : fallbackLabel;
     },
     [t],
   );
@@ -783,6 +836,17 @@ export function UserShell() {
         // stub showing empty state since A's local-server has no team
         // data source.
         { path: '/user/virtual-keys', icon: <KeyIcon />,         label: 'Team Keys',  originName: 'Virtual Keys', teamOnly: true },
+        // N3b employee OAuth self-service contribution (2026-06-29). teamOnly,
+        // mirrors Team Keys: B renders the local NavLink; A renders the
+        // team-oauth-contribute cross-app slot in this position (R13). Without
+        // this navGroups entry the page had a cross-app entry (OWN_TEAM_MENU)
+        // but no B-side sidebar presence, so it vanished when you navigated to
+        // the team origin — the exact R15 alignment-contract violation
+        // ("cross-app entry without a navGroups counterpart silently drops").
+        // Discoverability is server-gated via OAUTH_GROUP_ENABLED (which filters
+        // /system/cross-app-menu); the B-side entry is unconditional, matching
+        // every other teamOnly entry (Team Keys / Team Usage / Compliance).
+        { path: '/user/oauth-contribute', icon: <ShareIcon />,   label: 'Contribute OAuth', teamOnly: true },
       ],
     },
     {

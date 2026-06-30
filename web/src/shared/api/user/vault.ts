@@ -249,6 +249,9 @@ export interface VaultLastTest {
   ping_ok?: boolean;
   api_ok?: boolean;
   chat_ok?: boolean;
+  /** Chat probe was intentionally not executed; do not treat chat_ok=false as failure. */
+  chat_skipped?: boolean;
+  chat_skip_reason?: string;
   latency_ms?: number;
   error_code?: string;
   error_message?: string;

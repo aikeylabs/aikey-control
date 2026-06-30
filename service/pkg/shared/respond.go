@@ -76,13 +76,14 @@ func domainErrorStatus(code string) int {
 	case CodeBizAuthAccountInactive, CodeBizAuthTokenRevoked,
 		CodeBizAuthTokenExpired, CodeBizAuthTokenRecycled,
 		CodeBizAuthTokenNotActive, CodeBizAuthAccessDenied,
-		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied:
+		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied,
+		CodeBizOauthMemberTokenForbidden:
 		return http.StatusForbidden
 
 	// ── 404 Not Found ─────────────────────────────────────────────────────────
 	case CodeBizOrgNotFound, CodeBizSeatNotFound, CodeBizKeyNotFound,
 		CodeBizBindNotFound, CodeBizCredNotFound, CodeBizProvNotFound,
-		CodeBizOauthGroupNotFound:
+		CodeBizOauthGroupNotFound, CodeBizOauthLoginCredNotProvisioned:
 		return http.StatusNotFound
 
 	// ── 409 Conflict ──────────────────────────────────────────────────────────

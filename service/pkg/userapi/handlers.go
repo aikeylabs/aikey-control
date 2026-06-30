@@ -139,6 +139,8 @@ func NewHandlers(cfg *Config, logger *slog.Logger) *Handlers {
 //	POST   /api/user/oauth/login         -> oauth.LoginHandler           (no unlock; forwards to aikey-proxy broker)
 //	GET    /api/user/oauth/status        -> oauth.StatusHandler          (no unlock; broker session poll for Codex auth_code)
 //	POST   /api/user/oauth/poll          -> oauth.PollHandler            (no unlock; broker Device-Code poll for Kimi)
+//	POST   /api/user/oauth/pool/authorize-url -> oauth.PoolAuthorizeURLHandler (per-member pool login; → proxy memory broker → writeback master)
+//	POST   /api/user/oauth/pool/submit-code   -> oauth.PoolSubmitCodeHandler
 //	POST   /api/user/import/parse        -> Import.ParseHandler
 //	POST   /api/user/import/confirm      -> Import.ConfirmHandler        (requires unlock)
 //	GET    /api/user/import/rules        -> Import.RulesHandler          (unauthed)
@@ -253,6 +255,13 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(oauth.StatusHandler)))
 		mux.Handle("POST /api/user/oauth/poll",
 			authMW(http.HandlerFunc(oauth.PollHandler)))
+		// C10/RW8 per-member POOL login relays (→ proxy /oauth/pool/*): the local
+		// contribute page logs the member into a group account; the proxy exchanges
+		// with a memory-store broker and writes the token back to master.
+		mux.Handle("POST /api/user/oauth/pool/authorize-url",
+			authMW(http.HandlerFunc(oauth.PoolAuthorizeURLHandler)))
+		mux.Handle("POST /api/user/oauth/pool/submit-code",
+			authMW(http.HandlerFunc(oauth.PoolSubmitCodeHandler)))
 	}
 
 	// Import endpoints. ConfirmHandler needs an unlocked session.

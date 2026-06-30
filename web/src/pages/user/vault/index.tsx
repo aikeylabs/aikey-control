@@ -297,10 +297,11 @@ function formatRelative(unix: number | null | undefined): string {
 function lastTestHealthScore(lt: VaultLastTest | null | undefined): number {
   if (!lt) return 0;
   const legacyPass = lt.status === 'pass';
+  const chatSkipped = lt.chat_skipped === true;
   const phases = [
     lt.ping_ok ?? legacyPass,
     lt.api_ok  ?? legacyPass,
-    lt.chat_ok ?? legacyPass,
+    chatSkipped ? true : (lt.chat_ok ?? legacyPass),
   ];
   const firstFailIdx = phases.findIndex((ok) => !ok);
   if (firstFailIdx === -1) return 4;
@@ -320,20 +321,24 @@ function LastTestCell(props: { value: VaultLastTest | null }) {
     );
   }
   const legacyPass = lt.status === 'pass';
-  const phases: Array<{ name: string; ok: boolean }> = [
+  const chatSkipped = lt.chat_skipped === true;
+  const phases: Array<{ name: string; ok: boolean; skipped?: boolean }> = [
     { name: 'Ping', ok: lt.ping_ok ?? legacyPass },
     { name: 'API',  ok: lt.api_ok  ?? legacyPass },
-    { name: 'Chat', ok: lt.chat_ok ?? legacyPass },
+    { name: 'Chat', ok: chatSkipped ? true : (lt.chat_ok ?? legacyPass), skipped: chatSkipped },
   ];
   // Locate the first failing stage. Once a stage fails, everything to
   // its right is treated as "didn't get to run" (red), regardless of
   // its own boolean — that's the user's signal-chain mental model.
-  const firstFailIdx = phases.findIndex(p => !p.ok);
+  const firstFailIdx = phases.findIndex(p => !p.ok && !p.skipped);
   const okColor    = 'var(--success, #22c55e)';
   const failColor  = '#f59e0b';                       // amber — this stage broke
   const downstream = 'var(--destructive, #ef4444)';   // red — never got a chance
+  const skippedColor = 'var(--muted-foreground)';
 
   const segmentColor = (i: number): string => {
+    if (firstFailIdx !== -1 && i > firstFailIdx) return downstream;
+    if (phases[i]?.skipped) return skippedColor;
     if (firstFailIdx === -1) return okColor;        // all green
     if (i < firstFailIdx)    return okColor;        // upstream of break: passed
     if (i === firstFailIdx)  return failColor;      // the broken link
@@ -347,7 +352,9 @@ function LastTestCell(props: { value: VaultLastTest | null }) {
   // pixels to it.
   const tooltip = [
     ...phases.map((p, i) => {
-      const state = firstFailIdx === -1 || i < firstFailIdx
+      const state = p.skipped
+        ? 'skipped'
+        : firstFailIdx === -1 || i < firstFailIdx
         ? 'ok'
         : i === firstFailIdx ? 'failed' : 'not reached';
       return `${p.name}: ${state}`;
@@ -4695,6 +4702,7 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
             const pingOk = row.ping_ok === true;
             const apiOk = row.api_ok === true;
             const chatOk = row.chat_ok === true;
+            const chatSkipped = row.chat_skipped === true;
             const apiStatus = typeof row.api_status === 'number' ? row.api_status : null;
             const chatStatus = typeof row.chat_status === 'number' ? row.chat_status : null;
             const apiMs = typeof row.api_ms === 'number' ? row.api_ms : null;
@@ -4740,10 +4748,15 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      background: chatOk ? 'var(--success)' : stageFailColor,
+                      background: chatSkipped
+                        ? 'var(--muted-foreground)'
+                        : chatOk ? 'var(--success)' : stageFailColor,
+                      opacity: chatSkipped ? 0.55 : 1,
                     }}
                   />{' '}
-                  {chatOk ? t('vault.probeOk') : chatStatus != null ? `HTTP ${chatStatus}` : t('vault.probeFail')}
+                  {chatSkipped
+                    ? t('vault.probeStatusSkipped')
+                    : chatOk ? t('vault.probeOk') : chatStatus != null ? `HTTP ${chatStatus}` : t('vault.probeFail')}
                 </td>
                 <td style={cellStyle} className="font-mono">
                   {latencyMs != null ? `${latencyMs}ms` : '—'}
@@ -4849,7 +4862,8 @@ function FailureDetails(props: { rows: unknown[] }) {
         body: typeof row.api_body_snippet === 'string' ? row.api_body_snippet : null,
       });
     }
-    const chatRan = row.chat_status != null || typeof row.chat_body_snippet === 'string';
+    const chatRan = row.chat_skipped !== true
+      && (row.chat_status != null || typeof row.chat_body_snippet === 'string');
     if (row.chat_ok !== true && chatRan) {
       failures.push({
         provider,
@@ -5942,6 +5956,9 @@ function probeRowState(
   if (sr) {
     const v = sr[msField];
     if (typeof v === 'number' && v > 0) latency = `${Math.round(v)} ms`;
+  }
+  if (phase === 'chat' && testResult.chat_skipped === true) {
+    return { tone: '', status: t('vault.probeStatusSkipped'), latency: '-' };
   }
   if (ok) {
     return { tone: 'good', status: t('vault.probeStatusOk'), latency };

@@ -287,6 +287,15 @@ const (
 	// (their token is delivered at runtime via channel ③, not as a static key),
 	// so direct-binding one would silently produce an unusable VK. 422.
 	CodeBizBindOAuthDirect = "BIZ_BIND_OAUTH_DIRECT"
+	// CodeBizOauthMemberTokenForbidden: a member tried to write back a per-member
+	// OAuth token (RW10 POST /accounts/me/oauth-member-token) for an account that
+	// is NOT in any group they are an active member of. Defense in depth on the
+	// write-back path (R14.1 membership gate, fail-closed). 403.
+	CodeBizOauthMemberTokenForbidden = "BIZ_OAUTH_MEMBER_TOKEN_FORBIDDEN"
+	// CodeBizOauthLoginCredNotProvisioned: a member pulled the routed account's
+	// login credential (RW7 GET /accounts/me/group-routed-credential) but the admin
+	// has not stored a login email/password for that account yet. 404.
+	CodeBizOauthLoginCredNotProvisioned = "BIZ_OAUTH_LOGIN_CRED_NOT_PROVISIONED"
 
 	// DATA — client input validation
 	CodeDataInvalidBody  = "DATA_INVALID_BODY"
@@ -465,6 +474,21 @@ func BizOauthGroupRatioRejected(seats, accounts int, limit float64) *DomainError
 func BizOauthGroupDisabled() *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupDisabled,
 		Message: "seat group binding targets are not enabled in this deployment"}
+}
+
+// BizOauthMemberTokenForbidden — the caller tried to write back a per-member OAuth
+// token for an account they have no active group membership for (RW10 write-back
+// authz, R14.1 membership gate).
+func BizOauthMemberTokenForbidden() *DomainError {
+	return &DomainError{Code: CodeBizOauthMemberTokenForbidden,
+		Message: "not an active member of a group containing this account"}
+}
+
+// BizOauthLoginCredNotProvisioned — the routed account has no admin-stored login
+// email/password yet (RW7 pull). 404.
+func BizOauthLoginCredNotProvisioned() *DomainError {
+	return &DomainError{Code: CodeBizOauthLoginCredNotProvisioned,
+		Message: "no login credential has been provisioned for this account"}
 }
 
 // BizBindTargetInvalid — a binding's target shape is invalid (must be exactly one

@@ -64,6 +64,7 @@
     "navVault": "Vault",
     "navImport": "Import",
     "navTeamKeys": "Team Keys",
+    "navOauthContribute": "Contribute OAuth",
     "navUsage": "Usage",
     "navUsageDetail": "Usage Detail",
     "navTeamUsage": "Team Usage",
@@ -92,6 +93,7 @@
     "navComplianceAudit": "Compliance Audit"
   },
   "teamMenu": {
+    "oauthContribute": "Contribute OAuth",
     "teamKeys": "Team Keys",
     "teamUsage": "Team Usage",
     "teamCompliance": "Team Compliance",
