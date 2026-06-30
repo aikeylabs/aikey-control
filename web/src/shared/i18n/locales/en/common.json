@@ -64,7 +64,7 @@
     "navVault": "Vault",
     "navImport": "Import",
     "navTeamKeys": "Team Keys",
-    "navOauthContribute": "Contribute OAuth",
+    "navOauthContribute": "Team OAuth",
     "navUsage": "Usage",
     "navUsageDetail": "Usage Detail",
     "navTeamUsage": "Team Usage",
@@ -93,7 +93,7 @@
     "navComplianceAudit": "Compliance Audit"
   },
   "teamMenu": {
-    "oauthContribute": "Contribute OAuth",
+    "oauthContribute": "Team OAuth",
     "teamKeys": "Team Keys",
     "teamUsage": "Team Usage",
     "teamCompliance": "Team Compliance",
@@ -2159,10 +2159,12 @@
       "title": "Current account",
       "description": "The account this console is signed in with. Confirm it's the right one before changing anything below.",
       "emailLabel": "Login email",
+      "loginCmdLabel": "Login command",
+      "loginCmdHint": "Not signed in yet. Copy this command and run it in your terminal to sign in to the configured server.",
       "notLoggedIn": "(not logged in — run `aikey login` in your terminal)",
       "copy": "Copy",
       "copied": "Copied",
-      "copyTooltip": "Copy email to clipboard"
+      "copyTooltip": "Copy to clipboard"
     },
     "controlUrl": {
       "title": "Control URL",
@@ -2351,5 +2353,39 @@
     "fieldPromptLength": "Prompt length",
     "fieldDetectLatency": "Detection time",
     "fieldDetector": "Detector"
+  },
+  "oauthContribute": {
+    "pageTitle": "Team OAuth",
+    "pageDescription": "Sign in to the team account you're routed to. Past accounts are kept for history.",
+    "loading": "Loading...",
+    "historyNote": "You are routed to the highlighted account; past accounts are kept for history.",
+    "searchPlaceholder": "Search by email",
+    "colEmail": "Email",
+    "colLastLogin": "Last login",
+    "colStatus": "Status",
+    "empty": "No accounts yet.",
+    "noRoutedAccount": "You are not currently routed to a pool account.",
+    "currentBadge": "Current",
+    "reveal": "Show",
+    "hide": "Hide",
+    "emailHint": "Email: {{email}}",
+    "signInTitle": "Sign in to this account",
+    "signInFor": "Account: {{email}}",
+    "startSignIn": "Start sign-in",
+    "logIn": "Log in",
+    "reLogin": "Re-login",
+    "pasteCode": "Paste the authorization code",
+    "codePlaceholder": "code#state",
+    "finishSignIn": "Finish sign-in",
+    "securityNote": "The password is shown only when you reveal it and is the company account credential.",
+    "errNotLoggedIn": "Not signed in to your team. Run aikey login first.",
+    "errUnauth": "Your team session expired. Run aikey login again.",
+    "errUnreachable": "Can't reach the team server right now. Retry shortly.",
+    "status": {
+      "logged_in": "Logged in",
+      "needs_login": "Needs login",
+      "auth_failed": "Auth failed",
+      "revoked": "Revoked"
+    }
   }
 }

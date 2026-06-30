@@ -369,7 +369,7 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   // selectors yet.
   account:        { label: 'Account',    originName: 'My Account' },
   'virtual-keys': { label: 'Team Keys',  originName: 'Virtual Keys' },
-  'oauth-contribute': { label: 'Contribute OAuth' },
+  'team-oauth': { label: 'Team OAuth' },
   vault:          { label: 'Vault',      originName: 'My Vault' },
   'usage-ledger': { label: 'Usage',      originName: 'Usage Ledger' },
   'usage-detail': { label: 'Usage Detail' },
@@ -422,7 +422,7 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
   Vault: 'navVault',
   Import: 'navImport',
   'Team Keys': 'navTeamKeys',
-  'Contribute OAuth': 'navOauthContribute',
+  'Team OAuth': 'navOauthContribute',
   Usage: 'navUsage',
   'Usage Detail': 'navUsageDetail',
   'Team Usage': 'navTeamUsage',
@@ -469,14 +469,12 @@ const GROUP_TITLE_I18N_KEY: Record<string, string> = {
 // so it's the durable anchor for the translation lookup.
 const CROSS_APP_LABEL_I18N_KEY: Record<string, string> = {
   // Team entries — rendered on A (Personal) side. These come from master/web's
-  // OWN_TEAM_MENU (B publishes, A consumes); team-oauth-contribute is flag-gated
-  // server-side so A only sees it when the team enables OAUTH_GROUP — but the
-  // i18n mapping must exist regardless or it leaks its English wire label.
+  // OWN_TEAM_MENU (B publishes, A consumes). The i18n mapping must exist
+  // regardless or it leaks its English wire label.
   'team-keys': 'teamMenu.teamKeys',
   'team-usage': 'teamMenu.teamUsage',
   'team-compliance': 'teamMenu.teamCompliance',
   'team-account': 'teamMenu.account',
-  'team-oauth-contribute': 'teamMenu.oauthContribute',
   // Personal entries — rendered on B (Team) side. Reuse the sidebar nav
   // labels; note `personal-cost`'s display label is "Performance".
   'personal-vault': 'userShell.navVault',
@@ -486,6 +484,10 @@ const CROSS_APP_LABEL_I18N_KEY: Record<string, string> = {
   'personal-trust-check': 'userShell.navTrustCheck',
   'personal-compliance': 'userShell.navComplianceAudit',
   'personal-invites': 'userShell.navInvites',
+  // 2026-06-30 (RW8): the OAuth contribute page moved to the local node, so it's
+  // a Personal entry now (was the team-side 'team-oauth-contribute'). Label =
+  // the menu nav label ("团队OAuth" / "Team OAuth").
+  'personal-oauth-contribute': 'userShell.navOauthContribute',
 };
 
 function initials(email: string): string {
@@ -836,17 +838,15 @@ export function UserShell() {
         // stub showing empty state since A's local-server has no team
         // data source.
         { path: '/user/virtual-keys', icon: <KeyIcon />,         label: 'Team Keys',  originName: 'Virtual Keys', teamOnly: true },
-        // N3b employee OAuth self-service contribution (2026-06-29). teamOnly,
-        // mirrors Team Keys: B renders the local NavLink; A renders the
-        // team-oauth-contribute cross-app slot in this position (R13). Without
-        // this navGroups entry the page had a cross-app entry (OWN_TEAM_MENU)
-        // but no B-side sidebar presence, so it vanished when you navigated to
-        // the team origin — the exact R15 alignment-contract violation
-        // ("cross-app entry without a navGroups counterpart silently drops").
-        // Discoverability is server-gated via OAUTH_GROUP_ENABLED (which filters
-        // /system/cross-app-menu); the B-side entry is unconditional, matching
-        // every other teamOnly entry (Team Keys / Team Usage / Compliance).
-        { path: '/user/oauth-contribute', icon: <ShareIcon />,   label: 'Contribute OAuth', teamOnly: true },
+        // OAuth pool contribute / per-member sign-in. personalOnly since
+        // 2026-06-30 (RW8): the page now LIVES on the local node (A, 8090) —
+        // it pulls team data via the two-hop team-fetch but is HOSTED locally,
+        // so on A it must render a LOCAL NavLink (was teamOnly, which made A
+        // render it as a cross-app link to the team origin :3000 where the page
+        // no longer exists). On B (team) the matching cross-app slot comes from
+        // A's OWN_PERSONAL_MENU ('personal-oauth-contribute'). Same pattern as
+        // Vault / Trust Check (local page + cross-app trailer on the other side).
+        { path: '/user/team-oauth', icon: <ShareIcon />,   label: 'Team OAuth', personalOnly: true },
       ],
     },
     {

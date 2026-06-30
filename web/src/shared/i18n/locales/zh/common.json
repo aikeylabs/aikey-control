@@ -64,7 +64,7 @@
     "navVault": "保管库",
     "navImport": "导入",
     "navTeamKeys": "团队密钥",
-    "navOauthContribute": "贡献 OAuth",
+    "navOauthContribute": "团队OAuth",
     "navUsage": "用量",
     "navUsageDetail": "用量明细",
     "navTeamUsage": "团队用量",
@@ -93,7 +93,7 @@
     "navComplianceAudit": "合规审计"
   },
   "teamMenu": {
-    "oauthContribute": "贡献 OAuth",
+    "oauthContribute": "团队OAuth",
     "teamKeys": "团队密钥",
     "teamUsage": "团队用量",
     "teamCompliance": "团队合规",
@@ -2159,10 +2159,12 @@
       "title": "当前账号",
       "description": "本控制台正在使用的登录账号。改动下方任何设置前可先确认账号无误。",
       "emailLabel": "登录邮箱",
+      "loginCmdLabel": "登录命令",
+      "loginCmdHint": "尚未登录。复制此命令并在终端运行，即可登录到已配置的服务端。",
       "notLoggedIn": "（未登录 —— 在终端运行 aikey login 登录）",
       "copy": "复制",
       "copied": "已复制",
-      "copyTooltip": "复制邮箱到剪贴板"
+      "copyTooltip": "复制到剪贴板"
     },
     "controlUrl": {
       "title": "控制服务 URL",
@@ -2351,5 +2353,39 @@
     "fieldPromptLength": "Prompt 长度",
     "fieldDetectLatency": "检测耗时",
     "fieldDetector": "检测器"
+  },
+  "oauthContribute": {
+    "pageTitle": "团队OAuth",
+    "pageDescription": "登录到分配给你的团队账号；用过的账号会保留为历史。",
+    "loading": "加载中...",
+    "historyNote": "你被路由到高亮的账号；过往账号保留为历史。",
+    "searchPlaceholder": "按邮箱搜索",
+    "colEmail": "邮箱",
+    "colLastLogin": "最后登录",
+    "colStatus": "状态",
+    "empty": "暂无账号。",
+    "noRoutedAccount": "你当前未被路由到任何账号池账号。",
+    "currentBadge": "当前",
+    "reveal": "显示",
+    "hide": "隐藏",
+    "emailHint": "邮箱：{{email}}",
+    "signInTitle": "登录此账号",
+    "signInFor": "账号：{{email}}",
+    "startSignIn": "开始登录",
+    "logIn": "登录",
+    "reLogin": "重新登录",
+    "pasteCode": "粘贴授权码",
+    "codePlaceholder": "code#state",
+    "finishSignIn": "完成登录",
+    "securityNote": "密码仅在你点击显示时展示，是公司账号凭据。",
+    "errNotLoggedIn": "尚未登录团队，请先运行 aikey login。",
+    "errUnauth": "团队会话已过期，请重新运行 aikey login。",
+    "errUnreachable": "暂时无法连接团队服务器，请稍后重试。",
+    "status": {
+      "logged_in": "已登录",
+      "needs_login": "待登录",
+      "auth_failed": "认证失败",
+      "revoked": "已吊销"
+    }
   }
 }

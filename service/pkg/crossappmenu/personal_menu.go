@@ -99,6 +99,21 @@ var PersonalMenu = []Entry{
 		Visibility: VisibilityAlways,
 		Icon:       "compliance",
 	},
+	// C11 (2026-06-30): Team OAuth pool sign-in. Local page (8090) at
+	// /user/team-oauth; published here so B's (team server) sidebar surfaces a
+	// cross-app link back to A's local-server where the page lives — without this
+	// entry the "Team OAuth" item is silently filtered out on B (the live bug:
+	// master /user/* showed no Team OAuth menu). Pairs with the TS OWN_PERSONAL_MENU
+	// entry of the same ID (KEYS group, sits with Team Keys). visibility 'always'
+	// (page self-handles the not-signed-in-to-team case).
+	{
+		ID:         "personal-oauth-contribute",
+		Group:      GroupKeys,
+		Label:      "Team OAuth",
+		Path:       "/user/team-oauth",
+		Visibility: VisibilityAlways,
+		Icon:       "oauth-contribute",
+	},
 	// Phase 3B R16 (2026-05-11): Account intentionally NOT exposed via
 	// cross-app — both A and B have local /user/account routes showing
 	// side-relevant data. Each side renders its own Account NavLink
@@ -143,7 +158,8 @@ var personalMenuZhLabels = map[string]string{
 	"personal-usage":       "用量",
 	"personal-cost":        "性能", // Label "Performance"; ID kept for back-compat.
 	"personal-apps":        "应用",
-	"personal-trust-check": "置信度检测",
-	"personal-compliance":  "合规审计",
-	"personal-invites":     "邀请码",
+	"personal-trust-check":      "置信度检测",
+	"personal-compliance":       "合规审计",
+	"personal-oauth-contribute": "团队OAuth",
+	"personal-invites":          "邀请码",
 }

@@ -100,6 +100,23 @@ type Config struct {
 	// — see cmd/local/main.go.
 	ReadTeamURL func() (string, error)
 
+	// ReadConfiguredControlURL returns the control-panel URL the user has
+	// *configured* (config.json `controlPanelUrl`) even when they have NOT
+	// completed `aikey login` yet. Nil = field omitted from the response.
+	//
+	// Why separate from ReadTeamURL (single-source split, 2026-06-30):
+	// `aikey account set-url` writes config.json unconditionally but only
+	// writes vault `platform_account.control_url` once logged in. So a
+	// not-logged-in user who saves a URL in the Web Settings page would see
+	// ReadTeamURL return "" on reload — the saved value vanished. We expose
+	// the config-layer value as a SECOND field (`configured_url`) instead of
+	// folding it into `team_url`, because `team_url == ""` is a load-bearing
+	// "not logged into a team" signal the cross-app sidebar menu relies on
+	// (clearing team nav on logout — see web cross-app-menu R6). The
+	// Settings page displays `team_url || configured_url`; every other
+	// consumer keeps reading only `team_url` and is unaffected.
+	ReadConfiguredControlURL func() (string, error)
+
 	// ReadTeamJWT returns the team-server JWT the CLI obtained during
 	// `aikey login`, or "" if not logged in. Nil = endpoint disabled
 	// (returns 404). Used by /system/team-jwt — Phase 3A vault-merge
@@ -301,10 +318,13 @@ func NewHandler(cfg Config) http.Handler {
 	//
 	// Response shape: {"team_url": "http://..."} when set, {"team_url": ""}
 	// when not logged in (still 200 — empty is a valid state, not an
-	// error). Endpoint absent (404) when the host process didn't supply
+	// error). When ReadConfiguredControlURL is supplied, an additional
+	// {"configured_url": "http://..."} field carries the config.json URL
+	// the user saved before logging in (so the Settings page can re-display
+	// it). Endpoint absent (404) when the host process didn't supply
 	// ReadTeamURL — typically only in test harnesses.
 	if cfg.ReadTeamURL != nil {
-		mux.Handle("GET /system/team-url", withCrossAppMenuCORS(handleTeamURL(cfg.ReadTeamURL, logger)))
+		mux.Handle("GET /system/team-url", withCrossAppMenuCORS(handleTeamURL(cfg.ReadTeamURL, cfg.ReadConfiguredControlURL, logger)))
 		mux.Handle("OPTIONS /system/team-url",
 			withCrossAppMenuCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
@@ -421,17 +441,30 @@ func handleTeamJWT(read func() (string, error), logger *slog.Logger) http.Handle
 // ReadTeamURL on every request (vault may have changed since boot).
 // Read errors collapse to empty — the caller treats empty same as
 // "not logged in", and the operator sees the actual error in the log.
-func handleTeamURL(read func() (string, error), logger *slog.Logger) http.HandlerFunc {
+func handleTeamURL(read func() (string, error), readConfigured func() (string, error), logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		url, err := read()
 		if err != nil {
 			logger.Warn("read team URL from vault", "error", err)
 			url = ""
 		}
+		resp := map[string]any{"team_url": url}
+		// configured_url = the config.json control URL saved before login.
+		// Emitted as a separate field so the Settings page can re-display a
+		// not-yet-logged-in URL without overloading team_url's "logged into
+		// a team" semantics (cross-app menu depends on it). See the
+		// ReadConfiguredControlURL doc on Config.
+		if readConfigured != nil {
+			if cfgURL, cerr := readConfigured(); cerr != nil {
+				logger.Warn("read configured control URL from config", "error", cerr)
+			} else {
+				resp["configured_url"] = cfgURL
+			}
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store") // vault state changes shouldn't be cached
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]any{"team_url": url})
+		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
 

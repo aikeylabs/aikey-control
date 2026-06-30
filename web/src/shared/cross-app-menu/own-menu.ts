@@ -108,6 +108,20 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
     icon: 'compliance',
   },
 
+  // C11 (2026-06-30): pool account sign-in — sign in to the team account the
+  // allocation engine routes you to, with your used-account history. Local page
+  // (8090) that relays sign-in to the local proxy broker + reads master via the
+  // team-fetch two-hop. visibility 'always' (the page shows a "not signed in to
+  // team" notice for Personal-only users, like Compliance Audit).
+  {
+    id: 'personal-oauth-contribute',
+    group: 'KEYS',
+    label: 'Team OAuth',
+    path: '/user/team-oauth',
+    visibility: 'always',
+    icon: 'oauth-contribute',
+  },
+
   // Phase 3B R16 (2026-05-11): Account intentionally NOT exposed via
   // cross-app. Both A and B have a local /user/account route showing
   // side-relevant data (A = personal vault account; B = team

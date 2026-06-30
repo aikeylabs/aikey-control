@@ -77,6 +77,13 @@ type ComplianceSave =
   | { kind: 'locked' }
   | { kind: 'fail'; message: string };
 
+// Returns the control URL to display in Settings. Prefers the logged-in
+// vault value (`team_url`); falls back to `configured_url` — the config.json
+// URL `aikey account set-url` saves even when the user hasn't run
+// `aikey login` yet. Without the fallback, a not-logged-in user who saves a
+// URL here would see it vanish on reload (the save only reached config.json,
+// not the vault). `team_url` keeps its "logged into a team" meaning for the
+// sidebar cross-app menu; only this page reads the configured fallback.
 async function fetchCurrentTeamURL(): Promise<string> {
   const res = await fetch('/system/team-url', {
     method: 'GET',
@@ -85,8 +92,10 @@ async function fetchCurrentTeamURL(): Promise<string> {
   });
   if (!res.ok) return '';
   try {
-    const data = (await res.json()) as { team_url?: string };
-    return (data.team_url ?? '').trim();
+    const data = (await res.json()) as { team_url?: string; configured_url?: string };
+    const teamUrl = (data.team_url ?? '').trim();
+    if (teamUrl) return teamUrl;
+    return (data.configured_url ?? '').trim();
   } catch {
     return '';
   }
@@ -190,16 +199,6 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, []);
-  async function onCopyEmail() {
-    if (!currentEmail) return;
-    try {
-      await navigator.clipboard.writeText(currentEmail);
-      setEmailCopied(true);
-      window.setTimeout(() => setEmailCopied(false), 1500);
-    } catch {
-      /* clipboard blocked — user can still select + copy from the input */
-    }
-  }
 
   // ── Control URL state ──────────────────────────────────────────────
   const [currentURL, setCurrentURL] = useState<string>('');
@@ -254,6 +253,31 @@ export default function SettingsPage() {
 
   const saveDisabled = probeStatus.kind !== 'ok' || saveStatus.kind === 'saving';
   const urlChanged = urlInput.trim() !== currentURL.trim();
+
+  // ── Current Account box content (depends on Control URL) ───────────
+  // When logged into a team, the box shows the user's email (copy = email).
+  // When NOT logged in but a Control URL has been configured below, it shows
+  // the exact `aikey login` command — pre-filled with that URL — so the user
+  // can copy it straight into a terminal to finish signing in. We bind to the
+  // committed `currentURL` (not the live input) so the command always points
+  // at a saved URL rather than a half-typed / unverified one.
+  const loginCmd = currentURL.trim() ? `aikey login --control-url=${currentURL.trim()}` : '';
+  const showLoginCmd = !currentEmail && loginCmd !== '';
+  const accountLabel = showLoginCmd
+    ? t('settings.account.loginCmdLabel')
+    : t('settings.account.emailLabel');
+  const accountValue = currentEmail || (showLoginCmd ? loginCmd : t('settings.account.notLoggedIn'));
+  const accountCopyText = currentEmail || (showLoginCmd ? loginCmd : '');
+  async function onCopyAccount() {
+    if (!accountCopyText) return;
+    try {
+      await navigator.clipboard.writeText(accountCopyText);
+      setEmailCopied(true);
+      window.setTimeout(() => setEmailCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — user can still select + copy from the input */
+    }
+  }
 
   // ── Master Password copy state ─────────────────────────────────────
   const masterPwCmd = 'aikey change-password';
@@ -479,7 +503,7 @@ export default function SettingsPage() {
               color: 'var(--muted-foreground)',
             }}
           >
-            {t('settings.account.emailLabel')}
+            {accountLabel}
           </label>
           {/* Read-only "input" + copy chip mirrors the visual language
               of the Control URL card just below — same height, same
@@ -492,7 +516,7 @@ export default function SettingsPage() {
           <div className="flex gap-2 items-stretch">
             <input
               type="text"
-              value={currentEmail || t('settings.account.notLoggedIn')}
+              value={accountValue}
               readOnly
               spellCheck={false}
               className="flex-1"
@@ -500,7 +524,7 @@ export default function SettingsPage() {
                 background: '#000000',
                 border: '1px solid var(--border)',
                 borderRadius: 6,
-                color: currentEmail ? 'var(--foreground)' : 'var(--muted-foreground)',
+                color: accountCopyText ? 'var(--foreground)' : 'var(--muted-foreground)',
                 fontFamily: 'var(--font-mono)',
                 fontSize: 14,
                 padding: '10px 12px',
@@ -508,8 +532,8 @@ export default function SettingsPage() {
             />
             <button
               type="button"
-              onClick={onCopyEmail}
-              disabled={!currentEmail}
+              onClick={onCopyAccount}
+              disabled={!accountCopyText}
               title={t('settings.account.copyTooltip')}
               aria-label={t('settings.account.copyTooltip')}
               className="px-4 rounded-md"
@@ -519,8 +543,8 @@ export default function SettingsPage() {
                 color: emailCopied ? 'var(--primary-foreground)' : 'var(--foreground)',
                 fontFamily: 'var(--font-mono)',
                 fontSize: 13,
-                cursor: currentEmail ? 'pointer' : 'not-allowed',
-                opacity: currentEmail ? 1 : 0.5,
+                cursor: accountCopyText ? 'pointer' : 'not-allowed',
+                opacity: accountCopyText ? 1 : 0.5,
                 transition: 'background 120ms ease, color 120ms ease',
                 whiteSpace: 'nowrap',
               }}
@@ -528,6 +552,11 @@ export default function SettingsPage() {
               {emailCopied ? t('settings.account.copied') : t('settings.account.copy')}
             </button>
           </div>
+          {showLoginCmd && (
+            <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 8 }}>
+              {t('settings.account.loginCmdHint')}
+            </p>
+          )}
         </section>
 
         {/* ── Card 1: Control URL ───────────────────────────────────── */}

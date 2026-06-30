@@ -31,6 +31,7 @@ import UserTrustCheckPage from '../../pages/user/trust-check';
 // Phase 3 (2026-06-02): local compliance self-view page. /user/compliance in
 // the Quality group; reads the user's own events from local-server control.db.
 import UserCompliancePage from '../../pages/user/compliance';
+import UserOAuthContributePage from '../../pages/user/oauth-contribute';
 // Phase 4 阶段 3 (2026-05-21): third-party Agent management UI.
 // Lives under /user/apps (list) + /user/apps/:slug (detail). Calls
 // /api/user/apps/* (前置 2 — pkg/userapi/app), which subprocess-bridges
@@ -102,6 +103,7 @@ export function buildUserRoutes(): RouteObject[] {
         { path: 'cost', element: <Navigate to="/user/performance" replace /> },
         { path: 'trust-check', element: <UserTrustCheckPage /> },
         { path: 'compliance', element: <UserCompliancePage /> },
+        { path: 'team-oauth', element: <UserOAuthContributePage /> },
         // Phase 4 阶段 3 — third-party Agent management.
         // List shows all registered apps; Detail shows binding + usage + audit.
         // Registration itself happens via CLI (`aikey app register`) — no

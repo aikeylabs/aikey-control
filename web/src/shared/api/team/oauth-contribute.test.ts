@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchRoutedCredential, fetchTeamOAuthAccounts } from './oauth-contribute';
+import { fetchMyPoolAccounts, fetchRoutedCredential } from './oauth-contribute';
 
 // routeFetch installs a fake global.fetch that dispatches by URL substring, so a
 // test can stub the two-hop (/system/team-url + /system/team-jwt) then the
@@ -21,53 +21,92 @@ function routeFetch(routes: Record<string, { status?: number; json?: unknown }>)
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('fetchTeamOAuthAccounts', () => {
-  it('returns the account list when logged in', async () => {
-    routeFetch({
-      '/system/team-url': { json: { team_url: 'https://master.example.com' } },
-      '/system/team-jwt': { json: { jwt: 'JWT123' } },
-      '/accounts/me/oauth-accounts': {
-        json: [{ credential_id: 'c1', display_identity: 'a@b.com', assigned: true }],
-      },
-    });
-    const res = await fetchTeamOAuthAccounts();
-    expect(Array.isArray(res)).toBe(true);
-    expect((res as any)[0].credential_id).toBe('c1');
-  });
-
+describe('fetchMyPoolAccounts', () => {
   it('returns not-logged-in when team url/jwt are absent', async () => {
     routeFetch({
       '/system/team-url': { json: { team_url: '' } },
       '/system/team-jwt': { json: { jwt: '' } },
     });
-    const res = await fetchTeamOAuthAccounts();
-    expect(res).toEqual({ kind: 'not-logged-in' });
+    expect(await fetchMyPoolAccounts()).toEqual({ kind: 'not-logged-in' });
   });
 
   it('maps a 401 from master to unauth', async () => {
     routeFetch({
       '/system/team-url': { json: { team_url: 'https://m' } },
       '/system/team-jwt': { json: { jwt: 'expired' } },
-      '/accounts/me/oauth-accounts': { status: 401 },
+      '/accounts/me/oauth-member-tokens': { status: 401 },
     });
-    const res = await fetchTeamOAuthAccounts();
-    expect(res).toEqual({ kind: 'unauth' });
+    expect(await fetchMyPoolAccounts()).toEqual({ kind: 'unauth' });
   });
-});
 
-describe('fetchRoutedCredential', () => {
-  it('returns the login email + password for the routed account', async () => {
+  it('returns the logged-into history with the routed account flagged', async () => {
     routeFetch({
       '/system/team-url': { json: { team_url: 'https://m' } },
       '/system/team-jwt': { json: { jwt: 'JWT' } },
-      '/accounts/me/group-routed-credential': { json: { login_email: 'x@y.com', password: 's3cret' } },
+      '/accounts/me/oauth-member-tokens': {
+        json: [
+          { credential_id: 'c1', identity: 'a@x.com', status: 'logged_in', last_login_at: 100, expires_at: 0, is_routed: true },
+          { credential_id: 'c2', identity: 'b@x.com', status: 'auth_failed', last_login_at: 50, expires_at: 0, is_routed: false },
+        ],
+      },
     });
-    const res = await fetchRoutedCredential('c1');
-    expect(res).toEqual({ login_email: 'x@y.com', password: 's3cret' });
+    const res = await fetchMyPoolAccounts();
+    expect(Array.isArray(res)).toBe(true);
+    const list = res as any[];
+    expect(list).toHaveLength(2);
+    expect(list[0].is_routed).toBe(true);
+    expect(list[1].is_routed).toBe(false);
   });
 
   it('not-logged-in propagates', async () => {
     routeFetch({ '/system/team-url': { json: {} }, '/system/team-jwt': { json: {} } });
-    expect(await fetchRoutedCredential('c1')).toEqual({ kind: 'not-logged-in' });
+    expect(await fetchMyPoolAccounts()).toEqual({ kind: 'not-logged-in' });
+  });
+});
+
+describe('fetchRoutedCredential', () => {
+  it('omitting credential_id lets the server resolve the routed account', async () => {
+    let calledPath = '';
+    routeFetch({
+      '/system/team-url': { json: { team_url: 'https://m' } },
+      '/system/team-jwt': { json: { jwt: 'JWT' } },
+      '/accounts/me/group-routed-credential': {
+        json: { credential_id: 'c-routed', login_email: 'x@y.com', password: 's3cret' },
+      },
+    });
+    // capture the URL to assert no ?credential_id when omitted
+    const orig = globalThis.fetch as any;
+    globalThis.fetch = ((url: string, init?: any) => {
+      if (url.includes('group-routed-credential')) calledPath = url;
+      return orig(url, init);
+    }) as any;
+
+    const res = await fetchRoutedCredential(); // no arg → server resolves
+    expect(res).toEqual({ credential_id: 'c-routed', login_email: 'x@y.com', password: 's3cret' });
+    expect(calledPath.includes('credential_id=')).toBe(false);
+  });
+
+  it('passing credential_id pulls that specific account (LOGIN_REQUIRED flow)', async () => {
+    let calledPath = '';
+    routeFetch({
+      '/system/team-url': { json: { team_url: 'https://m' } },
+      '/system/team-jwt': { json: { jwt: 'JWT' } },
+      '/accounts/me/group-routed-credential': {
+        json: { credential_id: 'c1', login_email: 'x@y.com', password: 's' },
+      },
+    });
+    const orig = globalThis.fetch as any;
+    globalThis.fetch = ((url: string, init?: any) => {
+      if (url.includes('group-routed-credential')) calledPath = url;
+      return orig(url, init);
+    }) as any;
+
+    await fetchRoutedCredential('c1');
+    expect(calledPath.includes('credential_id=c1')).toBe(true);
+  });
+
+  it('not-logged-in propagates', async () => {
+    routeFetch({ '/system/team-url': { json: {} }, '/system/team-jwt': { json: {} } });
+    expect(await fetchRoutedCredential()).toEqual({ kind: 'not-logged-in' });
   });
 });
