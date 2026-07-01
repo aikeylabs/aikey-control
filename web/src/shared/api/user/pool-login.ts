@@ -46,7 +46,18 @@ export function poolAuthorizeURL(provider: string, credentialID: string) {
   return postPool<PoolAuthorizeStart>('authorize-url', { provider, credential_id: credentialID });
 }
 
-/** Finish: submit the pasted code; the proxy exchanges + writes the token to master. */
-export function poolSubmitCode(sessionID: string, code: string) {
-  return postPool<{ status: string }>('submit-code', { session_id: sessionID, code });
+/**
+ * Submit the pasted code. Two-step confirm:
+ *   - confirm=false (step 1): the proxy EXCHANGES only and returns {status:"pending",
+ *     identity} — the resolved Claude account email, for review — WITHOUT writing to
+ *     master. (`identity` is not a secret; the token never comes back.)
+ *   - confirm=true (step 2): the proxy replays the held token and WRITES it back
+ *     (status:"ok"). Idempotent per session, so re-sending the same code is safe.
+ */
+export function poolSubmitCode(sessionID: string, code: string, confirm = false) {
+  return postPool<{ status: string; identity?: string }>('submit-code', {
+    session_id: sessionID,
+    code,
+    confirm,
+  });
 }

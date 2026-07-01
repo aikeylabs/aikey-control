@@ -82,20 +82,28 @@ type SortKey = 'created' | 'last_test' | 'alias';
 //     was deferred per design decision 8).
 /**
  * A candidate pool account behind a oauth-group VK (N6 projection, Stage A).
- * The `assigned` one is master's static rank-0 default pick — the proxy's live
- * selection (which may fall back when an account is cooled/exhausted) is Stage B.
+ * Two DISTINCT concepts, deliberately not conflated (R22): `assigned` = master's
+ * static rank-0 default pick (stable); `current_routed` = the account the proxy is
+ * ACTUALLY routing this seat to right now (override ?? rank-0), stamped by the proxy's
+ * 60s rail and folded in by the CLI so the drawer shows the live pick without a manual
+ * key sync (C2, 2026-06-30). login_status is likewise refreshed from the live rail (C1).
  */
 interface OauthGroupAccountRef {
   account_id: string;
   identity: string; // email / alias for display
   provider_code: string;
   priority: number;
-  assigned: boolean; // master-assigned default (static)
+  assigned: boolean; // master-assigned default (static rank-0)
+  // current_routed (C2): the account this seat's traffic is currently routed to in
+  // steady state (proxy override ?? rank-0). Distinct from `assigned` — an engine
+  // redirect moves current_routed off the default. false/absent when the proxy hasn't
+  // polled yet (unknown → no indicator, never wrongly claimed).
+  current_routed?: boolean;
   credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
-  // login_status (RW8 per-member): the viewer's own per-member token state for this
-  // pool account — 'logged_in' | 'needs_login' | 'auth_failed' | 'revoked'. Lets the
-  // drawer show which pool account you've signed into (team OAuth). Absent on
-  // api_key candidates / older snapshots → no badge.
+  // login_status (RW8 per-member, C1 live): the viewer's own per-member token state for
+  // this pool account — 'logged_in' | 'needs_login' | 'auth_failed' | 'revoked'.
+  // Refreshed from the proxy's group_runtime rail (≤60s) so it reflects a completed
+  // login without a manual key sync. Absent on api_key candidates / older snapshots.
   login_status?: string;
 }
 
@@ -141,6 +149,14 @@ interface TeamRowRecord {
    */
   oauth_group_id?: string | null;
   group_accounts?: OauthGroupAccountRef[] | null;
+  /**
+   * owner_email (RW8): the owning account's email, stamped by `aikey key sync`
+   * and emitted by the CLI's `_internal query`. Surfaced in the drawer Meta as
+   * "Owner" — especially useful to tell apart a group VK left behind after that
+   * account logged out (its row keeps the email; another account's sync doesn't
+   * overwrite it). Absent on rows synced before the column / older CLI bundles.
+   */
+  owner_email?: string | null;
 }
 
 /** Row union for the unified vault table — broader than `VaultRecord`
@@ -3421,6 +3437,15 @@ function DetailDrawer(props: {
                   </span>
                 </span>
               </div>
+              {/* Owner (RW8): the owning account's email, stamped by key sync.
+                  Lets you tell apart a group VK left behind after another account
+                  logged out. Hidden when absent (older sync / pre-column rows). */}
+              {team.owner_email && (
+                <div className="drawer-field">
+                  <span className="k">{t('vault.owner')}</span>
+                  <span className="v mono">{team.owner_email}</span>
+                </div>
+              )}
               {/* route_url + Route token (2026-05-11): same pair shown in
                   the Personal/OAuth drawer above. Sourced inline from
                   CLI's `_internal query` team records (Phase 3B revised),
@@ -3554,6 +3579,12 @@ function DetailDrawer(props: {
                       >
                         <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
                         {a.assigned && <span className="chip success">{t('vault.oauthGroupDefault')}</span>}
+                        {/* C2 (2026-06-30): the account the proxy is ACTUALLY routing this
+                            seat to now (override ?? rank-0) — distinct from the static
+                            default above. Only shown once the proxy's live rail reports it. */}
+                        {a.current_routed && (
+                          <span className="chip info">{t('vault.oauthGroupCurrentRouted')}</span>
+                        )}
                         {/* RW8 per-member: which pool account the viewer has signed into (team OAuth). */}
                         {a.credential_type === 'oauth_account' && a.login_status && (
                           <span

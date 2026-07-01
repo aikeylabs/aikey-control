@@ -684,6 +684,9 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* ── Card 1b: Upstream (egress) proxy ──────────────────────── */}
+        <UpstreamProxyCard />
+
         {/* ── Card 2: AI Compliance Detection ───────────────────────── */}
         <section
           className="rounded-md"
@@ -1066,5 +1069,200 @@ export default function SettingsPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+// ── Upstream (egress) proxy card ─────────────────────────────────────
+// Self-contained (own state + fetch) so it doesn't entangle SettingsPage's state.
+// Reads + writes the egress proxy URL via the local-server relay → aikey-proxy
+// /admin/upstream-proxy, which validates, persists to aikey-user.yaml, and HOT-SWAPS
+// the live transport + OAuth impersonate client (no restart). Empty = direct egress.
+// This is the egress proxy's runtime home after R25 出口收敛 (moved off master).
+type UpstreamSave = { kind: 'idle' | 'saving' | 'ok' | 'fail'; message?: string };
+type UpstreamProbe =
+  | { kind: 'idle' }
+  | { kind: 'probing' }
+  | { kind: 'ok'; status: number; ms: number }
+  | { kind: 'fail'; message: string };
+
+function UpstreamProxyCard() {
+  const { t } = useTranslation();
+  const [currentURL, setCurrentURL] = useState('');
+  const [urlInput, setUrlInput] = useState('');
+  const [probe, setProbe] = useState<UpstreamProbe>({ kind: 'idle' });
+  const [save, setSave] = useState<UpstreamSave>({ kind: 'idle' });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/user/system/upstream-proxy', { credentials: 'same-origin' });
+        if (!res.ok) return; // proxy unreachable / not wired — leave the field empty
+        const data = (await res.json().catch(() => ({}))) as { url?: string };
+        const url = (data.url ?? '').trim();
+        if (!cancelled) {
+          setCurrentURL(url);
+          setUrlInput(url);
+        }
+      } catch {
+        /* proxy not running — non-fatal; the field stays empty */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const trimmed = urlInput.trim();
+  const changed = trimmed !== currentURL.trim();
+  // Clearing (empty) is always valid to save. A non-empty URL must pass Test
+  // connectivity first, so we never save an egress proxy that can't reach out.
+  const saveEnabled = save.kind !== 'saving' && changed && (trimmed === '' || probe.kind === 'ok');
+
+  async function onTest() {
+    setProbe({ kind: 'probing' });
+    setSave({ kind: 'idle' });
+    try {
+      const res = await fetch('/api/user/system/upstream-proxy/probe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ url: trimmed }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        status?: number;
+        elapsed_ms?: number;
+        error?: string;
+      };
+      if (!res.ok) {
+        setProbe({ kind: 'fail', message: data.error ?? `HTTP ${res.status}` });
+        return;
+      }
+      if (data.ok) {
+        setProbe({ kind: 'ok', status: data.status ?? 0, ms: data.elapsed_ms ?? 0 });
+      } else {
+        setProbe({ kind: 'fail', message: data.error ?? 'unreachable' });
+      }
+    } catch (e) {
+      setProbe({ kind: 'fail', message: String(e) });
+    }
+  }
+
+  async function onSave() {
+    setSave({ kind: 'saving' });
+    try {
+      const res = await fetch('/api/user/system/upstream-proxy', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ url: trimmed }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setSave({ kind: 'fail', message: data.error ?? `HTTP ${res.status}` });
+        return;
+      }
+      setCurrentURL(trimmed);
+      setSave({ kind: 'ok' });
+    } catch (e) {
+      setSave({ kind: 'fail', message: String(e) });
+    }
+  }
+
+  return (
+    <section
+      className="rounded-md"
+      style={{ background: 'var(--card)', border: '1px solid var(--border)', padding: 24, marginBottom: 24 }}
+    >
+      <h2
+        className="mb-3"
+        style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600, color: 'var(--display-foreground)' }}
+      >
+        {t('settings.upstreamProxy.title')}
+      </h2>
+      <p style={{ fontSize: 13, color: 'var(--soft-foreground)', marginBottom: 14 }}>
+        {t('settings.upstreamProxy.description')}
+      </p>
+
+      <label
+        className="block mb-1"
+        style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground)' }}
+      >
+        {t('settings.upstreamProxy.urlLabel')}
+      </label>
+      <input
+        type="text"
+        value={urlInput}
+        onChange={(e) => {
+          setUrlInput(e.target.value);
+          setProbe({ kind: 'idle' }); // stale probe must not unlock Save for a new URL
+          setSave({ kind: 'idle' });
+        }}
+        placeholder="http://127.0.0.1:7890"
+        spellCheck={false}
+        className="w-full mb-2"
+        style={{
+          background: '#000000',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          padding: '10px 12px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 13,
+          color: 'var(--foreground)',
+          outline: 'none',
+        }}
+      />
+
+      <div style={{ minHeight: 18, marginBottom: 14, fontSize: 12 }}>
+        {save.kind === 'saving' && (
+          <span style={{ color: 'var(--muted-foreground)' }}>{t('settings.upstreamProxy.statusSaving')}</span>
+        )}
+        {save.kind === 'ok' && <span style={{ color: '#4ade80' }}>{t('settings.upstreamProxy.statusSaved')}</span>}
+        {save.kind === 'fail' && (
+          <span style={{ color: '#ef4444' }}>{t('settings.upstreamProxy.statusFail', { msg: save.message })}</span>
+        )}
+        {save.kind === 'idle' && probe.kind === 'idle' && (
+          <span style={{ color: 'var(--muted-foreground)' }}>
+            {changed && trimmed !== ''
+              ? t('settings.upstreamProxy.statusReadyToTest')
+              : t('settings.upstreamProxy.statusHint')}
+          </span>
+        )}
+        {save.kind === 'idle' && probe.kind === 'probing' && (
+          <span style={{ color: 'var(--muted-foreground)' }}>{t('settings.upstreamProxy.statusProbing')}</span>
+        )}
+        {save.kind === 'idle' && probe.kind === 'ok' && (
+          <span style={{ color: '#4ade80' }}>
+            {t('settings.upstreamProxy.statusReachable', { status: probe.status, ms: probe.ms })}
+          </span>
+        )}
+        {save.kind === 'idle' && probe.kind === 'fail' && (
+          <span style={{ color: '#ef4444' }}>
+            {t('settings.upstreamProxy.statusUnreachable', { msg: probe.message })}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="btn btn-ghost text-xs px-4 py-1.5"
+          onClick={onTest}
+          disabled={probe.kind === 'probing'}
+        >
+          {t('settings.upstreamProxy.testButton')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary text-xs px-4 py-1.5"
+          onClick={onSave}
+          disabled={!saveEnabled}
+          title={saveEnabled ? undefined : t('settings.upstreamProxy.saveDisabledHint')}
+        >
+          {t('settings.upstreamProxy.saveButton')}
+        </button>
+      </div>
+    </section>
   );
 }

@@ -262,6 +262,17 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(oauth.PoolAuthorizeURLHandler)))
 		mux.Handle("POST /api/user/oauth/pool/submit-code",
 			authMW(http.HandlerFunc(oauth.PoolSubmitCodeHandler)))
+
+		// Egress (upstream) proxy config relay (→ proxy /admin/upstream-proxy):
+		// the local "Settings → Upstream proxy" card reads + sets the egress proxy
+		// URL; the proxy persists it to aikey-user.yaml and hot-swaps the live
+		// transport. Same session-cookie auth posture as the broker relays above.
+		mux.Handle("GET /api/user/system/upstream-proxy",
+			authMW(http.HandlerFunc(oauth.UpstreamProxyGetHandler)))
+		mux.Handle("PUT /api/user/system/upstream-proxy",
+			authMW(http.HandlerFunc(oauth.UpstreamProxySetHandler)))
+		mux.Handle("POST /api/user/system/upstream-proxy/probe",
+			authMW(http.HandlerFunc(oauth.UpstreamProxyProbeHandler)))
 	}
 
 	// Import endpoints. ConfirmHandler needs an unlocked session.

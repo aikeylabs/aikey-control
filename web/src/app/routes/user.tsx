@@ -51,6 +51,7 @@ import UserInvitesPage from '../../pages/user/invites';
 // a front-end-only `clearAuth()` that left vault state intact.
 import UserSettingsPage from '../../pages/user/settings';
 import CLIGuidePage from '../../pages/user/cli-guide';
+import BrowserProfileGuidePage from '../../pages/user/browser-profile-guide';
 import { GoAliasRedirect } from '../router/go-alias';
 
 // User-edition route table — exported so Trial-edition composer at
@@ -64,6 +65,9 @@ export function buildUserRoutes(): RouteObject[] {
   return [
     // Standalone pages (no shell, no auth — open in a new tab from the CLI).
     { path: '/user/cli-guide', element: <CLIGuidePage /> },
+    // Opened in a new tab from the Team OAuth sign-in panel (isolated Chrome
+    // profile per account). Standalone so it doesn't interrupt the login flow.
+    { path: '/user/browser-profile-guide', element: <BrowserProfileGuidePage /> },
 
     // `/go/:target` — stable alias used by `aikey web --<page>`.
     { path: '/go/:target', element: <GoAliasRedirect /> },
