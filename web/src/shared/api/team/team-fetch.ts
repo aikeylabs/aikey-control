@@ -31,6 +31,17 @@ export function isTeamFetchError(v: unknown): v is TeamFetchError {
   return typeof v === 'object' && v !== null && 'kind' in v;
 }
 
+/** A domain error surfaced by a team write (POST) — the master's
+ * {"error":code,"message":msg} envelope, plus the HTTP status. Distinct from
+ * TeamFetchError so the write UI can show the server's precise reason (e.g.
+ * OAUTH_GROUP_DISABLED / a missing-field message / a membership 403). */
+export type TeamWriteError = { kind: 'domain'; status: number; code: string; message: string };
+
+/** isTeamWriteError narrows a teamPostJSON result to its domain-error case. */
+export function isTeamWriteError(v: unknown): v is TeamWriteError {
+  return typeof v === 'object' && v !== null && (v as { kind?: string }).kind === 'domain';
+}
+
 async function readTeamURL(): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
@@ -101,6 +112,61 @@ export async function teamGetJSON<T>(path: string): Promise<T | TeamFetchError> 
     } catch (e) {
       return { kind: 'parse-error', detail: String(e) };
     }
+  } catch (e) {
+    return { kind: 'unreachable', detail: String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * teamPostJSON POSTs `body` to a team-scoped path on the remote master with the
+ * member's JWT. Returns the parsed success JSON, a TeamFetchError (transport /
+ * not-logged-in), OR a TeamWriteError carrying the server's domain error envelope
+ * (so the add-account UI can show the precise reason for a 4xx). `path` must start
+ * with '/'.
+ */
+export async function teamPostJSON<T>(
+  path: string,
+  body: unknown,
+): Promise<T | TeamFetchError | TeamWriteError> {
+  const [teamUrl, jwt] = await Promise.all([readTeamURL(), readTeamJWT()]);
+  if (!teamUrl || !jwt) {
+    return { kind: 'not-logged-in' };
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${teamUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${jwt}`,
+      },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+      credentials: 'omit',
+    });
+    if (res.ok) {
+      try {
+        return (await res.json()) as T;
+      } catch (e) {
+        return { kind: 'parse-error', detail: String(e) };
+      }
+    }
+    // Non-2xx: surface the master's {error,message} domain envelope so the UI can
+    // explain WHY (disabled / not a member / missing field), not just "failed".
+    let code = `HTTP_${res.status}`;
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = (await res.json()) as { error?: string; message?: string };
+      if (data.error) code = data.error;
+      if (data.message) message = data.message;
+    } catch {
+      /* keep the HTTP fallback */
+    }
+    return { kind: 'domain', status: res.status, code, message };
   } catch (e) {
     return { kind: 'unreachable', detail: String(e) };
   } finally {

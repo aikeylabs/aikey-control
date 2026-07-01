@@ -128,7 +128,8 @@ var zhMessages = map[string]string{
 	CodeBizAuthWeakPassword:       "新密码不符合复杂度要求（至少 8 位且包含字母和数字）",
 
 	// BIZ — Organization
-	CodeBizOrgNotFound: "组织 {{id}} 不存在",
+	CodeBizOrgNotFound:        "组织 {{id}} 不存在",
+	CodeBizReferencedNotFound: "引用的资源不存在",
 
 	// BIZ — Seat
 	CodeBizSeatNotFound:       "席位 {{id}} 不存在",
@@ -216,6 +217,15 @@ const (
 
 	// BIZ — Organization
 	CodeBizOrgNotFound = "BIZ_ORG_NOT_FOUND"
+
+	// CodeBizReferencedNotFound is the GENERIC foreign-key-violation code: an INSERT/
+	// UPDATE referenced a row that doesn't exist (any FK — provider_id, org_id,
+	// credential_id, ...). WHY separate from CodeBizOrgNotFound (2026-07-01 bugfix):
+	// TranslateError used to blanket-map EVERY FK violation to "org not found", so a
+	// provider FK miss (self-contribute 'claude') surfaced the wrong "组织 {{id}} 不
+	// 存在" (and the {{id}} stayed raw — the FK path has no id in Meta). This generic
+	// message names no specific entity + needs no {{id}} placeholder.
+	CodeBizReferencedNotFound = "BIZ_REFERENCED_NOT_FOUND"
 
 	// BIZ — Seat
 	CodeBizSeatNotFound       = "BIZ_SEAT_NOT_FOUND"

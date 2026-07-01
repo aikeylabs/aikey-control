@@ -83,7 +83,8 @@ func domainErrorStatus(code string) int {
 	// ── 404 Not Found ─────────────────────────────────────────────────────────
 	case CodeBizOrgNotFound, CodeBizSeatNotFound, CodeBizKeyNotFound,
 		CodeBizBindNotFound, CodeBizCredNotFound, CodeBizProvNotFound,
-		CodeBizOauthGroupNotFound, CodeBizOauthLoginCredNotProvisioned:
+		CodeBizOauthGroupNotFound, CodeBizOauthLoginCredNotProvisioned,
+		CodeBizReferencedNotFound:
 		return http.StatusNotFound
 
 	// ── 409 Conflict ──────────────────────────────────────────────────────────

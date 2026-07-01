@@ -151,8 +151,10 @@ func translateSQLiteError(err error) error {
 	}
 
 	if strings.Contains(msg, "FOREIGN KEY constraint failed") {
+		// Generic FK code — a FK violation can be ANY reference (provider_id, org_id,
+		// credential_id, ...), so never claim "org not found" (2026-07-01 bugfix).
 		return &DomainError{
-			Code:    CodeBizOrgNotFound,
+			Code:    CodeBizReferencedNotFound,
 			Message: "referenced resource not found",
 			Meta:    map[string]any{"db_detail": msg},
 		}

@@ -21,10 +21,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchMyPoolAccounts,
   fetchRoutedCredential,
+  fetchMyGroups,
+  addOauthAccount,
   type MyPoolAccount,
   type RoutedCredential,
+  type MyOauthGroup,
 } from '@/shared/api/team/oauth-contribute';
-import { isTeamFetchError, type TeamFetchError } from '@/shared/api/team/team-fetch';
+import {
+  isTeamFetchError,
+  isTeamWriteError,
+  type TeamFetchError,
+} from '@/shared/api/team/team-fetch';
 import { poolAuthorizeURL, poolSubmitCode, isPoolLoginError } from '@/shared/api/user/pool-login';
 import { copyText } from '@/shared/utils/clipboard';
 // Shared page CSS (card / chip / vault table / status-dot / row-use-btn / icon-btn
@@ -35,7 +42,14 @@ import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 
 // MVP is Claude-only (技术方案 N3). When the pool spans providers, MyPoolAccount
 // gains a `provider` field and this default is replaced by row.provider.
+// NOTE (2026-07-01): two DIFFERENT identifiers, do not conflate:
+//   - MVP_PROVIDER ('claude') = the OAuth BROKER slug (poolAuthorizeURL login flow).
+//   - MVP_PROVIDER_CODE ('anthropic') = the provider CODE the self-contribute Add
+//     sends; the backend resolves it to the provider_id (a per-deployment UUID). The
+//     old code sent 'claude' as provider_id → providers-FK violation mis-labeled as
+//     "组织不存在". The code is 'anthropic' (see SeedProviders), NOT 'claude'.
 const MVP_PROVIDER = 'claude';
+const MVP_PROVIDER_CODE = 'anthropic';
 
 /** status → chip class + status-dot modifier, matching the local web's chip CSS
  * (success / warning / danger). Mirrors virtual-keys' statusMeta. */
@@ -69,8 +83,13 @@ function fetchErrKey(err: TeamFetchError): string {
 
 export default function OAuthContributePage() {
   const { t } = useTranslation();
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
-  const [expandedRouted, setExpandedRouted] = useState(false);
+  // Which routed account's sign-in panel is open, by credential_id. A member in
+  // MULTIPLE pools has one routed account PER pool (2026-07-01) — each must expand
+  // independently, so this is a per-account id, not a single shared boolean.
+  const [expandedCred, setExpandedCred] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   const listQ = useQuery({
     queryKey: ['my-pool-accounts'],
@@ -117,7 +136,27 @@ export default function OAuthContributePage() {
                 {t('oauthContribute.pageDescription')}
               </div>
             </div>
+            {/* R24: employee self-service add — opens the modal to store an
+                account (email+password) into a pool group the member has joined. */}
+            <button
+              type="button"
+              className="row-use-btn ml-auto flex-shrink-0"
+              onClick={() => setShowAdd(true)}
+            >
+              <PlusIcon className="w-3 h-3" />
+              {t('oauthContribute.addButton')}
+            </button>
           </section>
+
+          {showAdd && (
+            <AddAccountModal
+              onClose={() => setShowAdd(false)}
+              onAdded={() => {
+                setShowAdd(false);
+                qc.invalidateQueries({ queryKey: ['my-pool-accounts'] });
+              }}
+            />
+          )}
 
           {/* Search — only meaningful once there's history to filter. */}
           {ready && accounts.length > 0 && (
@@ -157,10 +196,11 @@ export default function OAuthContributePage() {
                 <table className="vault">
                   <thead>
                     <tr>
-                      <th style={{ width: '46%' }}>{t('oauthContribute.colEmail')}</th>
-                      <th style={{ width: '18%' }}>{t('oauthContribute.colLastLogin')}</th>
-                      <th style={{ width: '14%' }}>{t('oauthContribute.colStatus')}</th>
-                      <th style={{ width: '22%', textAlign: 'right' }} aria-hidden="true" />
+                      <th style={{ width: '34%' }}>{t('oauthContribute.colEmail')}</th>
+                      <th style={{ width: '18%' }}>{t('oauthContribute.colPoolGroup')}</th>
+                      <th style={{ width: '16%' }}>{t('oauthContribute.colLastLogin')}</th>
+                      <th style={{ width: '12%' }}>{t('oauthContribute.colStatus')}</th>
+                      <th style={{ width: '20%', textAlign: 'right' }} aria-hidden="true" />
                     </tr>
                   </thead>
                   <tbody>
@@ -168,8 +208,10 @@ export default function OAuthContributePage() {
                       <AccountRow
                         key={a.credential_id}
                         account={a}
-                        expanded={!!a.is_routed && expandedRouted}
-                        onToggle={() => setExpandedRouted((v) => !v)}
+                        expanded={!!a.is_routed && expandedCred === a.credential_id}
+                        onToggle={() =>
+                          setExpandedCred((c) => (c === a.credential_id ? null : a.credential_id))
+                        }
                       />
                     ))}
                   </tbody>
@@ -219,6 +261,15 @@ function AccountRow({
             {isRouted && <span className="chip success">{t('oauthContribute.currentBadge')}</span>}
           </div>
         </td>
+        {/* Pool group name (group_alias): which OAuth pool this account belongs to.
+            Empty for ungrouped accounts / older servers → shows a muted dash. */}
+        <td className="font-mono text-[11.5px]" style={{ color: 'var(--foreground)' }}>
+          {account.group_alias ? (
+            account.group_alias
+          ) : (
+            <span style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>—</span>
+          )}
+        </td>
         <td className="font-mono text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>
           {fmtDate(account.last_login_at)}
         </td>
@@ -255,7 +306,7 @@ function AccountRow({
 
       {isRouted && expanded && (
         <tr>
-          <td colSpan={4} style={{ padding: 0 }}>
+          <td colSpan={5} style={{ padding: 0 }}>
             <RoutedActionPanel account={account} />
           </td>
         </tr>
@@ -275,8 +326,13 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   // password reveal (lazy)
   const [revealed, setRevealed] = useState(false);
   const credQ = useQuery({
-    queryKey: ['routed-credential'],
-    queryFn: () => fetchRoutedCredential(), // no id → server resolves the routed account
+    // Pull THIS account's password by explicit credential_id (2026-07-01): a member in
+    // multiple pools has one routed account per pool, so the panel must reveal ITS own
+    // account — NOT let the server resolve the single default-routed one (which would
+    // return the wrong pool's password for the 2nd panel). Keyed per-account so panels
+    // don't share a cache entry.
+    queryKey: ['routed-credential', account.credential_id],
+    queryFn: () => fetchRoutedCredential(account.credential_id),
     enabled: revealed,
   });
   const cred = credQ.data;
@@ -485,6 +541,163 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   );
 }
 
+/** AddAccountModal: the R24 employee self-service add form. Stores a provider
+ * account (email+password) into a pool group the member has joined — NO OAuth
+ * here; the account is logged into later, on demand, when the scheduler routes a
+ * member to it. Group dropdown = the member's joined groups (default first). */
+function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const { t } = useTranslation();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [groupID, setGroupID] = useState('');
+  const [err, setErr] = useState('');
+
+  const groupsQ = useQuery({ queryKey: ['my-oauth-groups'], queryFn: fetchMyGroups });
+  const groups: MyOauthGroup[] = Array.isArray(groupsQ.data) ? groupsQ.data : [];
+  const groupsErr = groupsQ.data && isTeamFetchError(groupsQ.data) ? groupsQ.data : undefined;
+
+  // Default the selection to the first (server-ordered: default group first).
+  const selectedGroup = groupID || groups[0]?.oauth_group_id || '';
+
+  const addMut = useMutation({
+    mutationFn: () =>
+      addOauthAccount({
+        // Send the provider CODE — the backend resolves it to the provider_id.
+        provider_id: MVP_PROVIDER_CODE,
+        login_email: email.trim(),
+        password,
+        oauth_group_id: selectedGroup,
+      }),
+    onSuccess: (res) => {
+      // TeamWriteError (domain) → show the server's precise reason; TeamFetchError
+      // (transport) → generic. Success → close + refresh the list.
+      if (isTeamWriteError(res)) {
+        setErr(res.message || t('oauthContribute.addErrGeneric'));
+        return;
+      }
+      if (isTeamFetchError(res)) {
+        setErr(t('oauthContribute.addErrGeneric'));
+        return;
+      }
+      onAdded();
+    },
+  });
+
+  const canSubmit =
+    !!email.trim() && !!password && !!selectedGroup && !addMut.isPending;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={onClose}
+    >
+      <div
+        className="card w-[440px] max-w-[92vw] p-5 space-y-4"
+        style={{ background: 'var(--surface-1)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <div
+            className="text-base font-bold font-mono tracking-wide"
+            style={{ color: 'var(--display-foreground)' }}
+          >
+            {t('oauthContribute.addTitle')}
+          </div>
+          <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>
+            {t('oauthContribute.addSubtitle')}
+          </div>
+        </div>
+
+        <label className="block space-y-1">
+          <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+            {t('oauthContribute.addEmailLabel')}
+          </span>
+          <input
+            type="email"
+            className="w-full px-3 py-2 text-sm"
+            placeholder={t('oauthContribute.addEmailPlaceholder')}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </label>
+
+        <label className="block space-y-1">
+          <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+            {t('oauthContribute.addPasswordLabel')}
+          </span>
+          <input
+            type="password"
+            className="w-full px-3 py-2 text-sm"
+            placeholder={t('oauthContribute.addPasswordPlaceholder')}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+
+        <label className="block space-y-1">
+          <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+            {t('oauthContribute.addGroupLabel')}
+          </span>
+          {groupsQ.isLoading ? (
+            <div className="text-[11px] font-mono py-2" style={{ color: 'var(--muted-foreground)' }}>
+              {t('oauthContribute.addGroupsLoading')}
+            </div>
+          ) : groupsErr || groups.length === 0 ? (
+            <div className="text-[11px] font-mono py-2" style={{ color: '#facc15' }}>
+              {t('oauthContribute.addNoGroups')}
+            </div>
+          ) : (
+            <select
+              className="w-full px-3 py-2 text-sm"
+              value={selectedGroup}
+              onChange={(e) => setGroupID(e.target.value)}
+            >
+              {groups.map((g) => (
+                <option key={g.oauth_group_id} value={g.oauth_group_id}>
+                  {g.alias || g.oauth_group_id}
+                  {g.is_default ? ` (${t('oauthContribute.defaultGroupTag')})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </label>
+
+        {/* ToS note — advisory, not a blocker (R24). */}
+        <p className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.8 }}>
+          {t('oauthContribute.addTos')}
+        </p>
+
+        {err && <p className="text-[11px]" style={{ color: '#fca5a5' }}>{err}</p>}
+
+        <div className="flex items-center justify-end gap-3 pt-1">
+          <button
+            type="button"
+            className="text-[11px]"
+            style={{ color: 'var(--muted-foreground)' }}
+            onClick={onClose}
+            disabled={addMut.isPending}
+          >
+            {t('oauthContribute.cancel')}
+          </button>
+          <button
+            type="button"
+            className="row-use-btn"
+            onClick={() => {
+              setErr('');
+              addMut.mutate();
+            }}
+            disabled={!canSubmit}
+          >
+            <PlusIcon className="w-3 h-3" />
+            {addMut.isPending ? t('oauthContribute.adding') : t('oauthContribute.addSubmit')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmptyState({ message, tone }: { message: string; tone?: 'error' }) {
   return (
     <div
@@ -511,6 +724,7 @@ const ICON_EYE_OFF = 'M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 
 const ICON_ZAP = 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z';
 const ICON_COPY = 'M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m8.25-8.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-7.5A2.25 2.25 0 018.25 18v-1.5m8.25-8.25h-6a2.25 2.25 0 00-2.25 2.25v6';
 const ICON_CHECK = 'M4.5 12.75l6 6 9-13.5';
+const ICON_PLUS = 'M12 4.5v15m7.5-7.5h-15';
 
 function ShareIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_SHARE} {...p} />; }
 function SearchIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_SEARCH} {...p} />; }
@@ -519,6 +733,7 @@ function EyeOffIcon(p: { className?: string; style?: React.CSSProperties }) { re
 function ZapIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_ZAP} {...p} />; }
 function CopyIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_COPY} {...p} />; }
 function CheckIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_CHECK} {...p} />; }
+function PlusIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_PLUS} {...p} />; }
 
 /** CopyBtn copies `value` to the clipboard (HTTP-safe via copyText) and shows a
  * 1.5s green check. Renders nothing when value is empty, so the password copy

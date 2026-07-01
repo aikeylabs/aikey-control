@@ -6,7 +6,42 @@
 // team-fetch helper. The pool LOGIN flow itself goes through the local proxy relay
 // (/api/user/oauth/pool/*, same-origin) — not here; this file is only the
 // master-side reads the page renders.
-import { teamGetJSON, type TeamFetchError } from './team-fetch';
+import {
+  teamGetJSON,
+  teamPostJSON,
+  type TeamFetchError,
+  type TeamWriteError,
+} from './team-fetch';
+
+/** One group the employee has joined — the add-account dropdown source (R24).
+ * Default group first (server-ordered). */
+export interface MyOauthGroup {
+  oauth_group_id: string;
+  alias: string;
+  is_default: boolean;
+}
+
+/** fetchMyGroups lists the groups the member has joined (add-account dropdown). */
+export async function fetchMyGroups(): Promise<MyOauthGroup[] | TeamFetchError> {
+  const res = await teamGetJSON<MyOauthGroup[]>('/accounts/me/oauth-groups');
+  if (Array.isArray(res)) return res;
+  if ('kind' in res) return res;
+  return [];
+}
+
+/** addOauthAccount self-contributes an account (email+password) into a group the
+ * caller belongs to (R24). NO OAuth here — the account is logged into later, on
+ * demand, when the engine routes a member to it. Returns the created metadata OR a
+ * TeamFetchError / TeamWriteError (the latter carries the server's precise reason:
+ * disabled / not-a-member / missing field). */
+export async function addOauthAccount(input: {
+  provider_id: string;
+  login_email: string;
+  password: string;
+  oauth_group_id: string;
+}): Promise<{ credential_id: string } | TeamFetchError | TeamWriteError> {
+  return teamPostJSON<{ credential_id: string }>('/accounts/me/oauth-accounts', input);
+}
 
 /** The routed account's admin-stored login credential (RW7 pull). */
 export interface RoutedCredential {
@@ -32,6 +67,11 @@ export interface MyPoolAccount {
   /** the account the allocation engine currently routes the member to — the page
    * highlights it; only it gets reveal-password + log-in. */
   is_routed: boolean;
+  /** the pool group this account belongs to (id + human-facing name). Display-only;
+   * omitted for ungrouped accounts / older servers. Same source as the vault page's
+   * group_alias. */
+  oauth_group_id?: string;
+  group_alias?: string;
 }
 
 /**

@@ -148,6 +148,14 @@ interface TeamRowRecord {
    * `_internal query` from the vault cache.
    */
   oauth_group_id?: string | null;
+  /**
+   * group_alias (2026-07-01): the OAuth group's human-facing name (server-synced via
+   * the managed-keys-snapshot). Shown in the row + drawer so a member in MULTIPLE
+   * OAuth groups — who gets one VK per group — can tell which VK routes to which
+   * group and pick by name (`aikey use` / set-route). Empty for direct-bind VKs or
+   * an unnamed group (then the generic "OAuth group" label shows).
+   */
+  group_alias?: string | null;
   group_accounts?: OauthGroupAccountRef[] | null;
   /**
    * owner_email (RW8): the owning account's email, stamped by `aikey key sync`
@@ -2670,7 +2678,12 @@ const Row = React.memo(function Row(props: {
         {r.oauth_group_id && (
           <>
             <span className="mx-1 opacity-40">·</span>
-            <span style={{ color: 'var(--primary-dim)' }}>{t('vault.oauthGroupShared')}</span>
+            {/* Show the OAuth group's NAME (group_alias) so a member in multiple
+                groups can tell which VK routes to which group; fall back to the
+                generic label for an unnamed group (2026-07-01). */}
+            <span style={{ color: 'var(--primary-dim)' }} title={t('vault.oauthGroupShared')}>
+              {(r as TeamRowRecord).group_alias || t('vault.oauthGroupShared')}
+            </span>
             {defaultAcct ? (
               <>
                 <span className="mx-1 opacity-40">·</span>
@@ -3437,6 +3450,15 @@ function DetailDrawer(props: {
                   </span>
                 </span>
               </div>
+              {/* OAuth group name (2026-07-01): which group this VK routes into — a
+                  member in multiple groups gets one VK per group; the name tells them
+                  apart. Only for group VKs with a named group. */}
+              {team.oauth_group_id && team.group_alias && (
+                <div className="drawer-field">
+                  <span className="k">{t('vault.oauthGroupName')}</span>
+                  <span className="v">{team.group_alias}</span>
+                </div>
+              )}
               {/* Owner (RW8): the owning account's email, stamped by key sync.
                   Lets you tell apart a group VK left behind after another account
                   logged out. Hidden when absent (older sync / pre-column rows). */}
