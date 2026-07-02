@@ -128,7 +128,8 @@ var zhMessages = map[string]string{
 	CodeBizAuthWeakPassword:       "新密码不符合复杂度要求（至少 8 位且包含字母和数字）",
 
 	// BIZ — Organization
-	CodeBizOrgNotFound: "组织 {{id}} 不存在",
+	CodeBizOrgNotFound:        "组织 {{id}} 不存在",
+	CodeBizReferencedNotFound: "引用的资源不存在",
 
 	// BIZ — Seat
 	CodeBizSeatNotFound:       "席位 {{id}} 不存在",
@@ -144,6 +145,7 @@ var zhMessages = map[string]string{
 	CodeBizBindNotFound:         "绑定 {{id}} 不存在",
 	CodeBizBindProtocolMismatch: "绑定协议 {{binding_protocol}} 与凭据供应商协议 {{cred_protocol}} 不匹配",
 	CodeBizBindDuplicateTarget:  "该虚拟密钥上已存在协议 {{protocol_type}} / 供应商 {{provider_id}} 的激活绑定",
+	CodeBizBindOAuthDirect:      "OAuth 账号凭据只能通过席位组分配，不能直接绑定到席位",
 	CodeBizBindNoActive:         "未找到该令牌的激活协议绑定",
 	CodeBizBindNotDelivered:     "绑定已存在，但无法下发至代理",
 
@@ -216,6 +218,15 @@ const (
 	// BIZ — Organization
 	CodeBizOrgNotFound = "BIZ_ORG_NOT_FOUND"
 
+	// CodeBizReferencedNotFound is the GENERIC foreign-key-violation code: an INSERT/
+	// UPDATE referenced a row that doesn't exist (any FK — provider_id, org_id,
+	// credential_id, ...). WHY separate from CodeBizOrgNotFound (2026-07-01 bugfix):
+	// TranslateError used to blanket-map EVERY FK violation to "org not found", so a
+	// provider FK miss (self-contribute 'claude') surfaced the wrong "组织 {{id}} 不
+	// 存在" (and the {{id}} stayed raw — the FK path has no id in Meta). This generic
+	// message names no specific entity + needs no {{id}} placeholder.
+	CodeBizReferencedNotFound = "BIZ_REFERENCED_NOT_FOUND"
+
 	// BIZ — Seat
 	CodeBizSeatNotFound       = "BIZ_SEAT_NOT_FOUND"
 	CodeBizSeatEmailTaken     = "BIZ_SEAT_EMAIL_TAKEN"
@@ -267,6 +278,34 @@ const (
 
 	// BIZ — Provider
 	CodeBizProvNotFound = "BIZ_PROV_NOT_FOUND"
+
+	// BIZ — Seat Group (通用凭证共享组 / oauth_group)
+	CodeBizOauthGroupNotFound         = "BIZ_OAUTH_GROUP_NOT_FOUND"
+	CodeBizOauthGroupDefaultProtected = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
+	CodeBizOauthGroupCredInUse        = "BIZ_OAUTH_GROUP_CRED_IN_USE"
+	// CodeBizOauthGroupRatioRejected: issuing to a group would push seats:accounts
+	// past the reject threshold (N4 capacity gate). 409 (capacity conflict).
+	CodeBizOauthGroupRatioRejected = "BIZ_OAUTH_GROUP_RATIO_REJECTED"
+	// CodeBizOauthGroupDisabled: a group binding target was requested but the
+	// oauth_group feature is off (OAUTH_GROUP_ENABLED). 422.
+	CodeBizOauthGroupDisabled = "BIZ_OAUTH_GROUP_DISABLED"
+	// CodeBizBindTargetInvalid: a binding must target exactly one of credential /
+	// oauth_group, and an issuance can't mix credential + group (or two groups). 422.
+	CodeBizBindTargetInvalid = "BIZ_BIND_TARGET_INVALID"
+	// CodeBizBindOAuthDirect: an OAuth-account credential was used as a DIRECT
+	// binding target. OAuth accounts can only be assigned through a seat group
+	// (their token is delivered at runtime via channel ③, not as a static key),
+	// so direct-binding one would silently produce an unusable VK. 422.
+	CodeBizBindOAuthDirect = "BIZ_BIND_OAUTH_DIRECT"
+	// CodeBizOauthMemberTokenForbidden: a member tried to write back a per-member
+	// OAuth token (RW10 POST /accounts/me/oauth-member-token) for an account that
+	// is NOT in any group they are an active member of. Defense in depth on the
+	// write-back path (R14.1 membership gate, fail-closed). 403.
+	CodeBizOauthMemberTokenForbidden = "BIZ_OAUTH_MEMBER_TOKEN_FORBIDDEN"
+	// CodeBizOauthLoginCredNotProvisioned: a member pulled the routed account's
+	// login credential (RW7 GET /accounts/me/group-routed-credential) but the admin
+	// has not stored a login email/password for that account yet. 404.
+	CodeBizOauthLoginCredNotProvisioned = "BIZ_OAUTH_LOGIN_CRED_NOT_PROVISIONED"
 
 	// DATA — client input validation
 	CodeDataInvalidBody  = "DATA_INVALID_BODY"
@@ -373,6 +412,16 @@ func BizBindProtocolMismatch(bindingProtocol, credProtocol string) *DomainError 
 			bindingProtocol, credProtocol),
 		Meta: map[string]any{"binding_protocol": bindingProtocol, "cred_protocol": credProtocol}}
 }
+
+// BizBindOAuthDirect — an OAuth-account credential was used as a direct binding
+// target. OAuth accounts are runtime-delivered (channel ③) and only routable
+// through a seat group; a direct bind would yield an unusable VK, so reject it
+// up front and point the admin at seat groups.
+func BizBindOAuthDirect(credentialID string) *DomainError {
+	return &DomainError{Code: CodeBizBindOAuthDirect,
+		Message: "OAuth account credentials can only be assigned through a seat group, not bound directly to a seat",
+		Meta:    map[string]any{"credential_id": credentialID}}
+}
 func BizBindDuplicateTarget(protocol, providerID string) *DomainError {
 	return &DomainError{Code: CodeBizBindDuplicateTarget,
 		Message: fmt.Sprintf("an active binding for protocol %q / provider %q already exists on this virtual key",
@@ -397,6 +446,68 @@ func BizCredInactive(id string) *DomainError {
 	return &DomainError{Code: CodeBizCredInactive,
 		Message: fmt.Sprintf("credential %q is not active", id),
 		Meta:    map[string]any{"id": id}}
+}
+
+// BizOauthGroupNotFound — a seat group (or a sub-resource keyed by id within the
+// oauth-group domain) was not found / not in this org.
+func BizOauthGroupNotFound(id string) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupNotFound,
+		Message: fmt.Sprintf("seat group %q not found", id),
+		Meta:    map[string]any{"id": id}}
+}
+
+// BizOauthGroupDefaultProtected — the per-org default group cannot be deleted.
+func BizOauthGroupDefaultProtected() *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupDefaultProtected,
+		Message: "the default seat group cannot be deleted"}
+}
+
+// BizOauthGroupCredInUse — a credential already belongs to a seat group
+// (credential_id UNIQUE: 1 credential ∈ at most 1 group).
+func BizOauthGroupCredInUse(credentialID string) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupCredInUse,
+		Message: fmt.Sprintf("credential %q already belongs to a seat group", credentialID),
+		Meta:    map[string]any{"credential_id": credentialID}}
+}
+
+// BizOauthGroupRatioRejected — issuing to a group would push the seats:accounts
+// ratio past the reject threshold (N4). The user must add accounts to the group
+// (relieve the bottleneck at the source) before issuing more seats.
+func BizOauthGroupRatioRejected(seats, accounts int, limit float64) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupRatioRejected,
+		Message: fmt.Sprintf("seat group is over capacity: %d seats vs %d accounts exceeds the %.0f:1 limit — add accounts before issuing more keys", seats, accounts, limit),
+		Meta:    map[string]any{"seats": seats, "accounts": accounts, "reject_ratio": limit}}
+}
+
+// BizOauthGroupDisabled — a group binding target was requested but the oauth_group
+// feature is not enabled in this deployment.
+func BizOauthGroupDisabled() *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupDisabled,
+		Message: "seat group binding targets are not enabled in this deployment"}
+}
+
+// BizOauthMemberTokenForbidden — the caller tried to write back a per-member OAuth
+// token for an account they have no active group membership for (RW10 write-back
+// authz, R14.1 membership gate).
+func BizOauthMemberTokenForbidden() *DomainError {
+	return &DomainError{Code: CodeBizOauthMemberTokenForbidden,
+		Message: "not an active member of a group containing this account"}
+}
+
+// BizOauthLoginCredNotProvisioned — the routed account has no admin-stored login
+// email/password yet (RW7 pull). 404.
+func BizOauthLoginCredNotProvisioned() *DomainError {
+	return &DomainError{Code: CodeBizOauthLoginCredNotProvisioned,
+		Message: "no login credential has been provisioned for this account"}
+}
+
+// BizBindTargetInvalid — a binding's target shape is invalid (must be exactly one
+// of credential / oauth_group; an issuance can't mix credential + group or span
+// two groups).
+func BizBindTargetInvalid(reason string) *DomainError {
+	return &DomainError{Code: CodeBizBindTargetInvalid,
+		Message: "invalid binding target: " + reason,
+		Meta:    map[string]any{"reason": reason}}
 }
 
 func BizProvNotFound(id string) *DomainError {

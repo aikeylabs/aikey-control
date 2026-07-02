@@ -5,7 +5,7 @@ import { AppProviders } from '@/app/providers';
 import { router } from '@/app/router';
 import { useMasterAuthStore, useUserAuthStore } from '@/store';
 import { runtimeConfig } from '@/app/config/runtime';
-import { resolveStoreFromPathname } from '@/app/router/go-alias';
+import { resolveStoreFromPathname, collapseLeadingSlashes } from '@/app/router/go-alias';
 import './index.css';
 import './shared/i18n/i18n';
 
@@ -61,17 +61,30 @@ import './shared/i18n/i18n';
     // keep defaults
   }
 
+  // Collapse any LEADING duplicate slashes before the path touches store
+  // resolution or replaceState. A deep link can arrive as `//go/overview` (e.g.
+  // a control_url that carried a trailing slash). The browser treats a leading
+  // `//` as a PROTOCOL-RELATIVE URL, so:
+  //   - history.replaceState('//go/overview') throws a cross-origin
+  //     SecurityError → the whole SPA white-screens; and
+  //   - resolveStoreFromPathname('//go/overview') misses the `/go/` prefix and
+  //     silently routes to the wrong store (session-expired UX).
+  // Normalizing to a single leading slash keeps us same-origin and lets the
+  // `/go/:target` route + the store decision table work. (The CLI now also
+  // emits clean URLs; this is the defense-in-depth layer for any other source.)
+  const safePath = collapseLeadingSlashes(window.location.pathname);
+
   // Route the token to the correct store. resolveStoreFromPathname lives
   // in go-alias.tsx so its decision table stays bound to GO_TARGETS at
   // compile time (single source of truth — see godoc on the function).
-  if (resolveStoreFromPathname(window.location.pathname) === 'user') {
+  if (resolveStoreFromPathname(safePath) === 'user') {
     useUserAuthStore.getState().setAuth(token, user);
   } else {
     useMasterAuthStore.getState().setAuth(token, user);
   }
 
   // Clear hash so the token doesn't linger in the address bar / history
-  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  window.history.replaceState(null, '', safePath + window.location.search);
 })();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

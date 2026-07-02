@@ -109,3 +109,17 @@ export function resolveStoreFromPathname(pathname: string): 'user' | 'master' {
   }
   return targetPath.startsWith('/user') ? 'user' : 'master';
 }
+
+/**
+ * collapseLeadingSlashes normalizes a pathname's LEADING slash run to a single
+ * '/'. A deep link can arrive as `//go/overview` (e.g. a control_url that
+ * carried a trailing slash joined to `/go/...`); the browser then treats the
+ * leading `//` as a PROTOCOL-RELATIVE URL pointing at host `go`. Left unfixed
+ * that makes history.replaceState throw a cross-origin SecurityError (white
+ * screen) and makes resolveStoreFromPathname miss the `/go/` prefix. Callers
+ * normalize once before either use. Only the leading run is collapsed — interior
+ * slashes are left intact (they're not the protocol-relative hazard).
+ */
+export function collapseLeadingSlashes(pathname: string): string {
+  return pathname.replace(/^\/+/, '/');
+}

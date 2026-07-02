@@ -27,14 +27,10 @@ var PersonalMenu = []Entry{
 		Visibility: VisibilityAlways,
 		Icon:       "vault",
 	},
-	{
-		ID:         "personal-import",
-		Group:      GroupKeys,
-		Label:      "Import",
-		Path:       "/user/import",
-		Visibility: VisibilityAlways,
-		Icon:       "import",
-	},
+	// "personal-import" removed 2026-06-26: Import sank into the Vault page
+	// as an action button (导入下沉); it is no longer a standalone sidebar
+	// destination. The /user/import route still exists. Must stay in sync
+	// with own-menu.ts (cross-app-menu-check lint).
 	{
 		ID:         "personal-usage",
 		Group:      GroupInsights,
@@ -66,9 +62,11 @@ var PersonalMenu = []Entry{
 	// surface a cross-app link back to A's /user/apps page.
 	// /api/user/apps/* lives on A's local-server; B has no own
 	// /user/apps route.
+	// 2026-06-26: Group moved INSIGHTS → APPS (Apps split into its own
+	// sidebar group). Must match own-menu.ts and UserShell's 'Apps' group.
 	{
 		ID:         "personal-apps",
-		Group:      GroupInsights,
+		Group:      GroupApps,
 		Label:      "Apps",
 		Path:       "/user/apps",
 		Visibility: VisibilityAlways,
@@ -100,6 +98,21 @@ var PersonalMenu = []Entry{
 		Path:       "/user/compliance",
 		Visibility: VisibilityAlways,
 		Icon:       "compliance",
+	},
+	// C11 (2026-06-30): Team OAuth pool sign-in. Local page (8090) at
+	// /user/team-oauth; published here so B's (team server) sidebar surfaces a
+	// cross-app link back to A's local-server where the page lives — without this
+	// entry the "Team OAuth" item is silently filtered out on B (the live bug:
+	// master /user/* showed no Team OAuth menu). Pairs with the TS OWN_PERSONAL_MENU
+	// entry of the same ID (KEYS group, sits with Team Keys). visibility 'always'
+	// (page self-handles the not-signed-in-to-team case).
+	{
+		ID:         "personal-oauth-contribute",
+		Group:      GroupKeys,
+		Label:      "Team OAuth",
+		Path:       "/user/team-oauth",
+		Visibility: VisibilityAlways,
+		Icon:       "oauth-contribute",
 	},
 	// Phase 3B R16 (2026-05-11): Account intentionally NOT exposed via
 	// cross-app — both A and B have local /user/account routes showing
@@ -142,11 +155,11 @@ var PersonalMenu = []Entry{
 // can't silently fall back to English for zh users.
 var personalMenuZhLabels = map[string]string{
 	"personal-vault":       "保管库",
-	"personal-import":      "导入",
 	"personal-usage":       "用量",
 	"personal-cost":        "性能", // Label "Performance"; ID kept for back-compat.
 	"personal-apps":        "应用",
-	"personal-trust-check": "置信度检测",
-	"personal-compliance":  "合规审计",
-	"personal-invites":     "邀请码",
+	"personal-trust-check":      "置信度检测",
+	"personal-compliance":       "合规审计",
+	"personal-oauth-contribute": "团队OAuth",
+	"personal-invites":          "邀请码",
 }

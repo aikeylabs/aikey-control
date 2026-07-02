@@ -76,24 +76,29 @@ func domainErrorStatus(code string) int {
 	case CodeBizAuthAccountInactive, CodeBizAuthTokenRevoked,
 		CodeBizAuthTokenExpired, CodeBizAuthTokenRecycled,
 		CodeBizAuthTokenNotActive, CodeBizAuthAccessDenied,
-		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied:
+		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied,
+		CodeBizOauthMemberTokenForbidden:
 		return http.StatusForbidden
 
 	// ── 404 Not Found ─────────────────────────────────────────────────────────
 	case CodeBizOrgNotFound, CodeBizSeatNotFound, CodeBizKeyNotFound,
-		CodeBizBindNotFound, CodeBizCredNotFound, CodeBizProvNotFound:
+		CodeBizBindNotFound, CodeBizCredNotFound, CodeBizProvNotFound,
+		CodeBizOauthGroupNotFound, CodeBizOauthLoginCredNotProvisioned,
+		CodeBizReferencedNotFound:
 		return http.StatusNotFound
 
 	// ── 409 Conflict ──────────────────────────────────────────────────────────
 	case CodeBizAuthEmailTaken, CodeBizSeatEmailTaken,
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
+		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
 		CodeBizLoginSessionTerminated:
 		return http.StatusConflict
 
 	// ── 422 Unprocessable ─────────────────────────────────────────────────────
 	case CodeBizSeatAlreadyClaimed, CodeBizKeyNotActive,
 		CodeBizKeyDuplicateProtocol, CodeBizBindProtocolMismatch,
-		CodeBizCredInactive:
+		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
+		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid:
 		return http.StatusUnprocessableEntity
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────

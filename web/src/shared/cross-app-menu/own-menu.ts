@@ -33,14 +33,11 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
     visibility: 'always',
     icon: 'vault',
   },
-  {
-    id: 'personal-import',
-    group: 'KEYS',
-    label: 'Import',
-    path: '/user/import',
-    visibility: 'always',
-    icon: 'import',
-  },
+  // 'personal-import' removed 2026-06-26: Import is no longer a standalone
+  // sidebar destination — it sank into the Vault page as an action button
+  // (导入下沉). The /user/import route still exists; the Vault page links to
+  // it. Dropping the cross-app entry keeps the Team side from rendering a
+  // stray standalone "Import" row. Must stay in sync with personal_menu.go.
 
   // INSIGHTS group
   {
@@ -71,9 +68,12 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
   // Phase 4 阶段 3 (2026-05-21): Apps — surface A's local Connected
   // Apps list to B's sidebar. /api/user/apps/* lives on A's
   // local-server; B has no own /user/apps route.
+  // 2026-06-26: Apps moved from INSIGHTS to its own APPS group (split out
+  // of the Cost group into a standalone sidebar group). Must match
+  // personal_menu.go's GroupApps and the new 'Apps' navGroup in UserShell.
   {
     id: 'personal-apps',
-    group: 'INSIGHTS',
+    group: 'APPS',
     label: 'Apps',
     path: '/user/apps',
     visibility: 'always',
@@ -106,6 +106,20 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
     path: '/user/compliance',
     visibility: 'always',
     icon: 'compliance',
+  },
+
+  // C11 (2026-06-30): pool account sign-in — sign in to the team account the
+  // allocation engine routes you to, with your used-account history. Local page
+  // (8090) that relays sign-in to the local proxy broker + reads master via the
+  // team-fetch two-hop. visibility 'always' (the page shows a "not signed in to
+  // team" notice for Personal-only users, like Compliance Audit).
+  {
+    id: 'personal-oauth-contribute',
+    group: 'KEYS',
+    label: 'Team OAuth',
+    path: '/user/team-oauth',
+    visibility: 'always',
+    icon: 'oauth-contribute',
   },
 
   // Phase 3B R16 (2026-05-11): Account intentionally NOT exposed via

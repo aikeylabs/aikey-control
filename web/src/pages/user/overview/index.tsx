@@ -27,7 +27,7 @@ import {
   PieChart, Pie, Cell, Label,
 } from 'recharts';
 import { userAccountsApi } from '@/shared/api/user/accounts';
-import { deliveryApi, type UserKeyDTO } from '@/shared/api/user/delivery';
+import { deliveryApi, routedGroupAccount, type UserKeyDTO } from '@/shared/api/user/delivery';
 import { vaultApi, type VaultListData } from '@/shared/api/user/vault';
 import { usageApi, type TimelinePoint, type ProtocolTotal, type HourlyPoint, type RecentRequest } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
@@ -1292,13 +1292,48 @@ export default function UserOverviewPage() {
                           style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}
                         >
                           {shortVkId(k.virtual_key_id)}
+                          {/* oauth_group (Stage A): shared-group marker + the
+                              master-assigned DEFAULT pool account identity. */}
+                          {k.oauth_group_id && (
+                            <>
+                              <span className="mx-1 opacity-50">·</span>
+                              <span style={{ color: 'var(--primary-dim)' }}>{t('overview.oauthGroupShared')}</span>
+                              {(() => {
+                                const def = routedGroupAccount(k.group_accounts);
+                                return def ? (
+                                  <>
+                                    <span className="mx-1 opacity-50">·</span>
+                                    <span title={t('overview.oauthGroupDefaultAccount')}>{def.identity}</span>
+                                  </>
+                                ) : null;
+                              })()}
+                            </>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--foreground)' }}>
-                          <span className="prov-dot" style={{ backgroundColor: providerColor(k.provider_code) }} />
-                          {k.provider_code || t('overview.unknownProvider')}
-                        </span>
+                        {(() => {
+                          // Group VK = shared OAuth pool with no single provider_code of its
+                          // own; derive the protocol from the pool's default/first account.
+                          const proto =
+                            (k.oauth_group_id && routedGroupAccount(k.group_accounts)?.provider_code) ||
+                            k.provider_code;
+                          return (
+                            <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--foreground)' }}>
+                              <span className="prov-dot" style={{ backgroundColor: providerColor(proto) }} />
+                              {proto || t('overview.unknownProvider')}
+                              {/* Group VK → TEAM-OAUTH chip beside the protocol (English, no mixed CN/EN). */}
+                              {k.oauth_group_id && (
+                                <span
+                                  className="text-[9px] font-mono px-1.5 py-0.5 rounded border"
+                                  style={{ color: 'var(--primary-dim)', borderColor: 'rgba(250,204,21,0.3)', backgroundColor: 'rgba(250,204,21,0.06)' }}
+                                >
+                                  TEAM-OAUTH
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-2.5">
                         <KeyStatusChip keyStatus={k.key_status} shareStatus={k.share_status} />

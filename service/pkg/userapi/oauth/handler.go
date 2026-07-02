@@ -90,6 +90,22 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 	forward(w, r, http.MethodPost, proxyBase()+"/oauth/poll", true)
 }
 
+// PoolAuthorizeURLHandler relays POST /api/user/oauth/pool/authorize-url →
+// POST /oauth/pool/authorize-url (C10/RW8 per-member POOL login). Unlike the
+// personal /oauth/login (vault-backed), the pool flow uses the proxy's
+// memory-store broker and writes the exchanged token back to master — the token
+// never lands in the local vault. Body: {"provider","credential_id"}.
+func PoolAuthorizeURLHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodPost, proxyBase()+"/oauth/pool/authorize-url", true)
+}
+
+// PoolSubmitCodeHandler relays POST /api/user/oauth/pool/submit-code →
+// POST /oauth/pool/submit-code. Body: {"session_id","code"}. The proxy exchanges
+// + writes the per-member token back to master; the response carries no token.
+func PoolSubmitCodeHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodPost, proxyBase()+"/oauth/pool/submit-code", true)
+}
+
 // forward issues a single HTTP request to the broker and streams the
 // response straight back. It preserves status code and a minimal set
 // of response headers (Content-Type, Content-Length) — broker error

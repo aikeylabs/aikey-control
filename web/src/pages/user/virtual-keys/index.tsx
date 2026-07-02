@@ -27,7 +27,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import axios from 'axios';
 
-import { deliveryApi, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
+import { deliveryApi, routedGroupAccount, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
 import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
@@ -791,6 +791,22 @@ const Row = React.memo(function Row(props: {
         <div className="alias-main">{r.alias || t('teamKeys.unnamed')}</div>
         <div className="alias-sub">
           <span className="font-mono" title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
+          {/* oauth_group (Stage A): shared-group marker + master-assigned default account. */}
+          {r.oauth_group_id && (
+            <>
+              <span className="mx-1 opacity-50">·</span>
+              <span style={{ color: 'var(--primary-dim)' }}>{t('teamKeys.oauthGroupShared')}</span>
+              {(() => {
+                const def = routedGroupAccount(r.group_accounts);
+                return def ? (
+                  <>
+                    <span className="mx-1 opacity-50">·</span>
+                    <span title={t('teamKeys.oauthGroupDefaultAccount')}>{def.identity}</span>
+                  </>
+                ) : null;
+              })()}
+            </>
+          )}
         </div>
       </td>
 
@@ -981,6 +997,112 @@ function DetailDrawer(props: {
               </span>
             </div>
           </div>
+
+          {/* oauth_group (Stage A): pool candidate accounts behind this group VK —
+              identity / provider / priority + the master-assigned default. Mirrors
+              the vault page's 池账号 section so both drawers read identically.
+              "Default" is master's STATIC rank-0 pick; the proxy's live selection
+              (cooled-account fallback) is Stage B. */}
+          {r.oauth_group_id && (
+            <div className="drawer-section">
+              <div className="drawer-section-title">
+                <KeyRoundIcon className="w-3 h-3" />
+                {t('teamKeys.oauthGroupGroupAccounts')}
+              </div>
+              {(r.group_accounts ?? []).length === 0 ? (
+                <div className="drawer-field">
+                  <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
+                    {t('teamKeys.oauthGroupNoAccounts')}
+                  </span>
+                </div>
+              ) : (
+                (r.group_accounts ?? [])
+                  .slice()
+                  .sort((a, b) => a.priority - b.priority)
+                  .map((a) => (
+                    // Custom stacked layout (NOT drawer-field): identity is a value,
+                    // not a field label — drawer-field's .k uppercases + letter-spaces
+                    // it (reads as garbled). Identity on its own line, the
+                    // provider/type/priority meta below it.
+                    <div
+                      key={a.account_id}
+                      style={{
+                        padding: '9px 11px',
+                        marginTop: 6,
+                        borderRadius: 8,
+                        border: `1px solid ${a.account_id === routedGroupAccount(r.group_accounts)?.account_id ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
+                        background: a.account_id === routedGroupAccount(r.group_accounts)?.account_id ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--foreground)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
+                        {a.assigned && <span className="chip success">{t('teamKeys.oauthGroupDefault')}</span>}
+                        {/* C2: the account the proxy is ACTUALLY routing to now (engine-first,
+                            live 60s rail) — distinct from the static default above. */}
+                        {a.current_routed && <span className="chip info">{t('teamKeys.oauthGroupCurrentRouted')}</span>}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--muted-foreground)',
+                          marginTop: 5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span
+                            className="prov-dot"
+                            style={{ background: providerBrandColor(a.provider_code), width: 6, height: 6 }}
+                          />
+                          {a.provider_code}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>
+                          {a.credential_type === 'oauth_account'
+                            ? t('teamKeys.oauthGroupTypeOauth')
+                            : t('teamKeys.oauthGroupTypeKey')}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>{t('teamKeys.oauthGroupPriority', { priority: a.priority })}</span>
+                      </div>
+                    </div>
+                  ))
+              )}
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <span
+                  style={{
+                    color: 'var(--muted-foreground)',
+                    fontSize: 11,
+                    fontStyle: 'italic',
+                    lineHeight: 1.5,
+                    display: 'block',
+                  }}
+                >
+                  {t('teamKeys.oauthGroupDefaultHint')}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Usage / Limit section — the seat's quota (used vs limit per rule),
               the same data as the team-keys list column, shown larger here. */}

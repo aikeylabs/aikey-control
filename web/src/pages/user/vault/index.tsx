@@ -28,6 +28,7 @@ import type { TFunction } from 'i18next';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { importApi, type ProviderRoute } from '@/shared/api/user/import';
+import { routedGroupAccount } from '@/shared/api/user/delivery';
 import { formatDate, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import {
   vaultApi,
@@ -80,6 +81,33 @@ type SortKey = 'created' | 'last_test' | 'alias';
 //     team rows don't open the drawer in this phase.
 //   - in_use_for: future Phase 3B work (Active state for team rows
 //     was deferred per design decision 8).
+/**
+ * A candidate pool account behind a oauth-group VK (N6 projection, Stage A).
+ * Two DISTINCT concepts, deliberately not conflated (R22): `assigned` = master's
+ * static rank-0 default pick (stable); `current_routed` = the account the proxy is
+ * ACTUALLY routing this seat to right now (override ?? rank-0), stamped by the proxy's
+ * 60s rail and folded in by the CLI so the drawer shows the live pick without a manual
+ * key sync (C2, 2026-06-30). login_status is likewise refreshed from the live rail (C1).
+ */
+interface OauthGroupAccountRef {
+  account_id: string;
+  identity: string; // email / alias for display
+  provider_code: string;
+  priority: number;
+  assigned: boolean; // master-assigned default (static rank-0)
+  // current_routed (C2): the account this seat's traffic is currently routed to in
+  // steady state (proxy override ?? rank-0). Distinct from `assigned` — an engine
+  // redirect moves current_routed off the default. false/absent when the proxy hasn't
+  // polled yet (unknown → no indicator, never wrongly claimed).
+  current_routed?: boolean;
+  credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
+  // login_status (RW8 per-member, C1 live): the viewer's own per-member token state for
+  // this pool account — 'logged_in' | 'needs_login' | 'auth_failed' | 'revoked'.
+  // Refreshed from the proxy's group_runtime rail (≤60s) so it reflects a completed
+  // login without a manual key sync. Absent on api_key candidates / older snapshots.
+  login_status?: string;
+}
+
 interface TeamRowRecord {
   target: 'team';
   id: string; // == virtual_key_id, used as the rowKey scope segment
@@ -113,6 +141,31 @@ interface TeamRowRecord {
    * survives every `aikey key sync`.
    */
   extra?: VaultExtra | null;
+  /**
+   * N6 oauth_group projection (Stage A): when this team VK is bound to a
+   * credential-sharing group, `oauth_group_id` is the group and `group_accounts`
+   * is the candidate pool (identity / provider / priority + master's assigned
+   * default). null/absent for direct-bind VKs. Emitted by the CLI's
+   * `_internal query` from the vault cache.
+   */
+  oauth_group_id?: string | null;
+  /**
+   * group_alias (2026-07-01): the OAuth group's human-facing name (server-synced via
+   * the managed-keys-snapshot). Shown in the row + drawer so a member in MULTIPLE
+   * OAuth groups — who gets one VK per group — can tell which VK routes to which
+   * group and pick by name (`aikey use` / set-route). Empty for direct-bind VKs or
+   * an unnamed group (then the generic "OAuth group" label shows).
+   */
+  group_alias?: string | null;
+  group_accounts?: OauthGroupAccountRef[] | null;
+  /**
+   * owner_email (RW8): the owning account's email, stamped by `aikey key sync`
+   * and emitted by the CLI's `_internal query`. Surfaced in the drawer Meta as
+   * "Owner" — especially useful to tell apart a group VK left behind after that
+   * account logged out (its row keeps the email; another account's sync doesn't
+   * overwrite it). Absent on rows synced before the column / older CLI bundles.
+   */
+  owner_email?: string | null;
 }
 
 /** Row union for the unified vault table — broader than `VaultRecord`
@@ -274,10 +327,11 @@ function formatRelative(unix: number | null | undefined): string {
 function lastTestHealthScore(lt: VaultLastTest | null | undefined): number {
   if (!lt) return 0;
   const legacyPass = lt.status === 'pass';
+  const chatSkipped = lt.chat_skipped === true;
   const phases = [
     lt.ping_ok ?? legacyPass,
     lt.api_ok  ?? legacyPass,
-    lt.chat_ok ?? legacyPass,
+    chatSkipped ? true : (lt.chat_ok ?? legacyPass),
   ];
   const firstFailIdx = phases.findIndex((ok) => !ok);
   if (firstFailIdx === -1) return 4;
@@ -297,20 +351,24 @@ function LastTestCell(props: { value: VaultLastTest | null }) {
     );
   }
   const legacyPass = lt.status === 'pass';
-  const phases: Array<{ name: string; ok: boolean }> = [
+  const chatSkipped = lt.chat_skipped === true;
+  const phases: Array<{ name: string; ok: boolean; skipped?: boolean }> = [
     { name: 'Ping', ok: lt.ping_ok ?? legacyPass },
     { name: 'API',  ok: lt.api_ok  ?? legacyPass },
-    { name: 'Chat', ok: lt.chat_ok ?? legacyPass },
+    { name: 'Chat', ok: chatSkipped ? true : (lt.chat_ok ?? legacyPass), skipped: chatSkipped },
   ];
   // Locate the first failing stage. Once a stage fails, everything to
   // its right is treated as "didn't get to run" (red), regardless of
   // its own boolean — that's the user's signal-chain mental model.
-  const firstFailIdx = phases.findIndex(p => !p.ok);
+  const firstFailIdx = phases.findIndex(p => !p.ok && !p.skipped);
   const okColor    = 'var(--success, #22c55e)';
   const failColor  = '#f59e0b';                       // amber — this stage broke
   const downstream = 'var(--destructive, #ef4444)';   // red — never got a chance
+  const skippedColor = 'var(--muted-foreground)';
 
   const segmentColor = (i: number): string => {
+    if (firstFailIdx !== -1 && i > firstFailIdx) return downstream;
+    if (phases[i]?.skipped) return skippedColor;
     if (firstFailIdx === -1) return okColor;        // all green
     if (i < firstFailIdx)    return okColor;        // upstream of break: passed
     if (i === firstFailIdx)  return failColor;      // the broken link
@@ -324,7 +382,9 @@ function LastTestCell(props: { value: VaultLastTest | null }) {
   // pixels to it.
   const tooltip = [
     ...phases.map((p, i) => {
-      const state = firstFailIdx === -1 || i < firstFailIdx
+      const state = p.skipped
+        ? 'skipped'
+        : firstFailIdx === -1 || i < firstFailIdx
         ? 'ok'
         : i === firstFailIdx ? 'failed' : 'not reached';
       return `${p.name}: ${state}`;
@@ -1100,18 +1160,30 @@ export default function UserVaultPage() {
         // schema change adds a third cache key).
         qc.refetchQueries({ queryKey: ['vault-list'] });
       })
-      .catch((err: Error & { code?: string; response?: { status?: number } }) => {
-        // Surface the raw HTTP status alongside the (CLI / axios) error
-        // code so the popup's friendly-text mapping can branch on
-        // 5xx-class failures without re-inspecting the thrown object.
-        const httpStatus = err.response?.status;
-        setTestError({
-          code: err.code,
-          httpStatus,
-          message: err.message || 'Test failed for an unknown reason',
-        });
-        setTestPhase('error');
-      });
+      .catch(
+        (err: Error & {
+          code?: string;
+          response?: { status?: number; data?: { error?: string; message?: string } };
+        }) => {
+          // Surface the raw HTTP status alongside the error code so the popup's
+          // friendly-text mapping can branch correctly. PREFER the backend's
+          // error_code (response body `error`, e.g. I_PROXY_NOT_RUNNING) over the
+          // axios transport code (ERR_BAD_RESPONSE for any 5xx): friendlyTestError
+          // keys on the I_* code, so falling back to the axios code collapsed every
+          // mapped failure (proxy down / cluster node / credential not found) into
+          // the generic 5xx "restart web" copy — the wrong next-step. Same for the
+          // message: the backend's human message beats axios's bare "Request failed
+          // with status code 503". Bugfix 2026-06-26-vault-test-error-code-not-surfaced.
+          const httpStatus = err.response?.status;
+          const data = err.response?.data;
+          setTestError({
+            code: data?.error ?? err.code,
+            httpStatus,
+            message: data?.message || err.message || 'Test failed for an unknown reason',
+          });
+          setTestPhase('error');
+        },
+      );
   }
 
   function closeTestPopup() {
@@ -2558,11 +2630,18 @@ const Row = React.memo(function Row(props: {
   const r = props.record;
   const inUse = recordInUseForGroup(r, props.groupProvider);
   const lockedTitle = props.locked ? t('vault.unlockToUseAction') : undefined;
-  const providerName = providerDisplayName(r);
   const isTeam = r.target === 'team';
   const isOAuth = r.target === 'oauth';
   const aliasMono = isMonoAlias(r.alias);
-  const kindLabel = isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY';
+  // Group VK = shared OAuth pool: it has no single protocol_family of its own
+  // (would render "unknown"), so derive the Provider column from the pool's
+  // default (or first) account; and its kind chip reads TEAM-OAUTH (English,
+  // matching the adjacent TEAM/OAUTH/KEY pills — no mixed CN/EN).
+  const isTeamOAuthGroup = isTeam && !!(r as TeamRowRecord).oauth_group_id;
+  const groupAccts = isTeamOAuthGroup ? (r as TeamRowRecord).group_accounts : null;
+  const groupProto = routedGroupAccount(groupAccts)?.provider_code;
+  const providerName = groupProto || providerDisplayName(r);
+  const kindLabel = isTeamOAuthGroup ? 'TEAM-OAUTH' : isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY';
   const kindClass = isTeam ? ' team' : isOAuth ? ' oauth' : '';
 
   // Secondary alias line: route_token tail + contextual hint.
@@ -2588,9 +2667,41 @@ const Row = React.memo(function Row(props: {
     // about the team-managed lifecycle so users aren't surprised when
     // the team admin's rotation kicks in.
     const expires = formatExpiresAtIso(r.expires_at, t);
+    // N6 oauth_group (Stage A): on a group VK, surface the shared-group marker +
+    // the pool account this seat is CURRENTLY ROUTED to — the proxy's live pick
+    // (current_routed, engine-first) when available, else the master default. The
+    // full candidate list is in the drawer.
+    const defaultAcct = routedGroupAccount(r.group_accounts);
     subLine = (
       <>
         {t('vault.teamKeyPrefix')}{teamShareLabel(r.share_status, t)}
+        {r.oauth_group_id && (
+          <>
+            <span className="mx-1 opacity-40">·</span>
+            {/* Show the OAuth group's NAME (group_alias) so a member in multiple
+                groups can tell which VK routes to which group; fall back to the
+                generic label for an unnamed group (2026-07-01). */}
+            <span style={{ color: 'var(--primary-dim)' }} title={t('vault.oauthGroupShared')}>
+              {(r as TeamRowRecord).group_alias || t('vault.oauthGroupShared')}
+            </span>
+            {defaultAcct ? (
+              <>
+                <span className="mx-1 opacity-40">·</span>
+                <span title={t('vault.oauthGroupDefaultAccount')}>{defaultAcct.identity}</span>
+              </>
+            ) : (
+              // Empty candidate set: the seat was unbound from the group, or the
+              // group has no enabled accounts → this group key can't route. Surface
+              // it so the member isn't left thinking a blank "Shared group" is fine.
+              <>
+                <span className="mx-1 opacity-40">·</span>
+                <span style={{ color: '#f59e0b' }} title={t('vault.oauthGroupNoAccessHint')}>
+                  {t('vault.oauthGroupNoAccess')}
+                </span>
+              </>
+            )}
+          </>
+        )}
         {expires && (
           <>
             <span className="mx-1 opacity-40">·</span>
@@ -3208,7 +3319,12 @@ function DetailDrawer(props: {
   // fields walled off behind isOAuth.
   const oauth = isOAuth ? (r as OAuthVaultRecord) : null;
   const team = isTeam ? (r as TeamRowRecord) : null;
-  const providerName = providerDisplayName(r);
+  // Group VK derives its protocol from the pool's default/first account (it has
+  // no single protocol_family of its own — see the row component for rationale).
+  const groupProto = team?.oauth_group_id
+    ? routedGroupAccount(team.group_accounts)?.provider_code
+    : undefined;
+  const providerName = groupProto || providerDisplayName(r);
 
   return (
     <>
@@ -3230,7 +3346,7 @@ function DetailDrawer(props: {
                   {providerName}
                 </span>
                 <span className={`kind-pill${isTeam ? ' team' : isOAuth ? ' oauth' : ''}`}>
-                  {isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY'}
+                  {team?.oauth_group_id ? 'TEAM-OAUTH' : isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY'}
                 </span>
               </span>
               {r.status === 'active' ? (
@@ -3334,6 +3450,24 @@ function DetailDrawer(props: {
                   </span>
                 </span>
               </div>
+              {/* OAuth group name (2026-07-01): which group this VK routes into — a
+                  member in multiple groups gets one VK per group; the name tells them
+                  apart. Only for group VKs with a named group. */}
+              {team.oauth_group_id && team.group_alias && (
+                <div className="drawer-field">
+                  <span className="k">{t('vault.oauthGroupName')}</span>
+                  <span className="v">{team.group_alias}</span>
+                </div>
+              )}
+              {/* Owner (RW8): the owning account's email, stamped by key sync.
+                  Lets you tell apart a group VK left behind after another account
+                  logged out. Hidden when absent (older sync / pre-column rows). */}
+              {team.owner_email && (
+                <div className="drawer-field">
+                  <span className="k">{t('vault.owner')}</span>
+                  <span className="v mono">{team.owner_email}</span>
+                </div>
+              )}
               {/* route_url + Route token (2026-05-11): same pair shown in
                   the Personal/OAuth drawer above. Sourced inline from
                   CLI's `_internal query` team records (Phase 3B revised),
@@ -3415,6 +3549,122 @@ function DetailDrawer(props: {
                 <span className="k">{t('vault.source')}</span>
                 <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
                   {t('vault.teamSourceDesc')}
+                </span>
+              </div>
+            </div>
+          )}
+          {/* N6 oauth_group (Stage A): pool candidate accounts behind this group
+              VK — identity / provider / priority + the master-assigned default.
+              "Default" is master's STATIC rank-0 pick; the proxy's live selection
+              (which may fall back when an account is cooled) is Stage B. */}
+          {isTeam && team && team.oauth_group_id && (
+            <div className="drawer-section">
+              <div className="drawer-section-title">
+                <KeyRoundIcon className="w-3 h-3" />
+                {t('vault.oauthGroupGroupAccounts')}
+              </div>
+              {(team.group_accounts ?? []).length === 0 ? (
+                <div className="drawer-field">
+                  <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
+                    {t('vault.oauthGroupNoAccounts')}
+                  </span>
+                </div>
+              ) : (
+                (team.group_accounts ?? [])
+                  .slice()
+                  .sort((a, b) => a.priority - b.priority)
+                  .map((a) => (
+                    // Custom stacked layout (NOT drawer-field): identity is a
+                    // value, not a field label — drawer-field's .k uppercases +
+                    // letter-spaces it (reads as garbled) and the .k/.v side-by-side
+                    // collides two long strings. Identity on its own line, the
+                    // type/provider/priority meta below it.
+                    <div
+                      key={a.account_id}
+                      style={{
+                        padding: '9px 11px',
+                        marginTop: 6,
+                        borderRadius: 8,
+                        border: `1px solid ${a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
+                        background: a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--foreground)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
+                        {a.assigned && <span className="chip success">{t('vault.oauthGroupDefault')}</span>}
+                        {/* C2 (2026-06-30): the account the proxy is ACTUALLY routing this
+                            seat to now (override ?? rank-0) — distinct from the static
+                            default above. Only shown once the proxy's live rail reports it. */}
+                        {a.current_routed && (
+                          <span className="chip info">{t('vault.oauthGroupCurrentRouted')}</span>
+                        )}
+                        {/* RW8 per-member: which pool account the viewer has signed into (team OAuth). */}
+                        {a.credential_type === 'oauth_account' && a.login_status && (
+                          <span
+                            className={`chip ${a.login_status === 'logged_in' ? 'success' : a.login_status === 'needs_login' ? 'warning' : 'danger'}`}
+                          >
+                            {t(`vault.oauthLoginStatus.${a.login_status}`, a.login_status)}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--muted-foreground)',
+                          marginTop: 5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span
+                            className="prov-dot"
+                            style={{ background: providerBrandColor(a.provider_code), width: 6, height: 6 }}
+                          />
+                          {a.provider_code}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>
+                          {a.credential_type === 'oauth_account'
+                            ? t('vault.oauthGroupTypeOauth')
+                            : t('vault.oauthGroupTypeKey')}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>{t('vault.oauthGroupPriority', { priority: a.priority })}</span>
+                      </div>
+                    </div>
+                  ))
+              )}
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <span
+                  style={{
+                    color: 'var(--muted-foreground)',
+                    fontSize: 11,
+                    fontStyle: 'italic',
+                    lineHeight: 1.5,
+                    display: 'block',
+                  }}
+                >
+                  {t('vault.oauthGroupDefaultHint')}
                 </span>
               </div>
             </div>
@@ -4518,6 +4768,7 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
             const pingOk = row.ping_ok === true;
             const apiOk = row.api_ok === true;
             const chatOk = row.chat_ok === true;
+            const chatSkipped = row.chat_skipped === true;
             const apiStatus = typeof row.api_status === 'number' ? row.api_status : null;
             const chatStatus = typeof row.chat_status === 'number' ? row.chat_status : null;
             const apiMs = typeof row.api_ms === 'number' ? row.api_ms : null;
@@ -4563,10 +4814,15 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      background: chatOk ? 'var(--success)' : stageFailColor,
+                      background: chatSkipped
+                        ? 'var(--muted-foreground)'
+                        : chatOk ? 'var(--success)' : stageFailColor,
+                      opacity: chatSkipped ? 0.55 : 1,
                     }}
                   />{' '}
-                  {chatOk ? t('vault.probeOk') : chatStatus != null ? `HTTP ${chatStatus}` : t('vault.probeFail')}
+                  {chatSkipped
+                    ? t('vault.probeStatusSkipped')
+                    : chatOk ? t('vault.probeOk') : chatStatus != null ? `HTTP ${chatStatus}` : t('vault.probeFail')}
                 </td>
                 <td style={cellStyle} className="font-mono">
                   {latencyMs != null ? `${latencyMs}ms` : '—'}
@@ -4672,7 +4928,8 @@ function FailureDetails(props: { rows: unknown[] }) {
         body: typeof row.api_body_snippet === 'string' ? row.api_body_snippet : null,
       });
     }
-    const chatRan = row.chat_status != null || typeof row.chat_body_snippet === 'string';
+    const chatRan = row.chat_skipped !== true
+      && (row.chat_status != null || typeof row.chat_body_snippet === 'string');
     if (row.chat_ok !== true && chatRan) {
       failures.push({
         provider,
@@ -5765,6 +6022,9 @@ function probeRowState(
   if (sr) {
     const v = sr[msField];
     if (typeof v === 'number' && v > 0) latency = `${Math.round(v)} ms`;
+  }
+  if (phase === 'chat' && testResult.chat_skipped === true) {
+    return { tone: '', status: t('vault.probeStatusSkipped'), latency: '-' };
   }
   if (ok) {
     return { tone: 'good', status: t('vault.probeStatusOk'), latency };

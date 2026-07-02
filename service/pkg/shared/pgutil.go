@@ -85,8 +85,11 @@ func TranslatePGError(err error) error {
 			Meta:    map[string]any{"constraint": pqErr.Constraint, "db_detail": pqErr.Detail},
 		}
 	case "23503": // foreign_key_violation
+		// Generic FK code — the violated constraint can reference ANY table (provider,
+		// org, credential, ...), so never claim "org not found" (2026-07-01 bugfix). The
+		// constraint name in Meta pinpoints which FK for server-side debugging.
 		return &DomainError{
-			Code:    CodeBizOrgNotFound,
+			Code:    CodeBizReferencedNotFound,
 			Message: fmt.Sprintf("referenced resource not found (constraint: %s)", pqErr.Constraint),
 			Meta:    map[string]any{"constraint": pqErr.Constraint},
 		}

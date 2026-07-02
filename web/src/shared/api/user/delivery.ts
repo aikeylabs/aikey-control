@@ -26,6 +26,40 @@ export interface SeatQuotaItem {
   limit: number;
 }
 
+/**
+ * A candidate pool account behind a oauth-group VK (master snapshot projection —
+ * the SAME shape the local vault gets, single source of truth). `assigned` is
+ * master's static rank-0 default pick; the proxy's live selection (cooled-account
+ * fallback) is a later stage.
+ */
+export interface GroupAccountRef {
+  account_id: string;
+  identity: string; // email / alias for display
+  provider_code: string;
+  priority: number;
+  assigned: boolean; // master-assigned default (static rank-0 / engine ledger pick)
+  // current_routed (C2): the account the proxy is ACTUALLY routing this seat to now
+  // (engine override ?? rank-0), stamped by the proxy's live 60s rail onto the local
+  // vault. Fresher + more authoritative than `assigned` (a key-sync snapshot copy).
+  // Absent on the master-snapshot shape (no proxy rail there) → fall back to assigned.
+  current_routed?: boolean;
+  credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
+}
+
+/**
+ * routedGroupAccount is the SINGLE display rule for "which pool account is selected"
+ * across the vault + team-keys pages: prefer the proxy's live routed account
+ * (current_routed, fresh + engine-first), fall back to the static default (assigned),
+ * then the first candidate. Keeps every page showing the SAME selected account instead
+ * of some reading the stale `assigned` snapshot (2026-07-01, source-of-truth unification).
+ */
+export function routedGroupAccount<T extends { assigned: boolean; current_routed?: boolean }>(
+  accounts: T[] | null | undefined,
+): T | undefined {
+  if (!accounts || accounts.length === 0) return undefined;
+  return accounts.find((a) => a.current_routed) ?? accounts.find((a) => a.assigned) ?? accounts[0];
+}
+
 export interface UserKeyDTO {
   virtual_key_id: string;
   org_id: string;
@@ -38,6 +72,11 @@ export interface UserKeyDTO {
   // Seat-level quota (one entry per rule) for the usage/limit bar. Absent when the
   // seat has no quota or the server edition doesn't wire quota.
   seat_quota?: SeatQuotaItem[];
+  // oauth_group projection (Stage A): when this VK targets a oauth_group, the shared
+  // group + candidate pool accounts. Absent for direct-bind VKs. Same source as
+  // the vault page (master snapshot.GroupAccounts).
+  oauth_group_id?: string;
+  group_accounts?: GroupAccountRef[];
 }
 
 // One fallback candidate within a protocol slot.
