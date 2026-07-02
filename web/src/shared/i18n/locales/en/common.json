@@ -2008,6 +2008,7 @@
     "oauthGroupGroupAccounts": "Pool accounts",
     "oauthGroupNoAccounts": "No accounts in this group yet.",
     "oauthGroupDefault": "Default",
+    "oauthGroupCurrentRouted": "current routed",
     "oauthGroupPriority": "Priority {{priority}}",
     "oauthGroupDefaultHint": "“Default” is the team admin's static preference; the actual routed account is decided live by the scheduling engine service.",
     "oauthGroupTypeOauth": "OAuth",

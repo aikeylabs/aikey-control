@@ -28,6 +28,7 @@ import type { TFunction } from 'i18next';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { importApi, type ProviderRoute } from '@/shared/api/user/import';
+import { routedGroupAccount } from '@/shared/api/user/delivery';
 import { formatDate, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import {
   vaultApi,
@@ -2638,7 +2639,7 @@ const Row = React.memo(function Row(props: {
   // matching the adjacent TEAM/OAUTH/KEY pills — no mixed CN/EN).
   const isTeamOAuthGroup = isTeam && !!(r as TeamRowRecord).oauth_group_id;
   const groupAccts = isTeamOAuthGroup ? (r as TeamRowRecord).group_accounts : null;
-  const groupProto = (groupAccts?.find((a) => a.assigned) ?? groupAccts?.[0])?.provider_code;
+  const groupProto = routedGroupAccount(groupAccts)?.provider_code;
   const providerName = groupProto || providerDisplayName(r);
   const kindLabel = isTeamOAuthGroup ? 'TEAM-OAUTH' : isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY';
   const kindClass = isTeam ? ' team' : isOAuth ? ' oauth' : '';
@@ -2667,11 +2668,10 @@ const Row = React.memo(function Row(props: {
     // the team admin's rotation kicks in.
     const expires = formatExpiresAtIso(r.expires_at, t);
     // N6 oauth_group (Stage A): on a group VK, surface the shared-group marker +
-    // the master-assigned DEFAULT pool account identity (the one routed to by
-    // default). The full candidate list is in the drawer. NOTE: "default" is
-    // master's static rank-0 pick; the proxy's live selection (which may fall
-    // back when an account is cooled) is Stage B.
-    const defaultAcct = r.group_accounts?.find((a) => a.assigned) ?? r.group_accounts?.[0];
+    // the pool account this seat is CURRENTLY ROUTED to — the proxy's live pick
+    // (current_routed, engine-first) when available, else the master default. The
+    // full candidate list is in the drawer.
+    const defaultAcct = routedGroupAccount(r.group_accounts);
     subLine = (
       <>
         {t('vault.teamKeyPrefix')}{teamShareLabel(r.share_status, t)}
@@ -3322,7 +3322,7 @@ function DetailDrawer(props: {
   // Group VK derives its protocol from the pool's default/first account (it has
   // no single protocol_family of its own — see the row component for rationale).
   const groupProto = team?.oauth_group_id
-    ? (team.group_accounts?.find((a) => a.assigned) ?? team.group_accounts?.[0])?.provider_code
+    ? routedGroupAccount(team.group_accounts)?.provider_code
     : undefined;
   const providerName = groupProto || providerDisplayName(r);
 
@@ -3585,8 +3585,8 @@ function DetailDrawer(props: {
                         padding: '9px 11px',
                         marginTop: 6,
                         borderRadius: 8,
-                        border: `1px solid ${a.assigned ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
-                        background: a.assigned ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
+                        background: a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
                       }}
                     >
                       <div

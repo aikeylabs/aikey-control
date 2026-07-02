@@ -37,8 +37,27 @@ export interface GroupAccountRef {
   identity: string; // email / alias for display
   provider_code: string;
   priority: number;
-  assigned: boolean; // master-assigned default (static)
+  assigned: boolean; // master-assigned default (static rank-0 / engine ledger pick)
+  // current_routed (C2): the account the proxy is ACTUALLY routing this seat to now
+  // (engine override ?? rank-0), stamped by the proxy's live 60s rail onto the local
+  // vault. Fresher + more authoritative than `assigned` (a key-sync snapshot copy).
+  // Absent on the master-snapshot shape (no proxy rail there) → fall back to assigned.
+  current_routed?: boolean;
   credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
+}
+
+/**
+ * routedGroupAccount is the SINGLE display rule for "which pool account is selected"
+ * across the vault + team-keys pages: prefer the proxy's live routed account
+ * (current_routed, fresh + engine-first), fall back to the static default (assigned),
+ * then the first candidate. Keeps every page showing the SAME selected account instead
+ * of some reading the stale `assigned` snapshot (2026-07-01, source-of-truth unification).
+ */
+export function routedGroupAccount<T extends { assigned: boolean; current_routed?: boolean }>(
+  accounts: T[] | null | undefined,
+): T | undefined {
+  if (!accounts || accounts.length === 0) return undefined;
+  return accounts.find((a) => a.current_routed) ?? accounts.find((a) => a.assigned) ?? accounts[0];
 }
 
 export interface UserKeyDTO {

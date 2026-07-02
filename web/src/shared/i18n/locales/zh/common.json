@@ -2008,6 +2008,7 @@
     "oauthGroupGroupAccounts": "池账号",
     "oauthGroupNoAccounts": "该组暂无账号。",
     "oauthGroupDefault": "默认",
+    "oauthGroupCurrentRouted": "当前路由",
     "oauthGroupPriority": "优先级 {{priority}}",
     "oauthGroupDefaultHint": "「默认」是团队管理员的静态首选；实际路由账号由调度引擎服务实时决定。",
     "oauthGroupTypeOauth": "OAuth",

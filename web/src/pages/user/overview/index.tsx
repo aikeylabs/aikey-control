@@ -27,7 +27,7 @@ import {
   PieChart, Pie, Cell, Label,
 } from 'recharts';
 import { userAccountsApi } from '@/shared/api/user/accounts';
-import { deliveryApi, type UserKeyDTO } from '@/shared/api/user/delivery';
+import { deliveryApi, routedGroupAccount, type UserKeyDTO } from '@/shared/api/user/delivery';
 import { vaultApi, type VaultListData } from '@/shared/api/user/vault';
 import { usageApi, type TimelinePoint, type ProtocolTotal, type HourlyPoint, type RecentRequest } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
@@ -1299,7 +1299,7 @@ export default function UserOverviewPage() {
                               <span className="mx-1 opacity-50">·</span>
                               <span style={{ color: 'var(--primary-dim)' }}>{t('overview.oauthGroupShared')}</span>
                               {(() => {
-                                const def = k.group_accounts?.find((a) => a.assigned) ?? k.group_accounts?.[0];
+                                const def = routedGroupAccount(k.group_accounts);
                                 return def ? (
                                   <>
                                     <span className="mx-1 opacity-50">·</span>
@@ -1316,8 +1316,7 @@ export default function UserOverviewPage() {
                           // Group VK = shared OAuth pool with no single provider_code of its
                           // own; derive the protocol from the pool's default/first account.
                           const proto =
-                            (k.oauth_group_id &&
-                              (k.group_accounts?.find((a) => a.assigned) ?? k.group_accounts?.[0])?.provider_code) ||
+                            (k.oauth_group_id && routedGroupAccount(k.group_accounts)?.provider_code) ||
                             k.provider_code;
                           return (
                             <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--foreground)' }}>

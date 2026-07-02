@@ -27,7 +27,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import axios from 'axios';
 
-import { deliveryApi, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
+import { deliveryApi, routedGroupAccount, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
 import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
@@ -797,7 +797,7 @@ const Row = React.memo(function Row(props: {
               <span className="mx-1 opacity-50">·</span>
               <span style={{ color: 'var(--primary-dim)' }}>{t('teamKeys.oauthGroupShared')}</span>
               {(() => {
-                const def = r.group_accounts?.find((a) => a.assigned) ?? r.group_accounts?.[0];
+                const def = routedGroupAccount(r.group_accounts);
                 return def ? (
                   <>
                     <span className="mx-1 opacity-50">·</span>
@@ -1030,8 +1030,8 @@ function DetailDrawer(props: {
                         padding: '9px 11px',
                         marginTop: 6,
                         borderRadius: 8,
-                        border: `1px solid ${a.assigned ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
-                        background: a.assigned ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${a.account_id === routedGroupAccount(r.group_accounts)?.account_id ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
+                        background: a.account_id === routedGroupAccount(r.group_accounts)?.account_id ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
                       }}
                     >
                       <div
@@ -1046,6 +1046,9 @@ function DetailDrawer(props: {
                       >
                         <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
                         {a.assigned && <span className="chip success">{t('teamKeys.oauthGroupDefault')}</span>}
+                        {/* C2: the account the proxy is ACTUALLY routing to now (engine-first,
+                            live 60s rail) — distinct from the static default above. */}
+                        {a.current_routed && <span className="chip info">{t('teamKeys.oauthGroupCurrentRouted')}</span>}
                       </div>
                       <div
                         style={{
