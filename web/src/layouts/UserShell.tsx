@@ -17,6 +17,7 @@ import {
   useVisibilityState,
   getOtherBaseUrl,
   refreshOtherBaseUrl,
+  buildCrossAppUrl,
   type CrossAppMenuEntry,
   type CrossAppMenuGroup,
 } from '@/shared/cross-app-menu';
@@ -627,7 +628,7 @@ export function UserShell() {
   // which is a better failure than a silent no-op click.
   const onOpenSettings = React.useCallback(() => {
     if (!IS_PERSONAL_SIDE && otherBaseUrl) {
-      window.location.href = `${otherBaseUrl.replace(/\/$/, '')}/user/settings`;
+      window.location.href = buildCrossAppUrl(otherBaseUrl.replace(/\/$/, ''), '/user/settings');
       return;
     }
     navigate('/user/settings');
@@ -1178,7 +1179,7 @@ export function UserShell() {
                           renderedItems.push(
                             <a
                               key={xa.id}
-                              href={`${otherBaseUrl}${xa.path}`}
+                              href={buildCrossAppUrl(otherBaseUrl, xa.path)}
                               className="nav-item nav-item-cross-app"
                               data-tooltip={tTeamMenuLabel(xa.id, xa.label)}
                               data-origin-name={`cross-app:${xa.id}`}
@@ -1194,7 +1195,7 @@ export function UserShell() {
                           renderedItems.push(
                             <a
                               key={item.path}
-                              href={`${otherBaseUrl}${item.path}`}
+                              href={buildCrossAppUrl(otherBaseUrl, item.path)}
                               className="nav-item nav-item-cross-app"
                               data-tooltip={tNavLabel(displayLabel)}
                               data-origin-name={`cross-app:own-${item.path.replace(/^\//, '').replace(/\//g, '-')}`}
@@ -1219,7 +1220,7 @@ export function UserShell() {
                         renderedItems.push(
                           <a
                             key={item.path}
-                            href={`${otherBaseUrl}${item.path}`}
+                            href={buildCrossAppUrl(otherBaseUrl, item.path)}
                             className="nav-item nav-item-cross-app"
                             data-tooltip={tNavLabel(displayLabel)}
                             data-origin-name={`cross-app:own-${item.path.replace(/^\//, '').replace(/\//g, '-')}`}
@@ -1264,7 +1265,7 @@ export function UserShell() {
                         renderedItems.push(
                           <a
                             key={xa.id}
-                            href={`${otherBaseUrl}${xa.path}`}
+                            href={buildCrossAppUrl(otherBaseUrl, xa.path)}
                             className="nav-item nav-item-cross-app"
                             data-tooltip={tTeamMenuLabel(xa.id, xa.label)}
                             data-origin-name={`cross-app:${xa.id}`}
@@ -1287,7 +1288,7 @@ export function UserShell() {
                       renderedItems.push(
                         <a
                           key={e.id}
-                          href={`${otherBaseUrl}${e.path}`}
+                          href={buildCrossAppUrl(otherBaseUrl, e.path)}
                           className="nav-item nav-item-cross-app"
                           data-tooltip={tTeamMenuLabel(e.id, e.label)}
                           data-origin-name={`cross-app:${e.id}`}

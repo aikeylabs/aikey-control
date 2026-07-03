@@ -27,7 +27,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import axios from 'axios';
 
-import { deliveryApi, routedGroupAccount, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
+import { deliveryApi, routedGroupAccount, type GroupAccountRef, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
 import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
@@ -39,7 +39,7 @@ import { copyText } from '@/shared/utils/clipboard';
 import { mapUseError } from '@/shared/utils/mapUseError';
 import { formatDate } from '@/shared/utils/datetime-intl';
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
-import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl } from '@/shared/cross-app-menu';
+import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl, buildCrossAppUrl } from '@/shared/cross-app-menu';
 
 // Phase 3B R23 revised (2026-05-11): on B (team server) the Team Keys
 // drawer cross-fetches Personal A's vault.list to surface the
@@ -58,6 +58,17 @@ type SortKey = 'alias' | 'expires' | 'status';
 /** Lower-case provider family for grouping. Strips _api / _oauth tails. */
 function providerFamily(code: string | null | undefined): string {
   return (code ?? 'unknown').toLowerCase().replace(/_oauth$|_api$/, '');
+}
+
+/**
+ * Provider family for a KEY row. A group VK has NO single provider_code of its own
+ * (the pool's accounts do) — derive it from the routed pool account, same rule as
+ * the vault/overview pages (routedGroupAccount). Without this, group VKs rendered a
+ * blank/unknown protocol family (2026-07-02 staging finding — the A2 sweep fixed the
+ * identity sub-line here but missed the family chip/grouping).
+ */
+function keyProviderFamily(k: { provider_code?: string | null; group_accounts?: GroupAccountRef[] | null }): string {
+  return providerFamily(k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code);
 }
 
 function providerBrandColor(provider: string | null | undefined): string {
@@ -380,7 +391,7 @@ export default function UserVirtualKeysPage() {
     const order: string[] = [];
     const map = new Map<string, UserKeyDTO[]>();
     for (const k of filtered) {
-      const fam = providerFamily(k.provider_code);
+      const fam = keyProviderFamily(k);
       if (!map.has(fam)) {
         map.set(fam, []);
         order.push(fam);
@@ -580,7 +591,7 @@ export default function UserVirtualKeysPage() {
                             // POST stays for A side (useHref=undefined).
                             useHref={
                               !IS_PERSONAL_SIDE && otherBaseUrl
-                                ? `${otherBaseUrl}/user/vault?focus=${encodeURIComponent(k.virtual_key_id)}`
+                                ? buildCrossAppUrl(otherBaseUrl, `/user/vault?focus=${encodeURIComponent(k.virtual_key_id)}`)
                                 : undefined
                             }
                           />
@@ -771,7 +782,7 @@ const Row = React.memo(function Row(props: {
   const { t } = useTranslation();
   const r = props.record;
   const status = statusMeta(r.key_status, t);
-  const fam = providerFamily(r.provider_code);
+  const fam = keyProviderFamily(r);
   const expiresStr = formatExpiresAt(r.expires_at, t);
   const trClasses = [
     'group-child',
@@ -924,7 +935,7 @@ function DetailDrawer(props: {
   const { t } = useTranslation();
   const r = props.record;
   const status = statusMeta(r.key_status, t);
-  const fam = providerFamily(r.provider_code);
+  const fam = keyProviderFamily(r);
   const expiresStr = formatExpiresAt(r.expires_at, t);
 
   React.useEffect(() => {

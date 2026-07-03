@@ -37,6 +37,7 @@ import {
   OWN_MENU,
   OWN_PERSONAL_MENU,
   getOtherBaseUrl,
+  buildCrossAppUrl,
 } from '@/shared/cross-app-menu';
 import type { AccountDTO } from '@/shared/api/types/account';
 
@@ -1377,7 +1378,7 @@ export default function UserOverviewPage() {
                           // around line 725.
                           const otherBaseUrl = getOtherBaseUrl();
                           if (!IS_PERSONAL_SIDE && otherBaseUrl) {
-                            const href = `${otherBaseUrl}/user/vault`;
+                            const href = buildCrossAppUrl(otherBaseUrl, '/user/vault');
                             return (
                               <a
                                 href={href}

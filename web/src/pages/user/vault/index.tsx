@@ -651,6 +651,12 @@ export default function UserVaultPage() {
     queryKey: ['vault-list', unlocked ? 'unlocked' : 'locked'],
     queryFn: vaultApi.list,
     staleTime: 30_000,
+    // Auto-refresh the candidate list so a pool account added on the server (or by an
+    // admin) appears WITHOUT a manual page reload — the design intent of the proxy's
+    // 60s fast rail: "/user/vault reflects login + routing within the proxy's 60s poll"
+    // (C1/C2). The list query is the passwordless metadata-only _internal query (no
+    // decrypt), so a 15s poll is cheap; keepPreviousData below avoids any flicker.
+    refetchInterval: 15_000,
     // Why keepPreviousData: when `unlocked` flips (lock → unlock or back), the
     // queryKey changes and React Query would otherwise return undefined while
     // the new query loads. That transient empty array tripped the live-record
