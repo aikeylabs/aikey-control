@@ -62,6 +62,14 @@ type Config struct {
 	VKCacheTTL time.Duration
 	CliTimeout time.Duration
 
+	// TeamGatewayEnabled advertises the Personal composing gateway
+	// capability on GET /system/team-url (`"gateway": true`). Set by
+	// cmd/local when it wires serve.WithTeamGateway; the SPA combines it
+	// with a non-empty team_url to treat the team side as same-origin
+	// (design: 20260703-web统一origin-本地网关方案.md). Optional field on
+	// an existing endpoint — deliberately not a new endpoint.
+	TeamGatewayEnabled bool
+
 	// UsageFacade is the in-proc query-service handler that owns
 	// `/v1/usage/*`. Personal local-server runs the same single-port
 	// pattern as cmd/full: trial-server's serve.Run constructs an
@@ -266,6 +274,18 @@ func NewHandler(cfg Config) http.Handler {
 	// timeline / by-protocol / recent endpoints from this local-server.
 	if cfg.UsageFacade != nil {
 		mux.Handle("/v1/usage/", corsWrap(cfg.UsageFacade))
+		// /api/user/usage/* — the LOCAL alias of the same facade
+		// (2026-07-03 unified-origin gateway, option 6). The Personal SPA
+		// reads local usage here (embed injects usageApiBase) so the
+		// /v1/usage namespace can be forwarded wholesale to the team
+		// server by the composing gateway without ambiguity. The alias
+		// rewrites back to the facade's canonical /v1/usage/* paths —
+		// one facade, two mounts, zero duplicated handlers.
+		mux.Handle("/api/user/usage/", corsWrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r2 := r.Clone(r.Context())
+			r2.URL.Path = "/v1/usage/" + strings.TrimPrefix(r.URL.Path, "/api/user/usage/")
+			cfg.UsageFacade.ServeHTTP(w, r2)
+		})))
 	}
 	// Phase 3 local compliance self-view store (control.db). Ingest is a
 	// machine endpoint (no CORS/auth — 127.0.0.1 bind + DC5); read is a
@@ -324,7 +344,7 @@ func NewHandler(cfg Config) http.Handler {
 	// it). Endpoint absent (404) when the host process didn't supply
 	// ReadTeamURL — typically only in test harnesses.
 	if cfg.ReadTeamURL != nil {
-		mux.Handle("GET /system/team-url", withCrossAppMenuCORS(handleTeamURL(cfg.ReadTeamURL, cfg.ReadConfiguredControlURL, logger)))
+		mux.Handle("GET /system/team-url", withCrossAppMenuCORS(handleTeamURL(cfg.ReadTeamURL, cfg.ReadConfiguredControlURL, cfg.TeamGatewayEnabled, logger)))
 		mux.Handle("OPTIONS /system/team-url",
 			withCrossAppMenuCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
@@ -382,6 +402,21 @@ func NewHandler(cfg Config) http.Handler {
 	// negotiated locale (Accept-Language → resolved locale header). One wrap
 	// here covers Personal local-server AND the control routes composed into
 	// the trial bundle — both build their handler via this NewHandler.
+	// /api/user/vault-bridge/* — local ALIAS of the /accounts/me/* vault
+	// bridge mounts above (2026-07-03 composing gateway, dual-homed family
+	// #3). In gateway mode /accounts/* forwards wholesale to the team
+	// server (B's Team Keys page needs the TEAM delivery state on those
+	// paths), so A's own pages read the LOCAL merged-vault bridge through
+	// this alias instead (embed injects runtimeConfig.vaultBridgeApiBase;
+	// /api/user/ is local-owned at the gateway). Implemented as a rewrite
+	// into the SAME mux so every current and future /accounts/me/* local
+	// mount is aliased automatically — no second routing table to drift.
+	mux.Handle("/api/user/vault-bridge/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/accounts/me/" + strings.TrimPrefix(r.URL.Path, "/api/user/vault-bridge/")
+		mux.ServeHTTP(w, r2)
+	}))
+
 	return shared.LocaleMiddleware(mux)
 }
 
@@ -441,7 +476,7 @@ func handleTeamJWT(read func() (string, error), logger *slog.Logger) http.Handle
 // ReadTeamURL on every request (vault may have changed since boot).
 // Read errors collapse to empty — the caller treats empty same as
 // "not logged in", and the operator sees the actual error in the log.
-func handleTeamURL(read func() (string, error), readConfigured func() (string, error), logger *slog.Logger) http.HandlerFunc {
+func handleTeamURL(read func() (string, error), readConfigured func() (string, error), gatewayEnabled bool, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		url, err := read()
 		if err != nil {
@@ -449,6 +484,13 @@ func handleTeamURL(read func() (string, error), readConfigured func() (string, e
 			url = ""
 		}
 		resp := map[string]any{"team_url": url}
+		if gatewayEnabled {
+			// Personal composing gateway capability (20260703 design):
+			// the SPA treats a non-empty team_url + gateway:true as
+			// "team side is same-origin — render team entries as local
+			// links, no cross-origin jump".
+			resp["gateway"] = true
+		}
 		// configured_url = the config.json control URL saved before login.
 		// Emitted as a separate field so the Settings page can re-display a
 		// not-yet-logged-in URL without overloading team_url's "logged into

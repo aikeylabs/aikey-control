@@ -39,7 +39,7 @@ import { copyText } from '@/shared/utils/clipboard';
 import { mapUseError } from '@/shared/utils/mapUseError';
 import { formatDate } from '@/shared/utils/datetime-intl';
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
-import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl, buildCrossAppUrl } from '@/shared/cross-app-menu';
+import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl, buildCrossAppUrl, isTeamGatewayActive, getCrossAppLinkBase } from '@/shared/cross-app-menu';
 
 // Phase 3B R23 revised (2026-05-11): on B (team server) the Team Keys
 // drawer cross-fetches Personal A's vault.list to surface the
@@ -284,7 +284,20 @@ export default function UserVirtualKeysPage() {
   // identity which owns the vault records.
   const otherBaseUrl = useMemo(() => getOtherBaseUrl(), []);
   const vaultCrossClient = useMemo(() => {
-    if (IS_PERSONAL_SIDE || !otherBaseUrl) return null;
+    if (IS_PERSONAL_SIDE) return null;
+    // 2026-07-03 composing gateway: served THROUGH the personal gateway,
+    // A's vault is SAME-ORIGIN (/api/user/* is local-owned there). The
+    // cross-origin form would target the wrong host (the shared
+    // 'team-base-url' key holds B on that origin) and get CORS-blocked —
+    // exactly the console error observed live on 2026-07-03.
+    if (isTeamGatewayActive()) {
+      return axios.create({
+        baseURL: '',
+        timeout: 15_000,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (!otherBaseUrl) return null;
     try {
       if (new URL(otherBaseUrl).origin === window.location.origin) return null;
     } catch {
@@ -591,7 +604,7 @@ export default function UserVirtualKeysPage() {
                             // POST stays for A side (useHref=undefined).
                             useHref={
                               !IS_PERSONAL_SIDE && otherBaseUrl
-                                ? buildCrossAppUrl(otherBaseUrl, `/user/vault?focus=${encodeURIComponent(k.virtual_key_id)}`)
+                                ? buildCrossAppUrl(getCrossAppLinkBase() ?? otherBaseUrl, `/user/vault?focus=${encodeURIComponent(k.virtual_key_id)}`)
                                 : undefined
                             }
                           />

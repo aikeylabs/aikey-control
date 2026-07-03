@@ -45,6 +45,11 @@ function currentLangTag(): 'en' | 'zh' {
  * produced in that (unreachable) case.
  */
 export function buildCrossAppUrl(base: string | null, path: string): string {
+  // Same-origin link (composing gateway: base '' → relative, or the
+  // unreachable null degrade): the destination shares this origin's
+  // localStorage, so the one-shot ?lang handoff is redundant — skip it
+  // for clean URLs (2026-07-03 user Q1). Cross-origin keeps the handoff.
+  if (!base) return `${path}`;
   const joiner = path.includes('?') ? '&' : '?';
-  return `${base ?? ''}${path}${joiner}lang=${currentLangTag()}`;
+  return `${base}${path}${joiner}lang=${currentLangTag()}`;
 }

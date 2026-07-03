@@ -7,6 +7,12 @@
  * POST /virtual-keys/:virtualKeyID/claim
  */
 import { httpClient } from '../http-client';
+import { runtimeConfig } from '@/app/config/runtime';
+
+// 2026-07-03 composing gateway: vault-bridge base resolution — see
+// RuntimeConfig.vaultBridgeApiBase for the four-quadrant table.
+const ME_BRIDGE_BASE: string = runtimeConfig.vaultBridgeApiBase ?? '/accounts/me';
+
 
 export interface PendingKeyDTO {
   virtual_key_id: string;
@@ -143,12 +149,12 @@ export interface KeySummaryDTO {
 
 export const deliveryApi = {
   pendingKeys: async (): Promise<PendingKeyDTO[]> => {
-    const res = await httpClient.get<{ pending_keys: PendingKeyDTO[] }>('/accounts/me/pending-keys');
+    const res = await httpClient.get<{ pending_keys: PendingKeyDTO[] }>(`${ME_BRIDGE_BASE}/pending-keys`);
     return res.data.pending_keys ?? [];
   },
 
   allKeys: async (): Promise<UserKeyDTO[]> => {
-    const res = await httpClient.get<{ keys: UserKeyDTO[] }>('/accounts/me/all-keys');
+    const res = await httpClient.get<{ keys: UserKeyDTO[] }>(`${ME_BRIDGE_BASE}/all-keys`);
     return res.data.keys ?? [];
   },
 

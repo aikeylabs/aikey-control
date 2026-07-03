@@ -38,7 +38,7 @@ func TestHandleTeamURL_NotLoggedIn_FallsBackToConfiguredURL(t *testing.T) {
 	read := func() (string, error) { return "", nil }
 	readConfigured := func() (string, error) { return "http://192.168.1.10:3000", nil }
 
-	out := decodeTeamURL(t, handleTeamURL(read, readConfigured, logger))
+	out := decodeTeamURL(t, handleTeamURL(read, readConfigured, false, logger))
 
 	if out["team_url"] != "" {
 		t.Errorf("team_url = %v, want empty (not logged into a team)", out["team_url"])
@@ -53,7 +53,7 @@ func TestHandleTeamURL_LoggedIn_KeepsTeamURL(t *testing.T) {
 	read := func() (string, error) { return "http://team.example:3000", nil }
 	readConfigured := func() (string, error) { return "http://team.example:3000", nil }
 
-	out := decodeTeamURL(t, handleTeamURL(read, readConfigured, logger))
+	out := decodeTeamURL(t, handleTeamURL(read, readConfigured, false, logger))
 
 	if out["team_url"] != "http://team.example:3000" {
 		t.Errorf("team_url = %v, want the vault URL", out["team_url"])
@@ -67,9 +67,26 @@ func TestHandleTeamURL_NoConfiguredReader_OmitsField(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	read := func() (string, error) { return "", nil }
 
-	out := decodeTeamURL(t, handleTeamURL(read, nil, logger))
+	out := decodeTeamURL(t, handleTeamURL(read, nil, false, logger))
 
 	if _, present := out["configured_url"]; present {
 		t.Errorf("configured_url present (%v) but no reader was wired; want omitted", out["configured_url"])
+	}
+}
+
+// Gateway capability flag (20260703 composing-gateway design): additive
+// `gateway:true` appears only when the host process enables it (cmd/local);
+// disabled hosts (trial/full, tests) keep the previous response shape.
+func TestHandleTeamURL_GatewayFlag(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	read := func() (string, error) { return "http://team.example:3000", nil }
+
+	out := decodeTeamURL(t, handleTeamURL(read, nil, true, logger))
+	if out["gateway"] != true {
+		t.Errorf("gateway = %v, want true when enabled", out["gateway"])
+	}
+	out = decodeTeamURL(t, handleTeamURL(read, nil, false, logger))
+	if _, present := out["gateway"]; present {
+		t.Errorf("gateway present (%v) on a disabled host; want omitted", out["gateway"])
 	}
 }

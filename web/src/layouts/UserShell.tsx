@@ -18,6 +18,7 @@ import {
   getOtherBaseUrl,
   refreshOtherBaseUrl,
   buildCrossAppUrl,
+  getCrossAppLinkBase,
   type CrossAppMenuEntry,
   type CrossAppMenuGroup,
 } from '@/shared/cross-app-menu';
@@ -615,6 +616,13 @@ export function UserShell() {
   // See roadmap update 20260510-personal-team-数据隔离与合并显示.md decision 4.
   const [otherMenu, setOtherMenu] = React.useState<CrossAppMenuEntry[]>(() => readOtherMenu());
   const [otherBaseUrl, setOtherBaseUrlState] = React.useState<string | null>(() => getOtherBaseUrl());
+  // Cross-app NAVIGATION base (2026-07-03 composing gateway). Distinct from
+  // otherBaseUrl on purpose — user invariant: menu VISIBILITY / runtime menu
+  // sync / composed detection keep reading the REAL team URL (original
+  // login/non-login scope behavior, byte-identical); only where a click
+  // NAVIGATES switches to same-origin when the local gateway composes the
+  // team side ('' → relative href → full-document load → gateway forwards).
+  const crossAppLinkBase = getCrossAppLinkBase() ?? otherBaseUrl;
 
   // Phase 4G (2026-06-01): single helper that opens the Settings page.
   // Personal (A) has /user/settings as a real route, so React Router
@@ -628,7 +636,7 @@ export function UserShell() {
   // which is a better failure than a silent no-op click.
   const onOpenSettings = React.useCallback(() => {
     if (!IS_PERSONAL_SIDE && otherBaseUrl) {
-      window.location.href = buildCrossAppUrl(otherBaseUrl.replace(/\/$/, ''), '/user/settings');
+      window.location.href = buildCrossAppUrl((crossAppLinkBase ?? otherBaseUrl).replace(/\/$/, ''), '/user/settings');
       return;
     }
     navigate('/user/settings');
@@ -784,6 +792,11 @@ export function UserShell() {
     /** Phase 3B R7: only render on B (Team) side. A's sidebar gets the
      *  equivalent via cross-app fetch from B's OWN_TEAM_MENU. */
     teamOnly?: boolean;
+    /** 2026-07-03 (user report): hide this LOCAL item until the CLI is
+     *  logged into a team. For pages that are meaningless without a team
+     *  backend (e.g. Team OAuth pool sign-in). Composed single-binary
+     *  mode ignores it — trial always ships the team side locally. */
+    requiresTeamLogin?: boolean;
     /** Phase 3B R11: side-specific label for entries that exist on both
      *  sides under different concepts. Example: `Usage` on A means
      *  personal usage; on B the same label slot means `Team Usage`. The
@@ -847,7 +860,7 @@ export function UserShell() {
         // no longer exists). On B (team) the matching cross-app slot comes from
         // A's OWN_PERSONAL_MENU ('personal-oauth-contribute'). Same pattern as
         // Vault / Trust Check (local page + cross-app trailer on the other side).
-        { path: '/user/team-oauth', icon: <ShareIcon />,   label: 'Team OAuth', personalOnly: true },
+        { path: '/user/team-oauth', icon: <ShareIcon />,   label: 'Team OAuth', personalOnly: true, requiresTeamLogin: true },
       ],
     },
     {
@@ -869,7 +882,7 @@ export function UserShell() {
         //   - Team Usage  (teamOnly)      → TeamUsageIcon
         //   - Performance (personalOnly)  → DollarIcon (was: "Cost")
         { path: '/user/usage-ledger', icon: <ReceiptIcon />,   label: 'Usage',       originName: 'Usage Ledger', personalOnly: true },
-        { path: '/user/usage-ledger', icon: <TeamUsageIcon />, label: 'Team Usage',                              teamOnly: true     },
+        { path: '/user/team-usage-ledger', icon: <TeamUsageIcon />, label: 'Team Usage',                         teamOnly: true     },
         // 2026-05-21 (later same day): URL also renamed `/user/cost` →
         // `/user/performance` so the sidebar path matches the visible label.
         // The page file, function name, CSS class, and trailer ID stay keyed
@@ -1136,6 +1149,17 @@ export function UserShell() {
                       ? true
                       : (!(item.personalOnly && !IS_PERSONAL_SIDE)
                         && !(item.teamOnly && IS_PERSONAL_SIDE));
+                    // 2026-07-03: login-gated local items (Team OAuth) hide
+                    // when no team is connected — same lifecycle as the
+                    // cross-app team entries (menu-scope invariant: logout
+                    // shows a pure-personal sidebar). Composed mode exempt.
+                    // Side-agnostic login signal: A derives teamLoggedIn
+                    // from otherBaseUrl (see useVisibilityState); reading
+                    // the field directly would break the dual-edit build
+                    // (B's VisibilityState has no teamLoggedIn).
+                    if (item.requiresTeamLogin && !isSingleBinaryComposed && !otherBaseUrl) {
+                      continue;
+                    }
                     const displayLabel =
                       !IS_PERSONAL_SIDE && item.teamSideLabel ? item.teamSideLabel : item.label;
                     if (sideAllowed) {
@@ -1179,11 +1203,11 @@ export function UserShell() {
                           renderedItems.push(
                             <a
                               key={xa.id}
-                              href={buildCrossAppUrl(otherBaseUrl, xa.path)}
+                              href={buildCrossAppUrl(crossAppLinkBase, xa.path)}
                               className="nav-item nav-item-cross-app"
                               data-tooltip={tTeamMenuLabel(xa.id, xa.label)}
                               data-origin-name={`cross-app:${xa.id}`}
-                              title={t('userShell.opensLink', { url: `${otherBaseUrl}${xa.path}` })}
+                              title={t('userShell.opensLink', { url: `${crossAppLinkBase}${xa.path}` })}
                             >
                               {crossAppIconFor(xa.icon)}
                               <span className="nav-label">{tTeamMenuLabel(xa.id, xa.label)}</span>
@@ -1195,11 +1219,11 @@ export function UserShell() {
                           renderedItems.push(
                             <a
                               key={item.path}
-                              href={buildCrossAppUrl(otherBaseUrl, item.path)}
+                              href={buildCrossAppUrl(crossAppLinkBase, item.path)}
                               className="nav-item nav-item-cross-app"
                               data-tooltip={tNavLabel(displayLabel)}
                               data-origin-name={`cross-app:own-${item.path.replace(/^\//, '').replace(/\//g, '-')}`}
-                              title={t('userShell.opensLink', { url: `${otherBaseUrl}${item.path}` })}
+                              title={t('userShell.opensLink', { url: `${crossAppLinkBase}${item.path}` })}
                             >
                               {item.icon}
                               <span className="nav-label">{tNavLabel(displayLabel)}</span>
@@ -1220,11 +1244,11 @@ export function UserShell() {
                         renderedItems.push(
                           <a
                             key={item.path}
-                            href={buildCrossAppUrl(otherBaseUrl, item.path)}
+                            href={buildCrossAppUrl(crossAppLinkBase, item.path)}
                             className="nav-item nav-item-cross-app"
                             data-tooltip={tNavLabel(displayLabel)}
                             data-origin-name={`cross-app:own-${item.path.replace(/^\//, '').replace(/\//g, '-')}`}
-                            title={t('userShell.opensLink', { url: `${otherBaseUrl}${item.path}` })}
+                            title={t('userShell.opensLink', { url: `${crossAppLinkBase}${item.path}` })}
                           >
                             {item.icon}
                             <span className="nav-label">{tNavLabel(displayLabel)}</span>
@@ -1265,11 +1289,11 @@ export function UserShell() {
                         renderedItems.push(
                           <a
                             key={xa.id}
-                            href={buildCrossAppUrl(otherBaseUrl, xa.path)}
+                            href={buildCrossAppUrl(crossAppLinkBase, xa.path)}
                             className="nav-item nav-item-cross-app"
                             data-tooltip={tTeamMenuLabel(xa.id, xa.label)}
                             data-origin-name={`cross-app:${xa.id}`}
-                            title={t('userShell.opensLink', { url: `${otherBaseUrl}${xa.path}` })}
+                            title={t('userShell.opensLink', { url: `${crossAppLinkBase}${xa.path}` })}
                           >
                             {crossAppIconFor(xa.icon)}
                             <span className="nav-label">{tTeamMenuLabel(xa.id, xa.label)}</span>
@@ -1288,11 +1312,11 @@ export function UserShell() {
                       renderedItems.push(
                         <a
                           key={e.id}
-                          href={buildCrossAppUrl(otherBaseUrl, e.path)}
+                          href={buildCrossAppUrl(crossAppLinkBase, e.path)}
                           className="nav-item nav-item-cross-app"
                           data-tooltip={tTeamMenuLabel(e.id, e.label)}
                           data-origin-name={`cross-app:${e.id}`}
-                          title={t('userShell.opensLink', { url: `${otherBaseUrl}${e.path}` })}
+                          title={t('userShell.opensLink', { url: `${crossAppLinkBase}${e.path}` })}
                         >
                           {crossAppIconFor(e.icon)}
                           <span className="nav-label">{tTeamMenuLabel(e.id, e.label)}</span>

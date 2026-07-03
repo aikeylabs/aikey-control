@@ -48,8 +48,11 @@ describe('buildCrossAppUrl', () => {
     );
   });
 
-  it('degrades a null base to a same-origin relative link (render guards make this unreachable)', () => {
+  it('same-origin (empty/null base) links skip the lang handoff — one origin, one localStorage (2026-07-03 Q1)', () => {
     mockI18n.resolvedLanguage = 'en';
-    expect(buildCrossAppUrl(null, '/user/vault')).toBe('/user/vault?lang=en');
+    expect(buildCrossAppUrl(null, '/user/vault')).toBe('/user/vault');
+    expect(buildCrossAppUrl('', '/user/virtual-keys')).toBe('/user/virtual-keys');
+    // cross-origin keeps the handoff
+    expect(buildCrossAppUrl('http://x', '/p')).toBe('http://x/p?lang=en');
   });
 });
