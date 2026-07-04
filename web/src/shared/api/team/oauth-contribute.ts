@@ -72,6 +72,10 @@ export interface MyPoolAccount {
    * group_alias. */
   oauth_group_id?: string;
   group_alias?: string;
+  /** provider code (anthropic | openai | …) — picks the sign-in flow (R34 codex
+   * pools): claude = paste-code, codex = local-callback polling. Omitted by older
+   * servers → the page falls back to the claude flow. */
+  provider_code?: string;
 }
 
 /**

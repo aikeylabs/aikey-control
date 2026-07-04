@@ -31,6 +31,7 @@ import { deliveryApi, routedGroupAccount, type UserKeyDTO } from '@/shared/api/u
 import { vaultApi, type VaultListData } from '@/shared/api/user/vault';
 import { usageApi, type TimelinePoint, type ProtocolTotal, type HourlyPoint, type RecentRequest } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
+import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import { formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import { formatCost } from '@/shared/utils/formatCost';
 import {
@@ -315,7 +316,10 @@ export default function UserOverviewPage() {
   // fetched `me.account_id` (which is A's stub `personal-local` or
   // `local-owner`) would not match any rows in A's events table.
   const accountId = me?.account_id;
-  const isLocalMode = useCrossOrigin || runtimeConfig.authMode === 'local_bypass';
+  // useCrossOrigin (B cross-fetching A's personal usage) legitimately stays
+  // org_id=personal; the other branch (a forwarded TEAM page is local_bypass
+  // too) is handled by isLocalUsageScope's !teamGateway gate. 2026-07-04.
+  const isLocalMode = useCrossOrigin || isLocalUsageScope(runtimeConfig);
   const usageIdentity = isLocalMode
     ? { org_id: 'personal' as const }
     : accountId ? { account_id: accountId } : null;

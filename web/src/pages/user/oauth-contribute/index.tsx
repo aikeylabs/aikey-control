@@ -32,7 +32,7 @@ import {
   isTeamWriteError,
   type TeamFetchError,
 } from '@/shared/api/team/team-fetch';
-import { poolAuthorizeURL, poolSubmitCode, isPoolLoginError } from '@/shared/api/user/pool-login';
+import { poolAuthorizeURL, poolSubmitCode, poolStatus, isPoolLoginError } from '@/shared/api/user/pool-login';
 import { copyText } from '@/shared/utils/clipboard';
 // Shared page CSS (card / chip / vault table / status-dot / row-use-btn / icon-btn
 // / alias-main …), all scoped under `.vault-page`. WITHOUT injecting this the
@@ -40,16 +40,37 @@ import { copyText } from '@/shared/utils/clipboard';
 // virtual-keys / vault pages.
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 
-// MVP is Claude-only (技术方案 N3). When the pool spans providers, MyPoolAccount
-// gains a `provider` field and this default is replaced by row.provider.
-// NOTE (2026-07-01): two DIFFERENT identifiers, do not conflate:
-//   - MVP_PROVIDER ('claude') = the OAuth BROKER slug (poolAuthorizeURL login flow).
-//   - MVP_PROVIDER_CODE ('anthropic') = the provider CODE the self-contribute Add
-//     sends; the backend resolves it to the provider_id (a per-deployment UUID). The
-//     old code sent 'claude' as provider_id → providers-FK violation mis-labeled as
-//     "组织不存在". The code is 'anthropic' (see SeedProviders), NOT 'claude'.
-const MVP_PROVIDER = 'claude';
-const MVP_PROVIDER_CODE = 'anthropic';
+// Per-provider pool sign-in profile — ONE source for everything that varies by
+// provider on this page (R34 codex pools; extend for kimi with one row). The
+// `flow` vocabulary mirrors aikey-auth-broker's FlowType so web and broker speak
+// one dictionary (single 名词字典):
+//   - setup_token (Claude): the provider page shows a code#state to PASTE.
+//   - auth_code   (Codex):  the broker's localhost:1455 callback exchanges
+//                           in-place → the page POLLS pool/status (no paste).
+//   - device_code (Kimi, future): device-code polling (not yet wired).
+// brokerSlug ≠ provider code: 'claude'/'codex' are the broker's login vocabulary
+// (poolAuthorizeURL), 'anthropic'/'openai' are provider codes (the Add form sends
+// the CODE; the backend resolves it to the per-deployment provider_id).
+type LoginFlow = 'setup_token' | 'auth_code' | 'device_code';
+interface ProviderLoginProfile {
+  code: string;
+  brokerSlug: string;
+  flow: LoginFlow;
+  labelKey: string;
+}
+const PROVIDER_LOGIN: ProviderLoginProfile[] = [
+  { code: 'anthropic', brokerSlug: 'claude', flow: 'setup_token', labelKey: 'oauthContribute.providerClaude' },
+  { code: 'openai', brokerSlug: 'codex', flow: 'auth_code', labelKey: 'oauthContribute.providerCodex' },
+  // Future: { code: 'kimi_code', brokerSlug: 'kimi', flow: 'device_code', labelKey: 'oauthContribute.providerKimi' },
+];
+// Missing/unknown provider_code (older server) falls back to the first profile
+// (claude / setup_token), preserving pre-R34 behavior.
+function loginProfile(providerCode?: string): ProviderLoginProfile {
+  return PROVIDER_LOGIN.find((p) => p.code === providerCode) ?? PROVIDER_LOGIN[0];
+}
+/** Providers a member can self-contribute accounts for — derived from the login
+ * table (matches the server-side pool-supported gate). value = provider CODE. */
+const ADDABLE_PROVIDERS = PROVIDER_LOGIN.map((p) => ({ code: p.code, labelKey: p.labelKey }));
 
 /** status → chip class + status-dot modifier, matching the local web's chip CSS
  * (success / warning / danger). Mirrors virtual-keys' statusMeta. */
@@ -343,14 +364,22 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   const [sessionId, setSessionId] = useState('');
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
-  // The Claude account email resolved by step-1 exchange. Shown for review; a yellow
+  // The provider account email resolved by step-1 exchange. Shown for review; a yellow
   // warning appears if it doesn't match this team slot. `awaitingConfirm` = the token
   // is exchanged + held but NOT yet written — the member must click Confirm to submit.
   const [signedInAs, setSignedInAs] = useState('');
   const [awaitingConfirm, setAwaitingConfirm] = useState(false);
+  // auth_code (codex) only: authorize opened, waiting for the broker's localhost
+  // callback to fire (page polls pool/status; no code to paste).
+  const [waitingCallback, setWaitingCallback] = useState(false);
+  const profile = loginProfile(account.provider_code);
+  // pollFlow = the sign-in has no paste step; the broker's localhost callback
+  // exchanges in place and the page polls for completion (codex today; a future
+  // device_code flow would be its own branch).
+  const pollFlow = profile.flow === 'auth_code';
 
   const startMut = useMutation({
-    mutationFn: () => poolAuthorizeURL(MVP_PROVIDER, account.credential_id),
+    mutationFn: () => poolAuthorizeURL(profile.brokerSlug, account.credential_id),
     onSuccess: (res) => {
       if (isPoolLoginError(res)) {
         setErr(res.message);
@@ -358,6 +387,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       }
       setErr('');
       setSessionId(res.session_id);
+      if (pollFlow) setWaitingCallback(true);
       window.open(res.authorize_url, '_blank', 'noopener');
     },
   });
@@ -395,12 +425,48 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     },
   });
 
+  // codex polling leg: OpenAI redirects to the broker's localhost:1455 callback,
+  // which exchanges in-place — poll pool/status until it flips, then run the SAME
+  // step-1 review path as claude via an EMPTY-code submit (idempotent replay; the
+  // broker returns the cached exchange without re-spending anything).
+  const finishRef = React.useRef<() => void>(() => {});
+  finishRef.current = () => finishMut.mutate(); // fresh closure each render (poll timer calls via ref)
+  React.useEffect(() => {
+    if (!pollFlow || !waitingCallback || !sessionId) return;
+    let stopped = false;
+    const timer = setInterval(async () => {
+      const res = await poolStatus(sessionId);
+      if (stopped) return;
+      if (isPoolLoginError(res)) {
+        // Transient relay/proxy hiccups shouldn't kill the wait — only a dead
+        // session should (UNKNOWN_SESSION / SESSION_EXPIRED are terminal).
+        if (res.code === 'UNKNOWN_SESSION' || res.code === 'SESSION_EXPIRED') {
+          setErr(res.message);
+          setWaitingCallback(false);
+        }
+        return;
+      }
+      if (res.status === 'success') {
+        setWaitingCallback(false);
+        finishRef.current();
+      } else if (res.status === 'failed' || res.status === 'expired') {
+        setErr(res.error_detail || t('oauthContribute.codexAuthFailed'));
+        setWaitingCallback(false);
+      }
+    }, 2000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [pollFlow, waitingCallback, sessionId, t]);
+
   function onCancelConfirm() {
     setErr('');
     setSignedInAs('');
     setAwaitingConfirm(false);
     setSessionId('');
     setCode('');
+    setWaitingCallback(false);
   }
 
   // Team-account match check (advisory, not enforced): the token IS written either
@@ -460,7 +526,10 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
           {t('oauthContribute.startSignIn')}
         </button>
 
-        {sessionId && !awaitingConfirm && (
+        {/* claude: paste the code shown by the provider page. codex has NO code —
+            the broker's localhost callback exchanges in-place, so show a waiting
+            hint while the page polls pool/status instead. */}
+        {sessionId && !awaitingConfirm && !pollFlow && (
           <>
             <input
               type="text"
@@ -479,6 +548,11 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
               {finishMut.isPending ? t('oauthContribute.resolving') : t('oauthContribute.finishSignIn')}
             </button>
           </>
+        )}
+        {sessionId && !awaitingConfirm && pollFlow && (waitingCallback || finishMut.isPending) && (
+          <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+            {finishMut.isPending ? t('oauthContribute.resolving') : t('oauthContribute.codexWaiting')}
+          </span>
         )}
       </div>
 
@@ -550,6 +624,7 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [groupID, setGroupID] = useState('');
+  const [providerCode, setProviderCode] = useState<string>(ADDABLE_PROVIDERS[0].code);
   const [err, setErr] = useState('');
 
   const groupsQ = useQuery({ queryKey: ['my-oauth-groups'], queryFn: fetchMyGroups });
@@ -563,7 +638,7 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
     mutationFn: () =>
       addOauthAccount({
         // Send the provider CODE — the backend resolves it to the provider_id.
-        provider_id: MVP_PROVIDER_CODE,
+        provider_id: providerCode,
         login_email: email.trim(),
         password,
         oauth_group_id: selectedGroup,
@@ -608,6 +683,26 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
             {t('oauthContribute.addSubtitle')}
           </div>
         </div>
+
+        {/* Provider picker (R34 codex pools): which provider this account belongs
+            to. The server enforces one-provider-per-group; picking the wrong one
+            surfaces the server's mixed-provider error on submit. */}
+        <label className="block space-y-1">
+          <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+            {t('oauthContribute.addProviderLabel')}
+          </span>
+          <select
+            className="w-full px-3 py-2 text-sm"
+            value={providerCode}
+            onChange={(e) => setProviderCode(e.target.value)}
+          >
+            {ADDABLE_PROVIDERS.map((p) => (
+              <option key={p.code} value={p.code}>
+                {t(p.labelKey)}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <label className="block space-y-1">
           <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>

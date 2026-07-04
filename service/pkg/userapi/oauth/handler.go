@@ -106,6 +106,29 @@ func PoolSubmitCodeHandler(w http.ResponseWriter, r *http.Request) {
 	forward(w, r, http.MethodPost, proxyBase()+"/oauth/pool/submit-code", true)
 }
 
+// PoolStatusHandler relays GET /api/user/oauth/pool/status?session_id=<id> →
+// GET /oauth/pool/status. The codex pool login has no code to paste (OpenAI
+// redirects to the broker's localhost:1455 callback, which exchanges in-place),
+// so the contribute page polls this until the session flips to success, then
+// calls submit-code with an empty code (idempotent replay). Mirrors the personal
+// StatusHandler above, but against the POOL broker's session store.
+func PoolStatusHandler(w http.ResponseWriter, r *http.Request) {
+	sid := r.URL.Query().Get("session_id")
+	if sid == "" {
+		http.Error(w, `{"error":{"code":"MISSING_SESSION_ID","message":"session_id query param is required"}}`, http.StatusBadRequest)
+		return
+	}
+	u, err := url.Parse(proxyBase() + "/oauth/pool/status")
+	if err != nil {
+		http.Error(w, "internal: bad proxy url", http.StatusInternalServerError)
+		return
+	}
+	q := u.Query()
+	q.Set("session_id", sid)
+	u.RawQuery = q.Encode()
+	forward(w, r, http.MethodGet, u.String(), false)
+}
+
 // forward issues a single HTTP request to the broker and streams the
 // response straight back. It preserves status code and a minimal set
 // of response headers (Content-Type, Content-Length) — broker error

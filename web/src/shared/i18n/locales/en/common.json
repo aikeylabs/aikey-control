@@ -315,6 +315,10 @@
     "sessionSuffix": " session",
     "saveAlias": "Save alias",
     "statusActive": "ACTIVE",
+    "statusInactive": "INACTIVE",
+    "statusNeedsLogin": "NEEDS LOGIN",
+    "loginCta": "Log in",
+    "needsLoginCtaTitle": "Log in to the currently-routed pool account to enable (go to Team OAuth)",
     "deleteForever": "Delete forever?",
     "deleteLockedTitle": "Unlock vault to delete",
     "deletingTitle": "Deleting…",
@@ -1421,6 +1425,16 @@
     "webHelp": "refreshes the web session token and re-opens this console.",
     "loginHelp": "re-authenticates your account when the CLI login has fully expired."
   },
+  "teamUnreachable": {
+    "consoleSubheading": "User Console — Team Server Unreachable",
+    "heading": "Team server unreachable",
+    "instruction": "Your local console is healthy — only the team pages are affected. You can keep using every local page from the menu.",
+    "setUrlLabel": "If the team server's address changed, point the CLI at the new one (keeps your login):",
+    "setUrlPlaceholder": "aikey account set-url http://<new-host>:<port>",
+    "retryHint": "Then retry this page.",
+    "retryButton": "Retry",
+    "errorCodeLabel": "Error code:"
+  },
   "cliGuide": {
     "tabSetup": "Check setup",
     "tabPaths": "Choose key path",
@@ -2457,6 +2471,11 @@
     "addNoGroups": "You haven't joined any pool group yet — ask your admin to add you to one.",
     "addGroupsLoading": "Loading your groups…",
     "addErrGeneric": "Couldn't add the account. Please try again.",
-    "defaultGroupTag": "default"
+    "defaultGroupTag": "default",
+    "codexWaiting": "Waiting for browser authorization… finish signing in on the opened tab; this page continues automatically.",
+    "codexAuthFailed": "Authorization failed. Start the sign-in again.",
+    "addProviderLabel": "Provider",
+    "providerClaude": "Claude (Anthropic)",
+    "providerCodex": "Codex (OpenAI / ChatGPT)"
   }
 }

@@ -116,7 +116,12 @@ interface TeamRowRecord {
   protocol_family: string;
   supported_providers: string[];
   share_status: 'pending' | 'claimed' | 'revoked';
-  effective_status: 'active' | 'inactive';
+  // 'needs_login' (2026-07-03, 防呆): a claimed+active OAUTH-GROUP VK whose CURRENT
+  // ROUTED pool account has no member token yet — usable after ONE login, so it reads
+  // as an amber "待登录" (matching the pool-account row chips) + a login CTA, NOT a red
+  // "inactive". 'inactive' stays for genuinely unusable (revoked / disabled / no
+  // routable account at all). CLI computes it in query.rs (single source).
+  effective_status: 'active' | 'inactive' | 'needs_login';
   expires_at?: string;
   // route_url + route_token (2026-05-11): emitted inline by CLI's
   // `_internal query` for team records (Phase 3B revised). Drawer
@@ -130,7 +135,7 @@ interface TeamRowRecord {
   created_at: number; // 0 — server doesn't echo create time in current DTO
   last_used_at: number | null; // null until usage telemetry rides through
   use_count: number; // 0 (same)
-  status: 'active' | 'inactive'; // mirrors effective_status for the chip
+  status: 'active' | 'inactive' | 'needs_login'; // mirrors effective_status for the chip
   in_use_for?: string[]; // empty in 3A; populated in 3B when Active wires up
   /**
    * Generic extension blob (2026-05-22) — see VaultExtra in
@@ -1472,8 +1477,15 @@ export default function UserVaultPage() {
     () => records.filter((r) => r.status === 'active').length,
     [records],
   );
+  // 待登录 (2026-07-03) is NOT an error — it's an actionable pending-login state, so it
+  // gets its own count and is EXCLUDED from the error tally (which should reflect only
+  // genuinely unusable keys: revoked / disabled / no routable account).
+  const needsLoginCount = useMemo(
+    () => records.filter((r) => r.status === 'needs_login').length,
+    [records],
+  );
   const errorCount = useMemo(
-    () => records.filter((r) => r.status !== 'active').length,
+    () => records.filter((r) => r.status !== 'active' && r.status !== 'needs_login').length,
     [records],
   );
 
@@ -1562,6 +1574,7 @@ export default function UserVaultPage() {
             <CardHeader
               counts={counts}
               activeCount={activeCount}
+              needsLoginCount={needsLoginCount}
               errorCount={errorCount}
             />
 
@@ -2131,10 +2144,12 @@ function UnlockBanner(props: {
 function CardHeader({
   counts,
   activeCount,
+  needsLoginCount,
   errorCount,
 }: {
   counts: { personal: number; oauth: number; team: number; total: number };
   activeCount: number;
+  needsLoginCount: number;
   errorCount: number;
 }) {
   const { t } = useTranslation();
@@ -2156,6 +2171,12 @@ function CardHeader({
           <span className="chip success">
             <span className="status-dot" style={{ width: 5, height: 5 }} />
             {activeCount}{t('vault.activeSuffix')}
+          </span>
+        )}
+        {needsLoginCount > 0 && (
+          <span className="chip warning">
+            <span className="status-dot" style={{ width: 5, height: 5 }} />
+            {needsLoginCount} {t('vault.statusNeedsLogin')}
           </span>
         )}
         {errorCount > 0 && (
@@ -2842,10 +2863,17 @@ const Row = React.memo(function Row(props: {
             <span className="status-dot" style={{ width: 5, height: 5 }} />
             {t('vault.statusActive')}
           </span>
+        ) : r.status === 'needs_login' ? (
+          // Amber, not red: the routed pool account just needs one login (待登录) — the
+          // pool-account row chips use the same term. Actionable, not an error state.
+          <span className="chip warning">
+            <span className="status-dot" style={{ width: 5, height: 5 }} />
+            {t('vault.statusNeedsLogin')}
+          </span>
         ) : (
           <span className="chip danger">
             <span className="status-dot error" style={{ width: 5, height: 5 }} />
-            {String(r.status).toUpperCase()}
+            {r.status === 'inactive' ? t('vault.statusInactive') : String(r.status).toUpperCase()}
           </span>
         )}
       </td>
@@ -2953,6 +2981,22 @@ const Row = React.memo(function Row(props: {
                 </button>
               );
             })()}
+            {/* 登录 CTA (2026-07-03, 防呆): a needs_login group VK can't route until the
+                member logs into the routed pool account. Instead of just hiding the Use
+                button (which leaves the row looking dead), offer a one-click link to the
+                team-oauth page where the routed account is auto-highlighted with the
+                sign-in control. Occupies the same primary-action slot as Use. */}
+            {isTeam && (r as TeamRowRecord).effective_status === 'needs_login' && !inUse && (
+              <Link
+                to="/user/team-oauth"
+                className="row-use-btn"
+                title={t('vault.needsLoginCtaTitle')}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ZapIcon className="w-3 h-3" />
+                {t('vault.loginCta')}
+              </Link>
+            )}
             {inUse && (
               <button
                 type="button"
@@ -3360,10 +3404,15 @@ function DetailDrawer(props: {
                   <span className="status-dot" style={{ width: 5, height: 5 }} />
                   {t('vault.statusActive')}
                 </span>
+              ) : r.status === 'needs_login' ? (
+                <span className="chip warning">
+                  <span className="status-dot" style={{ width: 5, height: 5 }} />
+                  {t('vault.statusNeedsLogin')}
+                </span>
               ) : (
                 <span className="chip danger">
                   <span className="status-dot error" style={{ width: 5, height: 5 }} />
-                  {String(r.status).toUpperCase()}
+                  {r.status === 'inactive' ? t('vault.statusInactive') : String(r.status).toUpperCase()}
                 </span>
               )}
             </div>
@@ -3379,6 +3428,137 @@ function DetailDrawer(props: {
         </div>
 
         <div className="drawer-body">
+          {/* N6 oauth_group (Stage A): pool candidate accounts behind this group
+              VK — identity / provider / priority + the master-assigned default.
+              "Default" is master's STATIC rank-0 pick; the proxy's live selection
+              (which may fall back when an account is cooled) is Stage B. */}
+          {isTeam && team && team.oauth_group_id && (
+            <div className="drawer-section">
+              <div className="drawer-section-title">
+                <KeyRoundIcon className="w-3 h-3" />
+                {t('vault.oauthGroupGroupAccounts')}
+              </div>
+              {(team.group_accounts ?? []).length === 0 ? (
+                <div className="drawer-field">
+                  <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
+                    {t('vault.oauthGroupNoAccounts')}
+                  </span>
+                </div>
+              ) : (
+                (team.group_accounts ?? [])
+                  .slice()
+                  .sort((a, b) => a.priority - b.priority)
+                  .map((a) => (
+                    // Custom stacked layout (NOT drawer-field): identity is a
+                    // value, not a field label — drawer-field's .k uppercases +
+                    // letter-spaces it (reads as garbled) and the .k/.v side-by-side
+                    // collides two long strings. Identity on its own line, the
+                    // type/provider/priority meta below it.
+                    <div
+                      key={a.account_id}
+                      style={{
+                        padding: '9px 11px',
+                        marginTop: 6,
+                        borderRadius: 8,
+                        border: `1px solid ${a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
+                        background: a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--foreground)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
+                        {a.assigned && <span className="chip success">{t('vault.oauthGroupDefault')}</span>}
+                        {/* C2 (2026-06-30): the account the proxy is ACTUALLY routing this
+                            seat to now (override ?? rank-0) — distinct from the static
+                            default above. Only shown once the proxy's live rail reports it. */}
+                        {a.current_routed && (
+                          <span className="chip info">{t('vault.oauthGroupCurrentRouted')}</span>
+                        )}
+                        {/* RW8 per-member: which pool account the viewer has signed into (team OAuth). */}
+                        {a.credential_type === 'oauth_account' && a.login_status && (
+                          <span
+                            className={`chip ${a.login_status === 'logged_in' ? 'success' : a.login_status === 'needs_login' ? 'warning' : 'danger'}`}
+                          >
+                            {t(`vault.oauthLoginStatus.${a.login_status}`, a.login_status)}
+                          </span>
+                        )}
+                        {/* 登录 CTA (2026-07-03, 防呆): a needs_login pool account is one
+                            web sign-in away from making this VK usable — link straight to
+                            the team-oauth page (the routed account is auto-highlighted there
+                            with the sign-in control). */}
+                        {a.credential_type === 'oauth_account' && a.login_status === 'needs_login' && (
+                          <Link
+                            to="/user/team-oauth"
+                            className="chip warning"
+                            style={{ textDecoration: 'none', cursor: 'pointer' }}
+                            title={t('vault.needsLoginCtaTitle')}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {t('vault.loginCta')} →
+                          </Link>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--muted-foreground)',
+                          marginTop: 5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span
+                            className="prov-dot"
+                            style={{ background: providerBrandColor(a.provider_code), width: 6, height: 6 }}
+                          />
+                          {a.provider_code}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>
+                          {a.credential_type === 'oauth_account'
+                            ? t('vault.oauthGroupTypeOauth')
+                            : t('vault.oauthGroupTypeKey')}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>{t('vault.oauthGroupPriority', { priority: a.priority })}</span>
+                      </div>
+                    </div>
+                  ))
+              )}
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <span
+                  style={{
+                    color: 'var(--muted-foreground)',
+                    fontSize: 11,
+                    fontStyle: 'italic',
+                    lineHeight: 1.5,
+                    display: 'block',
+                  }}
+                >
+                  {t('vault.oauthGroupDefaultHint')}
+                </span>
+              </div>
+            </div>
+          )}
           {/* Phase 3B (2026-05-11) — Virtual Key section: team-row analog
               of the Credential section. The wire shape from B's
               UserKeyDTO carries no ciphertext / base_url / route_url
@@ -3555,122 +3735,6 @@ function DetailDrawer(props: {
                 <span className="k">{t('vault.source')}</span>
                 <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
                   {t('vault.teamSourceDesc')}
-                </span>
-              </div>
-            </div>
-          )}
-          {/* N6 oauth_group (Stage A): pool candidate accounts behind this group
-              VK — identity / provider / priority + the master-assigned default.
-              "Default" is master's STATIC rank-0 pick; the proxy's live selection
-              (which may fall back when an account is cooled) is Stage B. */}
-          {isTeam && team && team.oauth_group_id && (
-            <div className="drawer-section">
-              <div className="drawer-section-title">
-                <KeyRoundIcon className="w-3 h-3" />
-                {t('vault.oauthGroupGroupAccounts')}
-              </div>
-              {(team.group_accounts ?? []).length === 0 ? (
-                <div className="drawer-field">
-                  <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
-                    {t('vault.oauthGroupNoAccounts')}
-                  </span>
-                </div>
-              ) : (
-                (team.group_accounts ?? [])
-                  .slice()
-                  .sort((a, b) => a.priority - b.priority)
-                  .map((a) => (
-                    // Custom stacked layout (NOT drawer-field): identity is a
-                    // value, not a field label — drawer-field's .k uppercases +
-                    // letter-spaces it (reads as garbled) and the .k/.v side-by-side
-                    // collides two long strings. Identity on its own line, the
-                    // type/provider/priority meta below it.
-                    <div
-                      key={a.account_id}
-                      style={{
-                        padding: '9px 11px',
-                        marginTop: 6,
-                        borderRadius: 8,
-                        border: `1px solid ${a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
-                        background: a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: 'var(--foreground)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
-                        {a.assigned && <span className="chip success">{t('vault.oauthGroupDefault')}</span>}
-                        {/* C2 (2026-06-30): the account the proxy is ACTUALLY routing this
-                            seat to now (override ?? rank-0) — distinct from the static
-                            default above. Only shown once the proxy's live rail reports it. */}
-                        {a.current_routed && (
-                          <span className="chip info">{t('vault.oauthGroupCurrentRouted')}</span>
-                        )}
-                        {/* RW8 per-member: which pool account the viewer has signed into (team OAuth). */}
-                        {a.credential_type === 'oauth_account' && a.login_status && (
-                          <span
-                            className={`chip ${a.login_status === 'logged_in' ? 'success' : a.login_status === 'needs_login' ? 'warning' : 'danger'}`}
-                          >
-                            {t(`vault.oauthLoginStatus.${a.login_status}`, a.login_status)}
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--muted-foreground)',
-                          marginTop: 5,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <span
-                            className="prov-dot"
-                            style={{ background: providerBrandColor(a.provider_code), width: 6, height: 6 }}
-                          />
-                          {a.provider_code}
-                        </span>
-                        <span style={{ opacity: 0.35 }}>·</span>
-                        <span>
-                          {a.credential_type === 'oauth_account'
-                            ? t('vault.oauthGroupTypeOauth')
-                            : t('vault.oauthGroupTypeKey')}
-                        </span>
-                        <span style={{ opacity: 0.35 }}>·</span>
-                        <span>{t('vault.oauthGroupPriority', { priority: a.priority })}</span>
-                      </div>
-                    </div>
-                  ))
-              )}
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: '8px 10px',
-                  borderRadius: 6,
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid var(--border)',
-                }}
-              >
-                <span
-                  style={{
-                    color: 'var(--muted-foreground)',
-                    fontSize: 11,
-                    fontStyle: 'italic',
-                    lineHeight: 1.5,
-                    display: 'block',
-                  }}
-                >
-                  {t('vault.oauthGroupDefaultHint')}
                 </span>
               </div>
             </div>
@@ -4361,6 +4425,11 @@ function DetailDrawer(props: {
                   <>
                     <span className="status-dot" style={{ width: 5, height: 5 }} />
                     <span style={{ color: 'var(--success)' }}>{t('vault.statusActiveWord')}</span>
+                  </>
+                ) : r.status === 'needs_login' ? (
+                  <>
+                    <span className="status-dot" style={{ width: 5, height: 5 }} />
+                    <span style={{ color: 'var(--warning, #f59e0b)' }}>{t('vault.statusNeedsLogin')}</span>
                   </>
                 ) : (
                   <>

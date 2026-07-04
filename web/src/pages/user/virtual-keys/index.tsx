@@ -66,9 +66,15 @@ function providerFamily(code: string | null | undefined): string {
  * the vault/overview pages (routedGroupAccount). Without this, group VKs rendered a
  * blank/unknown protocol family (2026-07-02 staging finding — the A2 sweep fixed the
  * identity sub-line here but missed the family chip/grouping).
+ *
+ * protocol_type fallback (2026-07-03): when the seat is unbound from the group the
+ * candidate set (group_accounts) goes empty, so the routed-account provider is gone
+ * too → without this the orphaned group VK's protocol falls back to "unknown". The
+ * binding-derived protocol_type survives member removal, so it's the stable last
+ * resort (mirrors the CLI vault path's team_protocol_source).
  */
-function keyProviderFamily(k: { provider_code?: string | null; group_accounts?: GroupAccountRef[] | null }): string {
-  return providerFamily(k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code);
+function keyProviderFamily(k: { provider_code?: string | null; protocol_type?: string | null; group_accounts?: GroupAccountRef[] | null }): string {
+  return providerFamily(k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || k.protocol_type);
 }
 
 function providerBrandColor(provider: string | null | undefined): string {

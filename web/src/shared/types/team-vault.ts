@@ -48,8 +48,10 @@ export interface TeamVaultRecord {
   share_status: 'pending' | 'claimed' | 'revoked';
 
   /** Effective active/inactive state — derived B-side from
-   * share_status × key_status. A treats this as opaque truth. */
-  effective_status: 'active' | 'inactive';
+   * share_status × key_status. A treats this as opaque truth.
+   * 'needs_login' (2026-07-03): OAUTH-GROUP VK whose routed pool account needs one
+   * login — amber "待登录" + login CTA, not a red "inactive". */
+  effective_status: 'active' | 'inactive' | 'needs_login';
 
   /** RFC3339 UTC timestamp when the key expires (CLI rotates before).
    * Optional because not every team key has an explicit expiry. */

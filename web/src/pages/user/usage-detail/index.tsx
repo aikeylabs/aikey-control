@@ -26,6 +26,7 @@ import { useSearchParams } from 'react-router-dom';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { usageApi, type UsageDetailRow } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
+import { isLocalUsageScope } from '@/shared/usage/local-identity';
 
 const PAGE_SIZE = 30;
 
@@ -114,7 +115,7 @@ export default function UserUsageDetailPage() {
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
 
   const accountId = me?.account_id;
-  const isLocalMode = runtimeConfig.authMode === 'local_bypass';
+  const isLocalMode = isLocalUsageScope(runtimeConfig);
   const usageIdentity = isLocalMode
     ? { org_id: 'personal' as const }
     : accountId ? { account_id: accountId } : null;

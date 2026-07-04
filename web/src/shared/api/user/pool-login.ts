@@ -61,3 +61,33 @@ export function poolSubmitCode(sessionID: string, code: string, confirm = false)
     confirm,
   });
 }
+
+/** Session progress for callback-based flows (codex): pending / success / failed /
+ * expired (+ provider error text). No token material ever appears here. */
+export interface PoolLoginStatus {
+  status: string;
+  error_detail?: string;
+}
+
+/**
+ * Poll the pool sign-in session (codex/auth_code flows, R34): OpenAI redirects to
+ * the broker's own localhost callback — there is no code to paste — so the page
+ * polls this until the session flips to success, then calls poolSubmitCode with an
+ * EMPTY code (the broker replays the cached exchange idempotently).
+ */
+export async function poolStatus(sessionID: string): Promise<PoolLoginStatus | PoolLoginError> {
+  try {
+    const res = await fetch(
+      `/api/user/oauth/pool/status?session_id=${encodeURIComponent(sessionID)}`,
+      { credentials: 'same-origin' },
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const e = (data as { error?: PoolLoginError }).error;
+      return e ?? { code: 'POOL_LOGIN_FAILED', message: `HTTP ${res.status}` };
+    }
+    return data as PoolLoginStatus;
+  } catch (e) {
+    return { code: 'PROXY_UNAVAILABLE', message: String(e) };
+  }
+}

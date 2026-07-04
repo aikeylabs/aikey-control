@@ -315,6 +315,10 @@
     "sessionSuffix": " 会话",
     "saveAlias": "保存别名",
     "statusActive": "活跃",
+    "statusInactive": "不可用",
+    "statusNeedsLogin": "待登录",
+    "loginCta": "登录",
+    "needsLoginCtaTitle": "登录当前路由到的池账号即可启用（前往 团队OAuth）",
     "deleteForever": "永久删除？",
     "deleteLockedTitle": "解锁保管库后才能删除",
     "deletingTitle": "删除中…",
@@ -1421,6 +1425,16 @@
     "webHelp": "刷新网页会话令牌并重新打开此控制台。",
     "loginHelp": "在 CLI 登录完全过期时重新认证您的账户。"
   },
+  "teamUnreachable": {
+    "consoleSubheading": "用户控制台 — 团队服务器不可达",
+    "heading": "团队服务器不可达",
+    "instruction": "您的本地控制台运行正常 — 仅团队页面受影响。您仍可从菜单继续使用所有本地页面。",
+    "setUrlLabel": "如果团队服务器地址已变更，请将 CLI 指向新地址（保留登录状态）：",
+    "setUrlPlaceholder": "aikey account set-url http://<new-host>:<port>",
+    "retryHint": "然后重试此页面。",
+    "retryButton": "重试",
+    "errorCodeLabel": "错误码："
+  },
   "cliGuide": {
     "tabSetup": "检查环境",
     "tabPaths": "选择密钥方式",
@@ -2457,6 +2471,11 @@
     "addNoGroups": "你还没有加入任何池组——请管理员先把你加入一个组。",
     "addGroupsLoading": "正在加载你的池组…",
     "addErrGeneric": "添加失败，请重试。",
-    "defaultGroupTag": "默认"
+    "defaultGroupTag": "默认",
+    "codexWaiting": "等待浏览器授权……在打开的标签页完成登录后，本页会自动继续。",
+    "codexAuthFailed": "授权失败，请重新开始登录。",
+    "addProviderLabel": "供应商",
+    "providerClaude": "Claude (Anthropic)",
+    "providerCodex": "Codex (OpenAI / ChatGPT)"
   }
 }

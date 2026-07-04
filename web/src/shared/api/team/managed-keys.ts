@@ -121,7 +121,7 @@ function rawToTeamRecord(raw: RawTeamKey): TeamVaultRecord {
   const share = (raw.share_status === 'pending' || raw.share_status === 'claimed' || raw.share_status === 'revoked')
     ? raw.share_status
     : 'claimed';
-  const effective = (raw.effective_status === 'active' || raw.effective_status === 'inactive')
+  const effective = (raw.effective_status === 'active' || raw.effective_status === 'inactive' || raw.effective_status === 'needs_login')
     ? raw.effective_status
     : (raw.key_status === 'active' && share === 'claimed' ? 'active' : 'inactive');
   return {

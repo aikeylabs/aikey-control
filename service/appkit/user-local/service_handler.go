@@ -53,6 +53,14 @@ var allowedServiceActions = map[string]map[string]bool{
 		"start":   true,
 		"stop":    true,
 		"restart": true,
+		// status: read-only. The generic handler shells out
+		// `aikey service status trust-local --json`, whose envelope carries
+		// an explicit `installed` bool. The trust-check page polls this on
+		// load so it can proactively distinguish "not installed" from
+		// "installed but offline" instead of defaulting to the misleading
+		// "offline / restart it" banner. Bugfix:
+		// 20260703-trust-check-web-offline-vs-notinstalled-proactive.md.
+		"status": true,
 	},
 	// web + proxy are deliberately NOT in this map; see header doc.
 }
@@ -112,7 +120,7 @@ func HandleServiceAction(logger *slog.Logger) http.HandlerFunc {
 		if !actions[action] {
 			writeJSONErr(w, http.StatusBadRequest, "INVALID_ACTION",
 				"action '"+action+"' not supported for "+name+
-					". Allowed: start, stop, restart.")
+					". Allowed: start, stop, restart, status.")
 			return
 		}
 

@@ -23,7 +23,12 @@
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 
-import { StartServiceError, useStartTrustLocalService } from './hooks';
+import {
+  StartServiceError,
+  normalizeServiceStatus,
+  useStartTrustLocalService,
+  useTrustLocalServiceStatus,
+} from './hooks';
 
 // Tiny inline fetch stub — we don't need MSW for two assertions.
 let originalFetch: typeof fetch;
@@ -131,5 +136,51 @@ describe('useStartTrustLocalService — error code preservation', () => {
     const err = caught as StartServiceError;
     expect(err.errorCode).toBe('HTTP_500');
     expect(err.detail).toBe('unexpected upstream failure');
+  });
+});
+
+/**
+ * Fence: the PROACTIVE install-state signal that lets the banner show
+ * "not installed" on first render (not only reactively after a Start click).
+ * Bugfix 20260703-trust-check-web-offline-vs-notinstalled-proactive.md.
+ *
+ * F1: an explicit `installed:false` from the console (same truth source as
+ *     `aikey doctor`) is preserved → banner picks the not-installed copy.
+ * F2: `installed:true, running:false` stays "installed but offline" → banner
+ *     keeps the Start button.
+ * F3: a malformed/legacy envelope defaults `installed` to false — we never
+ *     claim the plugin is present when we can't confirm it.
+ */
+describe('normalizeServiceStatus — proactive install-state', () => {
+  it('preserves installed:false so the banner shows not-installed upfront', () => {
+    const s = normalizeServiceStatus({
+      ok: true,
+      installed: false,
+      running: false,
+      detail: 'not installed',
+    });
+    expect(s.installed).toBe(false);
+    expect(s.running).toBe(false);
+  });
+
+  it('keeps installed:true + running:false as "offline, not uninstalled"', () => {
+    const s = normalizeServiceStatus({
+      ok: true,
+      installed: true,
+      running: false,
+      detail: 'not running',
+    });
+    expect(s.installed).toBe(true);
+    expect(s.running).toBe(false);
+  });
+
+  it('defaults installed to false on a malformed/empty envelope', () => {
+    expect(normalizeServiceStatus({}).installed).toBe(false);
+    expect(normalizeServiceStatus(null).installed).toBe(false);
+    expect(normalizeServiceStatus(undefined).installed).toBe(false);
+  });
+
+  it('exports the hook for the page to call', () => {
+    expect(useTrustLocalServiceStatus).toBeTypeOf('function');
   });
 });

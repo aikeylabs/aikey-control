@@ -141,6 +141,7 @@ func NewHandlers(cfg *Config, logger *slog.Logger) *Handlers {
 //	POST   /api/user/oauth/poll          -> oauth.PollHandler            (no unlock; broker Device-Code poll for Kimi)
 //	POST   /api/user/oauth/pool/authorize-url -> oauth.PoolAuthorizeURLHandler (per-member pool login; → proxy memory broker → writeback master)
 //	POST   /api/user/oauth/pool/submit-code   -> oauth.PoolSubmitCodeHandler
+//	GET    /api/user/oauth/pool/status        -> oauth.PoolStatusHandler (codex callback polling)
 //	POST   /api/user/import/parse        -> Import.ParseHandler
 //	POST   /api/user/import/confirm      -> Import.ConfirmHandler        (requires unlock)
 //	GET    /api/user/import/rules        -> Import.RulesHandler          (unauthed)
@@ -262,6 +263,10 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(oauth.PoolAuthorizeURLHandler)))
 		mux.Handle("POST /api/user/oauth/pool/submit-code",
 			authMW(http.HandlerFunc(oauth.PoolSubmitCodeHandler)))
+		// Codex pool login polls status until the broker's localhost callback
+		// completes the exchange (no paste-code for auth_code flows; R34).
+		mux.Handle("GET /api/user/oauth/pool/status",
+			authMW(http.HandlerFunc(oauth.PoolStatusHandler)))
 
 		// Egress (upstream) proxy config relay (→ proxy /admin/upstream-proxy):
 		// the local "Settings → Upstream proxy" card reads + sets the egress proxy

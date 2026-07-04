@@ -19,6 +19,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { usageApi, type TimelinePoint, type SessionTotal } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
+import { isLocalUsageScope } from '@/shared/usage/local-identity';
 
 function fmtTok(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -81,7 +82,7 @@ export default function UserPerformancePage() {
 
   // Same usage-identity logic as Overview (see overview/index.tsx for rationale).
   const accountId = me?.account_id;
-  const isLocalMode = runtimeConfig.authMode === 'local_bypass';
+  const isLocalMode = isLocalUsageScope(runtimeConfig);
   const usageIdentity = isLocalMode
     ? { org_id: 'personal' as const }
     : accountId ? { account_id: accountId } : null;

@@ -72,6 +72,11 @@ export interface UserKeyDTO {
   seat_id: string;
   alias: string;
   provider_code: string;
+  // protocol_type (2026-07-03): the VK's binding-derived protocol — the STABLE protocol
+  // source for a group VK (whose provider_code is always empty). Used as the protocol
+  // fallback so an orphaned group VK (seat unbound from group → group_accounts empty)
+  // still shows its protocol instead of "unknown". Absent on older servers.
+  protocol_type?: string;
   key_status: string;
   share_status: string;
   expires_at?: string;
