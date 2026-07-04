@@ -35,6 +35,16 @@ function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: (
           </div>
 
           <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+            {/* Shape-typed empty state (2026-07-03): zero slots is a benign shape
+                (group VK routes via its pool / binding not configured yet), no
+                longer a 503 — render an informative line instead of nothing. */}
+            {summary.slots.length === 0 && (
+              <div className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                {summary.binding_mode === 'oauth_group'
+                  ? 'Routed via the OAuth group pool.'
+                  : 'No bindings configured yet.'}
+              </div>
+            )}
             {summary.slots.map((slot) => (
               <div key={slot.protocol_type} className="space-y-2">
                 <div className="text-[10px] font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>

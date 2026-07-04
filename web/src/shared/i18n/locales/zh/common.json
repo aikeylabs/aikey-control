@@ -2047,6 +2047,7 @@
     "sectionRouting": "路由",
     "routingLoading": "加载绑定详情…",
     "routingNoSlots": "未配置路由槽。",
+    "routingViaOauthGroup": "由 OAuth 组池路由（见上方池账号）。",
     "routeUrlHint": "SDK base URL (经 aikey-proxy)",
     "copyRouteUrlTitle": "复制 route URL",
     "copyRouteUrlAriaLabel": "复制 route_url",

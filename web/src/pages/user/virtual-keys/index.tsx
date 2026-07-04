@@ -1189,7 +1189,14 @@ function DetailDrawer(props: {
             )}
             {props.summary && props.summary.slots.length === 0 && (
               <div className="drawer-field">
-                <span className="v" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>{t('teamKeys.routingNoSlots')}</span>
+                {/* Shape-typed empty state (2026-07-03): a group VK routes via its pool
+                    (panel above) — say so instead of the generic "no routing" text,
+                    which read like a misconfiguration; 'none'/legacy keeps the generic. */}
+                <span className="v" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
+                  {props.summary.binding_mode === 'oauth_group'
+                    ? t('teamKeys.routingViaOauthGroup')
+                    : t('teamKeys.routingNoSlots')}
+                </span>
               </div>
             )}
             {props.summary && props.summary.slots.map((slot) => (

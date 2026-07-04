@@ -91,7 +91,14 @@ func domainErrorStatus(code string) int {
 	case CodeBizAuthEmailTaken, CodeBizSeatEmailTaken,
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
 		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
-		CodeBizLoginSessionTerminated:
+		CodeBizLoginSessionTerminated,
+		// 2026-07-03 (owner-approved delivery-family contract unification): "no
+		// active / not-deliverable binding" is a RESOURCE-STATE conflict an admin
+		// resolves by configuring the binding — not a service outage. As 503s these
+		// made web consoles/CLIs read a normal not-configured state as "server down".
+		// 503 stays reserved for CodeExtProviderUnavailable (a genuinely
+		// unavailable dependency).
+		CodeBizBindNoActive, CodeBizBindNotDelivered:
 		return http.StatusConflict
 
 	// ── 422 Unprocessable ─────────────────────────────────────────────────────
@@ -110,7 +117,7 @@ func domainErrorStatus(code string) int {
 		return http.StatusBadGateway
 
 	// ── 503 Service Unavailable ───────────────────────────────────────────────
-	case CodeBizBindNoActive, CodeBizBindNotDelivered, CodeExtProviderUnavailable:
+	case CodeExtProviderUnavailable:
 		return http.StatusServiceUnavailable
 
 	// ── 500 Internal Server Error (default) ──────────────────────────────────

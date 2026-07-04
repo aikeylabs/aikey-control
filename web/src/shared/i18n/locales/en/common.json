@@ -2047,6 +2047,7 @@
     "sectionRouting": "Routing",
     "routingLoading": "Loading binding details…",
     "routingNoSlots": "No routing slots configured.",
+    "routingViaOauthGroup": "Routed via the OAuth group pool (see pool accounts above).",
     "routeUrlHint": "SDK base URL (via aikey-proxy)",
     "copyRouteUrlTitle": "Copy route URL",
     "copyRouteUrlAriaLabel": "Copy route_url",

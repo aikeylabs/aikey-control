@@ -144,6 +144,15 @@ export interface KeySummaryDTO {
   key_status: string;
   share_status: string;
   expires_at?: string;
+  // 2026-07-03 shape-typed delivery family: which kind of VK this is.
+  //   'direct'      — credential-backed slots below.
+  //   'oauth_group' — pool VK: slots stay empty here; the pool panel (group_accounts)
+  //                   is the routing view. oauth_group_id identifies the group.
+  //   'none'        — no bindings configured yet (benign — NOT an error; the old
+  //                   contract 503'd this normal state).
+  // Absent on pre-2026-07 servers → treat as legacy (undifferentiated empty slots).
+  binding_mode?: 'direct' | 'oauth_group' | 'none';
+  oauth_group_id?: string;
   slots: SummarySlotDTO[];
 }
 
