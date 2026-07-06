@@ -2476,6 +2476,8 @@
     "codexAuthFailed": "Authorization failed. Start the sign-in again.",
     "addProviderLabel": "Provider",
     "providerClaude": "Claude (Anthropic)",
-    "providerCodex": "Codex (OpenAI / ChatGPT)"
+    "providerCodex": "Codex (OpenAI / ChatGPT)",
+    "addNoGroupsForProvider": "No pool for the selected provider — you've only joined pools of a different provider. Ask an admin to create one.",
+    "addGroupsLoadFailed": "Couldn't load your pools (server error). Retry, or ask an admin to check the team server."
   }
 }

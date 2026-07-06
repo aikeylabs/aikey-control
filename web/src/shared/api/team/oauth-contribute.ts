@@ -19,6 +19,10 @@ export interface MyOauthGroup {
   oauth_group_id: string;
   alias: string;
   is_default: boolean;
+  /** R34 (2026-07-04): the pool's declared provider. The add-account modal filters
+   * the group dropdown to the picked provider (前置防呆). "" for older servers →
+   * the frontend shows all groups (the AttachAccount gate still enforces). */
+  provider_code?: string;
 }
 
 /** fetchMyGroups lists the groups the member has joined (add-account dropdown). */

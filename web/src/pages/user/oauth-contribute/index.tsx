@@ -631,8 +631,18 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
   const groups: MyOauthGroup[] = Array.isArray(groupsQ.data) ? groupsQ.data : [];
   const groupsErr = groupsQ.data && isTeamFetchError(groupsQ.data) ? groupsQ.data : undefined;
 
-  // Default the selection to the first (server-ordered: default group first).
-  const selectedGroup = groupID || groups[0]?.oauth_group_id || '';
+  // R34 前置防呆: only groups whose declared provider matches the picked provider
+  // (an openai account can't go into a Claude pool). Fallback: older servers send
+  // no provider_code → show all (the AttachAccount gate still enforces).
+  const filteredGroups = useMemo(
+    () => groups.filter((g) => !g.provider_code || g.provider_code === providerCode),
+    [groups, providerCode],
+  );
+  // Default to the first filtered group; if the current pick fell out of the set
+  // (provider just changed), snap back to the first match.
+  const selectedGroup = filteredGroups.some((g) => g.oauth_group_id === groupID)
+    ? groupID
+    : filteredGroups[0]?.oauth_group_id || '';
 
   const addMut = useMutation({
     mutationFn: () =>
@@ -738,9 +748,19 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
             <div className="text-[11px] font-mono py-2" style={{ color: 'var(--muted-foreground)' }}>
               {t('oauthContribute.addGroupsLoading')}
             </div>
-          ) : groupsErr || groups.length === 0 ? (
+          ) : groupsErr ? (
+            // A LOAD failure (500 / transport) must NOT be shown as "you haven't
+            // joined any pool" — that masked a real server error (e.g. the
+            // GroupsForSeats column-count bug) and sent people to the wrong fix.
+            // Surface it as a distinct load error so the actual problem is visible.
+            <div className="text-[11px] font-mono py-2" style={{ color: '#fca5a5' }}>
+              {t('oauthContribute.addGroupsLoadFailed')}
+            </div>
+          ) : filteredGroups.length === 0 ? (
             <div className="text-[11px] font-mono py-2" style={{ color: '#facc15' }}>
-              {t('oauthContribute.addNoGroups')}
+              {/* Genuinely no matching group: none joined at all, or none for the
+                  picked provider (e.g. joined only Claude pools but picked Codex). */}
+              {groups.length === 0 ? t('oauthContribute.addNoGroups') : t('oauthContribute.addNoGroupsForProvider')}
             </div>
           ) : (
             <select
@@ -748,7 +768,7 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
               value={selectedGroup}
               onChange={(e) => setGroupID(e.target.value)}
             >
-              {groups.map((g) => (
+              {filteredGroups.map((g) => (
                 <option key={g.oauth_group_id} value={g.oauth_group_id}>
                   {g.alias || g.oauth_group_id}
                   {g.is_default ? ` (${t('oauthContribute.defaultGroupTag')})` : ''}

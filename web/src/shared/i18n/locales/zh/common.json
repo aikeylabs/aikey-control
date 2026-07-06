@@ -2476,6 +2476,8 @@
     "codexAuthFailed": "授权失败，请重新开始登录。",
     "addProviderLabel": "供应商",
     "providerClaude": "Claude (Anthropic)",
-    "providerCodex": "Codex (OpenAI / ChatGPT)"
+    "providerCodex": "Codex (OpenAI / ChatGPT)",
+    "addNoGroupsForProvider": "没有该供应商的池——你只加入了其他供应商的池。请管理员新建一个。",
+    "addGroupsLoadFailed": "无法加载你的池组（服务器错误）。请重试，或让管理员检查团队服务端。"
   }
 }
