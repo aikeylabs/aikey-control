@@ -20,6 +20,9 @@
 package intake
 
 import (
+	"encoding/json"
+	"sync"
+
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/cli"
 )
 
@@ -29,4 +32,17 @@ import (
 type ImportHandlers struct {
 	Bridge  *cli.Bridge
 	VKCache *VKCache
+
+	// Memoized `_internal rules` payload (2026-07-07 vault-page latency
+	// analysis): the rules data is STATIC — fingerprint layer versions +
+	// provider route table that only change with the aikey binary — yet
+	// RulesHandler spawned a cli subprocess per request (~1.2s measured on
+	// the Windows live box) on a page-critical path. Cache the first
+	// successful reply for the server process lifetime: services restart
+	// whenever binaries upgrade (installer stops/starts them), so process
+	// lifetime == binary lifetime in every supported deploy path. Fallback
+	// replies are deliberately NOT cached — a transient early bridge
+	// failure must not pin stale hardcoded data until restart.
+	rulesMu     sync.Mutex
+	rulesCached json.RawMessage
 }

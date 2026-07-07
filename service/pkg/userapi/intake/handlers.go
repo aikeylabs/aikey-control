@@ -88,11 +88,29 @@ func (h *ImportHandlers) ConfirmHandler(w http.ResponseWriter, r *http.Request) 
 func (h *ImportHandlers) RulesHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
+	// Memoized: rules are static per binary — see the rulesCached field
+	// comment for the Why. Concurrent first-misses may both invoke (the
+	// reply is identical and idempotent; last write wins) — not worth a
+	// single-flight for a once-per-process race.
+	h.rulesMu.Lock()
+	cached := h.rulesCached
+	h.rulesMu.Unlock()
+	if cached != nil {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "ok",
+			"data":   cached,
+		})
+		return
+	}
+
 	if h.Bridge != nil {
 		// `_internal rules` doesn't read the vault; PlaceholderHex satisfies
 		// the IPC envelope's mandatory 64-char vault_key_hex field.
 		result, err := h.Bridge.Invoke(r.Context(), "rules", "", cli.PlaceholderHex, "", struct{}{})
 		if err == nil && result != nil && result.Status == "ok" && len(result.Data) > 0 {
+			h.rulesMu.Lock()
+			h.rulesCached = json.RawMessage(result.Data)
+			h.rulesMu.Unlock()
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"status": "ok",
 				"data":   json.RawMessage(result.Data),
@@ -101,6 +119,7 @@ func (h *ImportHandlers) RulesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Fallback is served but NOT cached (see field comment).
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"status": "ok",
 		"data":   rulesFallback(),
