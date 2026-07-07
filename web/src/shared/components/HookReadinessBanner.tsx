@@ -20,6 +20,7 @@
 import { useEffect, useState } from 'react';
 import { useHookReadinessStore, hookBannerKind } from '@/store';
 import { copyText } from '@/shared/utils/clipboard';
+import { isWindowsClient } from '@/shared/utils/platform';
 
 const SESSION_DISMISS_KEY = 'aikey:hookReadinessBannerDismissed';
 
@@ -77,28 +78,36 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
   // (re-open modal). Only one is set at a time.
   let cta: { label: string; command: string } | null = null;
   let ctaAction: { label: string; onClick: () => void } | null = null;
+  // Platform-aware copy (parity audit 2026-07-07 P2-7): Windows users were
+  // shown zsh paths + a `--shell zsh` fallback that fails verbatim on their
+  // machine (the bridge actually writes $PROFILE + hook.ps1).
+  const onWindows = isWindowsClient();
+  const rcName = onWindows ? 'your PowerShell $PROFILE' : '~/.zshrc';
   switch (kind) {
     case 'almost-ready':
       title = 'Almost ready — terminal auto-sync needs one more step';
       if (onEnableClick) {
         body =
-          "Hook file installed but your shell rc isn't wired yet. " +
-          'Click below to inject 3 lines into ~/.zshrc — we\'ll show you exactly what before changing anything. ' +
+          "Hook file installed but your shell profile isn't wired yet. " +
+          `Click below to inject a small managed block into ${rcName} — we'll show you exactly what before changing anything. ` +
           'You can also run `aikey hook install` from any terminal.';
         ctaAction = { label: 'Enable auto-sync', onClick: onEnableClick };
       } else {
         body =
-          "Hook file installed but your shell rc isn't wired yet. Run the command below " +
-          'once to enable auto-sync (it will prompt before modifying your ~/.zshrc).';
+          "Hook file installed but your shell profile isn't wired yet. Run the command below " +
+          `once to enable auto-sync (it will prompt before modifying ${rcName}).`;
         cta = { label: 'Copy command', command: 'aikey hook install' };
       }
       break;
     case 'shell-undetectable':
-      title = "Trial server didn't expose a zsh/bash SHELL";
+      title = 'The service environment did not expose a recognizable shell';
       body =
         'Hook file install was skipped because the service environment had no recognizable shell. ' +
         'Run the command below from your terminal to choose explicitly.';
-      cta = { label: 'Copy command', command: 'aikey hook install --shell zsh' };
+      cta = {
+        label: 'Copy command',
+        command: onWindows ? 'aikey hook install --shell powershell' : 'aikey hook install --shell zsh',
+      };
       break;
     case 'env-misconfigured':
       // Distinct from io-error because the remediation is "fix the
@@ -116,7 +125,8 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
     default:
       title = 'Hook install ran into a filesystem error';
       body =
-        'The Web bridge could not write ~/.aikey/hook.zsh. Check ~/.aikey/ permissions, then run the command below.';
+        `The Web bridge could not write ~/.aikey/${onWindows ? 'hook.ps1' : 'hook.zsh'}. ` +
+        'Check ~/.aikey/ permissions, then run the command below.';
       cta = { label: 'Copy command', command: 'aikey hook update' };
       break;
   }

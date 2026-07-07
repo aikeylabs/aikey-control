@@ -25,6 +25,7 @@ import { hookApi } from '@/shared/api/user/hook';
 import { pickHookReadiness, type HookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { copyText } from '@/shared/utils/clipboard';
+import { isWindowsClient } from '@/shared/utils/platform';
 
 interface HookWireRcModalProps {
   open: boolean;
@@ -108,8 +109,19 @@ export function useHookWireRcModal() {
   return { open, openIfNeeded, openManually, close };
 }
 
-const MARKER_BLOCK = `# aikey shell hook v3 begin
+// Platform-specific previews (parity audit 2026-07-07 P2-7): showing the zsh
+// block to a Windows user broke informed consent — the bridge actually writes
+// the PowerShell $PROFILE block below (see aikey-cli
+// shell_integration_windows.rs v3_rc_block_powershell; keep in sync).
+const MARKER_BLOCK_UNIX = `# aikey shell hook v3 begin
 [[ -f ~/.aikey/hook.zsh ]] && source ~/.aikey/hook.zsh
+# aikey shell hook v3 end`;
+const MARKER_BLOCK_WINDOWS = `# aikey shell hook v3 begin
+$_aikeyBin = if ($env:USERPROFILE) { Join-Path $env:USERPROFILE '.aikey\\bin' } else { Join-Path $env:HOME '.aikey/bin' }
+if ((Test-Path $_aikeyBin) -and (($env:Path -split ';') -notcontains $_aikeyBin)) { $env:Path = "$_aikeyBin;$env:Path" }
+$_aikeyHookFile = if ($env:USERPROFILE) { Join-Path $env:USERPROFILE '.aikey/hook.ps1' } else { Join-Path $env:HOME '.aikey/hook.ps1' }
+if (Test-Path $_aikeyHookFile) { . $_aikeyHookFile }
+Remove-Variable -Name _aikeyBin,_aikeyHookFile -Scope Local -ErrorAction SilentlyContinue
 # aikey shell hook v3 end`;
 const MANUAL_COMMAND = 'aikey hook install';
 
@@ -183,7 +195,11 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
     }
   };
 
-  const previewLines = useMemo(() => MARKER_BLOCK.split('\n'), []);
+  const onWindows = useMemo(() => isWindowsClient(), []);
+  const previewLines = useMemo(
+    () => (onWindows ? MARKER_BLOCK_WINDOWS : MARKER_BLOCK_UNIX).split('\n'),
+    [onWindows],
+  );
 
   if (!open) return null;
 
@@ -214,14 +230,14 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
           Enable terminal auto-sync?
         </h3>
         <p className="text-xs font-mono leading-relaxed mb-4" style={{ color: 'var(--muted-foreground)' }}>
-          Adding 3 lines to your shell rc lets every new terminal pick up key
-          changes (Add / Use / Delete) automatically — no manual{' '}
-          <code className="font-mono">source</code> needed.
+          Adding a small managed block to your shell profile lets every new
+          terminal pick up key changes (Add / Use / Delete) automatically — no
+          manual reload needed.
         </p>
 
         {/* Diff preview */}
         <p className="text-[10px] font-mono uppercase tracking-wider mb-1" style={{ color: 'var(--muted-foreground)' }}>
-          Will append to ~/.zshrc:
+          {onWindows ? 'Will append to your PowerShell $PROFILE:' : 'Will append to ~/.zshrc:'}
         </p>
         <pre
           className="font-mono text-xs leading-relaxed p-3 rounded border mb-4 whitespace-pre-wrap"
