@@ -15,7 +15,7 @@
  *   - GET /accounts/me/group-routed-credential (no id) → reveal password (routed only)
  *   - POST /api/user/oauth/pool/*           → pool sign-in (relay → proxy broker)
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -112,6 +112,24 @@ export default function OAuthContributePage() {
   const [expandedCred, setExpandedCred] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
 
+  // Toast stack — transient feedback for add (mirrors the team-keys page's
+  // ToastStack: same shared `.toast*` CSS from KEYS_PAGE_CSS, 5s auto-dismiss).
+  // Replicated inline rather than shared-extracted: this is the 2nd toast user
+  // on the app, and extraction touches the shipped virtual-keys page — defer
+  // until a 3rd consumer justifies a shared component.
+  interface ToastEntry { id: number; kind: 'success' | 'error'; title: string; sub?: string }
+  const [toasts, setToasts] = useState<ToastEntry[]>([]);
+  const toastIdRef = useRef(0);
+  const pushToast = useCallback((entry: Omit<ToastEntry, 'id'>): void => {
+    toastIdRef.current += 1;
+    const id = toastIdRef.current;
+    setToasts((prev) => [...prev, { ...entry, id }]);
+    setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== id)), 5000);
+  }, []);
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+
   const listQ = useQuery({
     queryKey: ['my-pool-accounts'],
     queryFn: fetchMyPoolAccounts,
@@ -175,6 +193,13 @@ export default function OAuthContributePage() {
               onAdded={() => {
                 setShowAdd(false);
                 qc.invalidateQueries({ queryKey: ['my-pool-accounts'] });
+                // Thank-you confirmation: the account is now in the pool and
+                // will be assigned to pool-group members on demand.
+                pushToast({
+                  kind: 'success',
+                  title: t('oauthContribute.addToastTitle'),
+                  sub: t('oauthContribute.addToastSub'),
+                });
               }}
             />
           )}
@@ -242,6 +267,45 @@ export default function OAuthContributePage() {
           </section>
         </div>
       </div>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+    </div>
+  );
+}
+
+/** ToastStack: transient add-confirmation feedback. Same markup + shared
+ * `.toast*` CSS (KEYS_PAGE_CSS) as the team-keys page so the two sibling
+ * pages give identical feedback. */
+function ToastStack({ toasts, onDismiss }: {
+  toasts: Array<{ id: number; kind: 'success' | 'error'; title: string; sub?: string }>;
+  onDismiss: (id: number) => void;
+}) {
+  const { t: tr } = useTranslation();
+  return (
+    <div className="toast-stack" aria-live="polite" aria-atomic="true">
+      {toasts.map((toast) => (
+        <div key={toast.id} className={`toast${toast.kind === 'error' ? ' error' : ''}`} data-open="true">
+          <span className="toast-icon">
+            {toast.kind === 'success' ? <ZapIcon className="w-3 h-3" /> : <InfoIcon className="w-3 h-3" />}
+          </span>
+          <div className="toast-body">
+            <div className="toast-title">{toast.title}</div>
+            {/* Override the shared `.toast-sub` single-line ellipsis: this
+                page's confirmation is a full sentence (esp. the English wire),
+                which would clip to "…assigned to poo…". Instance-scoped so the
+                team-keys page's short undo subs keep their single-line look. */}
+            {toast.sub && (
+              <div className="toast-sub" style={{ whiteSpace: 'normal', overflow: 'visible' }}>
+                {toast.sub}
+              </div>
+            )}
+          </div>
+          <div className="toast-actions">
+            <button type="button" className="toast-dismiss" onClick={() => onDismiss(toast.id)} aria-label={tr('oauthContribute.toastDismiss')}>
+              <XIcon className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -840,6 +904,8 @@ const ICON_ZAP = 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z';
 const ICON_COPY = 'M16.5 8.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v8.25A2.25 2.25 0 006 16.5h2.25m8.25-8.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-7.5A2.25 2.25 0 018.25 18v-1.5m8.25-8.25h-6a2.25 2.25 0 00-2.25 2.25v6';
 const ICON_CHECK = 'M4.5 12.75l6 6 9-13.5';
 const ICON_PLUS = 'M12 4.5v15m7.5-7.5h-15';
+const ICON_X = 'M6 18L18 6M6 6l12 12';
+const ICON_INFO = 'M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z';
 
 function ShareIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_SHARE} {...p} />; }
 function SearchIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_SEARCH} {...p} />; }
@@ -849,6 +915,8 @@ function ZapIcon(p: { className?: string; style?: React.CSSProperties }) { retur
 function CopyIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_COPY} {...p} />; }
 function CheckIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_CHECK} {...p} />; }
 function PlusIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_PLUS} {...p} />; }
+function XIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_X} {...p} />; }
+function InfoIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_INFO} {...p} />; }
 
 /** CopyBtn copies `value` to the clipboard (HTTP-safe via copyText) and shows a
  * 1.5s green check. Renders nothing when value is empty, so the password copy

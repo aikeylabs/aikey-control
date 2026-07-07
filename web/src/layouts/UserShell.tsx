@@ -603,6 +603,22 @@ export function UserShell() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
+  // Reveal the active nav item on a full-document load.
+  //
+  // WHY: cross-app entries (Overview / Account / Compliance) navigate via a
+  // full-page load, and a direct refresh / deep link also reloads the whole
+  // document. Either way the sidebar mounts at scrollTop=0, so when the
+  // current page's entry sits lower in the list it lands scrolled out of
+  // view — the user clicked a bottom item and it "disappeared". Scroll it
+  // back into view on mount. `block: 'nearest'` is a no-op when the item is
+  // already visible (default instant behavior = no animation), so this only
+  // acts on fresh loads; client-side SPA navigations keep their scroll and
+  // never remount this shell, so their scroll position is untouched.
+  React.useLayoutEffect(() => {
+    const active = document.querySelector('.user-sidebar .nav-item.active');
+    active?.scrollIntoView({ block: 'nearest' });
+  }, []);
+
   function isActive(path: string) {
     return pathname === path || pathname.startsWith(path + '/');
   }
