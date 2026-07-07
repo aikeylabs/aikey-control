@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AiKeyLabs/pkg/aikeycompat"
 )
 
 // stdinEnvelope matches aikey-cli's commands_internal::protocol::StdinEnvelope.
@@ -122,6 +124,10 @@ func (b *Bridge) InvokeWithTimeout(
 
 	// --stdin-json is the mandatory IPC mode for every _internal subcommand.
 	cmd := exec.CommandContext(callCtx, b.BinaryPath, "_internal", subcommand, "--stdin-json")
+	// Never flash a console window on Windows (2026-07-07: every vault-page
+	// bridge call popped a cmd/Windows Terminal window when the server ran
+	// console-less, e.g. started via `aikey web start`). No-op on Unix.
+	aikeycompat.HideSpawnConsole(cmd)
 	cmd.Stdin = bytes.NewReader(envJSON)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -222,6 +228,10 @@ func (b *Bridge) InvokeInit(
 	defer cancel()
 
 	cmd := exec.CommandContext(callCtx, b.BinaryPath, "_internal", "init", "--stdin-json")
+	// Never flash a console window on Windows (2026-07-07: every vault-page
+	// bridge call popped a cmd/Windows Terminal window when the server ran
+	// console-less, e.g. started via `aikey web start`). No-op on Unix.
+	aikeycompat.HideSpawnConsole(cmd)
 	cmd.Stdin = bytes.NewReader(envJSON)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -286,6 +296,10 @@ func (b *Bridge) InvokeHookOp(
 	defer cancel()
 
 	cmd := exec.CommandContext(callCtx, b.BinaryPath, "_internal", "hook-op", "--stdin-json")
+	// Never flash a console window on Windows (2026-07-07: every vault-page
+	// bridge call popped a cmd/Windows Terminal window when the server ran
+	// console-less, e.g. started via `aikey web start`). No-op on Unix.
+	aikeycompat.HideSpawnConsole(cmd)
 	cmd.Stdin = bytes.NewReader(envJSON)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

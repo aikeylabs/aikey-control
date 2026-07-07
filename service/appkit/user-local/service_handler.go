@@ -36,6 +36,8 @@ import (
 	"time"
 
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/cli"
+
+	"github.com/AiKeyLabs/pkg/aikeycompat"
 )
 
 // Tiny wrappers so the call-sites in HandleServiceAction read clean
@@ -154,6 +156,9 @@ func HandleServiceAction(logger *slog.Logger) http.HandlerFunc {
 		ctx, cancel := contextWithTimeout(r.Context(), 40*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, binPath, "service", action, name, "--json")
+		// Never flash a console window on Windows (same bridge-spawn class
+		// as pkg/userapi/cli/bridge.go, 2026-07-07). No-op on Unix.
+		aikeycompat.HideSpawnConsole(cmd)
 		// Read stdout and stderr SEPARATELY. Protocol contract: the CLI
 		// emits its JSON envelope on stdout; stderr carries human /
 		// diagnostic lines — and notably the CLI's top-level error handler
