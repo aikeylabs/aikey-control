@@ -41,13 +41,25 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// Copy variants keyed by the gateway's injected error code. The gateway serves
+// this same shell for three distinct not-ready conditions (design 2026-07):
+//   TEAM_UPSTREAM_UNREACHABLE — logged in, but the team server (B) is down.
+//   TEAM_NOT_LOGGED_IN        — no team binding; user must `aikey login`.
+//   LOCAL_VAULT_UNREADABLE    — local vault read failed (transient, e.g. lock).
+// Each renders a code-specific heading / instruction / recovery command instead
+// of the old silent redirect to /user/overview. Unknown codes fall back to the
+// upstream-unreachable variant so the page is always meaningful.
+const KNOWN_CODES = ['TEAM_UPSTREAM_UNREACHABLE', 'TEAM_NOT_LOGGED_IN', 'LOCAL_VAULT_UNREADABLE'];
+
 export default function TeamUnreachablePage() {
   const { t } = useTranslation();
   // Error code carried by the gateway's injected flag (falls back to the
   // canonical code when absent so the page is still meaningful if opened
   // directly). Kept read-only — this is a display signal, not app config.
   const code = window.__AIKEY_TEAM_DOWN__?.code ?? 'TEAM_UPSTREAM_UNREACHABLE';
-  const setUrlCmd = t('teamUnreachable.setUrlPlaceholder');
+  const variant = KNOWN_CODES.includes(code) ? code : 'TEAM_UPSTREAM_UNREACHABLE';
+  const vt = (key: string) => t(`teamUnreachable.variants.${variant}.${key}`);
+  const setUrlCmd = vt('command');
 
   return (
     <div className="w-full max-w-xl mx-auto py-10">
@@ -67,7 +79,7 @@ export default function TeamUnreachablePage() {
             {runtimeConfig.branding.appName}
           </span>
           <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-            {t('teamUnreachable.consoleSubheading')}
+            {vt('consoleSubheading')}
           </p>
         </div>
 
@@ -96,20 +108,20 @@ export default function TeamUnreachablePage() {
         </div>
 
         <h2 className="text-center text-sm font-mono font-bold mb-3" style={{ color: 'var(--foreground)' }}>
-          {t('teamUnreachable.heading')}
+          {vt('heading')}
         </h2>
 
         <p
           className="text-center text-xs font-mono mb-8"
           style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}
         >
-          {t('teamUnreachable.instruction')}
+          {vt('instruction')}
         </p>
 
         {/* Recovery command */}
         <div className="mb-6">
           <p className="text-xs font-mono mb-2" style={{ color: 'var(--muted-foreground)' }}>
-            {t('teamUnreachable.setUrlLabel')}
+            {vt('commandLabel')}
           </p>
           <div
             className="rounded border p-4 flex items-center justify-between gap-3"

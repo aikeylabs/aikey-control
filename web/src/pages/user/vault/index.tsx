@@ -49,6 +49,7 @@ import {
   useHookWireRcModal,
 } from '@/shared/components/HookWireRcModal';
 import { friendlyTestError } from './friendlyTestError';
+import { displayProtocolFamily } from '@/shared/api/user/protocolFamily';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
 import { ENTRY_BY_FAMILY } from '@/shared/generated/provider-registry';
@@ -121,7 +122,10 @@ interface TeamRowRecord {
   // as an amber "待登录" (matching the pool-account row chips) + a login CTA, NOT a red
   // "inactive". 'inactive' stays for genuinely unusable (revoked / disabled / no
   // routable account at all). CLI computes it in query.rs (single source).
-  effective_status: 'active' | 'inactive' | 'needs_login';
+  // 'pending_download' (2026-07-06): direct-bind VK whose key material hasn't been
+  // delivered locally — amber + actionable (unlock+reload / `aikey key sync`), keeps
+  // the chip honest when the IN USE badge (binding-driven) points at it.
+  effective_status: 'active' | 'inactive' | 'needs_login' | 'pending_download';
   expires_at?: string;
   // route_url + route_token (2026-05-11): emitted inline by CLI's
   // `_internal query` for team records (Phase 3B revised). Drawer
@@ -135,7 +139,7 @@ interface TeamRowRecord {
   created_at: number; // 0 — server doesn't echo create time in current DTO
   last_used_at: number | null; // null until usage telemetry rides through
   use_count: number; // 0 (same)
-  status: 'active' | 'inactive' | 'needs_login'; // mirrors effective_status for the chip
+  status: 'active' | 'inactive' | 'needs_login' | 'pending_download'; // mirrors effective_status for the chip
   in_use_for?: string[]; // empty in 3A; populated in 3B when Active wires up
   /**
    * Generic extension blob (2026-05-22) — see VaultExtra in
@@ -481,7 +485,7 @@ function providerDisplayName(r: VaultRowRecord): string {
   // tail). OAuth rows: broker provider name.
   let raw: string;
   if (r.target === 'personal') raw = r.provider_code ?? 'unknown';
-  else if (r.target === 'team') raw = r.protocol_family || 'unknown';
+  else if (r.target === 'team') raw = displayProtocolFamily(r.protocol_family) || 'unknown';
   else raw = r.provider;
   return raw.toLowerCase().replace(/_oauth$|_api$/, '');
 }
@@ -531,6 +535,7 @@ function familyOfProviderCode(code: string): string {
   // Single-platform: family == code (e.g. anthropic, openai, deepseek).
   return lc;
 }
+
 
 
 /** Route-token tail "vk_9f2a…a7e3" from full route_token. */
@@ -1270,9 +1275,12 @@ export default function UserVaultPage() {
             if (fams.length > 0) return fams;
           }
         }
-        // OAuth path: protocol_family already comes family-resolved from backend
-        // (commands_internal/query.rs::protocol_family_of returns registry.family).
-        return [r.protocol_family ?? 'unknown'];
+        // OAuth path: protocol_family comes family-resolved from backend
+        // (commands_internal/query.rs::protocol_family_of returns registry.family)
+        // EXCEPT an empty OAuth group VK, which carries the raw protocol_type
+        // ("openai_compatible") — displayProtocolFamily folds that to the pool's
+        // provider ("openai") so it groups with its non-empty siblings.
+        return [displayProtocolFamily(r.protocol_family) || 'unknown'];
       })();
       for (const fam of families) addToGroup(fam, r);
     }
@@ -2870,6 +2878,13 @@ const Row = React.memo(function Row(props: {
             <span className="status-dot" style={{ width: 5, height: 5 }} />
             {t('vault.statusNeedsLogin')}
           </span>
+        ) : r.status === 'pending_download' ? (
+          // Amber like needs_login: key material not delivered locally yet —
+          // actionable (unlock+reload triggers the full sync / `aikey key sync`).
+          <span className="chip warning">
+            <span className="status-dot" style={{ width: 5, height: 5 }} />
+            {t('vault.statusPendingDownload')}
+          </span>
         ) : (
           <span className="chip danger">
             <span className="status-dot error" style={{ width: 5, height: 5 }} />
@@ -3408,6 +3423,11 @@ function DetailDrawer(props: {
                 <span className="chip warning">
                   <span className="status-dot" style={{ width: 5, height: 5 }} />
                   {t('vault.statusNeedsLogin')}
+                </span>
+              ) : r.status === 'pending_download' ? (
+                <span className="chip warning">
+                  <span className="status-dot" style={{ width: 5, height: 5 }} />
+                  {t('vault.statusPendingDownload')}
                 </span>
               ) : (
                 <span className="chip danger">

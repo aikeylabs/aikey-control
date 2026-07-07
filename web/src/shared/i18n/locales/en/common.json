@@ -317,6 +317,7 @@
     "statusActive": "ACTIVE",
     "statusInactive": "INACTIVE",
     "statusNeedsLogin": "NEEDS LOGIN",
+    "statusPendingDownload": "PENDING DOWNLOAD",
     "loginCta": "Log in",
     "needsLoginCtaTitle": "Log in to the currently-routed pool account to enable (go to Team OAuth)",
     "deleteForever": "Delete forever?",
@@ -1426,14 +1427,31 @@
     "loginHelp": "re-authenticates your account when the CLI login has fully expired."
   },
   "teamUnreachable": {
-    "consoleSubheading": "User Console — Team Server Unreachable",
-    "heading": "Team server unreachable",
-    "instruction": "Your local console is healthy — only the team pages are affected. You can keep using every local page from the menu.",
-    "setUrlLabel": "If the team server's address changed, point the CLI at the new one (keeps your login):",
-    "setUrlPlaceholder": "aikey account set-url http://<new-host>:<port>",
-    "retryHint": "Then retry this page.",
     "retryButton": "Retry",
-    "errorCodeLabel": "Error code:"
+    "errorCodeLabel": "Error code:",
+    "variants": {
+      "TEAM_UPSTREAM_UNREACHABLE": {
+        "consoleSubheading": "User Console — Team Server Unreachable",
+        "heading": "Team server unreachable",
+        "instruction": "Your local console is healthy — only the team pages are affected. You can keep using every local page from the menu.",
+        "commandLabel": "If the team server's address changed, point the CLI at the new one (keeps your login):",
+        "command": "aikey account set-url http://<new-host>:<port>"
+      },
+      "TEAM_NOT_LOGGED_IN": {
+        "consoleSubheading": "User Console — Not Connected to a Team",
+        "heading": "Not connected to a team",
+        "instruction": "Team pages need a team login. Your local pages keep working from the menu. Connect to your team, then refresh this page.",
+        "commandLabel": "Connect to your team from the CLI, then refresh:",
+        "command": "aikey login --control-url http://<your-team-host>:<port>"
+      },
+      "LOCAL_VAULT_UNREADABLE": {
+        "consoleSubheading": "User Console — Local Environment Not Ready",
+        "heading": "Local environment not ready",
+        "instruction": "The local vault could not be read — it may be briefly locked or the local service is still starting. Your login is intact. Wait a moment and refresh; if it persists, restart the local console.",
+        "commandLabel": "Restart the local console, then refresh:",
+        "command": "aikey web restart"
+      }
+    }
   },
   "cliGuide": {
     "tabSetup": "Check setup",

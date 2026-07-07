@@ -317,6 +317,7 @@
     "statusActive": "活跃",
     "statusInactive": "不可用",
     "statusNeedsLogin": "待登录",
+    "statusPendingDownload": "待下载",
     "loginCta": "登录",
     "needsLoginCtaTitle": "登录当前路由到的池账号即可启用（前往 团队OAuth）",
     "deleteForever": "永久删除？",
@@ -1426,14 +1427,31 @@
     "loginHelp": "在 CLI 登录完全过期时重新认证您的账户。"
   },
   "teamUnreachable": {
-    "consoleSubheading": "用户控制台 — 团队服务器不可达",
-    "heading": "团队服务器不可达",
-    "instruction": "您的本地控制台运行正常 — 仅团队页面受影响。您仍可从菜单继续使用所有本地页面。",
-    "setUrlLabel": "如果团队服务器地址已变更，请将 CLI 指向新地址（保留登录状态）：",
-    "setUrlPlaceholder": "aikey account set-url http://<new-host>:<port>",
-    "retryHint": "然后重试此页面。",
     "retryButton": "重试",
-    "errorCodeLabel": "错误码："
+    "errorCodeLabel": "错误码：",
+    "variants": {
+      "TEAM_UPSTREAM_UNREACHABLE": {
+        "consoleSubheading": "用户控制台 — 团队服务器不可达",
+        "heading": "团队服务器不可达",
+        "instruction": "您的本地控制台运行正常 — 仅团队页面受影响。您仍可从菜单继续使用所有本地页面。",
+        "commandLabel": "如果团队服务器地址已变更，请将 CLI 指向新地址（保留登录状态）：",
+        "command": "aikey account set-url http://<new-host>:<port>"
+      },
+      "TEAM_NOT_LOGGED_IN": {
+        "consoleSubheading": "用户控制台 — 尚未连接团队",
+        "heading": "尚未连接团队",
+        "instruction": "团队页面需要先登录团队。本地页面仍可从菜单正常使用。连接到您的团队后，请刷新此页面。",
+        "commandLabel": "用 CLI 连接团队，然后刷新：",
+        "command": "aikey login --control-url http://<your-team-host>:<port>"
+      },
+      "LOCAL_VAULT_UNREADABLE": {
+        "consoleSubheading": "用户控制台 — 本地环境未就绪",
+        "heading": "本地环境未就绪",
+        "instruction": "无法读取本地保险库 — 可能被短暂锁定，或本地服务正在启动。您的登录状态未受影响。请稍候并刷新；若持续出现，请重启本地控制台。",
+        "commandLabel": "重启本地控制台，然后刷新：",
+        "command": "aikey web restart"
+      }
+    }
   },
   "cliGuide": {
     "tabSetup": "检查环境",

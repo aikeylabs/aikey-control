@@ -34,6 +34,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/cli"
 )
 
 // Tiny wrappers so the call-sites in HandleServiceAction read clean
@@ -77,8 +79,22 @@ func aikeyBinaryPath() string {
 	if v := envOrDefault("AIKEY_BIN_PATH", ""); v != "" {
 		return v
 	}
-	home := envOrDefault("HOME", "")
-	return filepath.Join(home, ".aikey", "bin", "aikey")
+	// os.UserHomeDir() resolves %USERPROFILE% on Windows / $HOME on Unix —
+	// more robust than reading HOME directly (a ScheduledTask-launched
+	// local-server may have a sparse env without HOME). Fall back to the
+	// HOME env only if UserHomeDir fails.
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = envOrDefault("HOME", "")
+	}
+	// cli.AikeyBinaryName() appends `.exe` on Windows. Hardcoding "aikey"
+	// here (find#5, 2026-07-06) made os/exec fail on Windows — only
+	// aikey.exe exists on disk, so `aikey service status trust-local` never
+	// ran, this endpoint 502'd, and the trust-check page showed trust-local
+	// "not installed" while it was healthy on :8801. Reuse the centralised
+	// basename (userapi/cli) so the .exe rule has ONE source of truth — a
+	// repeat of the vault-page 503 regression (windows-compatibility.md F3).
+	return filepath.Join(home, ".aikey", "bin", cli.AikeyBinaryName())
 }
 
 func envOrDefault(k, def string) string {

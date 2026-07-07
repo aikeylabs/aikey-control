@@ -31,6 +31,7 @@ import { deliveryApi, routedGroupAccount, type GroupAccountRef, type UserKeyDTO,
 import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
+import { displayProtocolFamily } from '@/shared/api/user/protocolFamily';
 import {
   HookWireRcModal,
   useHookWireRcModal,
@@ -74,7 +75,12 @@ function providerFamily(code: string | null | undefined): string {
  * resort (mirrors the CLI vault path's team_protocol_source).
  */
 function keyProviderFamily(k: { provider_code?: string | null; protocol_type?: string | null; group_accounts?: GroupAccountRef[] | null }): string {
-  return providerFamily(k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || k.protocol_type);
+  // displayProtocolFamily folds an empty OAuth group VK's raw protocol_type
+  // ("openai_compatible") to the pool's provider ("openai") so it labels the same
+  // as its routed-account siblings — identical to the Vault page (shared helper).
+  return providerFamily(
+    k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || displayProtocolFamily(k.protocol_type),
+  );
 }
 
 function providerBrandColor(provider: string | null | undefined): string {
