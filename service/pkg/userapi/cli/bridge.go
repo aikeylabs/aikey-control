@@ -44,11 +44,18 @@ type Bridge struct {
 	Logger  *slog.Logger
 }
 
-// New builds a bridge with a default 15s timeout. The binary is resolved
+// New builds a bridge with a default 60s timeout. The binary is resolved
 // lazily on first call so local-server can boot even if the cli isn't
 // installed yet (the page still renders; only the action endpoints fail).
+//
+// Why 60s, not 15s (parity audit 2026-07-07 P2-5): the FIRST aikey.exe
+// invocation on a fresh Windows install runs under a Defender cold-scan
+// plus the vault auto-migration, which together blow past 15s — observed
+// live as `set-url timed out` on the very first Settings save a customer
+// makes. 60s matches the installers' first-boot health budget. Steady-state
+// calls still return in <1s; the deadline only bounds the pathological case.
 func New(logger *slog.Logger) *Bridge {
-	return &Bridge{Timeout: 15 * time.Second, Logger: logger}
+	return &Bridge{Timeout: 60 * time.Second, Logger: logger}
 }
 
 // Invoke spawns one `aikey _internal <subcommand>` and returns the parsed
