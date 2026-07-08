@@ -2231,9 +2231,9 @@
     },
     "upstreamProxy": {
       "title": "Upstream proxy",
-      "description": "Outbound proxy the local proxy uses to reach AI providers and OAuth (e.g. a Clash endpoint). Test connectivity, then Save to apply immediately — no restart. Leave empty for a direct connection.",
+      "description": "Outbound proxy the local proxy uses to reach AI providers and OAuth (e.g. a Clash endpoint). Test connectivity, then Save to apply immediately — no restart. Leave empty to follow the OS system proxy automatically (macOS/Windows, refreshed live; direct when none is set).",
       "urlLabel": "PROXY URL",
-      "statusHint": "http / https / socks5, with host:port. Empty = direct connection.",
+      "statusHint": "http / https / socks5, with host:port. Empty = follow OS system proxy, or direct when none.",
       "statusReadyToTest": "Click Test connectivity to verify this proxy can reach the AI providers.",
       "statusProbing": "Testing connectivity through the proxy…",
       "statusReachable": "✓ reachable (HTTP {{status}}, {{ms}} ms) — Save to apply.",

@@ -1076,7 +1076,8 @@ export default function SettingsPage() {
 // Self-contained (own state + fetch) so it doesn't entangle SettingsPage's state.
 // Reads + writes the egress proxy URL via the local-server relay → aikey-proxy
 // /admin/upstream-proxy, which validates, persists to aikey-user.yaml, and HOT-SWAPS
-// the live transport + OAuth impersonate client (no restart). Empty = direct egress.
+// the live transport + OAuth impersonate client (no restart). Empty = follow the OS
+// system proxy live (macOS/Windows, 2026-07-08 sysproxy) or direct when none is set.
 // This is the egress proxy's runtime home after R25 出口收敛 (moved off master).
 type UpstreamSave = { kind: 'idle' | 'saving' | 'ok' | 'fail'; message?: string };
 type UpstreamProbe =

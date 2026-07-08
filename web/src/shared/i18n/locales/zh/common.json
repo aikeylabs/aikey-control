@@ -2231,9 +2231,9 @@
     },
     "upstreamProxy": {
       "title": "上游代理",
-      "description": "本地代理访问 AI 服务商和 OAuth 时走的出口代理（如 Clash 地址）。先测连通、再保存即时生效，无需重启。留空则直连。",
+      "description": "本地代理访问 AI 服务商和 OAuth 时走的出口代理（如 Clash 地址）。先测连通、再保存即时生效，无需重启。留空则自动跟随操作系统的系统代理（macOS/Windows，变化实时生效；无系统代理时直连）。",
       "urlLabel": "代理地址",
-      "statusHint": "http / https / socks5，需带 host:port。留空 = 直连。",
+      "statusHint": "http / https / socks5，需带 host:port。留空 = 跟随系统代理，无系统代理则直连。",
       "statusReadyToTest": "点「测试连通性」验证此代理能否到达 AI 服务商。",
       "statusProbing": "正在通过代理测试连通性…",
       "statusReachable": "✓ 可达（HTTP {{status}}，{{ms}} ms）—— 点保存应用。",
