@@ -1585,7 +1585,7 @@ export default function UserBulkImportPage() {
           </div>
           <div className="flex items-center gap-3">
             {!unlockExpanded ? (
-              <button className="btn btn-primary px-4 py-1.5 text-[11px]" onClick={() => setUnlockExpanded(true)}>{t('import.unlock')}</button>
+              <button className="btn btn-primary px-4 py-1.5 text-[11px] min-w-[60px]" onClick={() => setUnlockExpanded(true)}>{t('import.unlock')}</button>
             ) : (
               // Why the extra column wrapper around the form: the inline
               // error message used to sit next to Cancel, which pushed the
@@ -1609,7 +1609,7 @@ export default function UserBulkImportPage() {
                     value={unlockPassword}
                     onChange={(e) => setUnlockPassword(e.target.value)}
                   />
-                  <button type="submit" className="btn btn-primary px-3 py-1.5 text-[11px]" disabled={unlockMut.isPending || !unlockPassword}>
+                  <button type="submit" className="btn btn-primary px-3 py-1.5 text-[11px] min-w-[60px]" disabled={unlockMut.isPending || !unlockPassword}>
                     {unlockMut.isPending ? t('import.unlocking') : t('import.unlock')}
                   </button>
                   <button type="button" className="btn btn-ghost text-[11px] px-2 py-1.5" onClick={() => { setUnlockExpanded(false); setUnlockError(null); }}>{t('import.cancel')}</button>

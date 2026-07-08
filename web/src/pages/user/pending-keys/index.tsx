@@ -8,6 +8,7 @@ import { deliveryApi, type PendingKeyDTO, type DeliveryDTO } from '@/shared/api/
 import { Badge } from '@/shared/ui/Badge';
 import { copyText } from '@/shared/utils/clipboard';
 import { PageHeader } from '@/shared/ui/PageHeader';
+import { ModalPortal } from '@/shared/ui/ModalShell';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -41,7 +42,7 @@ function CopyButton({ text }: { text: string }) {
 
 function DeliveryModal({ delivery, onClose }: { delivery: DeliveryDTO; onClose: () => void }) {
   return (
-    <>
+    <ModalPortal>
       <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }} />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded border"
@@ -103,7 +104,7 @@ function DeliveryModal({ delivery, onClose }: { delivery: DeliveryDTO; onClose: 
           <button onClick={onClose} className="btn btn-primary text-xs px-6 py-2">Done</button>
         </div>
       </div>
-    </>
+    </ModalPortal>
   );
 }
 

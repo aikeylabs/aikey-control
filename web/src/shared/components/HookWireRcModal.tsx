@@ -26,6 +26,7 @@ import { pickHookReadiness, type HookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { copyText } from '@/shared/utils/clipboard';
 import { isWindowsClient } from '@/shared/utils/platform';
+import { ModalPortal } from '@/shared/ui/ModalShell';
 
 interface HookWireRcModalProps {
   open: boolean;
@@ -204,7 +205,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
   if (!open) return null;
 
   return (
-    <>
+    <ModalPortal>
       <div
         className="fixed inset-0 z-50"
         style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
@@ -322,6 +323,6 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
           </button>
         </div>
       </div>
-    </>
+    </ModalPortal>
   );
 }

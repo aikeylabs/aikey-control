@@ -1327,13 +1327,14 @@ export default function UserOverviewPage() {
                             <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--foreground)' }}>
                               <span className="prov-dot" style={{ backgroundColor: providerColor(proto) }} />
                               {proto || t('overview.unknownProvider')}
-                              {/* Group VK → TEAM-OAUTH chip beside the protocol (English, no mixed CN/EN). */}
+                              {/* Group VK → team-OAuth chip beside the protocol.
+                                  i18n'd 2026-07-07 (user request): 团队 OAuth in Chinese. */}
                               {k.oauth_group_id && (
                                 <span
                                   className="text-[9px] font-mono px-1.5 py-0.5 rounded border"
                                   style={{ color: 'var(--primary-dim)', borderColor: 'rgba(250,204,21,0.3)', backgroundColor: 'rgba(250,204,21,0.06)' }}
                                 >
-                                  TEAM-OAUTH
+                                  {t('overview.kindTeamOAuth')}
                                 </span>
                               )}
                             </span>

@@ -710,10 +710,29 @@ export default function UserVaultPage() {
   // `team_count` (set when team rows are inlined into `entries`).
   // `total` is the visible-row union — drives the "All" pill count.
   const counts = useMemo(() => {
-    const personal = listData?.counts.personal ?? 0;
-    const oauth = listData?.counts.oauth ?? 0;
-    const team = listData?.counts.team ?? 0;
-    return { personal, oauth, team, total: personal + oauth + team };
+    const personalVK = listData?.counts.personal ?? 0; // target='personal' (个人 API Key)
+    const personalOAuth = listData?.counts.oauth ?? 0; // target='oauth'    (个人 OAuth)
+    const team = listData?.counts.team ?? 0;           // target='team'     (团队, 含团队 OAuth 池)
+    // `total` (All pill) = the unique visible-row union. The three targets are
+    // disjoint, so their sum is the true total.
+    const total = personalVK + personalOAuth + team;
+    // Personal / Team pills are SCOPE (ownership) filters; the OAuth pill is a
+    // TYPE filter cutting ACROSS scope — so they OVERLAP on purpose (2026-07-07):
+    //   Personal = 个人 VK + 个人 OAuth       (target 'personal' + 'oauth')
+    //   Team     = 团队 (含团队 OAuth 池)      (target 'team')
+    //   OAuth    = 个人 OAuth + 团队 OAuth 池  ('oauth' + team-with-oauth_group_id)
+    // OAuth rows are double-counted across pills BY DESIGN, so only the disjoint
+    // sum feeds `total`. Kept in lockstep with the branches in `filtered` below.
+    const rows = (listData?.records as VaultRowRecord[]) ?? [];
+    const teamOAuthPool = rows.filter(
+      (r) => r.target === 'team' && !!(r as TeamRowRecord).oauth_group_id,
+    ).length;
+    return {
+      personal: personalVK + personalOAuth,
+      oauth: personalOAuth + teamOAuthPool,
+      team,
+      total,
+    };
   }, [listData]);
 
   // v4.3 (2026-05-01): provider_routes table — the authoritative declaration
@@ -758,7 +777,24 @@ export default function UserVaultPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filteredList = records.filter((r) => {
-      if (typeFilter !== 'all' && r.target !== typeFilter) return false;
+      // Type filter. Personal / Team are SCOPE (ownership) filters; OAuth is a
+      // TYPE filter cutting across scope — they overlap on purpose (2026-07-07):
+      //   Personal = 个人 VK + 个人 OAuth       (target 'personal' | 'oauth')
+      //   Team     = 团队 (含团队 OAuth 池)      (target 'team')
+      //   OAuth    = 个人 OAuth + 团队 OAuth 池  ('oauth' | team-with-oauth_group_id)
+      // Kept in lockstep with the `counts` computation above.
+      if (typeFilter !== 'all') {
+        let matches: boolean;
+        if (typeFilter === 'personal') {
+          matches = r.target === 'personal' || r.target === 'oauth';
+        } else if (typeFilter === 'oauth') {
+          matches = r.target === 'oauth'
+            || (r.target === 'team' && !!(r as TeamRowRecord).oauth_group_id);
+        } else {
+          matches = r.target === typeFilter; // team
+        }
+        if (!matches) return false;
+      }
       if (q) {
         const alias = (r.alias ?? '').toLowerCase();
         const provider = providerDisplayName(r);
@@ -2084,7 +2120,7 @@ function UnlockBanner(props: {
         // UNLOCK button; the password field stays hidden until the user
         // commits to unlocking.
         <button
-          className="btn btn-primary px-4 py-1.5 text-[11px]"
+          className="btn btn-primary px-4 py-1.5 text-[11px] min-w-[60px]"
           onClick={() => setExpanded(true)}
         >
           {t('vault.unlock')}
@@ -2109,7 +2145,7 @@ function UnlockBanner(props: {
             />
             <button
               type="submit"
-              className="btn btn-primary px-3 py-1.5 text-[11px]"
+              className="btn btn-primary px-3 py-1.5 text-[11px] min-w-[60px]"
               disabled={props.unlockPending || !props.password}
             >
               {props.unlockPending ? t('vault.unlocking') : t('vault.unlock')}
@@ -2670,13 +2706,20 @@ const Row = React.memo(function Row(props: {
   const aliasMono = isMonoAlias(r.alias);
   // Group VK = shared OAuth pool: it has no single protocol_family of its own
   // (would render "unknown"), so derive the Provider column from the pool's
-  // default (or first) account; and its kind chip reads TEAM-OAUTH (English,
-  // matching the adjacent TEAM/OAUTH/KEY pills — no mixed CN/EN).
+  // default (or first) account.
   const isTeamOAuthGroup = isTeam && !!(r as TeamRowRecord).oauth_group_id;
   const groupAccts = isTeamOAuthGroup ? (r as TeamRowRecord).group_accounts : null;
   const groupProto = routedGroupAccount(groupAccts)?.provider_code;
   const providerName = groupProto || providerDisplayName(r);
-  const kindLabel = isTeamOAuthGroup ? 'TEAM-OAUTH' : isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY';
+  // Kind chip. Fully i18n'd (2026-07-07, user request): in Chinese the four
+  // kinds render 密钥 / OAuth / 团队 / 团队 OAuth; English keeps KEY / OAUTH /
+  // TEAM / TEAM-OAUTH. Values live in the vault namespace of the locale files.
+  // NOTE: the chip's 密钥 (record TYPE = an API key) is a different axis from the
+  // filter pill's 个人 (record SCOPE = personal-owned, filterKey), so the two
+  // deliberately read differently.
+  const kindLabel = isTeamOAuthGroup
+    ? t('vault.kindTeamOAuth')
+    : isTeam ? t('vault.kindTeam') : isOAuth ? t('vault.kindOAuth') : t('vault.kindKey');
   const kindClass = isTeam ? ' team' : isOAuth ? ' oauth' : '';
 
   // Secondary alias line: route_token tail + contextual hint.
@@ -3411,7 +3454,7 @@ function DetailDrawer(props: {
                   {providerName}
                 </span>
                 <span className={`kind-pill${isTeam ? ' team' : isOAuth ? ' oauth' : ''}`}>
-                  {team?.oauth_group_id ? 'TEAM-OAUTH' : isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY'}
+                  {team?.oauth_group_id ? t('vault.kindTeamOAuth') : isTeam ? t('vault.kindTeam') : isOAuth ? t('vault.kindOAuth') : t('vault.kindKey')}
                 </span>
               </span>
               {r.status === 'active' ? (

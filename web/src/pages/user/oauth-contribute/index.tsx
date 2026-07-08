@@ -16,6 +16,7 @@
  *   - POST /api/user/oauth/pool/*           → pool sign-in (relay → proxy broker)
  */
 import React, { useMemo, useState, useRef, useCallback } from 'react';
+import { ModalPortal } from '@/shared/ui/ModalShell';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -89,6 +90,32 @@ function statusChip(s: string): { cls: string; dot: string } {
   }
 }
 
+/** auth_failed + revoked both mean "no longer usable" — the status filter folds
+ *  them into a single 已失效 (Inactive) pill. */
+function isInactiveStatus(s: string): boolean {
+  return s === 'auth_failed' || s === 'revoked';
+}
+
+/** Status filter pill — the same `.filter-pill` capsule the vault FilterStrip
+ *  uses. Kept inline (2nd consumer; extract to _shared on the 3rd, per the
+ *  toast-stack note below). */
+function StatusFilterPill(props: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+}) {
+  return (
+    <button
+      className={`filter-pill${props.active ? ' active' : ''}`}
+      onClick={props.onClick}
+    >
+      {props.label}
+      <span className="count">{props.count}</span>
+    </button>
+  );
+}
+
 function fmtDate(unix: number): string {
   if (!unix) return '—';
   return new Date(unix * 1000).toLocaleDateString('en-US');
@@ -106,6 +133,11 @@ export default function OAuthContributePage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  // Status filter (2026-07-07): 全部 / 已登录 / 待登录 / 已失效. `inactive` folds
+  // auth_failed + revoked. Pill labels reuse the status-chip i18n so the filter
+  // names match the table's 状态 column exactly.
+  const [statusFilter, setStatusFilter] =
+    useState<'all' | 'logged_in' | 'needs_login' | 'inactive'>('all');
   // Which routed account's sign-in panel is open, by credential_id. A member in
   // MULTIPLE pools has one routed account PER pool (2026-07-01) — each must expand
   // independently, so this is a per-account id, not a single shared boolean.
@@ -142,11 +174,28 @@ export default function OAuthContributePage() {
 
   const filtered = useMemo(
     () =>
-      accounts.filter((a) =>
-        a.identity.toLowerCase().includes(search.trim().toLowerCase()),
-      ),
-    [accounts, search],
+      accounts.filter((a) => {
+        if (statusFilter !== 'all') {
+          const ok = statusFilter === 'inactive'
+            ? isInactiveStatus(a.status)
+            : a.status === statusFilter;
+          if (!ok) return false;
+        }
+        return a.identity.toLowerCase().includes(search.trim().toLowerCase());
+      }),
+    [accounts, search, statusFilter],
   );
+  // Pill counts — off the UNfiltered list so each pill shows its own total
+  // regardless of the active filter (mirrors the vault FilterStrip).
+  const statusCounts = useMemo(() => {
+    const c = { all: accounts.length, logged_in: 0, needs_login: 0, inactive: 0 };
+    for (const a of accounts) {
+      if (a.status === 'logged_in') c.logged_in += 1;
+      else if (a.status === 'needs_login') c.needs_login += 1;
+      else if (isInactiveStatus(a.status)) c.inactive += 1;
+    }
+    return c;
+  }, [accounts]);
   const routed = accounts.find((a) => a.is_routed);
 
   const ready = !listQ.isLoading && !fetchErr;
@@ -180,6 +229,11 @@ export default function OAuthContributePage() {
             <button
               type="button"
               className="row-use-btn ml-auto flex-shrink-0"
+              /* Slightly taller than the base row-use-btn (28px) — this is a
+                 header CTA, not a table-row action, so it can read a bit larger.
+                 Inline height override (2026-07-07) beats the two-level
+                 `.vault-page .row-use-btn` rule without touching the shared class. */
+              style={{ height: 34 }}
               onClick={() => setShowAdd(true)}
             >
               <PlusIcon className="w-3 h-3" />
@@ -204,20 +258,52 @@ export default function OAuthContributePage() {
             />
           )}
 
-          {/* Search — only meaningful once there's history to filter. */}
+          {/* Search + status filter — only meaningful once there's history. */}
           {ready && accounts.length > 0 && (
-            <div className="relative">
-              <SearchIcon
-                className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                style={{ color: 'var(--muted-foreground)' }}
-              />
-              <input
-                type="text"
-                className="pl-10 pr-3 py-2 text-sm w-96"
-                placeholder={t('oauthContribute.searchPlaceholder')}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="relative">
+                <SearchIcon
+                  className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: 'var(--muted-foreground)' }}
+                />
+                <input
+                  type="text"
+                  className="pl-10 pr-3 py-2 text-sm w-96"
+                  placeholder={t('oauthContribute.searchPlaceholder')}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <div
+                className="filter-group"
+                role="radiogroup"
+                aria-label={t('oauthContribute.filterByStatusAria')}
+              >
+                <StatusFilterPill
+                  active={statusFilter === 'all'}
+                  onClick={() => setStatusFilter('all')}
+                  label={t('oauthContribute.filterAll')}
+                  count={statusCounts.all}
+                />
+                <StatusFilterPill
+                  active={statusFilter === 'logged_in'}
+                  onClick={() => setStatusFilter('logged_in')}
+                  label={t('oauthContribute.status.logged_in')}
+                  count={statusCounts.logged_in}
+                />
+                <StatusFilterPill
+                  active={statusFilter === 'needs_login'}
+                  onClick={() => setStatusFilter('needs_login')}
+                  label={t('oauthContribute.status.needs_login')}
+                  count={statusCounts.needs_login}
+                />
+                <StatusFilterPill
+                  active={statusFilter === 'inactive'}
+                  onClick={() => setStatusFilter('inactive')}
+                  label={t('oauthContribute.filterInactive')}
+                  count={statusCounts.inactive}
+                />
+              </div>
             </div>
           )}
 
@@ -735,27 +821,51 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
   const canSubmit =
     !!email.trim() && !!password && !!selectedGroup && !addMut.isPending;
 
+  // ModalPortal (2026-07-08 bugfix): rendered inline, this modal sat as a
+  // DIRECT CHILD of the page's `space-y-5` container — Tailwind's sibling
+  // rule applies margin-top to position:fixed boxes too, shoving the mask
+  // 20px down (uncovered strip at the top). scopeClassName="vault-page" is
+  // REQUIRED, not decorative: this page's card / input / button styles are
+  // scoped under `.vault-page ...` in KEYS_PAGE_CSS, and the portal moves
+  // the modal out of the page wrapper (without it the modal renders
+  // unstyled — transparent card, UA-default white inputs; regression caught
+  // by user 2026-07-08). Full background: shared/ui/ModalShell.tsx docstring.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
-      onClick={onClose}
-    >
+    <ModalPortal scopeClassName="vault-page">
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center"
+        style={{ background: 'rgba(0,0,0,0.5)' }}
+        onClick={onClose}
+      >
       <div
         className="card w-[440px] max-w-[92vw] p-5 space-y-4"
         style={{ background: 'var(--surface-1)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div>
-          <div
-            className="text-base font-bold font-mono tracking-wide"
-            style={{ color: 'var(--display-foreground)' }}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div
+              className="text-base font-bold font-mono tracking-wide"
+              style={{ color: 'var(--display-foreground)' }}
+            >
+              {t('oauthContribute.addTitle')}
+            </div>
+            <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>
+              {t('oauthContribute.addSubtitle')}
+            </div>
+          </div>
+          {/* Header close X (2026-07-08, user request): overlay-click and the
+              footer Cancel both exist but are invisible affordances — the X
+              matches the master dialogs' pattern (bindings / packs). */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('oauthContribute.addClose')}
+            className="flex-shrink-0 mt-0.5"
+            style={{ color: 'var(--muted-foreground)' }}
           >
-            {t('oauthContribute.addTitle')}
-          </div>
-          <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>
-            {t('oauthContribute.addSubtitle')}
-          </div>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
         </div>
 
         {/* Provider picker (R34 codex pools): which provider this account belongs
@@ -873,7 +983,8 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </ModalPortal>
   );
 }
 

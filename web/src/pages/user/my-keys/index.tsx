@@ -10,12 +10,13 @@ import React, { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { deliveryApi, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
 import { PageHeader } from '@/shared/ui/PageHeader';
+import { ModalPortal } from '@/shared/ui/ModalShell';
 
 // ── Summary modal ─────────────────────────────────────────────────────────────
 
 function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: () => void }) {
   return (
-    <>
+    <ModalPortal>
       <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }} />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded border"
@@ -94,7 +95,7 @@ function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: (
           <button onClick={onClose} className="btn btn-primary text-xs px-6 py-2">Close</button>
         </div>
       </div>
-    </>
+    </ModalPortal>
   );
 }
 

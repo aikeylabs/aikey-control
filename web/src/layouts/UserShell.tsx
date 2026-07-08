@@ -1029,15 +1029,6 @@ export function UserShell() {
             `padding:0; justify-content:center` so the icon-only mode
             still centers properly. */}
         <div className="nav-brand h-20 flex items-center justify-start pl-[40px] relative flex-shrink-0">
-          <div
-            className="absolute top-0 left-0 w-full h-px"
-            aria-hidden="true"
-            style={{
-              backgroundColor: 'var(--primary)',
-              opacity: 0.5,
-              boxShadow: '0 0 10px rgba(250,204,21,0.5)',
-            }}
-          />
           {/* Logo aligned with aikeylabs.com main site (2026-05-23):
               32x32 "AK" letterform box + Space Grotesk display font for
               the "AiKey" word, tracking-tight. Replaces the previous
