@@ -374,7 +374,18 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   'team-oauth': { label: 'Team OAuth' },
   vault:          { label: 'Vault',      originName: 'My Vault' },
   'usage-ledger': { label: 'Usage',      originName: 'Usage Ledger' },
+  // 2026-07-08: team-usage-ledger + performance were absent here, so the
+  // top breadcrumb fell back to the raw URL segment ("用户 / performance")
+  // instead of the localized nav label — the sidebar was fine because it
+  // reads navGroups. Labels must match navGroups so tNavLabel resolves the
+  // same i18n key (navTeamUsage / navPerformance). performance keeps
+  // originName 'Cost' (URL renamed /user/cost → /user/performance 2026-05-21)
+  // so data-origin-name selectors stay in lockstep with the sidebar item.
+  'team-usage-ledger': { label: 'Team Usage' },
+  performance:    { label: 'Performance', originName: 'Cost' },
   'usage-detail': { label: 'Usage Detail' },
+  apps:           { label: 'Apps',        originName: 'Connected Apps' },
+  invites:        { label: 'Invites' },
   'trust-check':  { label: 'Trust Check' },
   compliance:     { label: 'Compliance Audit' },
   // Phase 4G (2026-06-01): Web Console Settings page breadcrumb label.

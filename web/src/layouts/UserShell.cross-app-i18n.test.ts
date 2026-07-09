@@ -160,3 +160,71 @@ describe('cross-app menu i18n coverage', () => {
     expect(broken, `navGroups labels without resolvable i18n: ${broken.join(', ')}`).toEqual([]);
   });
 });
+
+/**
+ * Top-breadcrumb i18n coverage fence (2026-07-08 bugfix).
+ *
+ * Bug: the top-bar breadcrumb on /user/performance and /user/team-usage-ledger
+ * showed the raw URL segment ("用户 / performance") instead of the localized
+ * label. The breadcrumb resolves its label from ROUTE_LABELS keyed by URL
+ * segment (useBreadcrumbTrail), then localizes via tNavLabel → NAV_LABEL_I18N_KEY.
+ * These two segments (and apps/invites) were simply MISSING from ROUTE_LABELS,
+ * so it fell back to `{ label: <segment> }`; tNavLabel can't map a lowercase
+ * slug and returned it verbatim. The sidebar was fine (it reads navGroups, not
+ * ROUTE_LABELS) which is why only the breadcrumb was half-translated.
+ *
+ * Invariant: every sidebar navGroups path has a ROUTE_LABELS entry whose label
+ * maps through NAV_LABEL_I18N_KEY to a key present in BOTH en and zh — so a NEW
+ * page added to navGroups without its ROUTE_LABELS/i18n fails CI instead of
+ * silently shipping an English breadcrumb.
+ *
+ * See workflow/CI/bugfix/2026-07-08-breadcrumb-missing-i18n.md.
+ */
+describe('top-breadcrumb i18n coverage', () => {
+  /** URL segments of navGroups items (path: '/user/<segment>'). */
+  function extractNavPaths(src: string): string[] {
+    const out: string[] = [];
+    const re = /path:\s*['"`]\/user\/([\w-]+)['"`]/g;
+    let e: RegExpExecArray | null;
+    while ((e = re.exec(src))) out.push(e[1]);
+    return Array.from(new Set(out));
+  }
+
+  /** ROUTE_LABELS: URL segment → English label. Keys may be quoted
+   *  ('team-usage-ledger') or bare (performance). */
+  function extractRouteLabels(src: string): Record<string, string> {
+    const m = src.match(/const\s+ROUTE_LABELS[^=]*=\s*\{([\s\S]*?)\n\};/);
+    if (!m) return {};
+    const out: Record<string, string> = {};
+    const re = /['"`]?([\w-]+)['"`]?\s*:\s*\{\s*label:\s*['"`]([^'"`]+)['"`]/g;
+    let e: RegExpExecArray | null;
+    while ((e = re.exec(m[1]))) out[e[1]] = e[2];
+    return out;
+  }
+
+  const shell = read(SHELL);
+  const navPaths = extractNavPaths(shell);
+  const routeLabels = extractRouteLabels(shell);
+  const navLabelMap = extractNavLabelMap(shell);
+  const en = JSON.parse(read(EN));
+  const zh = JSON.parse(read(ZH));
+
+  it('extracts non-trivial nav paths + route labels (guards regex rot)', () => {
+    expect(navPaths.length).toBeGreaterThan(8);
+    expect(Object.keys(routeLabels).length).toBeGreaterThan(8);
+  });
+
+  it('every sidebar path has a localizable breadcrumb label in en+zh', () => {
+    const broken: string[] = [];
+    for (const seg of navPaths) {
+      const label = routeLabels[seg];
+      if (!label) { broken.push(`no ROUTE_LABELS entry for "/user/${seg}"`); continue; }
+      const sub = navLabelMap[label];
+      if (!sub) { broken.push(`ROUTE_LABELS["${seg}"].label "${label}" unmapped in NAV_LABEL_I18N_KEY`); continue; }
+      const key = `userShell.${sub}`;
+      if (typeof resolve(en, key) !== 'string') broken.push(`en:${seg}→${key}`);
+      if (typeof resolve(zh, key) !== 'string') broken.push(`zh:${seg}→${key}`);
+    }
+    expect(broken, `breadcrumb i18n gaps: ${broken.join(', ')}`).toEqual([]);
+  });
+});
