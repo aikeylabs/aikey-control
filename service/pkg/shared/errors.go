@@ -267,6 +267,9 @@ const (
 	CodeBizLoginSessionTerminated = "BIZ_LOGIN_SESSION_TERMINATED"
 	CodeBizLoginTokenInvalid      = "BIZ_LOGIN_TOKEN_INVALID"
 	CodeBizLoginTokenAlreadyUsed  = "BIZ_LOGIN_TOKEN_ALREADY_USED"
+	// Log-only code: an approval owner failed and the best-effort transition to
+	// denied also failed. It is never returned over the public login protocol.
+	CodeBizLoginApprovalCleanupFailed = "BIZ_LOGIN_APPROVAL_CLEANUP_FAILED"
 	// CodeBizJoinTokenInvalid: the org join token presented at digital-employee
 	// self-registration is unknown, revoked, or expired (v1.0.1-alpha.2).
 	CodeBizJoinTokenInvalid    = "BIZ_JOIN_TOKEN_INVALID"
@@ -274,11 +277,13 @@ const (
 	CodeBizRefreshTokenRevoked = "BIZ_REFRESH_TOKEN_REVOKED"
 
 	// BIZ — Member SSO
-	CodeBizSSOProviderDisabled = "BIZ_SSO_PROVIDER_DISABLED"
-	CodeBizSSOStateInvalid     = "BIZ_SSO_STATE_INVALID"
-	CodeBizSSOExchangeFailed   = "BIZ_SSO_EXCHANGE_FAILED"
-	CodeBizSSOTenantMismatch   = "BIZ_SSO_TENANT_MISMATCH"
-	CodeBizSSOIdentityConflict = "BIZ_SSO_IDENTITY_CONFLICT"
+	CodeBizSSOProviderDisabled    = "BIZ_SSO_PROVIDER_DISABLED"
+	CodeBizSSOStateInvalid        = "BIZ_SSO_STATE_INVALID"
+	CodeBizSSOExchangeFailed      = "BIZ_SSO_EXCHANGE_FAILED"
+	CodeBizSSOTenantMismatch      = "BIZ_SSO_TENANT_MISMATCH"
+	CodeBizSSOIdentityConflict    = "BIZ_SSO_IDENTITY_CONFLICT"
+	CodeBizSSOUserInfoIncomplete  = "BIZ_SSO_USERINFO_INCOMPLETE"
+	CodeBizSSOAliasBackfillFailed = "BIZ_SSO_ALIAS_BACKFILL_FAILED"
 
 	// BIZ — unique-conflict specialisations
 	CodeBizBindAliasTaken = "BIZ_BIND_ALIAS_TAKEN"

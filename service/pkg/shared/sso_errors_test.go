@@ -35,7 +35,7 @@ func TestSSOErrorHTTPStatuses(t *testing.T) {
 		CodeBizSSOExchangeFailed:   http.StatusBadGateway,
 	}
 	for code, want := range cases {
-		if got := domainErrorStatus(code); got != want {
+		if got := DomainErrorHTTPStatus(code); got != want {
 			t.Errorf("domainErrorStatus(%q) = %d, want %d", code, got, want)
 		}
 	}

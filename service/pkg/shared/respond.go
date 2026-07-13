@@ -47,10 +47,13 @@ func DomainErrorResponse(w http.ResponseWriter, err *DomainError) {
 		}
 		slog.Debug("domain error internal detail (stripped from response)", attrs...)
 	}
-	JSON(w, domainErrorStatus(err.Code), err.LocalizedResponseBody(LocaleFromWriter(w)))
+	JSON(w, DomainErrorHTTPStatus(err.Code), err.LocalizedResponseBody(LocaleFromWriter(w)))
 }
 
-func domainErrorStatus(code string) int {
+// DomainErrorHTTPStatus is the single HTTP status mapping for JSON and HTML
+// transports. Keeping it exported prevents an HTML handler from inventing a
+// second status contract for the same domain error code.
+func DomainErrorHTTPStatus(code string) int {
 	switch code {
 	// ── 400 Bad Request ────────────────────────────────────────────────────────
 	// CodeBizAuthWrongCurrentPwd / CodeBizAuthWeakPassword (added 2026-06-02):
