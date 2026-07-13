@@ -33,12 +33,12 @@ const SUGGESTIONS: Record<string, string> = {
   BIZ_AUTH_TOKEN_NOT_ACTIVE:    'This virtual key is not in an active state. Check its status on your keys page.',
   BIZ_AUTH_ACCESS_DENIED:       'You do not have permission to perform this action. Contact your administrator.',
 
-	// BIZ — Member SSO
-	BIZ_SSO_PROVIDER_DISABLED: 'Ask your administrator to enable and configure this SSO provider.',
-	BIZ_SSO_STATE_INVALID:     'Restart aikey login and begin a new SSO attempt.',
-	BIZ_SSO_EXCHANGE_FAILED:   'Try signing in again. If the problem continues, ask your administrator to verify the SSO configuration.',
-	BIZ_SSO_TENANT_MISMATCH:   'Use an account from your organization’s configured SSO tenant.',
-	BIZ_SSO_IDENTITY_CONFLICT: 'Sign in with the account already linked to this SSO identity or contact your administrator.',
+  // BIZ — Member SSO
+  BIZ_SSO_PROVIDER_DISABLED: 'Ask your administrator to enable and configure this SSO provider.',
+  BIZ_SSO_STATE_INVALID:     'Restart aikey login and begin a new SSO attempt.',
+  BIZ_SSO_EXCHANGE_FAILED:   'Try signing in again. If the problem continues, ask your administrator to verify the SSO configuration.',
+  BIZ_SSO_TENANT_MISMATCH:   'Use an account from your organization’s configured SSO tenant.',
+  BIZ_SSO_IDENTITY_CONFLICT: 'Sign in with the account already linked to this SSO identity or contact your administrator.',
 
   // BIZ — Org
   BIZ_ORG_NOT_FOUND: 'The organization was not found. It may have been deleted or the ID is incorrect.',
