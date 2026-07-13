@@ -48,8 +48,12 @@ import {
   HookWireRcModal,
   useHookWireRcModal,
 } from '@/shared/components/HookWireRcModal';
+import {
+  DesktopConsentModal,
+  useDesktopConsentModal,
+} from '@/shared/components/DesktopConsentModal';
 import { friendlyTestError } from './friendlyTestError';
-import { displayProtocolFamily } from '@/shared/api/user/protocolFamily';
+import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
 import { ENTRY_BY_FAMILY } from '@/shared/generated/provider-registry';
@@ -865,6 +869,10 @@ export default function UserVaultPage() {
   // The hook is local-edition gated and session-throttled internally —
   // see useHookWireRcModal in HookWireRcModal.tsx.
   const wireRcModal = useHookWireRcModal();
+  // Claude Desktop takeover consent (阶段7, 2026-07-13): auto-pops when a
+  // `use` on a claude credential reports desktop_switch.needs_consent.
+  // Local-edition gated inside the hook, same as wireRcModal.
+  const desktopModal = useDesktopConsentModal();
 
   const renameMut = useMutation({
     mutationFn: vaultApi.rename,
@@ -964,6 +972,10 @@ export default function UserVaultPage() {
       const r = pickHookReadiness(res);
       setHookReadinessFromMutation(r);
       wireRcModal.openIfNeeded(r, true);
+      // Claude Desktop consent (阶段7): pops only on needs_consent — a
+      // normal credential switch under an existing takeover is a no-op
+      // (D1/D3) and stays silent here.
+      desktopModal.openIfNeeded(res);
       qc.invalidateQueries({ queryKey: ['vault-list'] });
     },
   });
@@ -1075,7 +1087,7 @@ export default function UserVaultPage() {
             return n;
           });
         },
-        onSuccess: () => {
+        onSuccess: (res) => {
           // Flash route-pulse once (650ms window matches .just-switched CSS).
           setJustSwitchedIds((prev) => {
             const n = new Set(prev);
@@ -1092,10 +1104,20 @@ export default function UserVaultPage() {
           const providerTag = providerDisplayName(target).toUpperCase();
           const aliasLabel = target.alias ?? '(unnamed)';
           const cli = 'aikey use ' + (target.alias ?? '');
+          // Desktop is a cold-switch surface: when THIS use changed its
+          // config (restart_required), say so in the toast sub — the
+          // `cliHint` field is not rendered by the toast row, only `sub`
+          // is (阶段7 plan §5.3).
+          const desktopHint = res.desktop_switch?.restart_required
+            ? ' · ' + t('vault.desktopRestartHint')
+            : '';
           pushToast({
             kind: 'success',
             title: providerTag + ' now routes through ' + aliasLabel,
-            sub: (previousForUndo ? 'was ' + (previousForUndo.alias ?? '(unnamed)') + ' · ' : '') + cli,
+            sub:
+              (previousForUndo ? 'was ' + (previousForUndo.alias ?? '(unnamed)') + ' · ' : '') +
+              cli +
+              desktopHint,
             cliHint: cli,
             // Undo routes the same group context — the previous holder was
             // active for THIS group before we replaced it, so re-applying it
@@ -1553,6 +1575,24 @@ export default function UserVaultPage() {
               session-persistent fallback / re-opener). */}
           <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
           <HookWireRcModal open={wireRcModal.open} onClose={wireRcModal.close} />
+          <DesktopConsentModal
+            open={desktopModal.open}
+            replay={desktopModal.replay}
+            onClose={desktopModal.close}
+            onGranted={(d) => {
+              // Granted replay finished: refresh the list (binding state is
+              // idempotent but cheap to re-read) and surface the cold-switch
+              // hint — takeover only takes effect after a Desktop restart.
+              qc.invalidateQueries({ queryKey: ['vault-list'] });
+              if (d?.restart_required) {
+                pushToast({
+                  kind: 'success',
+                  title: t('vault.desktopConsentTitle'),
+                  sub: t('vault.desktopRestartHint'),
+                });
+              }
+            }}
+          />
           {/* Phase 3A-2 team-fetch banner: surfaces categorical errors
               (not-logged-in / unauth / unreachable / parse-error) above
               the page so the user understands why the Team rows are
