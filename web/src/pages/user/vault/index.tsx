@@ -2374,10 +2374,12 @@ function FilterPill({
 
 // ── Team fetch banner ────────────────────────────────────────────────────
 //
-// Phase 3A-2: surfaces the team-vault store's failure modes above the table
-// so users know WHY their team keys aren't showing (vs. a silent empty
-// "Team" filter). The four failure kinds map to distinct UX surfaces per
-// design decision 6 (roadmap update 20260511 §6):
+// Phase 3A-2, semantics revised by Phase 3B (2026-05-11): team rows are
+// displayed from the CLI's local vault cache and stay visible/usable while
+// the team server is offline — this banner only reports that the
+// reachability probe failed, i.e. sync of new issuance/revocation/status is
+// paused. It must NOT claim keys are hidden. The four failure kinds map to
+// distinct UX surfaces per design decision 6 (roadmap update 20260511 §6):
 //
 //   - not-logged-in:  user hasn't run `aikey login` yet against any team
 //                     server. NOT shown — most personal-edition users will

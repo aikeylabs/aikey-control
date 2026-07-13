@@ -284,7 +284,7 @@
     "teamSessionExpiredBody": "你的团队服务器会话已失效。请重新运行",
     "teamSessionExpiredBodyTail": "（在终端中执行）以刷新会话，然后重试。",
     "teamUnreachableBody": "无法连接到你的团队服务器",
-    "teamUnreachableBodyTail": "。在服务器恢复在线之前，团队密钥将被隐藏。",
+    "teamUnreachableBodyTail": "。本地已缓存的团队密钥仍可正常使用，但在服务器恢复在线之前，无法同步最新的签发、吊销与状态变更。",
     "teamParseErrorBody": "团队服务器有响应，但返回内容无法解析",
     "teamParseErrorBodyTail": "。这通常是临时的版本不匹配所致。",
     "retryTeamFetchTitle": "重新拉取团队密钥",

@@ -360,7 +360,10 @@ func (h *Handlers) Register(
 	}
 }
 
-// RegisterHook mounts POST /api/user/hook/install behind authMW.
+// RegisterHook mounts the hook-op routes behind authMW:
+//
+//	POST /api/user/hook/install — wire-rc (writes rc with modal consent)
+//	GET  /api/user/hook/status  — read-only readiness probe (2026-07-10)
 //
 // **Edition guard**: callers MUST only invoke this on local-user /
 // trial-full editions (i.e., wherever the trial-server / local-server
@@ -378,4 +381,6 @@ func (h *Handlers) RegisterHook(mux *http.ServeMux, authMW func(http.Handler) ht
 	}
 	mux.Handle("POST /api/user/hook/install",
 		authMW(http.HandlerFunc(h.Hook.InstallHandler)))
+	mux.Handle("GET /api/user/hook/status",
+		authMW(http.HandlerFunc(h.Hook.StatusHandler)))
 }

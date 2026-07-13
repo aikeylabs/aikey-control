@@ -25,8 +25,9 @@ import (
 
 // Handlers exposes the HTTP surface for hook-op actions.
 //
-// Currently the only action is wire-rc (POST /api/user/hook/install).
-// Future additions (uninstall-rc, status-rc) plug in here.
+// Actions: wire-rc (POST /api/user/hook/install) and status
+// (GET /api/user/hook/status, read-only). Future additions
+// (uninstall-rc) plug in here.
 type Handlers struct {
 	Bridge *cli.Bridge
 	Logger *slog.Logger
@@ -68,6 +69,37 @@ func (h *Handlers) InstallHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := h.Bridge.InvokeHookOp(r.Context(), "wire-rc", "")
+	if err != nil {
+		cli.WriteInvokeError(w, err)
+		return
+	}
+	if res.Status != "ok" {
+		cli.WriteCliError(w, res)
+		return
+	}
+	cli.WriteEnvelope(w, res)
+}
+
+// StatusHandler implements GET /api/user/hook/status.
+//
+// Read-only readiness probe (2026-07-10): the SPA's <HookReadinessBanner>
+// calls this on page load so the "terminal auto-sync is off" state survives
+// a refresh — previously readiness only arrived piggybacked on vault
+// mutation envelopes and evaporated with the page. Returns the same
+// three-field envelope as InstallHandler (hook_file_installed /
+// hook_rc_wired / hook_failure_reason), so the SPA's pickHookReadiness
+// consumes both without branching.
+//
+// The CLI side (`aikey _internal hook-op status` → hook_status_probe) is
+// guaranteed read-only — a GET that writes user dotfiles would be a covert
+// write. Same edition guard + authMW as InstallHandler via RegisterHook.
+func (h *Handlers) StatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		cli.WriteErr(w, cli.ErrBadRequest, "method must be GET")
+		return
+	}
+
+	res, err := h.Bridge.InvokeHookOp(r.Context(), "status", "")
 	if err != nil {
 		cli.WriteInvokeError(w, err)
 		return

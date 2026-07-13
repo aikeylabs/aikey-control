@@ -284,7 +284,7 @@
     "teamSessionExpiredBody": "Your team-server session is no longer valid. Re-run",
     "teamSessionExpiredBodyTail": "in a terminal to refresh,\n          then retry.",
     "teamUnreachableBody": "Could not reach your team server",
-    "teamUnreachableBodyTail": ". Team keys are hidden until the server is back online.",
+    "teamUnreachableBodyTail": ". Locally cached team keys keep working, but new issuance, revocation, and status changes won't sync until the server is back online.",
     "teamParseErrorBody": "The team server responded but the payload could not be parsed",
     "teamParseErrorBodyTail": ". This is usually a transient version mismatch.",
     "retryTeamFetchTitle": "Retry team-keys fetch",

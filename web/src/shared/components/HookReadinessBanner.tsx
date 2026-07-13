@@ -1,28 +1,71 @@
 /**
  * HookReadinessBanner — Hook coverage v1 §2.4 banner state machine.
  *
- * Shown in /user/vault and /user/virtual-keys when the most recent
- * vault mutation reports the active-state cross-shell sync hook is
- * not fully wired.
+ * Shown in /user/vault, /user/virtual-keys and /user/import when terminal
+ * auto-sync (the shell hook) is not fully wired.
  *
- * State machine (matches plan §2.4 table):
+ * State machine (see hookBannerKind in @/store):
  *   wired              → no banner (zero DOM)
- *   almost-ready       → "Run aikey hook install" CTA (Web-only flow case)
- *   shell-undetectable → "$SHELL is not zsh/bash" CTA with --shell hint
+ *   almost-ready       → NON-dismissible action banner (2026-07-10
+ *                        escalation) — one click fixes it, and while it is
+ *                        unfixed every key the user activates on the Web
+ *                        silently never reaches their CLI. Uses the gold
+ *                        "needs action" visual language of the vault/import
+ *                        unlock banners (.unlock-banner.locked anchor).
+ *   shell-undetectable → dismissible — can't be fixed from the browser
+ *   env-misconfigured  → dismissible — service env problem
+ *   io-error           → dismissible — fs/permission problem
  *   disabled           → no banner (user opted out via AIKEY_NO_HOOK=1)
- *   io-error           → fs / permission failure, link to troubleshooting
  *
- * Dismissal lives in sessionStorage so it doesn't leak across browser
- * sessions — a user who never wires rc will see the banner again next
- * time they open Web. Persistent storage would let dismissal mask a
- * real ongoing problem.
+ * Readiness bootstrap (2026-07-10): on mount (and on tab re-focus, 30s
+ * throttle) the banner asks GET /api/user/hook/status so the state
+ * survives a page refresh — previously readiness only arrived on vault
+ * mutation envelopes and a reload blanked the banner even though nothing
+ * was wired. Probe failures degrade silently to the old behavior.
+ *
+ * Dismissal (for the dismissible kinds) lives in sessionStorage so it
+ * doesn't leak across browser sessions.
  */
 import { useEffect, useState } from 'react';
-import { useHookReadinessStore, hookBannerKind } from '@/store';
+import {
+  useHookReadinessStore,
+  hookBannerKind,
+  bannerPolicy,
+  probedReadinessIsAuthoritative,
+} from '@/store';
+import { hookApi } from '@/shared/api/user/hook';
+import { pickHookReadiness } from '@/shared/api/user/vault';
 import { copyText } from '@/shared/utils/clipboard';
 import { isWindowsClient } from '@/shared/utils/platform';
+import { isLocalEdition } from './HookWireRcModal';
 
 const SESSION_DISMISS_KEY = 'aikey:hookReadinessBannerDismissed';
+
+// Module-level probe throttle: the banner is mounted by three pages, and a
+// per-component ref would re-probe on every navigation. 30s is enough to
+// pick up "user ran `aikey hook install` in a terminal, then came back".
+const PROBE_THROTTLE_MS = 30_000;
+let lastProbeAt = 0;
+
+async function probeStatusIntoStore(force = false) {
+  if (!isLocalEdition()) return;
+  const now = Date.now();
+  if (!force && now - lastProbeAt < PROBE_THROTTLE_MS) return;
+  lastProbeAt = now;
+  try {
+    const res = await hookApi.status();
+    const r = pickHookReadiness(res);
+    // Fresh-install pre-first-use state (file never rendered, no failure)
+    // is NOT a failure — abstain instead of raising a false io-error
+    // banner. See probedReadinessIsAuthoritative docs.
+    if (!probedReadinessIsAuthoritative(r)) return;
+    useHookReadinessStore.getState().setReadiness(r);
+  } catch {
+    // Read-only observability probe — a failure must not create noise of
+    // its own. Fall back to mutation-envelope updates (pre-2026-07-10
+    // behavior).
+  }
+}
 
 interface HookReadinessBannerProps {
   /**
@@ -44,13 +87,26 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
     return window.sessionStorage.getItem(SESSION_DISMISS_KEY) === '1';
   });
 
-  // Re-read sessionStorage when the page is brought back to focus so a
-  // user who dismisses + opens a new tab sees consistent behavior.
+  // Bootstrap probe: fill the store on first mount of a session so the
+  // banner state survives page refresh (readiness is not persisted).
+  useEffect(() => {
+    if (useHookReadinessStore.getState().readiness === null) {
+      void probeStatusIntoStore(true);
+    }
+  }, []);
+
+  // Re-read sessionStorage + re-probe when the tab regains focus so a user
+  // who fixes wiring in a terminal sees the banner clear without a manual
+  // refresh (30s throttle inside the probe).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const onVis = () => {
       if (document.visibilityState === 'visible') {
         setDismissed(window.sessionStorage.getItem(SESSION_DISMISS_KEY) === '1');
+        const current = hookBannerKind(useHookReadinessStore.getState().readiness);
+        if (current !== 'wired' && current !== 'disabled') {
+          void probeStatusIntoStore();
+        }
       }
     };
     document.addEventListener('visibilitychange', onVis);
@@ -58,7 +114,10 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
   }, []);
 
   const kind = hookBannerKind(readiness);
-  if (kind === 'wired' || kind === 'disabled' || dismissed) return null;
+  const { dismissible } = bannerPolicy(kind);
+  // Non-dismissible kinds ignore an earlier dismissal recorded while the
+  // banner showed a dismissible kind — the escalation must win.
+  if (kind === 'wired' || kind === 'disabled' || (dismissed && dismissible)) return null;
 
   const handleDismiss = () => {
     if (typeof window !== 'undefined') {
@@ -85,24 +144,27 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
   const rcName = onWindows ? 'your PowerShell $PROFILE' : '~/.zshrc';
   switch (kind) {
     case 'almost-ready':
-      title = 'Almost ready — terminal auto-sync needs one more step';
+      // Consequence-oriented title (2026-07-10): "Almost ready" framed the
+      // unwired state as safely postponable; the actual consequence is that
+      // Web-activated keys never reach the CLI. Say that.
+      title = "Terminal auto-sync is off — keys you activate here won't reach your CLI yet";
       if (onEnableClick) {
         body =
-          "Hook file installed but your shell profile isn't wired yet. " +
+          'Every `Use` on this page only takes effect in your terminal after auto-sync is on. ' +
           `Click below to inject a small managed block into ${rcName} — we'll show you exactly what before changing anything. ` +
           'You can also run `aikey hook install` from any terminal.';
         ctaAction = { label: 'Enable auto-sync', onClick: onEnableClick };
       } else {
         body =
-          "Hook file installed but your shell profile isn't wired yet. Run the command below " +
-          `once to enable auto-sync (it will prompt before modifying ${rcName}).`;
+          'Every `Use` on this page only takes effect in your terminal after auto-sync is on. ' +
+          `Run the command below once to enable it (it will prompt before modifying ${rcName}).`;
         cta = { label: 'Copy command', command: 'aikey hook install' };
       }
       break;
     case 'shell-undetectable':
       title = 'The service environment did not expose a recognizable shell';
       body =
-        'Hook file install was skipped because the service environment had no recognizable shell. ' +
+        'Terminal auto-sync setup was skipped because the service environment had no recognizable shell. ' +
         'Run the command below from your terminal to choose explicitly.';
       cta = {
         label: 'Copy command',
@@ -116,14 +178,14 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
       // (containerized / systemd unit missing User= setup).
       title = "Trial server's $HOME isn't set";
       body =
-        'Hook file install needs $HOME to know where to write. The Web bridge ran ' +
+        'Terminal auto-sync setup needs $HOME to know where to write. The Web bridge ran ' +
         'with no HOME — common in container / systemd contexts. Fix the service env ' +
         'and rerun, or install from a regular terminal session below.';
       cta = { label: 'Copy command', command: 'aikey hook install' };
       break;
     case 'io-error':
     default:
-      title = 'Hook install ran into a filesystem error';
+      title = 'Terminal auto-sync setup ran into a filesystem error';
       body =
         `The Web bridge could not write ~/.aikey/${onWindows ? 'hook.ps1' : 'hook.zsh'}. ` +
         'Check ~/.aikey/ permissions, then run the command below.';
@@ -132,7 +194,7 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
   }
 
   return (
-    <div className="hook-readiness-banner">
+    <div className={`hook-readiness-banner${dismissible ? '' : ' hook-readiness-action'}`}>
       <div className="hook-readiness-content">
         <div className="hook-readiness-text">
           <strong>{title}</strong>
@@ -158,14 +220,16 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
               {cta.label}
             </button>
           )}
-          <button
-            type="button"
-            className="hook-readiness-dismiss"
-            onClick={handleDismiss}
-            aria-label="Dismiss banner"
-          >
-            Dismiss
-          </button>
+          {dismissible && (
+            <button
+              type="button"
+              className="hook-readiness-dismiss"
+              onClick={handleDismiss}
+              aria-label="Dismiss banner"
+            >
+              Dismiss
+            </button>
+          )}
         </div>
       </div>
       <style>{HOOK_READINESS_CSS}</style>
@@ -181,6 +245,15 @@ const HOOK_READINESS_CSS = `
   border-radius: 4px;
   background: var(--surface-warn, rgba(234, 179, 8, 0.08));
   color: var(--text);
+}
+/* almost-ready escalation (2026-07-10): reuse the gold "needs action"
+   language of .unlock-banner.locked (keys-page-css.ts) — gradient +
+   primary inset rail — instead of inventing a new alarm style. Gold, not
+   red: unwired auto-sync is a gated state, not a failure. */
+.hook-readiness-banner.hook-readiness-action {
+  background: linear-gradient(90deg, rgba(250, 204, 21, 0.08) 0%, rgba(250, 204, 21, 0.02) 100%);
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  box-shadow: inset 3px 0 0 0 var(--primary);
 }
 .hook-readiness-content {
   display: flex;

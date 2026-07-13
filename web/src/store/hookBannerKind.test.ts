@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { hookBannerKind } from './index';
+import { hookBannerKind, bannerPolicy, probedReadinessIsAuthoritative } from './index';
+import type { HookBannerKind } from './index';
 
 /**
  * Hook coverage v1 §2.4 banner state machine. Pure-function tests pin
@@ -24,10 +25,11 @@ describe('hookBannerKind', () => {
     ).toBe('almost-ready');
   });
 
-  it('fileInstalled wins over failureReason when present', () => {
+  it('fileInstalled wins over failureReason when present (except aikey_no_hook)', () => {
     // Defensive: if a backend bug ever sends file=true with a non-null
     // reason, prefer the file=true branch so we don't show an error
-    // banner for a working hook.
+    // banner for a working hook. aikey_no_hook is the deliberate
+    // exception — see the opt-out precedence test below.
     expect(
       hookBannerKind({
         fileInstalled: true,
@@ -35,6 +37,28 @@ describe('hookBannerKind', () => {
         failureReason: 'io_error',
       }),
     ).toBe('almost-ready');
+  });
+
+  it('reason=aikey_no_hook wins over EVERYTHING → disabled (opt-out precedence, 2026-07-10)', () => {
+    // The read-only GET /api/user/hook/status probe reports REAL file/rc
+    // state alongside reason=aikey_no_hook. Without this precedence an
+    // opted-out user with a stale hook file would get the (now
+    // non-dismissible) almost-ready banner — the exact opposite of what
+    // AIKEY_NO_HOOK=1 promises. Silence is the contract.
+    expect(
+      hookBannerKind({
+        fileInstalled: true,
+        rcWired: false,
+        failureReason: 'aikey_no_hook',
+      }),
+    ).toBe('disabled');
+    expect(
+      hookBannerKind({
+        fileInstalled: true,
+        rcWired: true,
+        failureReason: 'aikey_no_hook',
+      }),
+    ).toBe('disabled');
   });
 
   it('!fileInstalled + reason=shell_undetectable → shell-undetectable', () => {
@@ -91,5 +115,65 @@ describe('hookBannerKind', () => {
         failureReason: null,
       }),
     ).toBe('io-error');
+  });
+});
+
+/**
+ * 2026-07-10 escalation: banner persistence policy. Only almost-ready is
+ * non-dismissible — it's the one state fixable with a single click, and
+ * while unfixed every Web `Use` silently never reaches the CLI.
+ * Environment-error kinds stay dismissible: an un-closable banner the user
+ * cannot act on trains them to ignore banners entirely.
+ */
+/**
+ * 2026-07-10 (found live on fresh dev5 VM): the read-only GET probe returns
+ * (file:false, rc:false, reason:null) on a fresh install BEFORE any use —
+ * adopting that shape raised a false "filesystem error" banner. The probe
+ * abstains; mutation envelopes with the same shape stay authoritative.
+ */
+describe('probedReadinessIsAuthoritative', () => {
+  it('abstains on the fresh-install pre-use shape (file=false, reason=null)', () => {
+    expect(
+      probedReadinessIsAuthoritative({ fileInstalled: false, rcWired: false, failureReason: null }),
+    ).toBe(false);
+  });
+
+  it('adopts real states: file installed, or an explicit failure reason', () => {
+    expect(
+      probedReadinessIsAuthoritative({ fileInstalled: true, rcWired: false, failureReason: null }),
+    ).toBe(true);
+    expect(
+      probedReadinessIsAuthoritative({
+        fileInstalled: false,
+        rcWired: false,
+        failureReason: 'io_error',
+      }),
+    ).toBe(true);
+    expect(
+      probedReadinessIsAuthoritative({
+        fileInstalled: false,
+        rcWired: false,
+        failureReason: 'aikey_no_hook',
+      }),
+    ).toBe(true);
+  });
+});
+
+describe('bannerPolicy', () => {
+  it('almost-ready is NOT dismissible', () => {
+    expect(bannerPolicy('almost-ready').dismissible).toBe(false);
+  });
+
+  it('every other kind stays dismissible', () => {
+    const others: HookBannerKind[] = [
+      'wired',
+      'shell-undetectable',
+      'env-misconfigured',
+      'disabled',
+      'io-error',
+    ];
+    for (const k of others) {
+      expect(bannerPolicy(k).dismissible, k).toBe(true);
+    }
   });
 });
