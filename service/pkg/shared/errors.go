@@ -161,6 +161,13 @@ var zhMessages = map[string]string{
 	CodeBizRefreshTokenInvalid:    "刷新令牌无效或已过期，请重新运行 aikey login",
 	CodeBizRefreshTokenRevoked:    "刷新令牌已被吊销，请重新运行 aikey login",
 
+	// BIZ — Member SSO
+	CodeBizSSOProviderDisabled: "该 SSO 登录方式未启用",
+	CodeBizSSOStateInvalid:     "SSO 登录状态无效，请重新运行 aikey login",
+	CodeBizSSOExchangeFailed:   "SSO 平台登录失败，请重试",
+	CodeBizSSOTenantMismatch:   "该 SSO 账号不属于当前企业租户",
+	CodeBizSSOIdentityConflict: "该 SSO 身份已绑定到另一个账号",
+
 	// BIZ — unique-conflict specialisations
 	CodeBizBindAliasTaken: "组织中已存在使用该别名的模板绑定",
 	CodeBizKeyAliasTaken:  "该席位下已存在使用该别名的虚拟密钥",
@@ -209,11 +216,11 @@ const (
 	// from BIZ_AUTH_INVALID_CREDENTIALS (login flow) because the caller is
 	// already authenticated — we want the UI to surface "current password is
 	// wrong" not "invalid email or password". Added 2026-06-02.
-	CodeBizAuthWrongCurrentPwd    = "BIZ_AUTH_WRONG_CURRENT_PWD"
+	CodeBizAuthWrongCurrentPwd = "BIZ_AUTH_WRONG_CURRENT_PWD"
 	// CodeBizAuthWeakPassword is returned when a new password does not meet
 	// the policy (≥8 chars, ≥1 letter, ≥1 digit). Same policy enforced
 	// client-side; server side is the authoritative gate. Added 2026-06-02.
-	CodeBizAuthWeakPassword       = "BIZ_AUTH_WEAK_PASSWORD"
+	CodeBizAuthWeakPassword = "BIZ_AUTH_WEAK_PASSWORD"
 
 	// BIZ — Organization
 	CodeBizOrgNotFound = "BIZ_ORG_NOT_FOUND"
@@ -238,33 +245,40 @@ const (
 	CodeBizKeyDuplicateProtocol = "BIZ_KEY_DUPLICATE_PROTOCOL"
 
 	// BIZ — Protocol Binding
-	CodeBizBindNotFound          = "BIZ_BIND_NOT_FOUND"
-	CodeBizBindProtocolMismatch  = "BIZ_BIND_PROTOCOL_MISMATCH"
-	CodeBizBindNoActive          = "BIZ_BIND_NO_ACTIVE"
-	CodeBizBindNotDelivered      = "BIZ_BIND_NOT_DELIVERED"
+	CodeBizBindNotFound         = "BIZ_BIND_NOT_FOUND"
+	CodeBizBindProtocolMismatch = "BIZ_BIND_PROTOCOL_MISMATCH"
+	CodeBizBindNoActive         = "BIZ_BIND_NO_ACTIVE"
+	CodeBizBindNotDelivered     = "BIZ_BIND_NOT_DELIVERED"
 	// CodeBizBindDuplicateTarget: same (protocol_type, provider_id) pair already active on this VK.
-	CodeBizBindDuplicateTarget   = "BIZ_BIND_DUPLICATE_TARGET"
+	CodeBizBindDuplicateTarget = "BIZ_BIND_DUPLICATE_TARGET"
 
 	// BIZ — Login Session / OAuth
-	CodeBizLoginSessionNotFound      = "BIZ_LOGIN_SESSION_NOT_FOUND"
-	CodeBizLoginSessionExpired       = "BIZ_LOGIN_SESSION_EXPIRED"
-	CodeBizLoginSessionDenied        = "BIZ_LOGIN_SESSION_DENIED"
+	CodeBizLoginSessionNotFound = "BIZ_LOGIN_SESSION_NOT_FOUND"
+	CodeBizLoginSessionExpired  = "BIZ_LOGIN_SESSION_EXPIRED"
+	CodeBizLoginSessionDenied   = "BIZ_LOGIN_SESSION_DENIED"
 	// CodeBizLoginResendCooldown is returned when Begin is called within the
 	// per-session cooldown window after a previous send. Pass remaining
 	// seconds via WithMeta("retry_after_seconds", ...) so the browser UI
 	// can render a live countdown.
-	CodeBizLoginResendCooldown       = "BIZ_LOGIN_RESEND_COOLDOWN"
+	CodeBizLoginResendCooldown = "BIZ_LOGIN_RESEND_COOLDOWN"
 	// CodeBizLoginSessionTerminated is returned when Begin is called on a
 	// session that has already reached a terminal state (approved, denied,
 	// cancelled, token_issued). The user must restart `aikey account login`.
-	CodeBizLoginSessionTerminated    = "BIZ_LOGIN_SESSION_TERMINATED"
-	CodeBizLoginTokenInvalid         = "BIZ_LOGIN_TOKEN_INVALID"
-	CodeBizLoginTokenAlreadyUsed     = "BIZ_LOGIN_TOKEN_ALREADY_USED"
+	CodeBizLoginSessionTerminated = "BIZ_LOGIN_SESSION_TERMINATED"
+	CodeBizLoginTokenInvalid      = "BIZ_LOGIN_TOKEN_INVALID"
+	CodeBizLoginTokenAlreadyUsed  = "BIZ_LOGIN_TOKEN_ALREADY_USED"
 	// CodeBizJoinTokenInvalid: the org join token presented at digital-employee
 	// self-registration is unknown, revoked, or expired (v1.0.1-alpha.2).
-	CodeBizJoinTokenInvalid          = "BIZ_JOIN_TOKEN_INVALID"
-	CodeBizRefreshTokenInvalid       = "BIZ_REFRESH_TOKEN_INVALID"
-	CodeBizRefreshTokenRevoked       = "BIZ_REFRESH_TOKEN_REVOKED"
+	CodeBizJoinTokenInvalid    = "BIZ_JOIN_TOKEN_INVALID"
+	CodeBizRefreshTokenInvalid = "BIZ_REFRESH_TOKEN_INVALID"
+	CodeBizRefreshTokenRevoked = "BIZ_REFRESH_TOKEN_REVOKED"
+
+	// BIZ — Member SSO
+	CodeBizSSOProviderDisabled = "BIZ_SSO_PROVIDER_DISABLED"
+	CodeBizSSOStateInvalid     = "BIZ_SSO_STATE_INVALID"
+	CodeBizSSOExchangeFailed   = "BIZ_SSO_EXCHANGE_FAILED"
+	CodeBizSSOTenantMismatch   = "BIZ_SSO_TENANT_MISMATCH"
+	CodeBizSSOIdentityConflict = "BIZ_SSO_IDENTITY_CONFLICT"
 
 	// BIZ — unique-conflict specialisations
 	CodeBizBindAliasTaken = "BIZ_BIND_ALIAS_TAKEN"
@@ -566,6 +580,33 @@ func BizRefreshTokenInvalid() *DomainError {
 func BizRefreshTokenRevoked() *DomainError {
 	return &DomainError{Code: CodeBizRefreshTokenRevoked,
 		Message: "refresh token has been revoked — please run aikey login again"}
+}
+
+func BizSSOProviderDisabled(provider string) *DomainError {
+	return &DomainError{Code: CodeBizSSOProviderDisabled,
+		Message: "this SSO provider is not enabled",
+		Meta:    map[string]any{"provider": provider}}
+}
+func BizSSOStateInvalid() *DomainError {
+	return &DomainError{Code: CodeBizSSOStateInvalid,
+		Message: "SSO login state is invalid — please run aikey login again"}
+}
+func BizSSOExchangeFailed(provider, upstreamMessage string) *DomainError {
+	return &DomainError{Code: CodeBizSSOExchangeFailed,
+		Message: "the SSO provider could not complete login",
+		Meta: map[string]any{
+			"provider":         provider,
+			"upstream_message": upstreamMessage,
+		}}
+}
+func BizSSOTenantMismatch(provider string) *DomainError {
+	return &DomainError{Code: CodeBizSSOTenantMismatch,
+		Message: "this SSO account does not belong to the configured tenant",
+		Meta:    map[string]any{"provider": provider}}
+}
+func BizSSOIdentityConflict() *DomainError {
+	return &DomainError{Code: CodeBizSSOIdentityConflict,
+		Message: "this SSO identity is already bound to another account"}
 }
 
 func BizBindAliasTaken() *DomainError {

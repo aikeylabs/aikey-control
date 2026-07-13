@@ -175,6 +175,9 @@ var sqliteConstraintRules = []struct {
 	pattern string
 	factory func(string) *DomainError
 }{
+	{"account_external_identities.provider, account_external_identities.subject", func(d string) *DomainError {
+		return &DomainError{Code: CodeBizSSOIdentityConflict, Message: "this SSO identity is already bound to another account", Meta: map[string]any{"db_detail": d}}
+	}},
 	{"global_accounts.email", func(d string) *DomainError {
 		return &DomainError{Code: CodeBizAuthEmailTaken, Message: "email is already registered", Meta: map[string]any{"db_detail": d}}
 	}},

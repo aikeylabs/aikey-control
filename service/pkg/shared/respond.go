@@ -61,7 +61,8 @@ func domainErrorStatus(code string) int {
 	// (which clears the session + redirects to /master/login on 401), which
 	// is exactly the wrong UX for "you typed the current password wrong".
 	case CodeDataInvalidBody, CodeDataMissingField, CodeDataInvalidField,
-		CodeBizAuthWrongCurrentPwd, CodeBizAuthWeakPassword:
+		CodeBizAuthWrongCurrentPwd, CodeBizAuthWeakPassword,
+		CodeBizSSOStateInvalid:
 		return http.StatusBadRequest
 
 	// ── 401 Unauthorised ──────────────────────────────────────────────────────
@@ -77,6 +78,7 @@ func domainErrorStatus(code string) int {
 		CodeBizAuthTokenExpired, CodeBizAuthTokenRecycled,
 		CodeBizAuthTokenNotActive, CodeBizAuthAccessDenied,
 		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied,
+		CodeBizSSOTenantMismatch,
 		CodeBizOauthMemberTokenForbidden:
 		return http.StatusForbidden
 
@@ -91,7 +93,7 @@ func domainErrorStatus(code string) int {
 	case CodeBizAuthEmailTaken, CodeBizSeatEmailTaken,
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
 		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
-		CodeBizLoginSessionTerminated,
+		CodeBizLoginSessionTerminated, CodeBizSSOIdentityConflict,
 		// 2026-07-03 (owner-approved delivery-family contract unification): "no
 		// active / not-deliverable binding" is a RESOURCE-STATE conflict an admin
 		// resolves by configuring the binding — not a service outage. As 503s these
@@ -105,7 +107,8 @@ func domainErrorStatus(code string) int {
 	case CodeBizSeatAlreadyClaimed, CodeBizKeyNotActive,
 		CodeBizKeyDuplicateProtocol, CodeBizBindProtocolMismatch,
 		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
-		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid:
+		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,
+		CodeBizSSOProviderDisabled:
 		return http.StatusUnprocessableEntity
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────
@@ -113,7 +116,8 @@ func domainErrorStatus(code string) int {
 		return http.StatusTooManyRequests
 
 	// ── 502 Bad Gateway ───────────────────────────────────────────────────────
-	case CodeExtProviderUpstream, CodeExtProviderAuthFailure:
+	case CodeExtProviderUpstream, CodeExtProviderAuthFailure,
+		CodeBizSSOExchangeFailed:
 		return http.StatusBadGateway
 
 	// ── 503 Service Unavailable ───────────────────────────────────────────────
