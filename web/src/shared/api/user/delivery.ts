@@ -77,6 +77,17 @@ export interface UserKeyDTO {
   // fallback so an orphaned group VK (seat unbound from group → group_accounts empty)
   // still shows its protocol instead of "unknown". Absent on older servers.
   protocol_type?: string;
+  // supported_providers (2026-07-13): EVERY provider this VK can route — one entry
+  // per active binding. `provider_code` / `protocol_type` above are only the FIRST
+  // binding's values (the master snapshot projects them as a primary hint for
+  // legacy readers, see snapshot/service.go), so a multi-protocol VK — the whole
+  // point of "one VK, N protocol channels" per the baseline ER — collapses to a
+  // single protocol if you read them alone. That's exactly what hid the openai
+  // channel of key-335923591-openai-official. The CLI has always emitted this field
+  // (commands_internal/query.rs team records); the DTO just never declared it, so
+  // nobody consumed it. The vault page fixed the same class of bug on 2026-05-12 by
+  // expanding on supported_providers; this page never followed.
+  supported_providers?: string[];
   key_status: string;
   share_status: string;
   expires_at?: string;

@@ -133,11 +133,48 @@ describe('friendlyTestError matching order', () => {
 
   it('httpStatus 4xx does NOT trigger the 5xx branch', () => {
     // Sanity: the 5xx branch must be tight on the range, not a
-    // catch-all "any status".
+    // catch-all "any status". 4xx now has its own branch (2026-07-12) —
+    // what matters is that it never claims "Local server is unavailable"
+    // and never steers the user at restarting web.
+    const out = friendlyTestError({ httpStatus: 404, message: 'Not Found' });
+    expect(out.title).not.toBe('Local server is unavailable');
+    expect(out.title).toBe('The key could not be probed');
+  });
+
+  /**
+   * 2026-07-12 bugfix — a team key's connectivity test rendered as:
+   *     检测无法运行 / "Request failed with status code 404" / no next step.
+   *
+   * Two defects, pinned below:
+   *  A. The call site read the WRONG envelope fields. aikey-local-server
+   *     emits {status, error_code, error_message} (userapi/cli/errors.go
+   *     JSONError); the page read `data.error` / `data.message`, which is the
+   *     MASTER/team API's envelope. So `code` always collapsed to axios's
+   *     ERR_BAD_REQUEST and EVERY I_* branch below was dead for any HTTP-error
+   *     response. Pinned in vault-test-error-envelope.test.ts (call-site level).
+   *  B. 4xx had no branch → bare fallback with NO action. Pinned here.
+   */
+  it('an unmapped 4xx still offers a next step (never a bare dump)', () => {
     const out = friendlyTestError({
+      code: 'ERR_BAD_REQUEST', // axios's generic code — carries no information
       httpStatus: 404,
-      message: 'Not Found',
+      message: 'Request failed with status code 404',
     });
-    expect(out.title).toBe('Probe could not run');
+    expect(out.action, '4xx must carry a remediation, not just a message').toBeTruthy();
+    // The raw axios sentence must NOT be the whole story any more.
+    expect(out.detail).not.toBe('Request failed with status code 404');
+  });
+
+  it('I_CREDENTIAL_NOT_FOUND (the real 404 code) wins over the generic 4xx branch', () => {
+    // Once the envelope fields are read correctly, THIS is what a team key's
+    // 404 actually carries — and it has a more precise remedy than the
+    // generic 4xx copy. Code-first ordering must keep it on top.
+    const out = friendlyTestError({
+      code: 'I_CREDENTIAL_NOT_FOUND',
+      httpStatus: 404,
+      message: 'Request failed with status code 404',
+    });
+    expect(out.title).toBe('Key not found');
+    expect(out.action).toBeTruthy();
   });
 });

@@ -77,7 +77,10 @@ func domainErrorStatus(code string) int {
 		CodeBizAuthTokenExpired, CodeBizAuthTokenRecycled,
 		CodeBizAuthTokenNotActive, CodeBizAuthAccessDenied,
 		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied,
-		CodeBizOauthMemberTokenForbidden:
+		CodeBizOauthMemberTokenForbidden,
+		// Refused BY DESIGN (form-①): still a 403, but the code tells the client
+		// it's policy, not a permission fault (2026-07-13).
+		CodeBizDeliveryCentralOnly:
 		return http.StatusForbidden
 
 	// ── 404 Not Found ─────────────────────────────────────────────────────────
@@ -105,7 +108,8 @@ func domainErrorStatus(code string) int {
 	case CodeBizSeatAlreadyClaimed, CodeBizKeyNotActive,
 		CodeBizKeyDuplicateProtocol, CodeBizBindProtocolMismatch,
 		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
-		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid:
+		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,
+		CodeBizVKGroupExclusive:
 		return http.StatusUnprocessableEntity
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────

@@ -111,6 +111,26 @@ interface OauthGroupAccountRef {
   // Refreshed from the proxy's group_runtime rail (≤60s) so it reflects a completed
   // login without a manual key sync. Absent on api_key candidates / older snapshots.
   login_status?: string;
+  // credential_id (2026-07-12): the account's real credential id — the SAME id the
+  // team-oauth page keys its rows by (MyPoolAccount.credential_id), threaded from the
+  // master snapshot (snapshot/group.go). The login CTA appends it as ?expand= so the
+  // team-oauth page auto-expands this account's sign-in card instead of making the
+  // user hunt for it. Absent on older snapshots / rail-only accounts → CTA falls
+  // back to the plain (un-targeted) link.
+  credential_id?: string;
+}
+
+/**
+ * teamOauthLoginHref: deep-link for the 登录 CTA — /user/team-oauth with the target
+ * account's credential_id as ?expand= so the landing page auto-expands that account's
+ * sign-in card (2026-07-12). credential_id may be absent (older master snapshots
+ * predate it; rail-only accounts don't carry it) → plain un-targeted link, same
+ * behavior as before this change.
+ */
+function teamOauthLoginHref(credentialId?: string): string {
+  return credentialId
+    ? `/user/team-oauth?expand=${encodeURIComponent(credentialId)}`
+    : '/user/team-oauth';
 }
 
 interface TeamRowRecord {
@@ -512,33 +532,6 @@ function providerShellCommand(family: string | null | undefined): string | null 
   return null;
 }
 
-/** V-layer helper: provider_code → display family for vault group rendering.
- *
- *  2026-05-08 显示层 family-grouping (详见 update/20260508-display-family-grouping.md)
- *
- *  Source of truth: CLI registry (`aikey-cli/data/provider_registry.yaml`
- *  RegistryEntry.family) + Rust `provider_registry::family_of()` helper.
- *  This frontend mapping mirrors only the multi-platform families (currently
- *  just Kimi) so the vault page can group personal keys by family even when
- *  the V data is delivered via `supported_providers` (per-record provider_code
- *  array) rather than the per-record `protocol_family` field.
- *
- *  Why duplicated here: vault `grouped` memo iterates `supported_providers` for
- *  multi-provider expansion (e.g. 0011 gateway key supports anthropic+openai
- *  → shows in BOTH groups). Each element is a provider_code, not a family. To
- *  family-group correctly without exposing extra response fields, the V layer
- *  maps each provider_code → family at render time.
- *
- *  Single-platform providers (anthropic / openai / google_gemini / ...) return
- *  input unchanged — matches CLI registry's `family defaults to code` rule.
- */
-function familyOfProviderCode(code: string): string {
-  const lc = (code ?? '').trim().toLowerCase();
-  if (lc === 'kimi_code' || lc === 'moonshot' || lc === 'kimi') return 'kimi';
-  // Add other multi-platform families here when they appear in the registry.
-  // Single-platform: family == code (e.g. anthropic, openai, deepseek).
-  return lc;
-}
 
 
 
@@ -1237,23 +1230,40 @@ export default function UserVaultPage() {
       .catch(
         (err: Error & {
           code?: string;
-          response?: { status?: number; data?: { error?: string; message?: string } };
+          response?: {
+            status?: number;
+            data?: { error_code?: string; error_message?: string; error?: string; message?: string };
+          };
         }) => {
           // Surface the raw HTTP status alongside the error code so the popup's
           // friendly-text mapping can branch correctly. PREFER the backend's
-          // error_code (response body `error`, e.g. I_PROXY_NOT_RUNNING) over the
-          // axios transport code (ERR_BAD_RESPONSE for any 5xx): friendlyTestError
+          // error code (e.g. I_PROXY_NOT_RUNNING) over the axios transport code
+          // (ERR_BAD_REQUEST / ERR_BAD_RESPONSE for ANY non-2xx): friendlyTestError
           // keys on the I_* code, so falling back to the axios code collapsed every
           // mapped failure (proxy down / cluster node / credential not found) into
-          // the generic 5xx "restart web" copy — the wrong next-step. Same for the
-          // message: the backend's human message beats axios's bare "Request failed
-          // with status code 503". Bugfix 2026-06-26-vault-test-error-code-not-surfaced.
+          // the generic fallback — raw axios text and NO next-step.
+          //
+          // FIELD NAMES (2026-07-12 bugfix — the 2026-06-26 fix read the wrong
+          // ones, so it never actually took effect): this endpoint is on
+          // aikey-local-server, whose error envelope is
+          // `{status, error_code, error_message}` (see userapi/cli/errors.go
+          // JSONError, and the ErrEnvelope type in shared/api/user/vault.ts).
+          // The `{error, message}` shape is the MASTER/team API's envelope — a
+          // different service. Reading `data.error` here always yielded
+          // undefined, so every I_* branch was dead for HTTP-error responses
+          // (e.g. a team key's I_CREDENTIAL_NOT_FOUND 404 rendered as the bare
+          // "Request failed with status code 404"). We read the local shape
+          // first and keep the master shape as a defensive fallback.
           const httpStatus = err.response?.status;
           const data = err.response?.data;
           setTestError({
-            code: data?.error ?? err.code,
+            code: data?.error_code ?? data?.error ?? err.code,
             httpStatus,
-            message: data?.message || err.message || 'Test failed for an unknown reason',
+            message:
+              data?.error_message ||
+              data?.message ||
+              err.message ||
+              'Test failed for an unknown reason',
           });
           setTestPhase('error');
         },
@@ -2966,7 +2976,11 @@ const Row = React.memo(function Row(props: {
         ) : r.status === 'pending_download' ? (
           // Amber like needs_login: key material not delivered locally yet —
           // actionable (unlock+reload triggers the full sync / `aikey key sync`).
-          <span className="chip warning">
+          // The chip carries the remedy in its title (2026-07-13): the state is
+          // self-healing on an unlocked page load, but a locked vault can't
+          // decrypt material, so the user needs the terminal command spelled out
+          // — mirrors the needs_login chip's needsLoginCtaTitle precedent.
+          <span className="chip warning" title={t('vault.pendingDownloadTitle')}>
             <span className="status-dot" style={{ width: 5, height: 5 }} />
             {t('vault.statusPendingDownload')}
           </span>
@@ -3085,10 +3099,15 @@ const Row = React.memo(function Row(props: {
                 member logs into the routed pool account. Instead of just hiding the Use
                 button (which leaves the row looking dead), offer a one-click link to the
                 team-oauth page where the routed account is auto-highlighted with the
-                sign-in control. Occupies the same primary-action slot as Use. */}
+                sign-in control. Occupies the same primary-action slot as Use.
+                2026-07-12: the link now carries ?expand=<credential_id> of the ROUTED
+                account (the one whose missing token made this VK needs_login) so the
+                team-oauth page auto-expands its sign-in card on arrival. */}
             {isTeam && (r as TeamRowRecord).effective_status === 'needs_login' && !inUse && (
               <Link
-                to="/user/team-oauth"
+                to={teamOauthLoginHref(
+                  routedGroupAccount((r as TeamRowRecord).group_accounts)?.credential_id,
+                )}
                 className="row-use-btn"
                 title={t('vault.needsLoginCtaTitle')}
                 onClick={(e) => e.stopPropagation()}
@@ -3510,7 +3529,8 @@ function DetailDrawer(props: {
                   {t('vault.statusNeedsLogin')}
                 </span>
               ) : r.status === 'pending_download' ? (
-                <span className="chip warning">
+                // Same remedy hint as the row chip (2026-07-13) — see there.
+                <span className="chip warning" title={t('vault.pendingDownloadTitle')}>
                   <span className="status-dot" style={{ width: 5, height: 5 }} />
                   {t('vault.statusPendingDownload')}
                 </span>
@@ -3598,10 +3618,11 @@ function DetailDrawer(props: {
                         {/* 登录 CTA (2026-07-03, 防呆): a needs_login pool account is one
                             web sign-in away from making this VK usable — link straight to
                             the team-oauth page (the routed account is auto-highlighted there
-                            with the sign-in control). */}
+                            with the sign-in control). 2026-07-12: carries THIS account's
+                            ?expand=<credential_id> so its sign-in card auto-expands there. */}
                         {a.credential_type === 'oauth_account' && a.login_status === 'needs_login' && (
                           <Link
-                            to="/user/team-oauth"
+                            to={teamOauthLoginHref(a.credential_id)}
                             className="chip warning"
                             style={{ textDecoration: 'none', cursor: 'pointer' }}
                             title={t('vault.needsLoginCtaTitle')}

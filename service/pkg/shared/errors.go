@@ -146,6 +146,8 @@ var zhMessages = map[string]string{
 	CodeBizBindProtocolMismatch: "绑定协议 {{binding_protocol}} 与凭据供应商协议 {{cred_protocol}} 不匹配",
 	CodeBizBindDuplicateTarget:  "该虚拟密钥上已存在协议 {{protocol_type}} / 供应商 {{provider_id}} 的激活绑定",
 	CodeBizBindOAuthDirect:      "OAuth 账号凭据只能通过席位组分配，不能直接绑定到席位",
+	CodeBizVKGroupExclusive:     "该虚拟密钥已绑定 OAuth 组，不能再挂载直连凭据（反之亦然）；请为该凭据单独签发一把虚拟密钥",
+	CodeBizDeliveryCentralOnly:  "该组织为集群集中交付模式（form-①）：密钥材料按策略保留在中心节点，不下发到个人机器。请通过集群节点路由使用；如需本机持有密钥，请联系管理员开启 EMPLOYEE_KEY_MODE=local",
 	CodeBizBindNoActive:         "未找到该令牌的激活协议绑定",
 	CodeBizBindNotDelivered:     "绑定已存在，但无法下发至代理",
 
@@ -297,6 +299,30 @@ const (
 	// (their token is delivered at runtime via channel ③, not as a static key),
 	// so direct-binding one would silently produce an unusable VK. 422.
 	CodeBizBindOAuthDirect = "BIZ_BIND_OAUTH_DIRECT"
+	// CodeBizVKGroupExclusive: a virtual key's binding targets must be
+	// HOMOGENEOUS — either all direct-credential bindings, or a single OAuth
+	// group. Issuance already enforces this (IssueVirtualKey N4 二选一), but the
+	// post-hoc paths (add-binding / batch-rebind) used to skip the check and
+	// could attach a direct credential onto a group VK. Such a VK is
+	// unrepresentable downstream: seat_group_id is a ROW-level column on the
+	// VK (master snapshot → CLI cache), and the proxy branches on it per-row
+	// (group VKs skip decryption and route via seat-assign + channel ③, direct
+	// VKs decrypt their ciphertext) — a mixed VK lands in undefined territory
+	// and its extra channel silently never routes. Fix: issue a SEPARATE VK.
+	// 422. (2026-07-13, user report: openai_official attached to an OAuth-group VK)
+	CodeBizVKGroupExclusive = "BIZ_VK_GROUP_EXCLUSIVE"
+	// CodeBizDeliveryCentralOnly: per-VK key delivery was refused because this
+	// control plane runs form-① (KeyDeliveryForm=central) — key material NEVER
+	// leaves the cluster's central nodes for a HUMAN seat, by design. The client
+	// must resolve its node and route through it instead of holding the key.
+	//
+	// Why a dedicated code (2026-07-13): this used to surface as a bare 403, which
+	// the cli rendered as "delivery request failed: status code 403" plus the
+	// advice "run `aikey key sync`" — the very command the user was already
+	// running. A refusal that is BY DESIGN must say so, and say what to do
+	// instead; an opaque 403 sends people hunting for a permissions bug that
+	// doesn't exist. 403.
+	CodeBizDeliveryCentralOnly = "BIZ_DELIVERY_CENTRAL_ONLY"
 	// CodeBizOauthMemberTokenForbidden: a member tried to write back a per-member
 	// OAuth token (RW10 POST /accounts/me/oauth-member-token) for an account that
 	// is NOT in any group they are an active member of. Defense in depth on the
@@ -355,6 +381,19 @@ func BizAuthTokenNotActive() *DomainError {
 }
 func BizAuthAccessDenied() *DomainError {
 	return &DomainError{Code: CodeBizAuthAccessDenied, Message: "access denied"}
+}
+
+// BizDeliveryCentralOnly — per-VK key delivery refused BY DESIGN (form-①).
+// Carries the org so the client can say WHICH deployment refused, and states the
+// remedy: route through the cluster node, or have an admin switch the plane to
+// EMPLOYEE_KEY_MODE=local. Never say "run aikey key sync" — that is the command
+// the user just ran (2026-07-13).
+func BizDeliveryCentralOnly(orgID string) *DomainError {
+	return &DomainError{Code: CodeBizDeliveryCentralOnly,
+		Message: "key material is not delivered to personal machines in this deployment " +
+			"(cluster central-delivery form): route through your cluster node, or ask an admin " +
+			"to enable EMPLOYEE_KEY_MODE=local",
+		Meta: map[string]any{"org_id": orgID, "key_delivery_form": "central"}}
 }
 func BizAuthWrongCurrentPwd() *DomainError {
 	return &DomainError{Code: CodeBizAuthWrongCurrentPwd, Message: "current password is incorrect"}
@@ -508,6 +547,15 @@ func BizBindTargetInvalid(reason string) *DomainError {
 	return &DomainError{Code: CodeBizBindTargetInvalid,
 		Message: "invalid binding target: " + reason,
 		Meta:    map[string]any{"reason": reason}}
+}
+
+// BizVKGroupExclusive — the VK's binding targets must stay homogeneous.
+// `reason` says which way the mix was attempted so the admin knows what to do.
+func BizVKGroupExclusive(virtualKeyID, reason string) *DomainError {
+	return &DomainError{Code: CodeBizVKGroupExclusive,
+		Message: "virtual key " + virtualKeyID + " cannot mix OAuth-group and direct-credential bindings: " +
+			reason + " — issue a separate virtual key instead",
+		Meta: map[string]any{"virtual_key_id": virtualKeyID, "reason": reason}}
 }
 
 func BizProvNotFound(id string) *DomainError {
