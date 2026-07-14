@@ -472,6 +472,9 @@ export default function UserVirtualKeysPage() {
 
   // Drawer + selected row
   const [drawerKey, setDrawerKey] = useState<UserKeyDTO | null>(null);
+  // Family group the drawer was opened from (multi-protocol VKs render one
+  // row per group — the drawer highlights THIS group's family, mutes others).
+  const [drawerGroup, setDrawerGroup] = useState<string | null>(null);
   const [summary, setSummary] = useState<KeySummaryDTO | null>(null);
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
@@ -555,8 +558,12 @@ export default function UserVirtualKeysPage() {
     },
   });
 
-  function openDrawer(k: UserKeyDTO) {
+  function openDrawer(k: UserKeyDTO, groupFamily: string) {
     setDrawerKey(k);
+    // A multi-protocol VK renders one row per family group; the drawer must
+    // know WHICH group it was opened from to highlight that family
+    // (2026-07-13 user spec, mirrors the vault-page drawer).
+    setDrawerGroup(groupFamily);
     setDrawerError(null);
     setSummary(null);
     if (k.key_status === 'active') {
@@ -649,7 +656,7 @@ export default function UserVirtualKeysPage() {
                             record={k}
                             groupFamily={g.provider}
                             isLastInGroup={idx === g.records.length - 1}
-                            onOpenDrawer={() => openDrawer(k)}
+                            onOpenDrawer={() => openDrawer(k, g.provider)}
                             onClaim={() => claimMut.mutate(k.virtual_key_id)}
                             onUse={() => useMutTeam.mutate(k.virtual_key_id)}
                             claimPending={claimMut.isPending && claimMut.variables === k.virtual_key_id}
@@ -679,6 +686,7 @@ export default function UserVirtualKeysPage() {
       {drawerKey && (
         <DetailDrawer
           record={drawerKey}
+          groupFamily={drawerGroup ?? keyProviderFamily(drawerKey)}
           summary={summary}
           summaryPending={viewMut.isPending}
           summaryError={drawerError}
@@ -988,6 +996,10 @@ const Row = React.memo(function Row(props: {
 // ── Detail drawer ────────────────────────────────────────────────────────
 function DetailDrawer(props: {
   record: UserKeyDTO;
+  /** Family group this drawer was opened from. Multi-protocol VKs render one
+   *  row per group; the drawer shows ALL families with THIS one highlighted
+   *  bold and the rest muted (2026-07-13 user spec, mirrors vault drawer). */
+  groupFamily: string;
   summary: KeySummaryDTO | null;
   summaryPending: boolean;
   summaryError: string | null;
@@ -1008,7 +1020,13 @@ function DetailDrawer(props: {
   const { t } = useTranslation();
   const r = props.record;
   const status = statusMeta(r.key_status, t);
-  const fam = keyProviderFamily(r);
+  // Current-group family drives the dot color + the highlighted entry; the
+  // full family list is shown with the others muted (multi-protocol VKs).
+  const fam = props.groupFamily;
+  const famList = (() => {
+    const all = keyProviderFamilies(r);
+    return all.includes(fam) ? [fam, ...all.filter((f) => f !== fam)] : all;
+  })();
   const expiresStr = formatExpiresAt(r.expires_at, t);
 
   React.useEffect(() => {
@@ -1036,6 +1054,8 @@ function DetailDrawer(props: {
             <div className="meta-row">
               <span className="provider-cell">
                 <span className="prov-dot" style={{ background: providerBrandColor(fam) }} />
+                {/* Head shows ONLY the current group's protocol (2026-07-13 user
+                    spec); the full multi-protocol list lives in META below. */}
                 <span className="name font-mono" style={{ color: 'var(--muted-foreground)' }}>{fam}</span>
                 <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
               </span>
@@ -1402,7 +1422,25 @@ function DetailDrawer(props: {
             </div>
             <div className="drawer-field">
               <span className="k">{t('teamKeys.fieldProtocol')}</span>
-              <span className="v">{fam}<span className="ro-pill">RO</span></span>
+              <span className="v">
+                {/* One protocol per line (2026-07-13 user spec) — current group
+                    bold, others muted. */}
+                <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+                  {famList.map((f) => (
+                    <span
+                      key={f}
+                      style={
+                        f === fam
+                          ? { fontWeight: 700 }
+                          : { color: 'var(--muted-foreground)', opacity: 0.55 }
+                      }
+                    >
+                      {f}
+                    </span>
+                  ))}
+                </span>
+                <span className="ro-pill">RO</span>
+              </span>
             </div>
             <div className="drawer-field">
               <span className="k">{t('teamKeys.fieldType')}</span>

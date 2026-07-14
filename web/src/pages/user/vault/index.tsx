@@ -514,6 +514,28 @@ function providerDisplayName(r: VaultRowRecord): string {
   return raw.toLowerCase().replace(/_oauth$|_api$/, '');
 }
 
+/** Provider label for a team row rendered INSIDE a specific display-family
+ *  group. A multi-protocol team key (`supported_providers` spanning families,
+ *  e.g. anthropic + openai) renders one row per family (see `grouped`), and
+ *  each row must label itself with the provider belonging to ITS group —
+ *  falling back to the record's single `protocol_family` made the openai-group
+ *  row of an anthropic+openai key read "anthropic" (2026-07-13 user report;
+ *  mirrors the virtual-keys page's per-family Row fix). Returns null when the
+ *  record has no supported provider in this family (caller falls back to
+ *  providerDisplayName). */
+function teamProviderForGroup(r: VaultRowRecord, groupProvider: string): string | null {
+  if (r.target !== 'team') return null;
+  const sp = (r as TeamRowRecord).supported_providers;
+  if (!Array.isArray(sp)) return null;
+  for (const p of sp) {
+    const raw = (p ?? '').toString().trim();
+    if (raw && familyOfProviderCode(raw) === groupProvider) {
+      return raw.toLowerCase().replace(/_oauth$|_api$/, '');
+    }
+  }
+  return null;
+}
+
 /** Shell wrapper that honours the currently-routed account for a given
  *  provider family. Users don't need `aikey` at all at call time — they
  *  just run e.g. `claude` / `codex` / `kimi` and the aikey proxy maps
@@ -841,6 +863,12 @@ export default function UserVaultPage() {
   const [editDraft, setEditDraft] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [drawerRecord, setDrawerRecord] = useState<VaultRowRecord | null>(null);
+  // Which display-family group the drawer was opened FROM. A multi-protocol
+  // key renders one row per family (openai + anthropic), so "the record's
+  // group" is ambiguous without carrying it — the old premise "a row lives in
+  // exactly one protocol group" broke when multi-protocol keys landed
+  // (2026-07-13). Drives the drawer's highlighted protocol + its Use scope.
+  const [drawerGroup, setDrawerGroup] = useState<string | null>(null);
   // Drawer open "mode" (2026-04-24 user request):
   //   - 'persistent' → opened by the explicit View details button; stays
   //     open even as the user scrolls the table behind the drawer.
@@ -1795,6 +1823,7 @@ export default function UserVaultPage() {
                                 deletePending={deleteMut.isPending}
                                 onOpenDrawer={(mode) => {
                                   setDrawerRecord(r);
+                                  setDrawerGroup(g.provider);
                                   setDrawerMode(mode ?? 'persistent');
                                 }}
                                 isLastInGroup={idx === sortedRecords.length - 1}
@@ -1873,15 +1902,19 @@ export default function UserVaultPage() {
             setDrawerRecord(null);
           }}
           // Phase 3B (2026-05-11): drawer "Use" button — same single-source-
-          // of-truth as the inline row Use. groupProvider here is the
-          // record's protocol_family because the drawer doesn't carry the
-          // group context (drawer is opened from a row that already lives
-          // in exactly one protocol group, so family is unambiguous).
-          onUse={() => switchTo(drawerRecord, drawerRecord.protocol_family ?? 'unknown')}
+          // of-truth as the inline row Use. 2026-07-13: family now comes from
+          // the GROUP the drawer was opened from (drawerGroup) — the old
+          // "a row lives in exactly one protocol group, so protocol_family is
+          // unambiguous" premise broke with multi-protocol keys, which render
+          // one row per family; the openai-group drawer must Use for openai.
+          // Fallback to protocol_family only for stale state (drawer survived
+          // a records refresh that dropped the group).
+          groupProvider={drawerGroup ?? (displayProtocolFamily(drawerRecord.protocol_family) || 'unknown')}
+          onUse={() => switchTo(drawerRecord, drawerGroup ?? (drawerRecord.protocol_family ?? 'unknown'))}
           // Test connection moved to the row Actions column 2026-05-22;
           // popup state is still owned at page level so the popup
           // overlays the page rather than the drawer.
-          inUse={recordInUseForGroup(drawerRecord, drawerRecord.protocol_family ?? 'unknown')}
+          inUse={recordInUseForGroup(drawerRecord, drawerGroup ?? (drawerRecord.protocol_family ?? 'unknown'))}
           switchPending={switchingIds.has(rowKey(drawerRecord))}
           hostToRoute={hostToRoute}
           providerToRoute={providerToRoute}
@@ -2762,7 +2795,8 @@ const Row = React.memo(function Row(props: {
   const isTeamOAuthGroup = isTeam && !!(r as TeamRowRecord).oauth_group_id;
   const groupAccts = isTeamOAuthGroup ? (r as TeamRowRecord).group_accounts : null;
   const groupProto = routedGroupAccount(groupAccts)?.provider_code;
-  const providerName = groupProto || providerDisplayName(r);
+  const providerName =
+    groupProto || teamProviderForGroup(r, props.groupProvider) || providerDisplayName(r);
   // Kind chip. Fully i18n'd (2026-07-07, user request): in Chinese the four
   // kinds render 密钥 / OAuth / 团队 / 团队 OAuth; English keeps KEY / OAUTH /
   // TEAM / TEAM-OAUTH. Values live in the vault namespace of the locale files.
@@ -3408,6 +3442,10 @@ function DetailDrawer(props: {
    *  Personal/OAuth code paths are unchanged; team rows render a
    *  Virtual-Key section instead of Credential and skip the Delete button. */
   record: VaultRowRecord;
+  /** Display-family group this drawer was opened from. Multi-protocol keys
+   *  render one row per family; the drawer highlights THIS family's provider
+   *  (bold) and mutes the others (2026-07-13 user spec). Also scopes Use. */
+  groupProvider: string;
   locked: boolean;
   onClose: () => void;
   onBeginRename: () => void;
@@ -3493,7 +3531,38 @@ function DetailDrawer(props: {
   const groupProto = team?.oauth_group_id
     ? routedGroupAccount(team.group_accounts)?.provider_code
     : undefined;
-  const providerName = groupProto || providerDisplayName(r);
+  const providerName =
+    groupProto || teamProviderForGroup(r, props.groupProvider) || providerDisplayName(r);
+  // Full protocol surface of the key (multi-protocol direct-bind keys carry
+  // several supported_providers). The drawer shows ALL of them: the current
+  // group's provider bold/highlighted, the rest muted — so a user opening the
+  // openai-group drawer of an anthropic+openai key sees both, with openai
+  // emphasized (2026-07-13 user spec). OAuth pool VKs stay single (per routed
+  // account). Order preserved but the current provider is hoisted first.
+  const allProviders: string[] = (() => {
+    if (groupProto) return [providerName];
+    const sp =
+      r.target === 'team' || r.target === 'personal'
+        ? (r as PersonalVaultRecord | TeamRowRecord).supported_providers
+        : null;
+    if (Array.isArray(sp) && sp.length > 0) {
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const p of sp) {
+        const raw = (p ?? '').toString().trim().toLowerCase().replace(/_oauth$|_api$/, '');
+        if (raw && !seen.has(raw)) {
+          seen.add(raw);
+          out.push(raw);
+        }
+      }
+      if (out.length > 0) {
+        return out.includes(providerName)
+          ? [providerName, ...out.filter((p) => p !== providerName)]
+          : out;
+      }
+    }
+    return [providerName];
+  })();
 
   return (
     <>
@@ -3508,6 +3577,8 @@ function DetailDrawer(props: {
                   className="prov-dot"
                   style={{ background: providerBrandColor(providerName) }}
                 />
+                {/* Head shows ONLY the current group's protocol (2026-07-13 user
+                    spec); the full multi-protocol list lives in META below. */}
                 <span
                   className="name font-mono"
                   style={{ color: 'var(--muted-foreground)' }}
@@ -4517,7 +4588,22 @@ function DetailDrawer(props: {
             <div className="drawer-field">
               <span className="k">{t('vault.protocol')}</span>
               <span className="v">
-                {providerName}
+                {/* One protocol per line (2026-07-13 user spec) — current group
+                    bold, others muted. */}
+                <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+                  {allProviders.map((p) => (
+                    <span
+                      key={p}
+                      style={
+                        p === providerName
+                          ? { fontWeight: 700 }
+                          : { color: 'var(--muted-foreground)', opacity: 0.55 }
+                      }
+                    >
+                      {p}
+                    </span>
+                  ))}
+                </span>
                 <span className="ro-pill">RO</span>
               </span>
             </div>
