@@ -27,10 +27,11 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import axios from 'axios';
 
-import { deliveryApi, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
+import { deliveryApi, routedGroupAccount, type GroupAccountRef, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
 import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
+import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
 import {
   HookWireRcModal,
   useHookWireRcModal,
@@ -39,7 +40,7 @@ import { copyText } from '@/shared/utils/clipboard';
 import { mapUseError } from '@/shared/utils/mapUseError';
 import { formatDate } from '@/shared/utils/datetime-intl';
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
-import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl } from '@/shared/cross-app-menu';
+import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl, buildCrossAppUrl, isTeamGatewayActive, getCrossAppLinkBase } from '@/shared/cross-app-menu';
 
 // Phase 3B R23 revised (2026-05-11): on B (team server) the Team Keys
 // drawer cross-fetches Personal A's vault.list to surface the
@@ -58,6 +59,63 @@ type SortKey = 'alias' | 'expires' | 'status';
 /** Lower-case provider family for grouping. Strips _api / _oauth tails. */
 function providerFamily(code: string | null | undefined): string {
   return (code ?? 'unknown').toLowerCase().replace(/_oauth$|_api$/, '');
+}
+
+/**
+ * Provider family for a KEY row. A group VK has NO single provider_code of its own
+ * (the pool's accounts do) — derive it from the routed pool account, same rule as
+ * the vault/overview pages (routedGroupAccount). Without this, group VKs rendered a
+ * blank/unknown protocol family (2026-07-02 staging finding — the A2 sweep fixed the
+ * identity sub-line here but missed the family chip/grouping).
+ *
+ * protocol_type fallback (2026-07-03): when the seat is unbound from the group the
+ * candidate set (group_accounts) goes empty, so the routed-account provider is gone
+ * too → without this the orphaned group VK's protocol falls back to "unknown". The
+ * binding-derived protocol_type survives member removal, so it's the stable last
+ * resort (mirrors the CLI vault path's team_protocol_source).
+ */
+function keyProviderFamily(k: { provider_code?: string | null; protocol_type?: string | null; group_accounts?: GroupAccountRef[] | null }): string {
+  // displayProtocolFamily folds an empty OAuth group VK's raw protocol_type
+  // ("openai_compatible") to the pool's provider ("openai") so it labels the same
+  // as its routed-account siblings — identical to the Vault page (shared helper).
+  return providerFamily(
+    k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || displayProtocolFamily(k.protocol_type),
+  );
+}
+
+/** EVERY display family this VK can route (2026-07-13).
+ *
+ *  Why: a VK carries N protocol channels by design (baseline ER —
+ *  uq_mpb_vk_protocol_provider is per (vk, protocol, provider)), but
+ *  `provider_code` / `protocol_type` only ever hold the FIRST binding's values
+ *  (the master snapshot projects them as a primary hint for legacy readers).
+ *  Grouping / labelling off them alone renders a multi-protocol VK as
+ *  single-protocol — the openai channel of a VK bound to anthropic+openai simply
+ *  vanished from this page. `supported_providers` carries the full set and the CLI
+ *  has always emitted it; we just never read it here.
+ *
+ *  This mirrors the vault page's expansion (2026-04-30 / 2026-05-12) — same
+ *  familyOfProviderCode口径, now via the shared helper. Falls back to the single
+ *  family when supported_providers is absent (older server) or empty (e.g. an
+ *  orphaned group VK, whose protocol still resolves through keyProviderFamily).
+ */
+function keyProviderFamilies(k: UserKeyDTO): string[] {
+  const sp = k.supported_providers;
+  if (Array.isArray(sp) && sp.length > 0) {
+    const seen = new Set<string>();
+    const fams: string[] = [];
+    for (const code of sp) {
+      const raw = (code ?? '').toString().trim();
+      if (!raw) continue;
+      const fam = familyOfProviderCode(raw);
+      if (!seen.has(fam)) {
+        seen.add(fam);
+        fams.push(fam);
+      }
+    }
+    if (fams.length > 0) return fams;
+  }
+  return [keyProviderFamily(k)];
 }
 
 function providerBrandColor(provider: string | null | undefined): string {
@@ -273,7 +331,20 @@ export default function UserVirtualKeysPage() {
   // identity which owns the vault records.
   const otherBaseUrl = useMemo(() => getOtherBaseUrl(), []);
   const vaultCrossClient = useMemo(() => {
-    if (IS_PERSONAL_SIDE || !otherBaseUrl) return null;
+    if (IS_PERSONAL_SIDE) return null;
+    // 2026-07-03 composing gateway: served THROUGH the personal gateway,
+    // A's vault is SAME-ORIGIN (/api/user/* is local-owned there). The
+    // cross-origin form would target the wrong host (the shared
+    // 'team-base-url' key holds B on that origin) and get CORS-blocked —
+    // exactly the console error observed live on 2026-07-03.
+    if (isTeamGatewayActive()) {
+      return axios.create({
+        baseURL: '',
+        timeout: 15_000,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (!otherBaseUrl) return null;
     try {
       if (new URL(otherBaseUrl).origin === window.location.origin) return null;
     } catch {
@@ -380,12 +451,17 @@ export default function UserVirtualKeysPage() {
     const order: string[] = [];
     const map = new Map<string, UserKeyDTO[]>();
     for (const k of filtered) {
-      const fam = providerFamily(k.provider_code);
-      if (!map.has(fam)) {
-        map.set(fam, []);
-        order.push(fam);
+      // Multi-protocol expansion (2026-07-13): a VK bound to anthropic+openai
+      // must appear under BOTH groups — same contract the vault page and the CLI
+      // `aikey use` picker already honour. Grouping by the single primary family
+      // hid every channel but the first.
+      for (const fam of keyProviderFamilies(k)) {
+        if (!map.has(fam)) {
+          map.set(fam, []);
+          order.push(fam);
+        }
+        map.get(fam)!.push(k);
       }
-      map.get(fam)!.push(k);
     }
     return order.map((provider) => ({
       provider,
@@ -396,6 +472,9 @@ export default function UserVirtualKeysPage() {
 
   // Drawer + selected row
   const [drawerKey, setDrawerKey] = useState<UserKeyDTO | null>(null);
+  // Family group the drawer was opened from (multi-protocol VKs render one
+  // row per group — the drawer highlights THIS group's family, mutes others).
+  const [drawerGroup, setDrawerGroup] = useState<string | null>(null);
   const [summary, setSummary] = useState<KeySummaryDTO | null>(null);
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
@@ -479,8 +558,12 @@ export default function UserVirtualKeysPage() {
     },
   });
 
-  function openDrawer(k: UserKeyDTO) {
+  function openDrawer(k: UserKeyDTO, groupFamily: string) {
     setDrawerKey(k);
+    // A multi-protocol VK renders one row per family group; the drawer must
+    // know WHICH group it was opened from to highlight that family
+    // (2026-07-13 user spec, mirrors the vault-page drawer).
+    setDrawerGroup(groupFamily);
     setDrawerError(null);
     setSummary(null);
     if (k.key_status === 'active') {
@@ -567,10 +650,13 @@ export default function UserVirtualKeysPage() {
                         />
                         {g.records.map((k, idx) => (
                           <Row
-                            key={k.virtual_key_id}
+                            // Keyed by (group, vk): a multi-protocol VK renders
+                            // once per family group, so vk id alone collides.
+                            key={`${g.provider}:${k.virtual_key_id}`}
                             record={k}
+                            groupFamily={g.provider}
                             isLastInGroup={idx === g.records.length - 1}
-                            onOpenDrawer={() => openDrawer(k)}
+                            onOpenDrawer={() => openDrawer(k, g.provider)}
                             onClaim={() => claimMut.mutate(k.virtual_key_id)}
                             onUse={() => useMutTeam.mutate(k.virtual_key_id)}
                             claimPending={claimMut.isPending && claimMut.variables === k.virtual_key_id}
@@ -580,7 +666,7 @@ export default function UserVirtualKeysPage() {
                             // POST stays for A side (useHref=undefined).
                             useHref={
                               !IS_PERSONAL_SIDE && otherBaseUrl
-                                ? `${otherBaseUrl}/user/vault?focus=${encodeURIComponent(k.virtual_key_id)}`
+                                ? buildCrossAppUrl(getCrossAppLinkBase() ?? otherBaseUrl, `/user/vault?focus=${encodeURIComponent(k.virtual_key_id)}`)
                                 : undefined
                             }
                           />
@@ -600,6 +686,7 @@ export default function UserVirtualKeysPage() {
       {drawerKey && (
         <DetailDrawer
           record={drawerKey}
+          groupFamily={drawerGroup ?? keyProviderFamily(drawerKey)}
           summary={summary}
           summaryPending={viewMut.isPending}
           summaryError={drawerError}
@@ -767,11 +854,16 @@ const Row = React.memo(function Row(props: {
    *  single tab so back-button returns them to the team listing).
    *  Undefined on A side. */
   useHref?: string;
+  /** The family of the GROUP this row is rendered under (2026-07-13). A
+   *  multi-protocol VK appears under every family it supports, so the row's
+   *  provider chip must show THAT group's family — not the VK's primary one,
+   *  which would label the openai row "anthropic". */
+  groupFamily?: string;
 }) {
   const { t } = useTranslation();
   const r = props.record;
   const status = statusMeta(r.key_status, t);
-  const fam = providerFamily(r.provider_code);
+  const fam = props.groupFamily ?? keyProviderFamily(r);
   const expiresStr = formatExpiresAt(r.expires_at, t);
   const trClasses = [
     'group-child',
@@ -791,6 +883,22 @@ const Row = React.memo(function Row(props: {
         <div className="alias-main">{r.alias || t('teamKeys.unnamed')}</div>
         <div className="alias-sub">
           <span className="font-mono" title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
+          {/* oauth_group (Stage A): shared-group marker + master-assigned default account. */}
+          {r.oauth_group_id && (
+            <>
+              <span className="mx-1 opacity-50">·</span>
+              <span style={{ color: 'var(--primary-dim)' }}>{t('teamKeys.oauthGroupShared')}</span>
+              {(() => {
+                const def = routedGroupAccount(r.group_accounts);
+                return def ? (
+                  <>
+                    <span className="mx-1 opacity-50">·</span>
+                    <span title={t('teamKeys.oauthGroupDefaultAccount')}>{def.identity}</span>
+                  </>
+                ) : null;
+              })()}
+            </>
+          )}
         </div>
       </td>
 
@@ -888,6 +996,10 @@ const Row = React.memo(function Row(props: {
 // ── Detail drawer ────────────────────────────────────────────────────────
 function DetailDrawer(props: {
   record: UserKeyDTO;
+  /** Family group this drawer was opened from. Multi-protocol VKs render one
+   *  row per group; the drawer shows ALL families with THIS one highlighted
+   *  bold and the rest muted (2026-07-13 user spec, mirrors vault drawer). */
+  groupFamily: string;
   summary: KeySummaryDTO | null;
   summaryPending: boolean;
   summaryError: string | null;
@@ -908,7 +1020,13 @@ function DetailDrawer(props: {
   const { t } = useTranslation();
   const r = props.record;
   const status = statusMeta(r.key_status, t);
-  const fam = providerFamily(r.provider_code);
+  // Current-group family drives the dot color + the highlighted entry; the
+  // full family list is shown with the others muted (multi-protocol VKs).
+  const fam = props.groupFamily;
+  const famList = (() => {
+    const all = keyProviderFamilies(r);
+    return all.includes(fam) ? [fam, ...all.filter((f) => f !== fam)] : all;
+  })();
   const expiresStr = formatExpiresAt(r.expires_at, t);
 
   React.useEffect(() => {
@@ -936,6 +1054,8 @@ function DetailDrawer(props: {
             <div className="meta-row">
               <span className="provider-cell">
                 <span className="prov-dot" style={{ background: providerBrandColor(fam) }} />
+                {/* Head shows ONLY the current group's protocol (2026-07-13 user
+                    spec); the full multi-protocol list lives in META below. */}
                 <span className="name font-mono" style={{ color: 'var(--muted-foreground)' }}>{fam}</span>
                 <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
               </span>
@@ -981,6 +1101,112 @@ function DetailDrawer(props: {
               </span>
             </div>
           </div>
+
+          {/* oauth_group (Stage A): pool candidate accounts behind this group VK —
+              identity / provider / priority + the master-assigned default. Mirrors
+              the vault page's 池账号 section so both drawers read identically.
+              "Default" is master's STATIC rank-0 pick; the proxy's live selection
+              (cooled-account fallback) is Stage B. */}
+          {r.oauth_group_id && (
+            <div className="drawer-section">
+              <div className="drawer-section-title">
+                <KeyRoundIcon className="w-3 h-3" />
+                {t('teamKeys.oauthGroupGroupAccounts')}
+              </div>
+              {(r.group_accounts ?? []).length === 0 ? (
+                <div className="drawer-field">
+                  <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
+                    {t('teamKeys.oauthGroupNoAccounts')}
+                  </span>
+                </div>
+              ) : (
+                (r.group_accounts ?? [])
+                  .slice()
+                  .sort((a, b) => a.priority - b.priority)
+                  .map((a) => (
+                    // Custom stacked layout (NOT drawer-field): identity is a value,
+                    // not a field label — drawer-field's .k uppercases + letter-spaces
+                    // it (reads as garbled). Identity on its own line, the
+                    // provider/type/priority meta below it.
+                    <div
+                      key={a.account_id}
+                      style={{
+                        padding: '9px 11px',
+                        marginTop: 6,
+                        borderRadius: 8,
+                        border: `1px solid ${a.account_id === routedGroupAccount(r.group_accounts)?.account_id ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
+                        background: a.account_id === routedGroupAccount(r.group_accounts)?.account_id ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--foreground)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
+                        {a.assigned && <span className="chip success">{t('teamKeys.oauthGroupDefault')}</span>}
+                        {/* C2: the account the proxy is ACTUALLY routing to now (engine-first,
+                            live 60s rail) — distinct from the static default above. */}
+                        {a.current_routed && <span className="chip info">{t('teamKeys.oauthGroupCurrentRouted')}</span>}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--muted-foreground)',
+                          marginTop: 5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span
+                            className="prov-dot"
+                            style={{ background: providerBrandColor(a.provider_code), width: 6, height: 6 }}
+                          />
+                          {a.provider_code}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>
+                          {a.credential_type === 'oauth_account'
+                            ? t('teamKeys.oauthGroupTypeOauth')
+                            : t('teamKeys.oauthGroupTypeKey')}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>{t('teamKeys.oauthGroupPriority', { priority: a.priority })}</span>
+                      </div>
+                    </div>
+                  ))
+              )}
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <span
+                  style={{
+                    color: 'var(--muted-foreground)',
+                    fontSize: 11,
+                    fontStyle: 'italic',
+                    lineHeight: 1.5,
+                    display: 'block',
+                  }}
+                >
+                  {t('teamKeys.oauthGroupDefaultHint')}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Usage / Limit section — the seat's quota (used vs limit per rule),
               the same data as the team-keys list column, shown larger here. */}
@@ -1043,7 +1269,14 @@ function DetailDrawer(props: {
             )}
             {props.summary && props.summary.slots.length === 0 && (
               <div className="drawer-field">
-                <span className="v" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>{t('teamKeys.routingNoSlots')}</span>
+                {/* Shape-typed empty state (2026-07-03): a group VK routes via its pool
+                    (panel above) — say so instead of the generic "no routing" text,
+                    which read like a misconfiguration; 'none'/legacy keeps the generic. */}
+                <span className="v" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>
+                  {props.summary.binding_mode === 'oauth_group'
+                    ? t('teamKeys.routingViaOauthGroup')
+                    : t('teamKeys.routingNoSlots')}
+                </span>
               </div>
             )}
             {props.summary && props.summary.slots.map((slot) => (
@@ -1189,7 +1422,25 @@ function DetailDrawer(props: {
             </div>
             <div className="drawer-field">
               <span className="k">{t('teamKeys.fieldProtocol')}</span>
-              <span className="v">{fam}<span className="ro-pill">RO</span></span>
+              <span className="v">
+                {/* One protocol per line (2026-07-13 user spec) — current group
+                    bold, others muted. */}
+                <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+                  {famList.map((f) => (
+                    <span
+                      key={f}
+                      style={
+                        f === fam
+                          ? { fontWeight: 700 }
+                          : { color: 'var(--muted-foreground)', opacity: 0.55 }
+                      }
+                    >
+                      {f}
+                    </span>
+                  ))}
+                </span>
+                <span className="ro-pill">RO</span>
+              </span>
             </div>
             <div className="drawer-field">
               <span className="k">{t('teamKeys.fieldType')}</span>

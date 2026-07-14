@@ -5,6 +5,11 @@
  * Prod: routed through API gateway / reverse proxy
  */
 import { httpClient } from './http-client';
+import { runtimeConfig } from '@/app/config/runtime';
+// 2026-07-03 unified-origin gateway (option 6): resolve where PERSONAL usage
+// data lives. See RuntimeConfig.usageApiBase for the four-quadrant table.
+const PERSONAL_USAGE_BASE: string = runtimeConfig.usageApiBase ?? '/v1/usage/personal';
+
 
 // --- Response types ---
 
@@ -279,7 +284,7 @@ export const usageApi = {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
     if (appSlug) params.app_slug = appSlug;
-    const res = await httpClient.get<TimelinePoint[]>('/v1/usage/personal/timeline', { params });
+    const res = await httpClient.get<TimelinePoint[]>(`${PERSONAL_USAGE_BASE}/timeline`, { params });
     return res.data;
   },
 
@@ -287,13 +292,13 @@ export const usageApi = {
     const params: Record<string, string> = { ...personalParams(id), tz: browserTZ() };
     if (date) params.date = date;
     if (appSlug) params.app_slug = appSlug;
-    const res = await httpClient.get<HourlyPoint[]>('/v1/usage/personal/hourly', { params });
+    const res = await httpClient.get<HourlyPoint[]>(`${PERSONAL_USAGE_BASE}/hourly`, { params });
     return res.data;
   },
 
   personalByProtocolTimeline: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<ProtocolTimelinePoint[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const res = await httpClient.get<ProtocolTimelinePoint[]>('/v1/usage/personal/by-protocol/timeline', {
+    const res = await httpClient.get<ProtocolTimelinePoint[]>(`${PERSONAL_USAGE_BASE}/by-protocol/timeline`, {
       params: { ...personalParams(id), ...range, tz: browserTZ() },
     });
     return res.data;
@@ -309,13 +314,13 @@ export const usageApi = {
   personalByProtocolHourly: async (id: PersonalIdentity, date?: string): Promise<ProtocolHourlyPoint[]> => {
     const params: Record<string, string> = { ...personalParams(id), tz: browserTZ() };
     if (date) params.date = date;
-    const res = await httpClient.get<ProtocolHourlyPoint[]>('/v1/usage/personal/by-protocol/hourly', { params });
+    const res = await httpClient.get<ProtocolHourlyPoint[]>(`${PERSONAL_USAGE_BASE}/by-protocol/hourly`, { params });
     return res.data;
   },
 
   personalByProtocolTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<ProtocolTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const res = await httpClient.get<ProtocolTotal[]>('/v1/usage/personal/by-protocol/total', {
+    const res = await httpClient.get<ProtocolTotal[]>(`${PERSONAL_USAGE_BASE}/by-protocol/total`, {
       params: { ...personalParams(id), ...range, tz: browserTZ() },
     });
     return res.data;
@@ -325,7 +330,7 @@ export const usageApi = {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
     if (sessionId) params.session_id = sessionId;
-    const res = await httpClient.get<KeyTotal[]>('/v1/usage/personal/by-key/total', { params });
+    const res = await httpClient.get<KeyTotal[]>(`${PERSONAL_USAGE_BASE}/by-key/total`, { params });
     return res.data;
   },
 
@@ -350,7 +355,7 @@ export const usageApi = {
     if (opts.appSlug) params.app_slug = opts.appSlug;
     if (opts.protocol) params.protocol = opts.protocol;
     if (opts.identity) params.identity = opts.identity;
-    const res = await httpClient.get<{ rows: UsageDetailRow[] }>('/v1/usage/personal/detail', { params });
+    const res = await httpClient.get<{ rows: UsageDetailRow[] }>(`${PERSONAL_USAGE_BASE}/detail`, { params });
     return res.data.rows ?? [];
   },
 
@@ -362,7 +367,7 @@ export const usageApi = {
    */
   personalByAppTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<AppTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const res = await httpClient.get<AppTotal[]>('/v1/usage/personal/by-app/total', {
+    const res = await httpClient.get<AppTotal[]>(`${PERSONAL_USAGE_BASE}/by-app/total`, {
       params: { ...personalParams(id), ...range, tz: browserTZ() },
     });
     return res.data;
@@ -380,7 +385,7 @@ export const usageApi = {
     const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
     if (appSlug) params.app_slug = appSlug;
     if (sessionId) params.session_id = sessionId;
-    const res = await httpClient.get<ModelTotal[]>('/v1/usage/personal/by-model/total', { params });
+    const res = await httpClient.get<ModelTotal[]>(`${PERSONAL_USAGE_BASE}/by-model/total`, { params });
     return res.data;
   },
 
@@ -397,7 +402,7 @@ export const usageApi = {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
     if (limit) params.limit = String(limit);
-    const res = await httpClient.get<SessionTotal[]>('/v1/usage/personal/by-session/total', { params });
+    const res = await httpClient.get<SessionTotal[]>(`${PERSONAL_USAGE_BASE}/by-session/total`, { params });
     return res.data;
   },
 
@@ -407,7 +412,7 @@ export const usageApi = {
    *  range the user is currently viewing. */
   personalRecent: async (id: PersonalIdentity, limit = 5): Promise<RecentRequest[]> => {
     const res = await httpClient.get<{ requests: RecentRequest[] }>(
-      '/v1/usage/personal/recent',
+      `${PERSONAL_USAGE_BASE}/recent`,
       { params: { ...personalParams(id), limit: String(limit) } },
     );
     return res.data.requests ?? [];

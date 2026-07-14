@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { AppRegisterResponse } from '@/shared/api/user/apps';
+import { ModalPortal } from '@/shared/ui/ModalShell';
 
 export interface TokenRevealModalProps {
   result: AppRegisterResponse;
@@ -82,6 +83,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
   const hasMissing = result.missing_upstreams_for_aikey_use.length > 0;
 
   return (
+    <ModalPortal>
     <div
       role="dialog"
       aria-modal="true"
@@ -340,5 +342,6 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

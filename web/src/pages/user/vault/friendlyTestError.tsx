@@ -152,6 +152,30 @@ export function friendlyTestError(
       ),
     };
   }
+  if (httpStatus != null && httpStatus >= 400 && httpStatus < 500) {
+    // 2026-07-12: 4xx had NO branch, so any client-error the code table
+    // doesn't name fell to the bare fallback — friendly title, raw axios
+    // text ("Request failed with status code 404"), and NO next step. A 4xx
+    // here means the local server understood us and refused: the key/route
+    // no longer matches what the vault holds. Steer at re-syncing the row
+    // rather than at restarting anything (that's the 5xx remedy).
+    return {
+      title: tr('vault.errRequestRejectedTitle', 'The key could not be probed'),
+      detail: tr(
+        'vault.errRequestRejectedDetail',
+        'aikey-local-server rejected the probe request for this key. Usually the key row the page is showing no longer matches the vault — it was revoked, re-delivered, or removed in another window.',
+      ),
+      action: (
+        <>
+          {tr(
+            'vault.errRequestRejectedAction',
+            'Refresh the list (top-right button) and re-run the test. For a team key, re-sync it first: ',
+          )}
+          <code className="font-bold">aikey use &lt;alias&gt;</code>.
+        </>
+      ),
+    };
+  }
   // Generic fallback: show the raw axios message so we don't hide real
   // bugs, but keep the title friendly so users know what kind of thing
   // went wrong.

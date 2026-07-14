@@ -10,12 +10,13 @@ import React, { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { deliveryApi, type UserKeyDTO, type KeySummaryDTO } from '@/shared/api/user/delivery';
 import { PageHeader } from '@/shared/ui/PageHeader';
+import { ModalPortal } from '@/shared/ui/ModalShell';
 
 // ── Summary modal ─────────────────────────────────────────────────────────────
 
 function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: () => void }) {
   return (
-    <>
+    <ModalPortal>
       <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }} />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded border"
@@ -35,6 +36,16 @@ function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: (
           </div>
 
           <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+            {/* Shape-typed empty state (2026-07-03): zero slots is a benign shape
+                (group VK routes via its pool / binding not configured yet), no
+                longer a 503 — render an informative line instead of nothing. */}
+            {summary.slots.length === 0 && (
+              <div className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                {summary.binding_mode === 'oauth_group'
+                  ? 'Routed via the OAuth group pool.'
+                  : 'No bindings configured yet.'}
+              </div>
+            )}
             {summary.slots.map((slot) => (
               <div key={slot.protocol_type} className="space-y-2">
                 <div className="text-[10px] font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
@@ -84,7 +95,7 @@ function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: (
           <button onClick={onClose} className="btn btn-primary text-xs px-6 py-2">Close</button>
         </div>
       </div>
-    </>
+    </ModalPortal>
   );
 }
 

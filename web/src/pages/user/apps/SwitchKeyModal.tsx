@@ -37,6 +37,7 @@ import { appsApi, type KeySourceType } from '@/shared/api/user/apps';
 import { deliveryApi } from '@/shared/api/user/delivery';
 import { importApi } from '@/shared/api/user/import';
 import { vaultApi } from '@/shared/api/user/vault';
+import { ModalPortal } from '@/shared/ui/ModalShell';
 
 export interface SwitchKeyModalProps {
   slug: string;
@@ -217,6 +218,7 @@ export function SwitchKeyModal({
   });
 
   return (
+    <ModalPortal>
     <div
       role="dialog"
       aria-modal="true"
@@ -482,5 +484,6 @@ export function SwitchKeyModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

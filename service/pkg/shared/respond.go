@@ -76,24 +76,40 @@ func domainErrorStatus(code string) int {
 	case CodeBizAuthAccountInactive, CodeBizAuthTokenRevoked,
 		CodeBizAuthTokenExpired, CodeBizAuthTokenRecycled,
 		CodeBizAuthTokenNotActive, CodeBizAuthAccessDenied,
-		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied:
+		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied,
+		CodeBizOauthMemberTokenForbidden,
+		// Refused BY DESIGN (form-①): still a 403, but the code tells the client
+		// it's policy, not a permission fault (2026-07-13).
+		CodeBizDeliveryCentralOnly:
 		return http.StatusForbidden
 
 	// ── 404 Not Found ─────────────────────────────────────────────────────────
 	case CodeBizOrgNotFound, CodeBizSeatNotFound, CodeBizKeyNotFound,
-		CodeBizBindNotFound, CodeBizCredNotFound, CodeBizProvNotFound:
+		CodeBizBindNotFound, CodeBizCredNotFound, CodeBizProvNotFound,
+		CodeBizOauthGroupNotFound, CodeBizOauthLoginCredNotProvisioned,
+		CodeBizReferencedNotFound:
 		return http.StatusNotFound
 
 	// ── 409 Conflict ──────────────────────────────────────────────────────────
 	case CodeBizAuthEmailTaken, CodeBizSeatEmailTaken,
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
-		CodeBizLoginSessionTerminated:
+		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
+		CodeBizLoginSessionTerminated,
+		// 2026-07-03 (owner-approved delivery-family contract unification): "no
+		// active / not-deliverable binding" is a RESOURCE-STATE conflict an admin
+		// resolves by configuring the binding — not a service outage. As 503s these
+		// made web consoles/CLIs read a normal not-configured state as "server down".
+		// 503 stays reserved for CodeExtProviderUnavailable (a genuinely
+		// unavailable dependency).
+		CodeBizBindNoActive, CodeBizBindNotDelivered:
 		return http.StatusConflict
 
 	// ── 422 Unprocessable ─────────────────────────────────────────────────────
 	case CodeBizSeatAlreadyClaimed, CodeBizKeyNotActive,
 		CodeBizKeyDuplicateProtocol, CodeBizBindProtocolMismatch,
-		CodeBizCredInactive:
+		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
+		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,
+		CodeBizVKGroupExclusive:
 		return http.StatusUnprocessableEntity
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────
@@ -105,7 +121,7 @@ func domainErrorStatus(code string) int {
 		return http.StatusBadGateway
 
 	// ── 503 Service Unavailable ───────────────────────────────────────────────
-	case CodeBizBindNoActive, CodeBizBindNotDelivered, CodeExtProviderUnavailable:
+	case CodeExtProviderUnavailable:
 		return http.StatusServiceUnavailable
 
 	// ── 500 Internal Server Error (default) ──────────────────────────────────

@@ -32,7 +32,8 @@ export const TEAM_MENU_FALLBACK: CrossAppMenuEntry[] = [
     id: 'team-usage',
     group: 'INSIGHTS',
     label: 'Team Usage',
-    path: '/user/usage-ledger',
+    // 2026-07-03: canonical team-usage path (see master own-menu.ts note).
+    path: '/user/team-usage-ledger',
     visibility: 'team-logged-in',
     icon: 'team-chart',
   },

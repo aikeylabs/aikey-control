@@ -46,7 +46,7 @@ export interface TeamManagedKeysResponse {
 
 /** Read the team-server URL the local-server discovered from the CLI
  * vault. Same-origin GET; returns "" when not logged in. */
-async function readTeamURL(): Promise<string> {
+async function readTeamTarget(): Promise<{ teamUrl: string; gateway: boolean }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -56,11 +56,17 @@ async function readTeamURL(): Promise<string> {
       signal: ctrl.signal,
       credentials: 'omit',
     });
-    if (!res.ok) return '';
-    const data = (await res.json()) as { team_url?: string };
-    return (data.team_url || '').trim().replace(/\/$/, '');
+    if (!res.ok) return { teamUrl: '', gateway: false };
+    const data = (await res.json()) as { team_url?: string; gateway?: boolean };
+    return {
+      teamUrl: (data.team_url || '').trim().replace(/\/$/, ''),
+      // 2026-07-03 composing gateway: the SAME authoritative response
+      // advertises whether this local-server composes the team side —
+      // no extra dependency, fresh on every fetch (P2b item ②).
+      gateway: data.gateway === true,
+    };
   } catch {
-    return '';
+    return { teamUrl: '', gateway: false };
   } finally {
     clearTimeout(timer);
   }
@@ -121,7 +127,7 @@ function rawToTeamRecord(raw: RawTeamKey): TeamVaultRecord {
   const share = (raw.share_status === 'pending' || raw.share_status === 'claimed' || raw.share_status === 'revoked')
     ? raw.share_status
     : 'claimed';
-  const effective = (raw.effective_status === 'active' || raw.effective_status === 'inactive')
+  const effective = (raw.effective_status === 'active' || raw.effective_status === 'inactive' || raw.effective_status === 'needs_login')
     ? raw.effective_status
     : (raw.key_status === 'active' && share === 'claimed' ? 'active' : 'inactive');
   return {
@@ -147,8 +153,17 @@ function rawToTeamRecord(raw: RawTeamKey): TeamVaultRecord {
 export async function fetchTeamManagedKeys(): Promise<
   TeamManagedKeysResponse | TeamFetchError
 > {
-  const [teamUrl, jwt] = await Promise.all([readTeamURL(), readTeamJWT()]);
-  if (!teamUrl || !jwt) {
+  const { teamUrl, gateway } = await readTeamTarget();
+  if (!teamUrl) {
+    return { kind: 'not-logged-in' };
+  }
+  // Composing-gateway path (P2b item ②, 2026-07-03): the team side is
+  // same-origin — fetch relatively and send NO token (the gateway injects
+  // the vault JWT server-side). This removes the last spot where the team
+  // JWT entered the browser on the vault-merge path. Legacy (no gateway):
+  // original cross-origin fetch with the /system/team-jwt token, unchanged.
+  const jwt = gateway ? '' : await readTeamJWT();
+  if (!gateway && !jwt) {
     return { kind: 'not-logged-in' };
   }
 
@@ -156,12 +171,12 @@ export async function fetchTeamManagedKeys(): Promise<
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetch(`${teamUrl}/accounts/me/all-keys`, {
+    const base = gateway ? '' : teamUrl;
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (!gateway) headers['Authorization'] = `Bearer ${jwt}`;
+    res = await fetch(`${base}/accounts/me/all-keys`, {
       method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${jwt}`,
-      },
+      headers,
       signal: ctrl.signal,
       credentials: 'omit',
     });

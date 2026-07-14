@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/cli"
@@ -21,6 +22,35 @@ import (
 // `provider_routes` table (single source of truth across cli + proxy +
 // fallback). Asserting on `provider_routes` here keeps the test aligned with
 // the actual handler output.
+// TestRulesHandler_ServesMemoizedPayloadWithoutBridge pins the memoization
+// contract (2026-07-07 vault-page latency fix): once rulesCached is set, the
+// handler must serve it verbatim and never consult the Bridge or fall back —
+// this is what removes the ~1.2s per-request cli spawn from the page path.
+func TestRulesHandler_ServesMemoizedPayloadWithoutBridge(t *testing.T) {
+	h := &ImportHandlers{rulesCached: json.RawMessage(`{"sentinel":"cached"}`)}
+	rr := httptest.NewRecorder()
+	h.RulesHandler(rr, httptest.NewRequest(http.MethodGet, "/api/user/import/rules", nil))
+	if rr.Code != 200 || !strings.Contains(rr.Body.String(), `"sentinel":"cached"`) {
+		t.Fatalf("memoized payload must be served verbatim, got %d %q", rr.Code, rr.Body.String())
+	}
+}
+
+// TestRulesHandler_FallbackIsNotCached: a bridge-less (or failed-bridge)
+// reply serves the hardcoded snapshot but must NOT populate the cache —
+// otherwise one transient early failure pins stale fallback data until
+// the process restarts.
+func TestRulesHandler_FallbackIsNotCached(t *testing.T) {
+	h := &ImportHandlers{}
+	rr := httptest.NewRecorder()
+	h.RulesHandler(rr, httptest.NewRequest(http.MethodGet, "/api/user/import/rules", nil))
+	if rr.Code != 200 {
+		t.Fatalf("want 200 got %d", rr.Code)
+	}
+	if h.rulesCached != nil {
+		t.Fatalf("fallback reply must not be memoized")
+	}
+}
+
 func TestRulesHandler_ReturnsStaticLayerVersions(t *testing.T) {
 	h := &ImportHandlers{}
 	rr := httptest.NewRecorder()

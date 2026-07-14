@@ -90,6 +90,45 @@ func PollHandler(w http.ResponseWriter, r *http.Request) {
 	forward(w, r, http.MethodPost, proxyBase()+"/oauth/poll", true)
 }
 
+// PoolAuthorizeURLHandler relays POST /api/user/oauth/pool/authorize-url →
+// POST /oauth/pool/authorize-url (C10/RW8 per-member POOL login). Unlike the
+// personal /oauth/login (vault-backed), the pool flow uses the proxy's
+// memory-store broker and writes the exchanged token back to master — the token
+// never lands in the local vault. Body: {"provider","credential_id"}.
+func PoolAuthorizeURLHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodPost, proxyBase()+"/oauth/pool/authorize-url", true)
+}
+
+// PoolSubmitCodeHandler relays POST /api/user/oauth/pool/submit-code →
+// POST /oauth/pool/submit-code. Body: {"session_id","code"}. The proxy exchanges
+// + writes the per-member token back to master; the response carries no token.
+func PoolSubmitCodeHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodPost, proxyBase()+"/oauth/pool/submit-code", true)
+}
+
+// PoolStatusHandler relays GET /api/user/oauth/pool/status?session_id=<id> →
+// GET /oauth/pool/status. The codex pool login has no code to paste (OpenAI
+// redirects to the broker's localhost:1455 callback, which exchanges in-place),
+// so the contribute page polls this until the session flips to success, then
+// calls submit-code with an empty code (idempotent replay). Mirrors the personal
+// StatusHandler above, but against the POOL broker's session store.
+func PoolStatusHandler(w http.ResponseWriter, r *http.Request) {
+	sid := r.URL.Query().Get("session_id")
+	if sid == "" {
+		http.Error(w, `{"error":{"code":"MISSING_SESSION_ID","message":"session_id query param is required"}}`, http.StatusBadRequest)
+		return
+	}
+	u, err := url.Parse(proxyBase() + "/oauth/pool/status")
+	if err != nil {
+		http.Error(w, "internal: bad proxy url", http.StatusInternalServerError)
+		return
+	}
+	q := u.Query()
+	q.Set("session_id", sid)
+	u.RawQuery = q.Encode()
+	forward(w, r, http.MethodGet, u.String(), false)
+}
+
 // forward issues a single HTTP request to the broker and streams the
 // response straight back. It preserves status code and a minimal set
 // of response headers (Content-Type, Content-Length) — broker error

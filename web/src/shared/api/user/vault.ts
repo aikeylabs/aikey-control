@@ -249,6 +249,9 @@ export interface VaultLastTest {
   ping_ok?: boolean;
   api_ok?: boolean;
   chat_ok?: boolean;
+  /** Chat probe was intentionally not executed; do not treat chat_ok=false as failure. */
+  chat_skipped?: boolean;
+  chat_skip_reason?: string;
   latency_ms?: number;
   error_code?: string;
   error_message?: string;
@@ -433,6 +436,16 @@ export interface UseRequest {
   // the CLI resolves all three.
   target: 'personal' | 'oauth' | 'team';
   id: string;
+  /**
+   * Claude Desktop consent replay (阶段7, 2026-07-13). After the consent
+   * modal, the web re-invokes `use` with the answer instead of calling a
+   * dedicated endpoint (方案B — reuses the whole use pipeline; `use` is
+   * idempotent so the replay is side-effect-free beyond the takeover).
+   * Absent on every ordinary use.
+   */
+  desktop_consent?: 'granted' | 'denied';
+  /** "Don't ask again" checkbox state accompanying desktop_consent. */
+  desktop_remember?: boolean;
 }
 
 export interface UseResponse {
@@ -462,6 +475,22 @@ export interface UseResponse {
   hook_file_installed?: boolean;
   hook_rc_wired?: boolean;
   hook_failure_reason?: HookFailureReason | null;
+  /**
+   * Claude Desktop takeover state after this use (阶段7, 2026-07-13).
+   * Present only when the CLI funnel actually evaluated Desktop (anthropic
+   * active + supported platform). needs_consent drives the consent modal;
+   * restart_required drives the toast hint (Desktop is a cold-switch
+   * surface — config changes need an app restart, unlike the CLI).
+   */
+  desktop_switch?: DesktopSwitch;
+}
+
+/** Claude Desktop takeover wire state (mirrors the CLI's DesktopSwitch). */
+export interface DesktopSwitch {
+  detected: boolean;
+  configured: boolean;
+  restart_required: boolean;
+  needs_consent: boolean;
 }
 
 /** Hook coverage v1 failure reason codes. Stable contract. */

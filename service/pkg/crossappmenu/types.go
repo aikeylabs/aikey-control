@@ -44,6 +44,10 @@ const (
 	// will skip the entry; harmless graceful degradation (the link
 	// just doesn't show until peer upgrades).
 	GroupQuality Group = "QUALITY"
+	// APPS added 2026-06-26 to split "Apps" out of the INSIGHTS/Cost
+	// group into its own sidebar group. Same graceful-degradation
+	// contract as QUALITY: peers on older binaries skip the entry.
+	GroupApps Group = "APPS"
 )
 
 // Visibility is the sentinel each side maps to its own runtime predicate.

@@ -49,6 +49,7 @@ import {
 } from 'recharts';
 
 import { runtimeConfig } from '@/app/config/runtime';
+import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { usageApi, type TimelinePoint, type ModelTotal } from '@/shared/api/usage';
 import { CostCell } from '@/shared/ui/CostCell';
@@ -221,7 +222,7 @@ export default function UserAppDetailPage() {
 
   const meQuery = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   const accountId = meQuery.data?.account_id;
-  const isLocalMode = runtimeConfig.authMode === 'local_bypass';
+  const isLocalMode = isLocalUsageScope(runtimeConfig);
   const identity = isLocalMode
     ? { org_id: 'personal' as const }
     : accountId

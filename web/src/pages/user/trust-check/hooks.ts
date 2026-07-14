@@ -82,6 +82,65 @@ export function useStartTrustLocalService() {
   });
 }
 
+/**
+ * useTrustLocalServiceStatus — POST /api/internal/services/trust-local/status
+ *
+ * Proactive install-state probe, served by aikey-local-server (8090) which
+ * shells out `aikey service status trust-local --json`. Unlike the liveness
+ * query (which hits trust-local :8801 directly and can't tell "not installed"
+ * from "installed but stopped" — both just fail), this reports an explicit
+ * `installed` bool from the SAME binary-path truth source as `aikey doctor`.
+ * The banner uses it to show "not installed → aikey app install" on the very
+ * first render instead of the misleading "offline / restart it" default.
+ * Bugfix: 20260703-trust-check-web-offline-vs-notinstalled-proactive.md.
+ *
+ * Never throws on a not-installed/offline result — the console returns
+ * `{ok:true, installed:false, running:false}` (HTTP 200) for those; only a
+ * genuine transport failure rejects, and the banner degrades to the existing
+ * reactive (post-Start-click) detection in that case.
+ */
+export interface TrustLocalServiceStatus {
+  ok: boolean;
+  installed: boolean;
+  running: boolean;
+  detail: string;
+}
+
+/**
+ * Normalize the console's service-status envelope into a total shape.
+ * Exported so the fence test exercises the SAME code the hook runs (not a
+ * re-implementation). Defaults are deliberately conservative: a missing
+ * `installed` reads as `false` so a malformed/legacy console never makes the
+ * banner claim the plugin is present when we can't confirm it.
+ */
+export function normalizeServiceStatus(
+  body: Partial<TrustLocalServiceStatus> | null | undefined,
+): TrustLocalServiceStatus {
+  return {
+    ok: body?.ok ?? false,
+    installed: body?.installed ?? false,
+    running: body?.running ?? false,
+    detail: body?.detail ?? '',
+  };
+}
+
+export function useTrustLocalServiceStatus() {
+  return useQuery<TrustLocalServiceStatus>({
+    queryKey: ['trust-local', 'service-status'],
+    queryFn: async () => {
+      const resp = await fetch('/api/internal/services/trust-local/status', {
+        method: 'POST',
+      });
+      const body = (await resp
+        .json()
+        .catch(() => ({}))) as Partial<TrustLocalServiceStatus>;
+      return normalizeServiceStatus(body);
+    },
+    refetchInterval: STATUS_REFETCH_INTERVAL,
+    staleTime: 10_000,
+  });
+}
+
 export function useTrustStatus() {
   return useQuery({
     queryKey: ['trust-local', 'status'],

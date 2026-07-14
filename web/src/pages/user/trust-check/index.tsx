@@ -37,6 +37,7 @@ import {
   useAliasDetail,
   useRealtimeDetection,
   useStartTrustLocalService,
+  useTrustLocalServiceStatus,
   useTriggerVerify,
   useTrustView,
   useVerifyPolling,
@@ -347,6 +348,10 @@ export default function UserTrustCheckPage() {
   // Showing the mutation's own pending/error state on the banner is
   // enough feedback without racing manual re-fetches.
   const startService = useStartTrustLocalService();
+  // Proactive install-state probe (via the console → `aikey service status`)
+  // so the offline banner can pick the correct not-installed vs offline copy
+  // on first render, not only reactively after a failed Start click.
+  const svcStatus = useTrustLocalServiceStatus();
   const onRowClick = useCallback((row: TrustRow) => {
     setExpandedAlias((prev) => (prev === row.alias_name ? null : row.alias_name));
   }, []);
@@ -440,9 +445,16 @@ export default function UserTrustCheckPage() {
         // The error code comes from the console envelope which forwards
         // the CLI's `{"ok":false, "error":"TRUST_LOCAL_NOT_INSTALLED"}`
         // JSON. See hooks.ts::StartServiceError for the typed shape.
+        // Proactive: the console status probe reports `installed` from the
+        // same binary-path truth source as `aikey doctor`, so the FIRST
+        // render already shows "not installed → aikey app install" (and hides
+        // the useless Start button below) instead of the misleading "offline
+        // / restart it" default. Falls back to the reactive post-Start-click
+        // signal when the probe itself couldn't run.
         const notInstalled =
-          startService.isError &&
-          startService.error?.errorCode === 'TRUST_LOCAL_NOT_INSTALLED';
+          svcStatus.data?.installed === false ||
+          (startService.isError &&
+            startService.error?.errorCode === 'TRUST_LOCAL_NOT_INSTALLED');
         return (
           <div className="tc-banner tc-banner-offline" role="status">
             <span className="tc-banner-dot" />

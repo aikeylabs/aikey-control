@@ -3,6 +3,7 @@ module github.com/AiKeyLabs/aikey-control/service
 go 1.26.1
 
 require (
+	github.com/AiKeyLabs/pkg/aikeycompat v0.0.0
 	github.com/AiKeyLabs/pkg/aikeytime v0.1.0
 	github.com/AiKeyLabs/pkg/providerroutes v0.0.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
@@ -17,3 +18,5 @@ require (
 )
 
 replace github.com/AiKeyLabs/pkg/providerroutes => ../../pkg/providerroutes
+
+replace github.com/AiKeyLabs/pkg/aikeycompat => ../../pkg/aikeycompat

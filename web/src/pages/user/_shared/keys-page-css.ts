@@ -452,6 +452,12 @@ export const KEYS_PAGE_CSS = `
 /* ── Row inline Use button ─ only on non-active rows (design spec). */
 .vault-page .row-use-btn {
   display: inline-flex; align-items: center; gap: 4px;
+  /* Same squeeze-guard as .in-use-chip (whose comment is the origin): the row
+     actions cell is a flex container and this is its only text-bearing child —
+     without these two rules a tight actions column compresses the button until
+     the label clips/wraps. Never shrink; label never wraps. (2026-07-03) */
+  flex-shrink: 0;
+  white-space: nowrap;
   height: 28px;
   padding: 0 9px;
   margin-right: 2px;
@@ -812,6 +818,7 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page .icon-btn {
   width: 28px; height: 28px;
+  flex-shrink: 0; /* same squeeze-guard family as .row-use-btn / .in-use-chip */
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--muted-foreground);

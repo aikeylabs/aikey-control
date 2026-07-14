@@ -24,6 +24,10 @@ const REFRESH_TIMEOUT_MS = 3000;
 
 interface TeamUrlResponse {
   team_url: string;
+  /** 2026-07-03 composing gateway: present+true when this local server
+   * forwards team routes on the same origin. Optional — older servers
+   * omit it and every consumer must treat absence as false. */
+  gateway?: boolean;
 }
 
 /** Synchronous read: localStorage cache or null. Used for the initial
@@ -112,12 +116,14 @@ export async function refreshOtherBaseUrl(): Promise<string | null> {
     const url = (data.team_url || '').trim().replace(/\/$/, '');
     if (!url) {
       // Case 1: server explicitly says "no team URL". Clear both caches so
-      // sidebar renders the logged-out state on next read.
+      // sidebar renders the logged-out state on next read. The gateway flag
+      // follows the same lifecycle — logged out means nothing to compose.
       const previous = getOtherBaseUrl();
       if (previous !== null) {
         setOtherBaseUrl(null);
         clearTeamMenu();
       }
+      setTeamGatewayActive(false);
       return null;
     }
     try {
@@ -136,6 +142,10 @@ export async function refreshOtherBaseUrl(): Promise<string | null> {
       clearTeamMenu();
     }
     setOtherBaseUrl(url);
+    // Gateway capability rides the same authoritative answer. Absent field
+    // (older local-server) → false → links stay cross-origin (original
+    // behavior preserved).
+    setTeamGatewayActive(data.gateway === true);
     return url;
   } catch (err) {
     // Case 3: network error / timeout / abort. Keep cache.
@@ -147,3 +157,48 @@ export async function refreshOtherBaseUrl(): Promise<string | null> {
 }
 
 export const OTHER_BASE_URL_STORAGE_KEY = STORAGE_KEY;
+
+// ── Composing-gateway awareness (2026-07-03, 20260703-web统一origin design) ──
+//
+// User-mandated invariant (2026-07-03): the login/non-login MENU SCOPE must
+// keep the ORIGINAL implementation — visibility, runtime menu sync, the
+// single-binary-composed detection and the cross-origin data clients all
+// keep reading the REAL team URL exactly as before. The gateway changes ONE
+// thing only: where menu clicks NAVIGATE. So the gateway flag is stored
+// alongside (not instead of) the team URL, and only the link-base helper
+// below consumes it.
+
+const GATEWAY_KEY = 'aikey-cross-app:team-gateway';
+
+/** Persist the gateway capability learned from /system/team-url. */
+export function setTeamGatewayActive(active: boolean): void {
+  try {
+    if (active) localStorage.setItem(GATEWAY_KEY, '1');
+    else localStorage.removeItem(GATEWAY_KEY);
+  } catch {
+    // localStorage disabled — degrade to cross-origin links.
+  }
+}
+
+/** True when the local server composes the team side on this origin. */
+export function isTeamGatewayActive(): boolean {
+  try {
+    return localStorage.getItem(GATEWAY_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Base for cross-app NAVIGATION hrefs. Gateway active → '' (same-origin
+ * relative: a full-document load that the local gateway forwards to the
+ * team server); otherwise the real team URL (original cross-origin jump).
+ * Returns null exactly when getOtherBaseUrl() does — callers keep gating
+ * VISIBILITY on getOtherBaseUrl() so menu scope is byte-identical to the
+ * pre-gateway implementation.
+ */
+export function getCrossAppLinkBase(): string | null {
+  const real = getOtherBaseUrl();
+  if (real === null) return null;
+  return isTeamGatewayActive() ? '' : real;
+}

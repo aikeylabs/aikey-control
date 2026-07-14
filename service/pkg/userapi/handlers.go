@@ -139,6 +139,9 @@ func NewHandlers(cfg *Config, logger *slog.Logger) *Handlers {
 //	POST   /api/user/oauth/login         -> oauth.LoginHandler           (no unlock; forwards to aikey-proxy broker)
 //	GET    /api/user/oauth/status        -> oauth.StatusHandler          (no unlock; broker session poll for Codex auth_code)
 //	POST   /api/user/oauth/poll          -> oauth.PollHandler            (no unlock; broker Device-Code poll for Kimi)
+//	POST   /api/user/oauth/pool/authorize-url -> oauth.PoolAuthorizeURLHandler (per-member pool login; → proxy memory broker → writeback master)
+//	POST   /api/user/oauth/pool/submit-code   -> oauth.PoolSubmitCodeHandler
+//	GET    /api/user/oauth/pool/status        -> oauth.PoolStatusHandler (codex callback polling)
 //	POST   /api/user/import/parse        -> Import.ParseHandler
 //	POST   /api/user/import/confirm      -> Import.ConfirmHandler        (requires unlock)
 //	GET    /api/user/import/rules        -> Import.RulesHandler          (unauthed)
@@ -253,6 +256,28 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(oauth.StatusHandler)))
 		mux.Handle("POST /api/user/oauth/poll",
 			authMW(http.HandlerFunc(oauth.PollHandler)))
+		// C10/RW8 per-member POOL login relays (→ proxy /oauth/pool/*): the local
+		// contribute page logs the member into a group account; the proxy exchanges
+		// with a memory-store broker and writes the token back to master.
+		mux.Handle("POST /api/user/oauth/pool/authorize-url",
+			authMW(http.HandlerFunc(oauth.PoolAuthorizeURLHandler)))
+		mux.Handle("POST /api/user/oauth/pool/submit-code",
+			authMW(http.HandlerFunc(oauth.PoolSubmitCodeHandler)))
+		// Codex pool login polls status until the broker's localhost callback
+		// completes the exchange (no paste-code for auth_code flows; R34).
+		mux.Handle("GET /api/user/oauth/pool/status",
+			authMW(http.HandlerFunc(oauth.PoolStatusHandler)))
+
+		// Egress (upstream) proxy config relay (→ proxy /admin/upstream-proxy):
+		// the local "Settings → Upstream proxy" card reads + sets the egress proxy
+		// URL; the proxy persists it to aikey-user.yaml and hot-swaps the live
+		// transport. Same session-cookie auth posture as the broker relays above.
+		mux.Handle("GET /api/user/system/upstream-proxy",
+			authMW(http.HandlerFunc(oauth.UpstreamProxyGetHandler)))
+		mux.Handle("PUT /api/user/system/upstream-proxy",
+			authMW(http.HandlerFunc(oauth.UpstreamProxySetHandler)))
+		mux.Handle("POST /api/user/system/upstream-proxy/probe",
+			authMW(http.HandlerFunc(oauth.UpstreamProxyProbeHandler)))
 	}
 
 	// Import endpoints. ConfirmHandler needs an unlocked session.
@@ -335,7 +360,10 @@ func (h *Handlers) Register(
 	}
 }
 
-// RegisterHook mounts POST /api/user/hook/install behind authMW.
+// RegisterHook mounts the hook-op routes behind authMW:
+//
+//	POST /api/user/hook/install — wire-rc (writes rc with modal consent)
+//	GET  /api/user/hook/status  — read-only readiness probe (2026-07-10)
 //
 // **Edition guard**: callers MUST only invoke this on local-user /
 // trial-full editions (i.e., wherever the trial-server / local-server
@@ -353,4 +381,6 @@ func (h *Handlers) RegisterHook(mux *http.ServeMux, authMW func(http.Handler) ht
 	}
 	mux.Handle("POST /api/user/hook/install",
 		authMW(http.HandlerFunc(h.Hook.InstallHandler)))
+	mux.Handle("GET /api/user/hook/status",
+		authMW(http.HandlerFunc(h.Hook.StatusHandler)))
 }

@@ -92,3 +92,60 @@ describe('rawToTeamRecord', () => {
     expect(r.target).toBe('team');
   });
 });
+
+// ── composing-gateway path (P2b item ②, 2026-07-03) ─────────────────────
+// The vault-merge fetch was the last place the team JWT entered the
+// browser. Under the gateway it must: fetch same-origin (relative), send
+// NO Authorization (the gateway injects it server-side), and never touch
+// /system/team-jwt. Legacy servers (no gateway field) keep the original
+// cross-origin + token flow — pinned by the second case.
+import { vi } from 'vitest';
+import { fetchTeamManagedKeys } from './managed-keys';
+
+describe('fetchTeamManagedKeys gateway mode', () => {
+  it('gateway: relative fetch, no Authorization, team-jwt never requested', async () => {
+    const calls: Array<{ url: string; auth: string | undefined }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), auth: (init?.headers as Record<string, string>)?.['Authorization'] });
+      if (String(url).includes('/system/team-url')) {
+        return new Response(JSON.stringify({ team_url: 'http://192.168.0.120:3000', gateway: true }));
+      }
+      if (String(url).includes('/accounts/me/all-keys')) {
+        return new Response(JSON.stringify({ keys: [] }));
+      }
+      throw new Error('unexpected fetch ' + url);
+    }));
+    const out = await fetchTeamManagedKeys();
+    vi.unstubAllGlobals();
+
+    expect('records' in out).toBe(true);
+    const keysCall = calls.find((c) => c.url.includes('all-keys'))!;
+    expect(keysCall.url).toBe('/accounts/me/all-keys'); // relative — gateway routes it
+    expect(keysCall.auth).toBeUndefined(); // token never enters the browser
+    expect(calls.some((c) => c.url.includes('team-jwt'))).toBe(false);
+  });
+
+  it('legacy (no gateway field): original cross-origin + bearer flow preserved', async () => {
+    const calls: Array<{ url: string; auth: string | undefined }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), auth: (init?.headers as Record<string, string>)?.['Authorization'] });
+      if (String(url).includes('/system/team-url')) {
+        return new Response(JSON.stringify({ team_url: 'http://192.168.0.120:3000' }));
+      }
+      if (String(url).includes('/system/team-jwt')) {
+        return new Response(JSON.stringify({ jwt: 'legacy-jwt' }));
+      }
+      if (String(url).includes('/accounts/me/all-keys')) {
+        return new Response(JSON.stringify({ keys: [] }));
+      }
+      throw new Error('unexpected fetch ' + url);
+    }));
+    const out = await fetchTeamManagedKeys();
+    vi.unstubAllGlobals();
+
+    expect('records' in out).toBe(true);
+    const keysCall = calls.find((c) => c.url.includes('all-keys'))!;
+    expect(keysCall.url).toBe('http://192.168.0.120:3000/accounts/me/all-keys');
+    expect(keysCall.auth).toBe('Bearer legacy-jwt');
+  });
+});

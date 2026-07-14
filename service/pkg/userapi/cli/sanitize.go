@@ -98,3 +98,16 @@ func aikeyBinaryName() string {
 	}
 	return "aikey"
 }
+
+// AikeyBinaryName is the exported accessor so callers in OTHER packages
+// resolve the SAME installer-owned basename instead of hardcoding "aikey".
+// Why exported (2026-07-06, find#5): appkit/user-local's service_handler
+// hardcoded "aikey" (no .exe) when shelling out `aikey service status
+// trust-local` for the trust-check page. On Windows os/exec then failed to
+// find the binary (only aikey.exe exists) → the endpoint returned 502 → the
+// page showed trust-local "not installed" even while it was running on :8801.
+// This is the SAME class of bug as the vault-page 503 regression (2026-04-28,
+// windows-compatibility.md F3) this helper was created to prevent — it
+// recurred purely because a new caller duplicated the path logic instead of
+// reusing this centralised name. Keep new cross-package callers on this.
+func AikeyBinaryName() string { return aikeyBinaryName() }

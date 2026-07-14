@@ -1,17 +1,24 @@
 /**
  * HookWireRcModal — Web-modal "Allow" path for shell-hook rc wiring.
  *
- * Pops automatically on the first vault mutation in this browser session
- * that returns hook_rc_wired=false (mounted by the same pages as
+ * Pops automatically on EVERY eligible vault mutation (use/add) that
+ * returns hook_rc_wired=false (mounted by the same pages as
  * <HookReadinessBanner>). Also re-openable from the banner CTA.
  *
+ * 2026-07-10 escalation (20260710-hook接线可见性升级.md): the previous
+ * once-per-session auto-pop gate is gone. "Not now" only skips the current
+ * occurrence — the next eligible use/add re-pops while rc stays unwired.
+ * The eligible mutation is precisely the moment the user says "route this
+ * key", which is exactly when unwired state makes the action meaningless,
+ * so re-prompting there is targeted, not global nagging.
+ *
  * Design contract: 20260507-web-hook-rc-modal-自动注入.md
- *   - Shows a plain-text preview of the 3 lines that will be appended
- *     to ~/.zshrc / ~/.bashrc so the user has full informed consent
+ *   - Shows a plain-text preview of the lines that will be appended
+ *     to the shell profile so the user has full informed consent
  *   - Includes the manual command `aikey hook install` as an inline
  *     fallback for users who would rather run it from a terminal
  *   - Allow → POST /api/user/hook/install → setReadiness({rcWired:true})
- *   - Not now → markModalShown() + close (banner remains as fallback)
+ *   - Not now → close (banner remains as fallback)
  *   - On error: stays open with the failure reason inline; user can
  *     retry, copy the manual command, or dismiss
  *
@@ -25,6 +32,8 @@ import { hookApi } from '@/shared/api/user/hook';
 import { pickHookReadiness, type HookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { copyText } from '@/shared/utils/clipboard';
+import { isWindowsClient } from '@/shared/utils/platform';
+import { ModalPortal } from '@/shared/ui/ModalShell';
 
 interface HookWireRcModalProps {
   open: boolean;
@@ -42,7 +51,7 @@ interface HookWireRcModalProps {
  * carried hook code over from a shared bundle. Belt-and-suspenders for the
  * server-side edition guard in aikey-control-master/.../router.go.
  */
-function isLocalEdition(): boolean {
+export function isLocalEdition(): boolean {
   if (typeof window === 'undefined') return false;
   // Use a loose access — the script tag is injected only for local modes.
   const cfg = (window as unknown as { __AIKEY_CONFIG__?: { authMode?: string } })
@@ -53,8 +62,9 @@ function isLocalEdition(): boolean {
 /**
  * Page-side composable: returns `{open, openIfNeeded, openManually, close}`.
  *
- * `openIfNeeded(readiness, eligible)` opens the modal exactly once per
- * session when ALL of the following hold:
+ * `openIfNeeded(readiness, eligible)` opens the modal when ALL of the
+ * following hold (2026-07-10: the once-per-session gate was removed — it
+ * re-pops on every eligible mutation while rc stays unwired):
  *   - `eligible === true`        — the caller's mutation is a "user explicitly
  *                                  set this as active" event (e.g. add of a
  *                                  first-of-its-protocol key, `aikey use`).
@@ -66,7 +76,6 @@ function isLocalEdition(): boolean {
  *   - readiness ↦ "almost ready"  — file installed + rc not wired + no
  *                                  failure reason
  *   - `isLocalEdition()`         — Personal / Trial only
- *   - !`modalShownThisSession`   — at most one auto-pop per session
  *
  * Pages call `openIfNeeded(pickHookReadiness(res), eligible)` in mutation
  * onSuccess right after `setReadiness(...)`. Eligibility maps to the
@@ -81,24 +90,20 @@ function isLocalEdition(): boolean {
  * Pages also pass `openManually` as the banner's `onEnableClick` so the
  * banner CTA becomes a re-opener regardless of eligibility.
  *
- * Per 20260507-web-hook-rc-modal-自动注入.md update X2.
+ * Per 20260507-web-hook-rc-modal-自动注入.md update X2 +
+ * 20260710-hook接线可见性升级.md.
  */
 export function useHookWireRcModal() {
   const [open, setOpen] = useState(false);
-  const modalShownThisSession = useHookReadinessStore((s) => s.modalShownThisSession);
 
-  const openIfNeeded = useCallback(
-    (r: HookReadiness, eligible: boolean) => {
-      if (!eligible) return;
-      if (modalShownThisSession) return;
-      if (!isLocalEdition()) return;
-      if (!r.fileInstalled) return;
-      if (r.rcWired) return;
-      if (r.failureReason) return;
-      setOpen(true);
-    },
-    [modalShownThisSession],
-  );
+  const openIfNeeded = useCallback((r: HookReadiness, eligible: boolean) => {
+    if (!eligible) return;
+    if (!isLocalEdition()) return;
+    if (!r.fileInstalled) return;
+    if (r.rcWired) return;
+    if (r.failureReason) return;
+    setOpen(true);
+  }, []);
 
   const close = useCallback(() => setOpen(false), []);
   // Manual re-open (banner CTA path) — bypasses eligibility check because
@@ -108,14 +113,24 @@ export function useHookWireRcModal() {
   return { open, openIfNeeded, openManually, close };
 }
 
-const MARKER_BLOCK = `# aikey shell hook v3 begin
+// Platform-specific previews (parity audit 2026-07-07 P2-7): showing the zsh
+// block to a Windows user broke informed consent — the bridge actually writes
+// the PowerShell $PROFILE block below (see aikey-cli
+// shell_integration_windows.rs v3_rc_block_powershell; keep in sync).
+const MARKER_BLOCK_UNIX = `# aikey shell hook v3 begin
 [[ -f ~/.aikey/hook.zsh ]] && source ~/.aikey/hook.zsh
+# aikey shell hook v3 end`;
+const MARKER_BLOCK_WINDOWS = `# aikey shell hook v3 begin
+$_aikeyBin = if ($env:USERPROFILE) { Join-Path $env:USERPROFILE '.aikey\\bin' } else { Join-Path $env:HOME '.aikey/bin' }
+if ((Test-Path $_aikeyBin) -and (($env:Path -split ';') -notcontains $_aikeyBin)) { $env:Path = "$_aikeyBin;$env:Path" }
+$_aikeyHookFile = if ($env:USERPROFILE) { Join-Path $env:USERPROFILE '.aikey/hook.ps1' } else { Join-Path $env:HOME '.aikey/hook.ps1' }
+if (Test-Path $_aikeyHookFile) { . $_aikeyHookFile }
+Remove-Variable -Name _aikeyBin,_aikeyHookFile -Scope Local -ErrorAction SilentlyContinue
 # aikey shell hook v3 end`;
 const MANUAL_COMMAND = 'aikey hook install';
 
 export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
   const setReadiness = useHookReadinessStore((s) => s.setReadiness);
-  const markModalShown = useHookReadinessStore((s) => s.markModalShown);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -150,7 +165,6 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
       // <HookReadinessBanner> updates immediately (and any other page
       // visiting later in this session shows the post-wire state).
       setReadiness(pickHookReadiness(res));
-      markModalShown();
       if (res.hook_rc_wired) {
         onClose();
       } else {
@@ -168,8 +182,9 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
     }
   };
 
+  // "Not now" = skip this occurrence only. No session flag — the next
+  // eligible use/add re-pops the modal while rc stays unwired (2026-07-10).
   const handleNotNow = () => {
-    markModalShown();
     onClose();
   };
 
@@ -183,12 +198,16 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
     }
   };
 
-  const previewLines = useMemo(() => MARKER_BLOCK.split('\n'), []);
+  const onWindows = useMemo(() => isWindowsClient(), []);
+  const previewLines = useMemo(
+    () => (onWindows ? MARKER_BLOCK_WINDOWS : MARKER_BLOCK_UNIX).split('\n'),
+    [onWindows],
+  );
 
   if (!open) return null;
 
   return (
-    <>
+    <ModalPortal>
       <div
         className="fixed inset-0 z-50"
         style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
@@ -214,14 +233,14 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
           Enable terminal auto-sync?
         </h3>
         <p className="text-xs font-mono leading-relaxed mb-4" style={{ color: 'var(--muted-foreground)' }}>
-          Adding 3 lines to your shell rc lets every new terminal pick up key
-          changes (Add / Use / Delete) automatically — no manual{' '}
-          <code className="font-mono">source</code> needed.
+          Adding a small managed block to your shell profile lets every new
+          terminal pick up key changes (Add / Use / Delete) automatically — no
+          manual reload needed.
         </p>
 
         {/* Diff preview */}
         <p className="text-[10px] font-mono uppercase tracking-wider mb-1" style={{ color: 'var(--muted-foreground)' }}>
-          Will append to ~/.zshrc:
+          {onWindows ? 'Will append to your PowerShell $PROFILE:' : 'Will append to ~/.zshrc:'}
         </p>
         <pre
           className="font-mono text-xs leading-relaxed p-3 rounded border mb-4 whitespace-pre-wrap"
@@ -306,6 +325,6 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
           </button>
         </div>
       </div>
-    </>
+    </ModalPortal>
   );
 }

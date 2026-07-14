@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AiKeyLabs/pkg/aikeycompat"
 )
 
 // stdinEnvelope matches aikey-cli's commands_internal::protocol::StdinEnvelope.
@@ -44,11 +46,18 @@ type Bridge struct {
 	Logger  *slog.Logger
 }
 
-// New builds a bridge with a default 15s timeout. The binary is resolved
+// New builds a bridge with a default 60s timeout. The binary is resolved
 // lazily on first call so local-server can boot even if the cli isn't
 // installed yet (the page still renders; only the action endpoints fail).
+//
+// Why 60s, not 15s (parity audit 2026-07-07 P2-5): the FIRST aikey.exe
+// invocation on a fresh Windows install runs under a Defender cold-scan
+// plus the vault auto-migration, which together blow past 15s — observed
+// live as `set-url timed out` on the very first Settings save a customer
+// makes. 60s matches the installers' first-boot health budget. Steady-state
+// calls still return in <1s; the deadline only bounds the pathological case.
 func New(logger *slog.Logger) *Bridge {
-	return &Bridge{Timeout: 15 * time.Second, Logger: logger}
+	return &Bridge{Timeout: 60 * time.Second, Logger: logger}
 }
 
 // Invoke spawns one `aikey _internal <subcommand>` and returns the parsed
@@ -115,6 +124,10 @@ func (b *Bridge) InvokeWithTimeout(
 
 	// --stdin-json is the mandatory IPC mode for every _internal subcommand.
 	cmd := exec.CommandContext(callCtx, b.BinaryPath, "_internal", subcommand, "--stdin-json")
+	// Never flash a console window on Windows (2026-07-07: every vault-page
+	// bridge call popped a cmd/Windows Terminal window when the server ran
+	// console-less, e.g. started via `aikey web start`). No-op on Unix.
+	aikeycompat.HideSpawnConsole(cmd)
 	cmd.Stdin = bytes.NewReader(envJSON)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -215,6 +228,10 @@ func (b *Bridge) InvokeInit(
 	defer cancel()
 
 	cmd := exec.CommandContext(callCtx, b.BinaryPath, "_internal", "init", "--stdin-json")
+	// Never flash a console window on Windows (2026-07-07: every vault-page
+	// bridge call popped a cmd/Windows Terminal window when the server ran
+	// console-less, e.g. started via `aikey web start`). No-op on Unix.
+	aikeycompat.HideSpawnConsole(cmd)
 	cmd.Stdin = bytes.NewReader(envJSON)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -279,6 +296,10 @@ func (b *Bridge) InvokeHookOp(
 	defer cancel()
 
 	cmd := exec.CommandContext(callCtx, b.BinaryPath, "_internal", "hook-op", "--stdin-json")
+	// Never flash a console window on Windows (2026-07-07: every vault-page
+	// bridge call popped a cmd/Windows Terminal window when the server ran
+	// console-less, e.g. started via `aikey web start`). No-op on Unix.
+	aikeycompat.HideSpawnConsole(cmd)
 	cmd.Stdin = bytes.NewReader(envJSON)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

@@ -46,7 +46,7 @@ func handleLogout(invoke func(ctx context.Context) error, logger *slog.Logger) h
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second) // 60s: first-run aikey.exe under Defender cold-scan + vault migration exceeds 15s (parity audit 2026-07-07 P2-5)
 		defer cancel()
 		if err := invoke(ctx); err != nil {
 			if logger != nil {
@@ -114,7 +114,7 @@ func handleSetTeamURL(invoke func(ctx context.Context, url string) error, logger
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid url (expected http://host:port or https://host)"})
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second) // 60s: first-run aikey.exe under Defender cold-scan + vault migration exceeds 15s (parity audit 2026-07-07 P2-5)
 		defer cancel()
 		if err := invoke(ctx, clean); err != nil {
 			if logger != nil {

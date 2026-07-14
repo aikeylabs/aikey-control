@@ -61,15 +61,19 @@ func TestHandler_LocalizesLabelsForZh(t *testing.T) {
 	// zh request → labels swapped to Chinese; en (default) → unchanged.
 	// Drives the real Handler through the same LocaleMiddleware the
 	// user-local mux uses, so the locale path is exercised end-to-end.
+	// Probes personal-vault + personal-apps: vault verifies basic zh
+	// localization; apps verifies a second entry stays localized after the
+	// 2026-06-26 menu reshuffle (Apps moved INSIGHTS→APPS group, Import was
+	// removed as a cross-app entry — see personal_menu.go).
 	cases := []struct {
-		name       string
-		accept     string
-		wantVault  string
-		wantImport string
+		name      string
+		accept    string
+		wantVault string
+		wantApps  string
 	}{
-		{"zh", "zh-CN,zh;q=0.9", "保管库", "导入"},
-		{"en", "en-US,en;q=0.9", "Vault", "Import"},
-		{"no-header", "", "Vault", "Import"},
+		{"zh", "zh-CN,zh;q=0.9", "保管库", "应用"},
+		{"en", "en-US,en;q=0.9", "Vault", "Apps"},
+		{"no-header", "", "Vault", "Apps"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -92,8 +96,8 @@ func TestHandler_LocalizesLabelsForZh(t *testing.T) {
 			if got := byID["personal-vault"]; got != tc.wantVault {
 				t.Errorf("vault label=%q, want %q", got, tc.wantVault)
 			}
-			if got := byID["personal-import"]; got != tc.wantImport {
-				t.Errorf("import label=%q, want %q", got, tc.wantImport)
+			if got := byID["personal-apps"]; got != tc.wantApps {
+				t.Errorf("apps label=%q, want %q", got, tc.wantApps)
 			}
 		})
 	}

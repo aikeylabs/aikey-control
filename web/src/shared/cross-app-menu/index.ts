@@ -41,6 +41,12 @@ export {
   refreshOtherBaseUrl,
   OTHER_BASE_URL_STORAGE_KEY,
 } from './other-base-url';
+export { buildCrossAppUrl } from './cross-app-url';
+export {
+  setTeamGatewayActive,
+  isTeamGatewayActive,
+  getCrossAppLinkBase,
+} from './other-base-url';
 
 /** Generic: this side's own menu (Personal entries). */
 export const OWN_MENU = _own;

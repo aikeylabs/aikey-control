@@ -48,8 +48,13 @@ export interface TeamVaultRecord {
   share_status: 'pending' | 'claimed' | 'revoked';
 
   /** Effective active/inactive state — derived B-side from
-   * share_status × key_status. A treats this as opaque truth. */
-  effective_status: 'active' | 'inactive';
+   * share_status × key_status. A treats this as opaque truth.
+   * 'needs_login' (2026-07-03): OAUTH-GROUP VK whose routed pool account needs one
+   * login — amber "待登录" + login CTA, not a red "inactive".
+   * 'pending_download' (2026-07-06): direct-bind VK whose key material hasn't been
+   * delivered locally (and no cluster node route) — amber, actionable: unlock+reload
+   * or `aikey key sync` downloads it. See update/20260706-绑定材料守卫与Web解锁态全量sync.md. */
+  effective_status: 'active' | 'inactive' | 'needs_login' | 'pending_download';
 
   /** RFC3339 UTC timestamp when the key expires (CLI rotates before).
    * Optional because not every team key has an explicit expiry. */

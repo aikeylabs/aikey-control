@@ -29,10 +29,13 @@ package vault
 //   - Alias conflicts auto-retry with `-2/-3/...` up to 20 times (D7).
 
 import (
+	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/cli"
@@ -46,16 +49,115 @@ import (
 // networks without letting a hung probe block the request indefinitely.
 const testConnectivityTimeout = 45 * time.Second
 
+// snapshotSyncDebounce bounds how often a vault-page load may kick a background
+// snapshot sync, so rapid polling of /api/user/vault/list can't hammer Control
+// with sync-version checks. A newly-issued team VK appears on the next load
+// after this window (worst case) — acceptable for a human-driven page.
+const snapshotSyncDebounce = 5 * time.Second
+
+// snapshotSyncTimeout upper-bounds one background sync subprocess so a hung
+// network can't leak the goroutine. The subprocess is detached from the HTTP
+// request, so this never delays the vault read.
+const snapshotSyncTimeout = 20 * time.Second
+
 // CRUDHandlers bundles the User-Vault-page endpoints. Depends on
 // Store + cli.Bridge already built by the orchestrator.
 type CRUDHandlers struct {
 	Store  *Store
 	Bridge *cli.Bridge
+
+	// Background snapshot-sync coordination (see triggerBackgroundSnapshotSync).
+	// The vault page reads the LOCAL VK cache; these fields let a page load kick
+	// a best-effort refresh of that cache WITHOUT blocking the read (offline-first).
+	syncMu     sync.Mutex
+	lastSyncAt time.Time
+	syncing    bool
 }
 
 // NewCRUDHandlers wires a CRUDHandlers with shared deps.
 func NewCRUDHandlers(store *Store, bridge *cli.Bridge) *CRUDHandlers {
 	return &CRUDHandlers{Store: store, Bridge: bridge}
+}
+
+// triggerBackgroundSnapshotSync fires a best-effort, NON-BLOCKING snapshot sync
+// so the vault page's next load reflects server-side VK changes (a newly-issued
+// team/group VK) without depending on the CLI or the `aikey agent` daemon having
+// run.
+//
+// # Why non-blocking is load-bearing (offline-first)
+// The vault MUST render from the local cache instantly even with no network —
+// that is a preserved product principle (offline use). So this NEVER waits on
+// Control: it returns immediately, the caller serves the cache, and the sync
+// happens in a detached goroutine whose result only matters for the NEXT load.
+// If offline / Control is down, the sync subprocess fails silently and the
+// already-served cache is unaffected. See
+// aikeylabs/workflow/CI/designpattern/web-read-triggers-nonblocking-sync.md.
+//
+// Debounced + single-flight so rapid polls don't spawn overlapping subprocesses.
+//
+// claimSyncSlot reports whether the caller may START a background sync now, and
+// if so marks one in-flight. Returns false when a sync is already running
+// (single-flight) or when the last one started within snapshotSyncDebounce
+// (debounce). Split out from triggerBackgroundSnapshotSync so the gate is
+// unit-testable without spawning a subprocess.
+func (h *CRUDHandlers) claimSyncSlot() bool {
+	h.syncMu.Lock()
+	defer h.syncMu.Unlock()
+	if h.syncing || (!h.lastSyncAt.IsZero() && time.Since(h.lastSyncAt) < snapshotSyncDebounce) {
+		return false
+	}
+	h.syncing = true
+	h.lastSyncAt = time.Now()
+	return true
+}
+
+// releaseSyncSlot clears the in-flight flag (the debounce window keeps ticking
+// from lastSyncAt, so releasing does not immediately allow another sync).
+func (h *CRUDHandlers) releaseSyncSlot() {
+	h.syncMu.Lock()
+	h.syncing = false
+	h.syncMu.Unlock()
+}
+
+// vaultKeyHex: the unlocked session's vault_key hex, or "" when locked.
+//
+// Two sync tiers (2026-07-06, update/20260706-绑定材料守卫与Web解锁态全量sync.md):
+//   - "" (locked)  → PlaceholderHex → CLI runs the metadata-only sync. Provider
+//     key material CANNOT be stored in this tier — it must be encrypted with
+//     the vault key before touching disk, and there is no key to encrypt with.
+//   - real key     → CLI runs the FULL sync (claim + key-material download), so
+//     an unlocked web page load self-heals a missing provider_key_ciphertext
+//     (previously the key sat in "pending download" until a terminal
+//     `aikey key sync`).
+func (h *CRUDHandlers) triggerBackgroundSnapshotSync(vaultKeyHex string) {
+	if h.Bridge == nil || !h.claimSyncSlot() {
+		return
+	}
+
+	keyHex := vaultKeyHex
+	if keyHex == "" {
+		keyHex = cli.PlaceholderHex
+	}
+	go func() {
+		defer h.releaseSyncSlot()
+		// Detached context: the goroutine outlives the HTTP request (whose ctx is
+		// cancelled once the vault list response is written). Bounded so a stuck
+		// network can't pin the goroutine forever.
+		ctx, cancel := context.WithTimeout(context.Background(), snapshotSyncTimeout)
+		defer cancel()
+		// Failures are expected offline; log at debug-ish WARN only on a
+		// real error envelope, never fail anything.
+		res, err := h.Bridge.Invoke(ctx, "query", "snapshot_sync", keyHex, "", struct{}{})
+		if err != nil {
+			slog.Debug("vault snapshot_sync background invoke failed (non-fatal, offline?)",
+				"error", err.Error())
+			return
+		}
+		if res != nil && res.Status != "ok" {
+			slog.Debug("vault snapshot_sync background returned non-ok (non-fatal)",
+				"error_code", res.ErrorCode)
+		}
+	}()
 }
 
 // ============================================================================
@@ -111,6 +213,15 @@ func (h *CRUDHandlers) ListHandler(w http.ResponseWriter, r *http.Request) {
 			haveSession = true
 		}
 	}
+
+	// Offline-first background refresh: kick a best-effort snapshot sync so the
+	// NEXT load reflects newly-issued server-side VKs (team/group) without the
+	// CLI or `aikey agent` having run. This NEVER blocks — the list below returns
+	// from the local cache immediately, so an offline member still gets their
+	// vault instantly. Unlocked sessions pass their vault_key so the sync can
+	// also claim + download missing provider key material (full tier); locked
+	// sessions stay metadata-only. See triggerBackgroundSnapshotSync.
+	h.triggerBackgroundSnapshotSync(hex)
 
 	if !haveSession {
 		// Locked path — single cli call, no decryption.
@@ -572,6 +683,14 @@ func (h *CRUDHandlers) EntryAddHandler(w http.ResponseWriter, r *http.Request) {
 type useRequest struct {
 	Target string `json:"target"`
 	ID     string `json:"id"`
+	// Claude Desktop consent replay (阶段7, 2026-07-13): after the browser
+	// consent modal the web re-invokes `use` carrying the answer. Typed
+	// passthrough is REQUIRED — json.Unmarshal drops unknown fields, so
+	// without these the CLI would never see the consent (verified). The
+	// response direction needs no fields here: cli.Result.Data is a raw
+	// json.RawMessage passed through verbatim.
+	DesktopConsent  string `json:"desktop_consent,omitempty"`
+	DesktopRemember bool   `json:"desktop_remember,omitempty"`
 }
 
 // UseHandler: POST /api/user/vault/use.

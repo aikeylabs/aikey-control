@@ -28,6 +28,7 @@ import {
 import { usageApi } from '@/shared/api/usage';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { runtimeConfig } from '@/app/config/runtime';
+import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import { formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import { formatCost } from '@/shared/utils/formatCost';
 import { CostCell } from '@/shared/ui/CostCell';
@@ -260,7 +261,7 @@ export default function UserUsageLedgerPage() {
   });
 
   const accountId = me?.account_id;
-  const isLocalMode = runtimeConfig.authMode === 'local_bypass';
+  const isLocalMode = isLocalUsageScope(runtimeConfig);
   const identity = isLocalMode
     ? { org_id: 'personal' as const }
     : accountId ? { account_id: accountId } : null;

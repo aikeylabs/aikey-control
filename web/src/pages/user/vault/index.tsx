@@ -28,6 +28,7 @@ import type { TFunction } from 'i18next';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { importApi, type ProviderRoute } from '@/shared/api/user/import';
+import { routedGroupAccount } from '@/shared/api/user/delivery';
 import { formatDate, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import {
   vaultApi,
@@ -47,7 +48,12 @@ import {
   HookWireRcModal,
   useHookWireRcModal,
 } from '@/shared/components/HookWireRcModal';
+import {
+  DesktopConsentModal,
+  useDesktopConsentModal,
+} from '@/shared/components/DesktopConsentModal';
 import { friendlyTestError } from './friendlyTestError';
+import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
 import { ENTRY_BY_FAMILY } from '@/shared/generated/provider-registry';
@@ -80,6 +86,53 @@ type SortKey = 'created' | 'last_test' | 'alias';
 //     team rows don't open the drawer in this phase.
 //   - in_use_for: future Phase 3B work (Active state for team rows
 //     was deferred per design decision 8).
+/**
+ * A candidate pool account behind a oauth-group VK (N6 projection, Stage A).
+ * Two DISTINCT concepts, deliberately not conflated (R22): `assigned` = master's
+ * static rank-0 default pick (stable); `current_routed` = the account the proxy is
+ * ACTUALLY routing this seat to right now (override ?? rank-0), stamped by the proxy's
+ * 60s rail and folded in by the CLI so the drawer shows the live pick without a manual
+ * key sync (C2, 2026-06-30). login_status is likewise refreshed from the live rail (C1).
+ */
+interface OauthGroupAccountRef {
+  account_id: string;
+  identity: string; // email / alias for display
+  provider_code: string;
+  priority: number;
+  assigned: boolean; // master-assigned default (static rank-0)
+  // current_routed (C2): the account this seat's traffic is currently routed to in
+  // steady state (proxy override ?? rank-0). Distinct from `assigned` — an engine
+  // redirect moves current_routed off the default. false/absent when the proxy hasn't
+  // polled yet (unknown → no indicator, never wrongly claimed).
+  current_routed?: boolean;
+  credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
+  // login_status (RW8 per-member, C1 live): the viewer's own per-member token state for
+  // this pool account — 'logged_in' | 'needs_login' | 'auth_failed' | 'revoked'.
+  // Refreshed from the proxy's group_runtime rail (≤60s) so it reflects a completed
+  // login without a manual key sync. Absent on api_key candidates / older snapshots.
+  login_status?: string;
+  // credential_id (2026-07-12): the account's real credential id — the SAME id the
+  // team-oauth page keys its rows by (MyPoolAccount.credential_id), threaded from the
+  // master snapshot (snapshot/group.go). The login CTA appends it as ?expand= so the
+  // team-oauth page auto-expands this account's sign-in card instead of making the
+  // user hunt for it. Absent on older snapshots / rail-only accounts → CTA falls
+  // back to the plain (un-targeted) link.
+  credential_id?: string;
+}
+
+/**
+ * teamOauthLoginHref: deep-link for the 登录 CTA — /user/team-oauth with the target
+ * account's credential_id as ?expand= so the landing page auto-expands that account's
+ * sign-in card (2026-07-12). credential_id may be absent (older master snapshots
+ * predate it; rail-only accounts don't carry it) → plain un-targeted link, same
+ * behavior as before this change.
+ */
+function teamOauthLoginHref(credentialId?: string): string {
+  return credentialId
+    ? `/user/team-oauth?expand=${encodeURIComponent(credentialId)}`
+    : '/user/team-oauth';
+}
+
 interface TeamRowRecord {
   target: 'team';
   id: string; // == virtual_key_id, used as the rowKey scope segment
@@ -88,7 +141,15 @@ interface TeamRowRecord {
   protocol_family: string;
   supported_providers: string[];
   share_status: 'pending' | 'claimed' | 'revoked';
-  effective_status: 'active' | 'inactive';
+  // 'needs_login' (2026-07-03, 防呆): a claimed+active OAUTH-GROUP VK whose CURRENT
+  // ROUTED pool account has no member token yet — usable after ONE login, so it reads
+  // as an amber "待登录" (matching the pool-account row chips) + a login CTA, NOT a red
+  // "inactive". 'inactive' stays for genuinely unusable (revoked / disabled / no
+  // routable account at all). CLI computes it in query.rs (single source).
+  // 'pending_download' (2026-07-06): direct-bind VK whose key material hasn't been
+  // delivered locally — amber + actionable (unlock+reload / `aikey key sync`), keeps
+  // the chip honest when the IN USE badge (binding-driven) points at it.
+  effective_status: 'active' | 'inactive' | 'needs_login' | 'pending_download';
   expires_at?: string;
   // route_url + route_token (2026-05-11): emitted inline by CLI's
   // `_internal query` for team records (Phase 3B revised). Drawer
@@ -102,7 +163,7 @@ interface TeamRowRecord {
   created_at: number; // 0 — server doesn't echo create time in current DTO
   last_used_at: number | null; // null until usage telemetry rides through
   use_count: number; // 0 (same)
-  status: 'active' | 'inactive'; // mirrors effective_status for the chip
+  status: 'active' | 'inactive' | 'needs_login' | 'pending_download'; // mirrors effective_status for the chip
   in_use_for?: string[]; // empty in 3A; populated in 3B when Active wires up
   /**
    * Generic extension blob (2026-05-22) — see VaultExtra in
@@ -113,6 +174,31 @@ interface TeamRowRecord {
    * survives every `aikey key sync`.
    */
   extra?: VaultExtra | null;
+  /**
+   * N6 oauth_group projection (Stage A): when this team VK is bound to a
+   * credential-sharing group, `oauth_group_id` is the group and `group_accounts`
+   * is the candidate pool (identity / provider / priority + master's assigned
+   * default). null/absent for direct-bind VKs. Emitted by the CLI's
+   * `_internal query` from the vault cache.
+   */
+  oauth_group_id?: string | null;
+  /**
+   * group_alias (2026-07-01): the OAuth group's human-facing name (server-synced via
+   * the managed-keys-snapshot). Shown in the row + drawer so a member in MULTIPLE
+   * OAuth groups — who gets one VK per group — can tell which VK routes to which
+   * group and pick by name (`aikey use` / set-route). Empty for direct-bind VKs or
+   * an unnamed group (then the generic "OAuth group" label shows).
+   */
+  group_alias?: string | null;
+  group_accounts?: OauthGroupAccountRef[] | null;
+  /**
+   * owner_email (RW8): the owning account's email, stamped by `aikey key sync`
+   * and emitted by the CLI's `_internal query`. Surfaced in the drawer Meta as
+   * "Owner" — especially useful to tell apart a group VK left behind after that
+   * account logged out (its row keeps the email; another account's sync doesn't
+   * overwrite it). Absent on rows synced before the column / older CLI bundles.
+   */
+  owner_email?: string | null;
 }
 
 /** Row union for the unified vault table — broader than `VaultRecord`
@@ -274,10 +360,11 @@ function formatRelative(unix: number | null | undefined): string {
 function lastTestHealthScore(lt: VaultLastTest | null | undefined): number {
   if (!lt) return 0;
   const legacyPass = lt.status === 'pass';
+  const chatSkipped = lt.chat_skipped === true;
   const phases = [
     lt.ping_ok ?? legacyPass,
     lt.api_ok  ?? legacyPass,
-    lt.chat_ok ?? legacyPass,
+    chatSkipped ? true : (lt.chat_ok ?? legacyPass),
   ];
   const firstFailIdx = phases.findIndex((ok) => !ok);
   if (firstFailIdx === -1) return 4;
@@ -297,20 +384,24 @@ function LastTestCell(props: { value: VaultLastTest | null }) {
     );
   }
   const legacyPass = lt.status === 'pass';
-  const phases: Array<{ name: string; ok: boolean }> = [
+  const chatSkipped = lt.chat_skipped === true;
+  const phases: Array<{ name: string; ok: boolean; skipped?: boolean }> = [
     { name: 'Ping', ok: lt.ping_ok ?? legacyPass },
     { name: 'API',  ok: lt.api_ok  ?? legacyPass },
-    { name: 'Chat', ok: lt.chat_ok ?? legacyPass },
+    { name: 'Chat', ok: chatSkipped ? true : (lt.chat_ok ?? legacyPass), skipped: chatSkipped },
   ];
   // Locate the first failing stage. Once a stage fails, everything to
   // its right is treated as "didn't get to run" (red), regardless of
   // its own boolean — that's the user's signal-chain mental model.
-  const firstFailIdx = phases.findIndex(p => !p.ok);
+  const firstFailIdx = phases.findIndex(p => !p.ok && !p.skipped);
   const okColor    = 'var(--success, #22c55e)';
   const failColor  = '#f59e0b';                       // amber — this stage broke
   const downstream = 'var(--destructive, #ef4444)';   // red — never got a chance
+  const skippedColor = 'var(--muted-foreground)';
 
   const segmentColor = (i: number): string => {
+    if (firstFailIdx !== -1 && i > firstFailIdx) return downstream;
+    if (phases[i]?.skipped) return skippedColor;
     if (firstFailIdx === -1) return okColor;        // all green
     if (i < firstFailIdx)    return okColor;        // upstream of break: passed
     if (i === firstFailIdx)  return failColor;      // the broken link
@@ -324,7 +415,9 @@ function LastTestCell(props: { value: VaultLastTest | null }) {
   // pixels to it.
   const tooltip = [
     ...phases.map((p, i) => {
-      const state = firstFailIdx === -1 || i < firstFailIdx
+      const state = p.skipped
+        ? 'skipped'
+        : firstFailIdx === -1 || i < firstFailIdx
         ? 'ok'
         : i === firstFailIdx ? 'failed' : 'not reached';
       return `${p.name}: ${state}`;
@@ -416,9 +509,31 @@ function providerDisplayName(r: VaultRowRecord): string {
   // tail). OAuth rows: broker provider name.
   let raw: string;
   if (r.target === 'personal') raw = r.provider_code ?? 'unknown';
-  else if (r.target === 'team') raw = r.protocol_family || 'unknown';
+  else if (r.target === 'team') raw = displayProtocolFamily(r.protocol_family) || 'unknown';
   else raw = r.provider;
   return raw.toLowerCase().replace(/_oauth$|_api$/, '');
+}
+
+/** Provider label for a team row rendered INSIDE a specific display-family
+ *  group. A multi-protocol team key (`supported_providers` spanning families,
+ *  e.g. anthropic + openai) renders one row per family (see `grouped`), and
+ *  each row must label itself with the provider belonging to ITS group —
+ *  falling back to the record's single `protocol_family` made the openai-group
+ *  row of an anthropic+openai key read "anthropic" (2026-07-13 user report;
+ *  mirrors the virtual-keys page's per-family Row fix). Returns null when the
+ *  record has no supported provider in this family (caller falls back to
+ *  providerDisplayName). */
+function teamProviderForGroup(r: VaultRowRecord, groupProvider: string): string | null {
+  if (r.target !== 'team') return null;
+  const sp = (r as TeamRowRecord).supported_providers;
+  if (!Array.isArray(sp)) return null;
+  for (const p of sp) {
+    const raw = (p ?? '').toString().trim();
+    if (raw && familyOfProviderCode(raw) === groupProvider) {
+      return raw.toLowerCase().replace(/_oauth$|_api$/, '');
+    }
+  }
+  return null;
 }
 
 /** Shell wrapper that honours the currently-routed account for a given
@@ -439,33 +554,7 @@ function providerShellCommand(family: string | null | undefined): string | null 
   return null;
 }
 
-/** V-layer helper: provider_code → display family for vault group rendering.
- *
- *  2026-05-08 显示层 family-grouping (详见 update/20260508-display-family-grouping.md)
- *
- *  Source of truth: CLI registry (`aikey-cli/data/provider_registry.yaml`
- *  RegistryEntry.family) + Rust `provider_registry::family_of()` helper.
- *  This frontend mapping mirrors only the multi-platform families (currently
- *  just Kimi) so the vault page can group personal keys by family even when
- *  the V data is delivered via `supported_providers` (per-record provider_code
- *  array) rather than the per-record `protocol_family` field.
- *
- *  Why duplicated here: vault `grouped` memo iterates `supported_providers` for
- *  multi-provider expansion (e.g. 0011 gateway key supports anthropic+openai
- *  → shows in BOTH groups). Each element is a provider_code, not a family. To
- *  family-group correctly without exposing extra response fields, the V layer
- *  maps each provider_code → family at render time.
- *
- *  Single-platform providers (anthropic / openai / google_gemini / ...) return
- *  input unchanged — matches CLI registry's `family defaults to code` rule.
- */
-function familyOfProviderCode(code: string): string {
-  const lc = (code ?? '').trim().toLowerCase();
-  if (lc === 'kimi_code' || lc === 'moonshot' || lc === 'kimi') return 'kimi';
-  // Add other multi-platform families here when they appear in the registry.
-  // Single-platform: family == code (e.g. anthropic, openai, deepseek).
-  return lc;
-}
+
 
 
 /** Route-token tail "vk_9f2a…a7e3" from full route_token. */
@@ -591,6 +680,12 @@ export default function UserVaultPage() {
     queryKey: ['vault-list', unlocked ? 'unlocked' : 'locked'],
     queryFn: vaultApi.list,
     staleTime: 30_000,
+    // Auto-refresh the candidate list so a pool account added on the server (or by an
+    // admin) appears WITHOUT a manual page reload — the design intent of the proxy's
+    // 60s fast rail: "/user/vault reflects login + routing within the proxy's 60s poll"
+    // (C1/C2). The list query is the passwordless metadata-only _internal query (no
+    // decrypt), so a 15s poll is cheap; keepPreviousData below avoids any flicker.
+    refetchInterval: 15_000,
     // Why keepPreviousData: when `unlocked` flips (lock → unlock or back), the
     // queryKey changes and React Query would otherwise return undefined while
     // the new query loads. That transient empty array tripped the live-record
@@ -634,10 +729,29 @@ export default function UserVaultPage() {
   // `team_count` (set when team rows are inlined into `entries`).
   // `total` is the visible-row union — drives the "All" pill count.
   const counts = useMemo(() => {
-    const personal = listData?.counts.personal ?? 0;
-    const oauth = listData?.counts.oauth ?? 0;
-    const team = listData?.counts.team ?? 0;
-    return { personal, oauth, team, total: personal + oauth + team };
+    const personalVK = listData?.counts.personal ?? 0; // target='personal' (个人 API Key)
+    const personalOAuth = listData?.counts.oauth ?? 0; // target='oauth'    (个人 OAuth)
+    const team = listData?.counts.team ?? 0;           // target='team'     (团队, 含团队 OAuth 池)
+    // `total` (All pill) = the unique visible-row union. The three targets are
+    // disjoint, so their sum is the true total.
+    const total = personalVK + personalOAuth + team;
+    // Personal / Team pills are SCOPE (ownership) filters; the OAuth pill is a
+    // TYPE filter cutting ACROSS scope — so they OVERLAP on purpose (2026-07-07):
+    //   Personal = 个人 VK + 个人 OAuth       (target 'personal' + 'oauth')
+    //   Team     = 团队 (含团队 OAuth 池)      (target 'team')
+    //   OAuth    = 个人 OAuth + 团队 OAuth 池  ('oauth' + team-with-oauth_group_id)
+    // OAuth rows are double-counted across pills BY DESIGN, so only the disjoint
+    // sum feeds `total`. Kept in lockstep with the branches in `filtered` below.
+    const rows = (listData?.records as VaultRowRecord[]) ?? [];
+    const teamOAuthPool = rows.filter(
+      (r) => r.target === 'team' && !!(r as TeamRowRecord).oauth_group_id,
+    ).length;
+    return {
+      personal: personalVK + personalOAuth,
+      oauth: personalOAuth + teamOAuthPool,
+      team,
+      total,
+    };
   }, [listData]);
 
   // v4.3 (2026-05-01): provider_routes table — the authoritative declaration
@@ -682,7 +796,24 @@ export default function UserVaultPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filteredList = records.filter((r) => {
-      if (typeFilter !== 'all' && r.target !== typeFilter) return false;
+      // Type filter. Personal / Team are SCOPE (ownership) filters; OAuth is a
+      // TYPE filter cutting across scope — they overlap on purpose (2026-07-07):
+      //   Personal = 个人 VK + 个人 OAuth       (target 'personal' | 'oauth')
+      //   Team     = 团队 (含团队 OAuth 池)      (target 'team')
+      //   OAuth    = 个人 OAuth + 团队 OAuth 池  ('oauth' | team-with-oauth_group_id)
+      // Kept in lockstep with the `counts` computation above.
+      if (typeFilter !== 'all') {
+        let matches: boolean;
+        if (typeFilter === 'personal') {
+          matches = r.target === 'personal' || r.target === 'oauth';
+        } else if (typeFilter === 'oauth') {
+          matches = r.target === 'oauth'
+            || (r.target === 'team' && !!(r as TeamRowRecord).oauth_group_id);
+        } else {
+          matches = r.target === typeFilter; // team
+        }
+        if (!matches) return false;
+      }
       if (q) {
         const alias = (r.alias ?? '').toLowerCase();
         const provider = providerDisplayName(r);
@@ -732,6 +863,12 @@ export default function UserVaultPage() {
   const [editDraft, setEditDraft] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [drawerRecord, setDrawerRecord] = useState<VaultRowRecord | null>(null);
+  // Which display-family group the drawer was opened FROM. A multi-protocol
+  // key renders one row per family (openai + anthropic), so "the record's
+  // group" is ambiguous without carrying it — the old premise "a row lives in
+  // exactly one protocol group" broke when multi-protocol keys landed
+  // (2026-07-13). Drives the drawer's highlighted protocol + its Use scope.
+  const [drawerGroup, setDrawerGroup] = useState<string | null>(null);
   // Drawer open "mode" (2026-04-24 user request):
   //   - 'persistent' → opened by the explicit View details button; stays
   //     open even as the user scrolls the table behind the drawer.
@@ -753,6 +890,10 @@ export default function UserVaultPage() {
   // The hook is local-edition gated and session-throttled internally —
   // see useHookWireRcModal in HookWireRcModal.tsx.
   const wireRcModal = useHookWireRcModal();
+  // Claude Desktop takeover consent (阶段7, 2026-07-13): auto-pops when a
+  // `use` on a claude credential reports desktop_switch.needs_consent.
+  // Local-edition gated inside the hook, same as wireRcModal.
+  const desktopModal = useDesktopConsentModal();
 
   const renameMut = useMutation({
     mutationFn: vaultApi.rename,
@@ -852,6 +993,10 @@ export default function UserVaultPage() {
       const r = pickHookReadiness(res);
       setHookReadinessFromMutation(r);
       wireRcModal.openIfNeeded(r, true);
+      // Claude Desktop consent (阶段7): pops only on needs_consent — a
+      // normal credential switch under an existing takeover is a no-op
+      // (D1/D3) and stays silent here.
+      desktopModal.openIfNeeded(res);
       qc.invalidateQueries({ queryKey: ['vault-list'] });
     },
   });
@@ -963,7 +1108,7 @@ export default function UserVaultPage() {
             return n;
           });
         },
-        onSuccess: () => {
+        onSuccess: (res) => {
           // Flash route-pulse once (650ms window matches .just-switched CSS).
           setJustSwitchedIds((prev) => {
             const n = new Set(prev);
@@ -980,10 +1125,20 @@ export default function UserVaultPage() {
           const providerTag = providerDisplayName(target).toUpperCase();
           const aliasLabel = target.alias ?? '(unnamed)';
           const cli = 'aikey use ' + (target.alias ?? '');
+          // Desktop is a cold-switch surface: when THIS use changed its
+          // config (restart_required), say so in the toast sub — the
+          // `cliHint` field is not rendered by the toast row, only `sub`
+          // is (阶段7 plan §5.3).
+          const desktopHint = res.desktop_switch?.restart_required
+            ? ' · ' + t('vault.desktopRestartHint')
+            : '';
           pushToast({
             kind: 'success',
             title: providerTag + ' now routes through ' + aliasLabel,
-            sub: (previousForUndo ? 'was ' + (previousForUndo.alias ?? '(unnamed)') + ' · ' : '') + cli,
+            sub:
+              (previousForUndo ? 'was ' + (previousForUndo.alias ?? '(unnamed)') + ' · ' : '') +
+              cli +
+              desktopHint,
             cliHint: cli,
             // Undo routes the same group context — the previous holder was
             // active for THIS group before we replaced it, so re-applying it
@@ -1100,18 +1255,47 @@ export default function UserVaultPage() {
         // schema change adds a third cache key).
         qc.refetchQueries({ queryKey: ['vault-list'] });
       })
-      .catch((err: Error & { code?: string; response?: { status?: number } }) => {
-        // Surface the raw HTTP status alongside the (CLI / axios) error
-        // code so the popup's friendly-text mapping can branch on
-        // 5xx-class failures without re-inspecting the thrown object.
-        const httpStatus = err.response?.status;
-        setTestError({
-          code: err.code,
-          httpStatus,
-          message: err.message || 'Test failed for an unknown reason',
-        });
-        setTestPhase('error');
-      });
+      .catch(
+        (err: Error & {
+          code?: string;
+          response?: {
+            status?: number;
+            data?: { error_code?: string; error_message?: string; error?: string; message?: string };
+          };
+        }) => {
+          // Surface the raw HTTP status alongside the error code so the popup's
+          // friendly-text mapping can branch correctly. PREFER the backend's
+          // error code (e.g. I_PROXY_NOT_RUNNING) over the axios transport code
+          // (ERR_BAD_REQUEST / ERR_BAD_RESPONSE for ANY non-2xx): friendlyTestError
+          // keys on the I_* code, so falling back to the axios code collapsed every
+          // mapped failure (proxy down / cluster node / credential not found) into
+          // the generic fallback — raw axios text and NO next-step.
+          //
+          // FIELD NAMES (2026-07-12 bugfix — the 2026-06-26 fix read the wrong
+          // ones, so it never actually took effect): this endpoint is on
+          // aikey-local-server, whose error envelope is
+          // `{status, error_code, error_message}` (see userapi/cli/errors.go
+          // JSONError, and the ErrEnvelope type in shared/api/user/vault.ts).
+          // The `{error, message}` shape is the MASTER/team API's envelope — a
+          // different service. Reading `data.error` here always yielded
+          // undefined, so every I_* branch was dead for HTTP-error responses
+          // (e.g. a team key's I_CREDENTIAL_NOT_FOUND 404 rendered as the bare
+          // "Request failed with status code 404"). We read the local shape
+          // first and keep the master shape as a defensive fallback.
+          const httpStatus = err.response?.status;
+          const data = err.response?.data;
+          setTestError({
+            code: data?.error_code ?? data?.error ?? err.code,
+            httpStatus,
+            message:
+              data?.error_message ||
+              data?.message ||
+              err.message ||
+              'Test failed for an unknown reason',
+          });
+          setTestPhase('error');
+        },
+      );
   }
 
   function closeTestPopup() {
@@ -1187,9 +1371,12 @@ export default function UserVaultPage() {
             if (fams.length > 0) return fams;
           }
         }
-        // OAuth path: protocol_family already comes family-resolved from backend
-        // (commands_internal/query.rs::protocol_family_of returns registry.family).
-        return [r.protocol_family ?? 'unknown'];
+        // OAuth path: protocol_family comes family-resolved from backend
+        // (commands_internal/query.rs::protocol_family_of returns registry.family)
+        // EXCEPT an empty OAuth group VK, which carries the raw protocol_type
+        // ("openai_compatible") — displayProtocolFamily folds that to the pool's
+        // provider ("openai") so it groups with its non-empty siblings.
+        return [displayProtocolFamily(r.protocol_family) || 'unknown'];
       })();
       for (const fam of families) addToGroup(fam, r);
     }
@@ -1394,8 +1581,15 @@ export default function UserVaultPage() {
     () => records.filter((r) => r.status === 'active').length,
     [records],
   );
+  // 待登录 (2026-07-03) is NOT an error — it's an actionable pending-login state, so it
+  // gets its own count and is EXCLUDED from the error tally (which should reflect only
+  // genuinely unusable keys: revoked / disabled / no routable account).
+  const needsLoginCount = useMemo(
+    () => records.filter((r) => r.status === 'needs_login').length,
+    [records],
+  );
   const errorCount = useMemo(
-    () => records.filter((r) => r.status !== 'active').length,
+    () => records.filter((r) => r.status !== 'active' && r.status !== 'needs_login').length,
     [records],
   );
 
@@ -1419,6 +1613,24 @@ export default function UserVaultPage() {
               session-persistent fallback / re-opener). */}
           <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
           <HookWireRcModal open={wireRcModal.open} onClose={wireRcModal.close} />
+          <DesktopConsentModal
+            open={desktopModal.open}
+            replay={desktopModal.replay}
+            onClose={desktopModal.close}
+            onGranted={(d) => {
+              // Granted replay finished: refresh the list (binding state is
+              // idempotent but cheap to re-read) and surface the cold-switch
+              // hint — takeover only takes effect after a Desktop restart.
+              qc.invalidateQueries({ queryKey: ['vault-list'] });
+              if (d?.restart_required) {
+                pushToast({
+                  kind: 'success',
+                  title: t('vault.desktopConsentTitle'),
+                  sub: t('vault.desktopRestartHint'),
+                });
+              }
+            }}
+          />
           {/* Phase 3A-2 team-fetch banner: surfaces categorical errors
               (not-logged-in / unauth / unreachable / parse-error) above
               the page so the user understands why the Team rows are
@@ -1484,6 +1696,7 @@ export default function UserVaultPage() {
             <CardHeader
               counts={counts}
               activeCount={activeCount}
+              needsLoginCount={needsLoginCount}
               errorCount={errorCount}
             />
 
@@ -1610,6 +1823,7 @@ export default function UserVaultPage() {
                                 deletePending={deleteMut.isPending}
                                 onOpenDrawer={(mode) => {
                                   setDrawerRecord(r);
+                                  setDrawerGroup(g.provider);
                                   setDrawerMode(mode ?? 'persistent');
                                 }}
                                 isLastInGroup={idx === sortedRecords.length - 1}
@@ -1688,15 +1902,19 @@ export default function UserVaultPage() {
             setDrawerRecord(null);
           }}
           // Phase 3B (2026-05-11): drawer "Use" button — same single-source-
-          // of-truth as the inline row Use. groupProvider here is the
-          // record's protocol_family because the drawer doesn't carry the
-          // group context (drawer is opened from a row that already lives
-          // in exactly one protocol group, so family is unambiguous).
-          onUse={() => switchTo(drawerRecord, drawerRecord.protocol_family ?? 'unknown')}
+          // of-truth as the inline row Use. 2026-07-13: family now comes from
+          // the GROUP the drawer was opened from (drawerGroup) — the old
+          // "a row lives in exactly one protocol group, so protocol_family is
+          // unambiguous" premise broke with multi-protocol keys, which render
+          // one row per family; the openai-group drawer must Use for openai.
+          // Fallback to protocol_family only for stale state (drawer survived
+          // a records refresh that dropped the group).
+          groupProvider={drawerGroup ?? (displayProtocolFamily(drawerRecord.protocol_family) || 'unknown')}
+          onUse={() => switchTo(drawerRecord, drawerGroup ?? (drawerRecord.protocol_family ?? 'unknown'))}
           // Test connection moved to the row Actions column 2026-05-22;
           // popup state is still owned at page level so the popup
           // overlays the page rather than the drawer.
-          inUse={recordInUseForGroup(drawerRecord, drawerRecord.protocol_family ?? 'unknown')}
+          inUse={recordInUseForGroup(drawerRecord, drawerGroup ?? (drawerRecord.protocol_family ?? 'unknown'))}
           switchPending={switchingIds.has(rowKey(drawerRecord))}
           hostToRoute={hostToRoute}
           providerToRoute={providerToRoute}
@@ -1985,7 +2203,7 @@ function UnlockBanner(props: {
         // UNLOCK button; the password field stays hidden until the user
         // commits to unlocking.
         <button
-          className="btn btn-primary px-4 py-1.5 text-[11px]"
+          className="btn btn-primary px-4 py-1.5 text-[11px] min-w-[60px]"
           onClick={() => setExpanded(true)}
         >
           {t('vault.unlock')}
@@ -2010,7 +2228,7 @@ function UnlockBanner(props: {
             />
             <button
               type="submit"
-              className="btn btn-primary px-3 py-1.5 text-[11px]"
+              className="btn btn-primary px-3 py-1.5 text-[11px] min-w-[60px]"
               disabled={props.unlockPending || !props.password}
             >
               {props.unlockPending ? t('vault.unlocking') : t('vault.unlock')}
@@ -2053,10 +2271,12 @@ function UnlockBanner(props: {
 function CardHeader({
   counts,
   activeCount,
+  needsLoginCount,
   errorCount,
 }: {
   counts: { personal: number; oauth: number; team: number; total: number };
   activeCount: number;
+  needsLoginCount: number;
   errorCount: number;
 }) {
   const { t } = useTranslation();
@@ -2078,6 +2298,12 @@ function CardHeader({
           <span className="chip success">
             <span className="status-dot" style={{ width: 5, height: 5 }} />
             {activeCount}{t('vault.activeSuffix')}
+          </span>
+        )}
+        {needsLoginCount > 0 && (
+          <span className="chip warning">
+            <span className="status-dot" style={{ width: 5, height: 5 }} />
+            {needsLoginCount} {t('vault.statusNeedsLogin')}
           </span>
         )}
         {errorCount > 0 && (
@@ -2231,10 +2457,12 @@ function FilterPill({
 
 // ── Team fetch banner ────────────────────────────────────────────────────
 //
-// Phase 3A-2: surfaces the team-vault store's failure modes above the table
-// so users know WHY their team keys aren't showing (vs. a silent empty
-// "Team" filter). The four failure kinds map to distinct UX surfaces per
-// design decision 6 (roadmap update 20260511 §6):
+// Phase 3A-2, semantics revised by Phase 3B (2026-05-11): team rows are
+// displayed from the CLI's local vault cache and stay visible/usable while
+// the team server is offline — this banner only reports that the
+// reachability probe failed, i.e. sync of new issuance/revocation/status is
+// paused. It must NOT claim keys are hidden. The four failure kinds map to
+// distinct UX surfaces per design decision 6 (roadmap update 20260511 §6):
 //
 //   - not-logged-in:  user hasn't run `aikey login` yet against any team
 //                     server. NOT shown — most personal-edition users will
@@ -2558,11 +2786,26 @@ const Row = React.memo(function Row(props: {
   const r = props.record;
   const inUse = recordInUseForGroup(r, props.groupProvider);
   const lockedTitle = props.locked ? t('vault.unlockToUseAction') : undefined;
-  const providerName = providerDisplayName(r);
   const isTeam = r.target === 'team';
   const isOAuth = r.target === 'oauth';
   const aliasMono = isMonoAlias(r.alias);
-  const kindLabel = isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY';
+  // Group VK = shared OAuth pool: it has no single protocol_family of its own
+  // (would render "unknown"), so derive the Provider column from the pool's
+  // default (or first) account.
+  const isTeamOAuthGroup = isTeam && !!(r as TeamRowRecord).oauth_group_id;
+  const groupAccts = isTeamOAuthGroup ? (r as TeamRowRecord).group_accounts : null;
+  const groupProto = routedGroupAccount(groupAccts)?.provider_code;
+  const providerName =
+    groupProto || teamProviderForGroup(r, props.groupProvider) || providerDisplayName(r);
+  // Kind chip. Fully i18n'd (2026-07-07, user request): in Chinese the four
+  // kinds render 密钥 / OAuth / 团队 / 团队 OAuth; English keeps KEY / OAUTH /
+  // TEAM / TEAM-OAUTH. Values live in the vault namespace of the locale files.
+  // NOTE: the chip's 密钥 (record TYPE = an API key) is a different axis from the
+  // filter pill's 个人 (record SCOPE = personal-owned, filterKey), so the two
+  // deliberately read differently.
+  const kindLabel = isTeamOAuthGroup
+    ? t('vault.kindTeamOAuth')
+    : isTeam ? t('vault.kindTeam') : isOAuth ? t('vault.kindOAuth') : t('vault.kindKey');
   const kindClass = isTeam ? ' team' : isOAuth ? ' oauth' : '';
 
   // Secondary alias line: route_token tail + contextual hint.
@@ -2588,9 +2831,41 @@ const Row = React.memo(function Row(props: {
     // about the team-managed lifecycle so users aren't surprised when
     // the team admin's rotation kicks in.
     const expires = formatExpiresAtIso(r.expires_at, t);
+    // N6 oauth_group (Stage A): on a group VK, surface the shared-group marker +
+    // the pool account this seat is CURRENTLY ROUTED to — the proxy's live pick
+    // (current_routed, engine-first) when available, else the master default. The
+    // full candidate list is in the drawer.
+    const defaultAcct = routedGroupAccount(r.group_accounts);
     subLine = (
       <>
         {t('vault.teamKeyPrefix')}{teamShareLabel(r.share_status, t)}
+        {r.oauth_group_id && (
+          <>
+            <span className="mx-1 opacity-40">·</span>
+            {/* Show the OAuth group's NAME (group_alias) so a member in multiple
+                groups can tell which VK routes to which group; fall back to the
+                generic label for an unnamed group (2026-07-01). */}
+            <span style={{ color: 'var(--primary-dim)' }} title={t('vault.oauthGroupShared')}>
+              {(r as TeamRowRecord).group_alias || t('vault.oauthGroupShared')}
+            </span>
+            {defaultAcct ? (
+              <>
+                <span className="mx-1 opacity-40">·</span>
+                <span title={t('vault.oauthGroupDefaultAccount')}>{defaultAcct.identity}</span>
+              </>
+            ) : (
+              // Empty candidate set: the seat was unbound from the group, or the
+              // group has no enabled accounts → this group key can't route. Surface
+              // it so the member isn't left thinking a blank "Shared group" is fine.
+              <>
+                <span className="mx-1 opacity-40">·</span>
+                <span style={{ color: '#f59e0b' }} title={t('vault.oauthGroupNoAccessHint')}>
+                  {t('vault.oauthGroupNoAccess')}
+                </span>
+              </>
+            )}
+          </>
+        )}
         {expires && (
           <>
             <span className="mx-1 opacity-40">·</span>
@@ -2725,10 +3000,28 @@ const Row = React.memo(function Row(props: {
             <span className="status-dot" style={{ width: 5, height: 5 }} />
             {t('vault.statusActive')}
           </span>
+        ) : r.status === 'needs_login' ? (
+          // Amber, not red: the routed pool account just needs one login (待登录) — the
+          // pool-account row chips use the same term. Actionable, not an error state.
+          <span className="chip warning">
+            <span className="status-dot" style={{ width: 5, height: 5 }} />
+            {t('vault.statusNeedsLogin')}
+          </span>
+        ) : r.status === 'pending_download' ? (
+          // Amber like needs_login: key material not delivered locally yet —
+          // actionable (unlock+reload triggers the full sync / `aikey key sync`).
+          // The chip carries the remedy in its title (2026-07-13): the state is
+          // self-healing on an unlocked page load, but a locked vault can't
+          // decrypt material, so the user needs the terminal command spelled out
+          // — mirrors the needs_login chip's needsLoginCtaTitle precedent.
+          <span className="chip warning" title={t('vault.pendingDownloadTitle')}>
+            <span className="status-dot" style={{ width: 5, height: 5 }} />
+            {t('vault.statusPendingDownload')}
+          </span>
         ) : (
           <span className="chip danger">
             <span className="status-dot error" style={{ width: 5, height: 5 }} />
-            {String(r.status).toUpperCase()}
+            {r.status === 'inactive' ? t('vault.statusInactive') : String(r.status).toUpperCase()}
           </span>
         )}
       </td>
@@ -2836,6 +3129,27 @@ const Row = React.memo(function Row(props: {
                 </button>
               );
             })()}
+            {/* 登录 CTA (2026-07-03, 防呆): a needs_login group VK can't route until the
+                member logs into the routed pool account. Instead of just hiding the Use
+                button (which leaves the row looking dead), offer a one-click link to the
+                team-oauth page where the routed account is auto-highlighted with the
+                sign-in control. Occupies the same primary-action slot as Use.
+                2026-07-12: the link now carries ?expand=<credential_id> of the ROUTED
+                account (the one whose missing token made this VK needs_login) so the
+                team-oauth page auto-expands its sign-in card on arrival. */}
+            {isTeam && (r as TeamRowRecord).effective_status === 'needs_login' && !inUse && (
+              <Link
+                to={teamOauthLoginHref(
+                  routedGroupAccount((r as TeamRowRecord).group_accounts)?.credential_id,
+                )}
+                className="row-use-btn"
+                title={t('vault.needsLoginCtaTitle')}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ZapIcon className="w-3 h-3" />
+                {t('vault.loginCta')}
+              </Link>
+            )}
             {inUse && (
               <button
                 type="button"
@@ -3128,6 +3442,10 @@ function DetailDrawer(props: {
    *  Personal/OAuth code paths are unchanged; team rows render a
    *  Virtual-Key section instead of Credential and skip the Delete button. */
   record: VaultRowRecord;
+  /** Display-family group this drawer was opened from. Multi-protocol keys
+   *  render one row per family; the drawer highlights THIS family's provider
+   *  (bold) and mutes the others (2026-07-13 user spec). Also scopes Use. */
+  groupProvider: string;
   locked: boolean;
   onClose: () => void;
   onBeginRename: () => void;
@@ -3208,7 +3526,43 @@ function DetailDrawer(props: {
   // fields walled off behind isOAuth.
   const oauth = isOAuth ? (r as OAuthVaultRecord) : null;
   const team = isTeam ? (r as TeamRowRecord) : null;
-  const providerName = providerDisplayName(r);
+  // Group VK derives its protocol from the pool's default/first account (it has
+  // no single protocol_family of its own — see the row component for rationale).
+  const groupProto = team?.oauth_group_id
+    ? routedGroupAccount(team.group_accounts)?.provider_code
+    : undefined;
+  const providerName =
+    groupProto || teamProviderForGroup(r, props.groupProvider) || providerDisplayName(r);
+  // Full protocol surface of the key (multi-protocol direct-bind keys carry
+  // several supported_providers). The drawer shows ALL of them: the current
+  // group's provider bold/highlighted, the rest muted — so a user opening the
+  // openai-group drawer of an anthropic+openai key sees both, with openai
+  // emphasized (2026-07-13 user spec). OAuth pool VKs stay single (per routed
+  // account). Order preserved but the current provider is hoisted first.
+  const allProviders: string[] = (() => {
+    if (groupProto) return [providerName];
+    const sp =
+      r.target === 'team' || r.target === 'personal'
+        ? (r as PersonalVaultRecord | TeamRowRecord).supported_providers
+        : null;
+    if (Array.isArray(sp) && sp.length > 0) {
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const p of sp) {
+        const raw = (p ?? '').toString().trim().toLowerCase().replace(/_oauth$|_api$/, '');
+        if (raw && !seen.has(raw)) {
+          seen.add(raw);
+          out.push(raw);
+        }
+      }
+      if (out.length > 0) {
+        return out.includes(providerName)
+          ? [providerName, ...out.filter((p) => p !== providerName)]
+          : out;
+      }
+    }
+    return [providerName];
+  })();
 
   return (
     <>
@@ -3223,6 +3577,8 @@ function DetailDrawer(props: {
                   className="prov-dot"
                   style={{ background: providerBrandColor(providerName) }}
                 />
+                {/* Head shows ONLY the current group's protocol (2026-07-13 user
+                    spec); the full multi-protocol list lives in META below. */}
                 <span
                   className="name font-mono"
                   style={{ color: 'var(--muted-foreground)' }}
@@ -3230,7 +3586,7 @@ function DetailDrawer(props: {
                   {providerName}
                 </span>
                 <span className={`kind-pill${isTeam ? ' team' : isOAuth ? ' oauth' : ''}`}>
-                  {isTeam ? 'TEAM' : isOAuth ? 'OAUTH' : 'KEY'}
+                  {team?.oauth_group_id ? t('vault.kindTeamOAuth') : isTeam ? t('vault.kindTeam') : isOAuth ? t('vault.kindOAuth') : t('vault.kindKey')}
                 </span>
               </span>
               {r.status === 'active' ? (
@@ -3238,10 +3594,21 @@ function DetailDrawer(props: {
                   <span className="status-dot" style={{ width: 5, height: 5 }} />
                   {t('vault.statusActive')}
                 </span>
+              ) : r.status === 'needs_login' ? (
+                <span className="chip warning">
+                  <span className="status-dot" style={{ width: 5, height: 5 }} />
+                  {t('vault.statusNeedsLogin')}
+                </span>
+              ) : r.status === 'pending_download' ? (
+                // Same remedy hint as the row chip (2026-07-13) — see there.
+                <span className="chip warning" title={t('vault.pendingDownloadTitle')}>
+                  <span className="status-dot" style={{ width: 5, height: 5 }} />
+                  {t('vault.statusPendingDownload')}
+                </span>
               ) : (
                 <span className="chip danger">
                   <span className="status-dot error" style={{ width: 5, height: 5 }} />
-                  {String(r.status).toUpperCase()}
+                  {r.status === 'inactive' ? t('vault.statusInactive') : String(r.status).toUpperCase()}
                 </span>
               )}
             </div>
@@ -3257,6 +3624,138 @@ function DetailDrawer(props: {
         </div>
 
         <div className="drawer-body">
+          {/* N6 oauth_group (Stage A): pool candidate accounts behind this group
+              VK — identity / provider / priority + the master-assigned default.
+              "Default" is master's STATIC rank-0 pick; the proxy's live selection
+              (which may fall back when an account is cooled) is Stage B. */}
+          {isTeam && team && team.oauth_group_id && (
+            <div className="drawer-section">
+              <div className="drawer-section-title">
+                <KeyRoundIcon className="w-3 h-3" />
+                {t('vault.oauthGroupGroupAccounts')}
+              </div>
+              {(team.group_accounts ?? []).length === 0 ? (
+                <div className="drawer-field">
+                  <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
+                    {t('vault.oauthGroupNoAccounts')}
+                  </span>
+                </div>
+              ) : (
+                (team.group_accounts ?? [])
+                  .slice()
+                  .sort((a, b) => a.priority - b.priority)
+                  .map((a) => (
+                    // Custom stacked layout (NOT drawer-field): identity is a
+                    // value, not a field label — drawer-field's .k uppercases +
+                    // letter-spaces it (reads as garbled) and the .k/.v side-by-side
+                    // collides two long strings. Identity on its own line, the
+                    // type/provider/priority meta below it.
+                    <div
+                      key={a.account_id}
+                      style={{
+                        padding: '9px 11px',
+                        marginTop: 6,
+                        borderRadius: 8,
+                        border: `1px solid ${a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
+                        background: a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--foreground)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
+                        {a.assigned && <span className="chip success">{t('vault.oauthGroupDefault')}</span>}
+                        {/* C2 (2026-06-30): the account the proxy is ACTUALLY routing this
+                            seat to now (override ?? rank-0) — distinct from the static
+                            default above. Only shown once the proxy's live rail reports it. */}
+                        {a.current_routed && (
+                          <span className="chip info">{t('vault.oauthGroupCurrentRouted')}</span>
+                        )}
+                        {/* RW8 per-member: which pool account the viewer has signed into (team OAuth). */}
+                        {a.credential_type === 'oauth_account' && a.login_status && (
+                          <span
+                            className={`chip ${a.login_status === 'logged_in' ? 'success' : a.login_status === 'needs_login' ? 'warning' : 'danger'}`}
+                          >
+                            {t(`vault.oauthLoginStatus.${a.login_status}`, a.login_status)}
+                          </span>
+                        )}
+                        {/* 登录 CTA (2026-07-03, 防呆): a needs_login pool account is one
+                            web sign-in away from making this VK usable — link straight to
+                            the team-oauth page (the routed account is auto-highlighted there
+                            with the sign-in control). 2026-07-12: carries THIS account's
+                            ?expand=<credential_id> so its sign-in card auto-expands there. */}
+                        {a.credential_type === 'oauth_account' && a.login_status === 'needs_login' && (
+                          <Link
+                            to={teamOauthLoginHref(a.credential_id)}
+                            className="chip warning"
+                            style={{ textDecoration: 'none', cursor: 'pointer' }}
+                            title={t('vault.needsLoginCtaTitle')}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {t('vault.loginCta')} →
+                          </Link>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--muted-foreground)',
+                          marginTop: 5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span
+                            className="prov-dot"
+                            style={{ background: providerBrandColor(a.provider_code), width: 6, height: 6 }}
+                          />
+                          {a.provider_code}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>
+                          {a.credential_type === 'oauth_account'
+                            ? t('vault.oauthGroupTypeOauth')
+                            : t('vault.oauthGroupTypeKey')}
+                        </span>
+                        <span style={{ opacity: 0.35 }}>·</span>
+                        <span>{t('vault.oauthGroupPriority', { priority: a.priority })}</span>
+                      </div>
+                    </div>
+                  ))
+              )}
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <span
+                  style={{
+                    color: 'var(--muted-foreground)',
+                    fontSize: 11,
+                    fontStyle: 'italic',
+                    lineHeight: 1.5,
+                    display: 'block',
+                  }}
+                >
+                  {t('vault.oauthGroupDefaultHint')}
+                </span>
+              </div>
+            </div>
+          )}
           {/* Phase 3B (2026-05-11) — Virtual Key section: team-row analog
               of the Credential section. The wire shape from B's
               UserKeyDTO carries no ciphertext / base_url / route_url
@@ -3334,6 +3833,24 @@ function DetailDrawer(props: {
                   </span>
                 </span>
               </div>
+              {/* OAuth group name (2026-07-01): which group this VK routes into — a
+                  member in multiple groups gets one VK per group; the name tells them
+                  apart. Only for group VKs with a named group. */}
+              {team.oauth_group_id && team.group_alias && (
+                <div className="drawer-field">
+                  <span className="k">{t('vault.oauthGroupName')}</span>
+                  <span className="v">{team.group_alias}</span>
+                </div>
+              )}
+              {/* Owner (RW8): the owning account's email, stamped by key sync.
+                  Lets you tell apart a group VK left behind after another account
+                  logged out. Hidden when absent (older sync / pre-column rows). */}
+              {team.owner_email && (
+                <div className="drawer-field">
+                  <span className="k">{t('vault.owner')}</span>
+                  <span className="v mono">{team.owner_email}</span>
+                </div>
+              )}
               {/* route_url + Route token (2026-05-11): same pair shown in
                   the Personal/OAuth drawer above. Sourced inline from
                   CLI's `_internal query` team records (Phase 3B revised),
@@ -4071,7 +4588,22 @@ function DetailDrawer(props: {
             <div className="drawer-field">
               <span className="k">{t('vault.protocol')}</span>
               <span className="v">
-                {providerName}
+                {/* One protocol per line (2026-07-13 user spec) — current group
+                    bold, others muted. */}
+                <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+                  {allProviders.map((p) => (
+                    <span
+                      key={p}
+                      style={
+                        p === providerName
+                          ? { fontWeight: 700 }
+                          : { color: 'var(--muted-foreground)', opacity: 0.55 }
+                      }
+                    >
+                      {p}
+                    </span>
+                  ))}
+                </span>
                 <span className="ro-pill">RO</span>
               </span>
             </div>
@@ -4105,6 +4637,11 @@ function DetailDrawer(props: {
                   <>
                     <span className="status-dot" style={{ width: 5, height: 5 }} />
                     <span style={{ color: 'var(--success)' }}>{t('vault.statusActiveWord')}</span>
+                  </>
+                ) : r.status === 'needs_login' ? (
+                  <>
+                    <span className="status-dot" style={{ width: 5, height: 5 }} />
+                    <span style={{ color: 'var(--warning, #f59e0b)' }}>{t('vault.statusNeedsLogin')}</span>
                   </>
                 ) : (
                   <>
@@ -4518,6 +5055,7 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
             const pingOk = row.ping_ok === true;
             const apiOk = row.api_ok === true;
             const chatOk = row.chat_ok === true;
+            const chatSkipped = row.chat_skipped === true;
             const apiStatus = typeof row.api_status === 'number' ? row.api_status : null;
             const chatStatus = typeof row.chat_status === 'number' ? row.chat_status : null;
             const apiMs = typeof row.api_ms === 'number' ? row.api_ms : null;
@@ -4563,10 +5101,15 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      background: chatOk ? 'var(--success)' : stageFailColor,
+                      background: chatSkipped
+                        ? 'var(--muted-foreground)'
+                        : chatOk ? 'var(--success)' : stageFailColor,
+                      opacity: chatSkipped ? 0.55 : 1,
                     }}
                   />{' '}
-                  {chatOk ? t('vault.probeOk') : chatStatus != null ? `HTTP ${chatStatus}` : t('vault.probeFail')}
+                  {chatSkipped
+                    ? t('vault.probeStatusSkipped')
+                    : chatOk ? t('vault.probeOk') : chatStatus != null ? `HTTP ${chatStatus}` : t('vault.probeFail')}
                 </td>
                 <td style={cellStyle} className="font-mono">
                   {latencyMs != null ? `${latencyMs}ms` : '—'}
@@ -4672,7 +5215,8 @@ function FailureDetails(props: { rows: unknown[] }) {
         body: typeof row.api_body_snippet === 'string' ? row.api_body_snippet : null,
       });
     }
-    const chatRan = row.chat_status != null || typeof row.chat_body_snippet === 'string';
+    const chatRan = row.chat_skipped !== true
+      && (row.chat_status != null || typeof row.chat_body_snippet === 'string');
     if (row.chat_ok !== true && chatRan) {
       failures.push({
         provider,
@@ -5765,6 +6309,9 @@ function probeRowState(
   if (sr) {
     const v = sr[msField];
     if (typeof v === 'number' && v > 0) latency = `${Math.round(v)} ms`;
+  }
+  if (phase === 'chat' && testResult.chat_skipped === true) {
+    return { tone: '', status: t('vault.probeStatusSkipped'), latency: '-' };
   }
   if (ok) {
     return { tone: 'good', status: t('vault.probeStatusOk'), latency };

@@ -27,6 +27,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appsApi, type AppRegisterResponse } from '@/shared/api/user/apps';
 import { importApi } from '@/shared/api/user/import';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
+import { ModalPortal } from '@/shared/ui/ModalShell';
 
 export interface AddAppModalProps {
   onClose: () => void;
@@ -147,6 +148,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
   };
 
   return (
+    <ModalPortal>
     <div
       role="dialog"
       aria-modal="true"
@@ -418,5 +420,6 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

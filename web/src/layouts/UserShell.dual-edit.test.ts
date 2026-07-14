@@ -174,4 +174,16 @@ describe('UserShell.tsx dual-edit drift (aikey-control/web ↔ aikey-control-mas
     expect(Object.keys(userMap).length, 'should find some route labels').toBeGreaterThan(3);
     expect(masterMap).toEqual(userMap);
   });
+
+  // 2026-06-29: pin the cross-app label i18n map across both copies. A
+  // missed dual-edit here re-introduces the "half Chinese, half English"
+  // sidebar (cross-app rows fall back to their English wire label while
+  // local rows are translated). See workflow/CI/bugfix/2026-06-29-
+  // cross-app-menu-i18n-half-translated.md.
+  it('CROSS_APP_LABEL_I18N_KEY: every cross-app id maps to the same i18n key', () => {
+    const userMap = extractStringMap(userSrc, 'CROSS_APP_LABEL_I18N_KEY');
+    const masterMap = extractStringMap(masterSrc, 'CROSS_APP_LABEL_I18N_KEY');
+    expect(Object.keys(userMap).length, 'should find some cross-app label mappings').toBeGreaterThan(8);
+    expect(masterMap).toEqual(userMap);
+  });
 });

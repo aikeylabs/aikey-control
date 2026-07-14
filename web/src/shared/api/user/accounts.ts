@@ -6,6 +6,13 @@
  * GET  /accounts/me/seats
  */
 import { httpClient } from '../http-client';
+import { runtimeConfig } from '@/app/config/runtime';
+
+// 2026-07-03 composing gateway: vault-bridge base — dual-homed family #3
+// (see RuntimeConfig.vaultBridgeApiBase). The plain /accounts/me IDENTITY
+// endpoint deliberately keeps its path (team identity when logged in).
+const ME_BRIDGE_BASE: string = runtimeConfig.vaultBridgeApiBase ?? '/accounts/me';
+
 import type { AccountDTO, LoginResponse } from '../types/account';
 
 export interface RegisterRequest {
@@ -40,7 +47,7 @@ export const userAccountsApi = {
   },
 
   mySeats: async (): Promise<SeatSummaryDTO[]> => {
-    const res = await httpClient.get<SeatSummaryDTO[]>('/accounts/me/seats');
+    const res = await httpClient.get<SeatSummaryDTO[]>(`${ME_BRIDGE_BASE}/seats`);
     return res.data;
   },
 

@@ -27,16 +27,18 @@ import {
   PieChart, Pie, Cell, Label,
 } from 'recharts';
 import { userAccountsApi } from '@/shared/api/user/accounts';
-import { deliveryApi, type UserKeyDTO } from '@/shared/api/user/delivery';
+import { deliveryApi, routedGroupAccount, type UserKeyDTO } from '@/shared/api/user/delivery';
 import { vaultApi, type VaultListData } from '@/shared/api/user/vault';
 import { usageApi, type TimelinePoint, type ProtocolTotal, type HourlyPoint, type RecentRequest } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
+import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import { formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import { formatCost } from '@/shared/utils/formatCost';
 import {
   OWN_MENU,
   OWN_PERSONAL_MENU,
   getOtherBaseUrl,
+  buildCrossAppUrl,
 } from '@/shared/cross-app-menu';
 import type { AccountDTO } from '@/shared/api/types/account';
 
@@ -314,7 +316,10 @@ export default function UserOverviewPage() {
   // fetched `me.account_id` (which is A's stub `personal-local` or
   // `local-owner`) would not match any rows in A's events table.
   const accountId = me?.account_id;
-  const isLocalMode = useCrossOrigin || runtimeConfig.authMode === 'local_bypass';
+  // useCrossOrigin (B cross-fetching A's personal usage) legitimately stays
+  // org_id=personal; the other branch (a forwarded TEAM page is local_bypass
+  // too) is handled by isLocalUsageScope's !teamGateway gate. 2026-07-04.
+  const isLocalMode = useCrossOrigin || isLocalUsageScope(runtimeConfig);
   const usageIdentity = isLocalMode
     ? { org_id: 'personal' as const }
     : accountId ? { account_id: accountId } : null;
@@ -1292,13 +1297,49 @@ export default function UserOverviewPage() {
                           style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}
                         >
                           {shortVkId(k.virtual_key_id)}
+                          {/* oauth_group (Stage A): shared-group marker + the
+                              master-assigned DEFAULT pool account identity. */}
+                          {k.oauth_group_id && (
+                            <>
+                              <span className="mx-1 opacity-50">·</span>
+                              <span style={{ color: 'var(--primary-dim)' }}>{t('overview.oauthGroupShared')}</span>
+                              {(() => {
+                                const def = routedGroupAccount(k.group_accounts);
+                                return def ? (
+                                  <>
+                                    <span className="mx-1 opacity-50">·</span>
+                                    <span title={t('overview.oauthGroupDefaultAccount')}>{def.identity}</span>
+                                  </>
+                                ) : null;
+                              })()}
+                            </>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--foreground)' }}>
-                          <span className="prov-dot" style={{ backgroundColor: providerColor(k.provider_code) }} />
-                          {k.provider_code || t('overview.unknownProvider')}
-                        </span>
+                        {(() => {
+                          // Group VK = shared OAuth pool with no single provider_code of its
+                          // own; derive the protocol from the pool's default/first account.
+                          const proto =
+                            (k.oauth_group_id && routedGroupAccount(k.group_accounts)?.provider_code) ||
+                            k.provider_code;
+                          return (
+                            <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--foreground)' }}>
+                              <span className="prov-dot" style={{ backgroundColor: providerColor(proto) }} />
+                              {proto || t('overview.unknownProvider')}
+                              {/* Group VK → team-OAuth chip beside the protocol.
+                                  i18n'd 2026-07-07 (user request): 团队 OAuth in Chinese. */}
+                              {k.oauth_group_id && (
+                                <span
+                                  className="text-[9px] font-mono px-1.5 py-0.5 rounded border"
+                                  style={{ color: 'var(--primary-dim)', borderColor: 'rgba(250,204,21,0.3)', backgroundColor: 'rgba(250,204,21,0.06)' }}
+                                >
+                                  {t('overview.kindTeamOAuth')}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-2.5">
                         <KeyStatusChip keyStatus={k.key_status} shareStatus={k.share_status} />
@@ -1342,7 +1383,7 @@ export default function UserOverviewPage() {
                           // around line 725.
                           const otherBaseUrl = getOtherBaseUrl();
                           if (!IS_PERSONAL_SIDE && otherBaseUrl) {
-                            const href = `${otherBaseUrl}/user/vault`;
+                            const href = buildCrossAppUrl(otherBaseUrl, '/user/vault');
                             return (
                               <a
                                 href={href}

@@ -115,52 +115,20 @@ interface HookReadinessState {
   /** Most recent reading; null = no vault op observed yet this session. */
   readiness: HookReadiness | null;
   setReadiness: (r: HookReadiness) => void;
-
-  /**
-   * Whether the wire-rc modal has been shown (auto-popped or user-opened)
-   * this browser session. Used by the page handlers to limit auto-pop to
-   * the FIRST mutation that detects rc_wired=false — subsequent mutations
-   * fall back to the persistent banner (whose CTA can re-open the modal
-   * on demand).
-   *
-   * Persisted in sessionStorage under MODAL_SHOWN_KEY so a page reload
-   * during the same session doesn't re-pop the modal. Clears on browser
-   * session end (intentionally NOT localStorage — drift is rare but the
-   * modal is the cheapest fix path for it).
-   *
-   * Per 20260507-web-hook-rc-modal-自动注入.md §H4.
-   */
-  modalShownThisSession: boolean;
-  markModalShown: () => void;
 }
 
-const MODAL_SHOWN_KEY = 'aikey:hookWireRcModalShown';
-
-function readModalShown(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.sessionStorage.getItem(MODAL_SHOWN_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
+// modalShownThisSession / MODAL_SHOWN_KEY were REMOVED (2026-07-10 escalation,
+// see 20260710-hook接线可见性升级.md): the once-per-session auto-pop gate let
+// two clicks ("Not now" + banner Dismiss) permanently hide the fact that
+// terminal auto-sync is off — keys the user activates on the Web never reach
+// their CLI, silently. The modal now re-pops on EVERY eligible use/add while
+// rc stays unwired; "Not now" only skips the current occurrence (the modal
+// is only ever triggered by mutation onSuccess, so it cannot re-pop
+// spontaneously).
 
 export const useHookReadinessStore = create<HookReadinessState>()((set) => ({
   readiness: null,
   setReadiness: (r) => set({ readiness: r }),
-  modalShownThisSession: readModalShown(),
-  markModalShown: () => {
-    if (typeof window !== 'undefined') {
-      try {
-        window.sessionStorage.setItem(MODAL_SHOWN_KEY, '1');
-      } catch {
-        // sessionStorage unavailable (private mode, quota exceeded) — fall
-        // through to in-memory only. Worst case: modal can re-pop within
-        // this tab's lifetime, which is the prior behavior anyway.
-      }
-    }
-    set({ modalShownThisSession: true });
-  },
 }));
 
 /**
@@ -189,11 +157,48 @@ export type HookBannerKind =
 
 export function hookBannerKind(r: HookReadiness | null): HookBannerKind {
   if (!r) return 'wired';
+  // Opt-out wins over everything (2026-07-10): the read-only status probe
+  // reports REAL file/rc state alongside reason=aikey_no_hook, so checking
+  // fileInstalled/!rcWired first would surface an almost-ready banner to a
+  // user who explicitly set AIKEY_NO_HOOK=1. Silence is the contract.
+  if (r.failureReason === 'aikey_no_hook') return 'disabled';
   if (r.fileInstalled && r.rcWired) return 'wired';
   if (r.fileInstalled && !r.rcWired) return 'almost-ready';
   const reason: HookFailureReason | null = r.failureReason;
   if (reason === 'shell_undetectable') return 'shell-undetectable';
   if (reason === 'home_unset') return 'env-misconfigured';
-  if (reason === 'aikey_no_hook') return 'disabled';
   return 'io-error';
+}
+
+/**
+ * Banner persistence policy per kind (2026-07-10 escalation).
+ *
+ * Only `almost-ready` is non-dismissible: it is the one state the user can
+ * fix with a single click (the modal's Allow), so persistence pays off
+ * 100%. Environment-error kinds (shell-undetectable / env-misconfigured /
+ * io-error) can't be fixed from the browser — an un-closable banner there
+ * would just train users to ignore banners. `wired` / `disabled` render
+ * nothing, so the flag is moot (kept true for completeness).
+ *
+ * Pure function, unit-tested alongside hookBannerKind.
+ */
+export function bannerPolicy(kind: HookBannerKind): { dismissible: boolean } {
+  return { dismissible: kind !== 'almost-ready' };
+}
+
+/**
+ * Whether a READ-ONLY probe result (GET /api/user/hook/status) should be
+ * adopted into the store (2026-07-10, found live on a fresh dev5 VM).
+ *
+ * `fileInstalled=false + failureReason=null` from the probe just means the
+ * hook file was never rendered — the normal pre-first-use state of a fresh
+ * install. Adopting it would surface the io-error ("filesystem error")
+ * banner to a user who did nothing wrong: a false alarm that trains users
+ * to ignore banners. The probe abstains; the same shape arriving in a
+ * MUTATION envelope stays authoritative (there it means the use-funnel's
+ * Layer-1 write really failed) — mutation paths call setReadiness directly
+ * and never go through this gate.
+ */
+export function probedReadinessIsAuthoritative(r: HookReadiness): boolean {
+  return r.fileInstalled || r.failureReason !== null;
 }

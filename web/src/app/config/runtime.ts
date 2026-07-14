@@ -28,6 +28,39 @@ export interface RuntimeConfig {
    *                   otherBaseUrl origin comparison, same as pre-fix.
    */
   controlPlaneMode?: 'trial' | 'personal' | 'production';
+  /** 2026-07-03 unified-origin gateway (option 6): base path the PERSONAL
+   *  usage charts read from. Injected as "/api/user/usage/personal" only by
+   *  the Personal local-server embed; every other host omits it and the
+   *  shared usage client falls back to "/v1/usage/personal" — which is the
+   *  team server's own path on a direct visit, and is forwarded to the team
+   *  server by the composing gateway on a composed visit. One field, four
+   *  deployment quadrants, no heuristics — do NOT infer this from
+   *  authMode/controlPlaneMode (the gateway patch masquerades team pages as
+   *  local_bypass, which would misroute team usage to local data). */
+  usageApiBase?: string;
+  /** 2026-07-03 composing gateway, dual-homed family #3: base for the
+   *  /accounts/me/* VAULT-BRIDGE data endpoints (all-keys / pending-keys /
+   *  seats / sync-version / managed-keys-snapshot). Same four-quadrant rule
+   *  as usageApiBase: ONLY the Personal local-server embed injects
+   *  "/api/user/vault-bridge" (local merged-vault views for A pages);
+   *  everywhere else the shared clients fall back to "/accounts/me" — B's
+   *  own path on a direct visit, forwarded to B by the gateway on a
+   *  composed visit (Team Keys delivery state). */
+  vaultBridgeApiBase?: string;
+  /** 2026-07-04 composing gateway: TRUE only in a B page forwarded + patched
+   *  by the local gateway (the injected `__AIKEY_CONFIG__` carries it). It is
+   *  the authoritative "this local_bypass page is actually a forwarded TEAM
+   *  page" signal — Personal-local, Trial, and direct-B visits never set it.
+   *
+   *  WHY it exists: usageApiBase fixed WHICH backend the usage charts read,
+   *  but the pages ALSO derive their query IDENTITY (org_id=personal vs
+   *  account_id) from `authMode==='local_bypass'` — the exact "infer from
+   *  authMode" mistake usageApiBase's doc warns against. A forwarded team page
+   *  is local_bypass, so it wrongly queried org_id=personal against the team
+   *  server (which has no personal-org rows) → empty team-usage/detail/
+   *  performance/overview. Gate `isLocalMode` on `!teamGateway` so the
+   *  forwarded page uses the member's account_id instead. */
+  teamGateway?: boolean;
   featureFlags: {
     usageLedger: boolean;
     controlEvents: boolean;
@@ -68,6 +101,13 @@ const defaultConfig: RuntimeConfig = {
 declare global {
   interface Window {
     __AIKEY_CONFIG__?: Partial<RuntimeConfig>;
+    // Injected by the Personal composing gateway (aikey-trial-server
+    // serveTeamDownShell) ONLY when it served the LOCAL shell as a team-page
+    // fallback because the team server (B) was unreachable. Absent in every
+    // other context (normal local pages, Trial, direct-B). The Personal
+    // router's catch-all renders the in-shell "team unreachable" page when it
+    // is present. A transient degrade signal — not app config.
+    __AIKEY_TEAM_DOWN__?: { code: string; path: string };
   }
 }
 

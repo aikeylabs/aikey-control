@@ -7,6 +7,12 @@
  * POST /virtual-keys/:virtualKeyID/claim
  */
 import { httpClient } from '../http-client';
+import { runtimeConfig } from '@/app/config/runtime';
+
+// 2026-07-03 composing gateway: vault-bridge base resolution — see
+// RuntimeConfig.vaultBridgeApiBase for the four-quadrant table.
+const ME_BRIDGE_BASE: string = runtimeConfig.vaultBridgeApiBase ?? '/accounts/me';
+
 
 export interface PendingKeyDTO {
   virtual_key_id: string;
@@ -26,18 +32,73 @@ export interface SeatQuotaItem {
   limit: number;
 }
 
+/**
+ * A candidate pool account behind a oauth-group VK (master snapshot projection —
+ * the SAME shape the local vault gets, single source of truth). `assigned` is
+ * master's static rank-0 default pick; the proxy's live selection (cooled-account
+ * fallback) is a later stage.
+ */
+export interface GroupAccountRef {
+  account_id: string;
+  identity: string; // email / alias for display
+  provider_code: string;
+  priority: number;
+  assigned: boolean; // master-assigned default (static rank-0 / engine ledger pick)
+  // current_routed (C2): the account the proxy is ACTUALLY routing this seat to now
+  // (engine override ?? rank-0), stamped by the proxy's live 60s rail onto the local
+  // vault. Fresher + more authoritative than `assigned` (a key-sync snapshot copy).
+  // Absent on the master-snapshot shape (no proxy rail there) → fall back to assigned.
+  current_routed?: boolean;
+  credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
+}
+
+/**
+ * routedGroupAccount is the SINGLE display rule for "which pool account is selected"
+ * across the vault + team-keys pages: prefer the proxy's live routed account
+ * (current_routed, fresh + engine-first), fall back to the static default (assigned),
+ * then the first candidate. Keeps every page showing the SAME selected account instead
+ * of some reading the stale `assigned` snapshot (2026-07-01, source-of-truth unification).
+ */
+export function routedGroupAccount<T extends { assigned: boolean; current_routed?: boolean }>(
+  accounts: T[] | null | undefined,
+): T | undefined {
+  if (!accounts || accounts.length === 0) return undefined;
+  return accounts.find((a) => a.current_routed) ?? accounts.find((a) => a.assigned) ?? accounts[0];
+}
+
 export interface UserKeyDTO {
   virtual_key_id: string;
   org_id: string;
   seat_id: string;
   alias: string;
   provider_code: string;
+  // protocol_type (2026-07-03): the VK's binding-derived protocol — the STABLE protocol
+  // source for a group VK (whose provider_code is always empty). Used as the protocol
+  // fallback so an orphaned group VK (seat unbound from group → group_accounts empty)
+  // still shows its protocol instead of "unknown". Absent on older servers.
+  protocol_type?: string;
+  // supported_providers (2026-07-13): EVERY provider this VK can route — one entry
+  // per active binding. `provider_code` / `protocol_type` above are only the FIRST
+  // binding's values (the master snapshot projects them as a primary hint for
+  // legacy readers, see snapshot/service.go), so a multi-protocol VK — the whole
+  // point of "one VK, N protocol channels" per the baseline ER — collapses to a
+  // single protocol if you read them alone. That's exactly what hid the openai
+  // channel of key-335923591-openai-official. The CLI has always emitted this field
+  // (commands_internal/query.rs team records); the DTO just never declared it, so
+  // nobody consumed it. The vault page fixed the same class of bug on 2026-05-12 by
+  // expanding on supported_providers; this page never followed.
+  supported_providers?: string[];
   key_status: string;
   share_status: string;
   expires_at?: string;
   // Seat-level quota (one entry per rule) for the usage/limit bar. Absent when the
   // seat has no quota or the server edition doesn't wire quota.
   seat_quota?: SeatQuotaItem[];
+  // oauth_group projection (Stage A): when this VK targets a oauth_group, the shared
+  // group + candidate pool accounts. Absent for direct-bind VKs. Same source as
+  // the vault page (master snapshot.GroupAccounts).
+  oauth_group_id?: string;
+  group_accounts?: GroupAccountRef[];
 }
 
 // One fallback candidate within a protocol slot.
@@ -99,17 +160,26 @@ export interface KeySummaryDTO {
   key_status: string;
   share_status: string;
   expires_at?: string;
+  // 2026-07-03 shape-typed delivery family: which kind of VK this is.
+  //   'direct'      — credential-backed slots below.
+  //   'oauth_group' — pool VK: slots stay empty here; the pool panel (group_accounts)
+  //                   is the routing view. oauth_group_id identifies the group.
+  //   'none'        — no bindings configured yet (benign — NOT an error; the old
+  //                   contract 503'd this normal state).
+  // Absent on pre-2026-07 servers → treat as legacy (undifferentiated empty slots).
+  binding_mode?: 'direct' | 'oauth_group' | 'none';
+  oauth_group_id?: string;
   slots: SummarySlotDTO[];
 }
 
 export const deliveryApi = {
   pendingKeys: async (): Promise<PendingKeyDTO[]> => {
-    const res = await httpClient.get<{ pending_keys: PendingKeyDTO[] }>('/accounts/me/pending-keys');
+    const res = await httpClient.get<{ pending_keys: PendingKeyDTO[] }>(`${ME_BRIDGE_BASE}/pending-keys`);
     return res.data.pending_keys ?? [];
   },
 
   allKeys: async (): Promise<UserKeyDTO[]> => {
-    const res = await httpClient.get<{ keys: UserKeyDTO[] }>('/accounts/me/all-keys');
+    const res = await httpClient.get<{ keys: UserKeyDTO[] }>(`${ME_BRIDGE_BASE}/all-keys`);
     return res.data.keys ?? [];
   },
 

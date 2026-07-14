@@ -4,12 +4,16 @@
  * Endpoints:
  *   POST /api/user/hook/install   (Personal + Trial only — see edition guard
  *                                  in aikey-control-master/service/internal/api/router.go)
+ *   GET  /api/user/hook/status    (same guard; read-only readiness probe,
+ *                                  2026-07-10 — lets the banner survive a
+ *                                  page refresh instead of waiting for the
+ *                                  next vault mutation envelope)
  *
  * Per 20260507-web-hook-rc-modal-自动注入.md.
  *
- * Distinct from vault.ts: this endpoint does NOT require vault unlock and
- * never derives a vault key. It only writes ~/.aikey/hook.{zsh,bash} and
- * the v3 marker block in the user's shell rc.
+ * Distinct from vault.ts: these endpoints do NOT require vault unlock and
+ * never derive a vault key. install writes ~/.aikey/hook.{zsh,bash} and
+ * the v3 marker block in the user's shell rc; status writes NOTHING.
  */
 
 import { httpClient } from '../http-client';
@@ -62,6 +66,18 @@ export const hookApi = {
     const res = await httpClient.post<OkEnvelope<HookInstallResponse> | ErrEnvelope>(
       '/api/user/hook/install',
       {},
+    );
+    return unwrap(res.data);
+  },
+
+  /**
+   * Read-only readiness probe (2026-07-10). Same three-field envelope as
+   * install, so pickHookReadiness consumes both. Backed by a guaranteed
+   * read-only CLI probe — safe to call on page load / tab focus.
+   */
+  status: async (): Promise<HookInstallResponse> => {
+    const res = await httpClient.get<OkEnvelope<HookInstallResponse> | ErrEnvelope>(
+      '/api/user/hook/status',
     );
     return unwrap(res.data);
   },

@@ -34,6 +34,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/AiKeyLabs/aikey-control/service/pkg/userapi/cli"
+
+	"github.com/AiKeyLabs/pkg/aikeycompat"
 )
 
 // Tiny wrappers so the call-sites in HandleServiceAction read clean
@@ -53,6 +57,14 @@ var allowedServiceActions = map[string]map[string]bool{
 		"start":   true,
 		"stop":    true,
 		"restart": true,
+		// status: read-only. The generic handler shells out
+		// `aikey service status trust-local --json`, whose envelope carries
+		// an explicit `installed` bool. The trust-check page polls this on
+		// load so it can proactively distinguish "not installed" from
+		// "installed but offline" instead of defaulting to the misleading
+		// "offline / restart it" banner. Bugfix:
+		// 20260703-trust-check-web-offline-vs-notinstalled-proactive.md.
+		"status": true,
 	},
 	// web + proxy are deliberately NOT in this map; see header doc.
 }
@@ -69,8 +81,22 @@ func aikeyBinaryPath() string {
 	if v := envOrDefault("AIKEY_BIN_PATH", ""); v != "" {
 		return v
 	}
-	home := envOrDefault("HOME", "")
-	return filepath.Join(home, ".aikey", "bin", "aikey")
+	// os.UserHomeDir() resolves %USERPROFILE% on Windows / $HOME on Unix —
+	// more robust than reading HOME directly (a ScheduledTask-launched
+	// local-server may have a sparse env without HOME). Fall back to the
+	// HOME env only if UserHomeDir fails.
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = envOrDefault("HOME", "")
+	}
+	// cli.AikeyBinaryName() appends `.exe` on Windows. Hardcoding "aikey"
+	// here (find#5, 2026-07-06) made os/exec fail on Windows — only
+	// aikey.exe exists on disk, so `aikey service status trust-local` never
+	// ran, this endpoint 502'd, and the trust-check page showed trust-local
+	// "not installed" while it was healthy on :8801. Reuse the centralised
+	// basename (userapi/cli) so the .exe rule has ONE source of truth — a
+	// repeat of the vault-page 503 regression (windows-compatibility.md F3).
+	return filepath.Join(home, ".aikey", "bin", cli.AikeyBinaryName())
 }
 
 func envOrDefault(k, def string) string {
@@ -112,7 +138,7 @@ func HandleServiceAction(logger *slog.Logger) http.HandlerFunc {
 		if !actions[action] {
 			writeJSONErr(w, http.StatusBadRequest, "INVALID_ACTION",
 				"action '"+action+"' not supported for "+name+
-					". Allowed: start, stop, restart.")
+					". Allowed: start, stop, restart, status.")
 			return
 		}
 
@@ -130,6 +156,9 @@ func HandleServiceAction(logger *slog.Logger) http.HandlerFunc {
 		ctx, cancel := contextWithTimeout(r.Context(), 40*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, binPath, "service", action, name, "--json")
+		// Never flash a console window on Windows (same bridge-spawn class
+		// as pkg/userapi/cli/bridge.go, 2026-07-07). No-op on Unix.
+		aikeycompat.HideSpawnConsole(cmd)
 		// Read stdout and stderr SEPARATELY. Protocol contract: the CLI
 		// emits its JSON envelope on stdout; stderr carries human /
 		// diagnostic lines — and notably the CLI's top-level error handler
