@@ -213,6 +213,74 @@ function rowKey(r: VaultRowRecord): string {
   return `${r.target}:${r.id}`;
 }
 
+// ── Hidden-keys view preference (2026-07-15 user request) ───────────────
+//
+// Two pieces of state, both PURE VIEW-LAYER (no vault write, no API):
+//   - hide pin  : the toolbar pin toggle. ON = hide inactive keys AND
+//                 manually-hidden keys ("tidy mode"). One switch governs
+//                 both buckets by design (user decision 2026-07-15) so the
+//                 user has a single mental model: pin lit = list is tidy.
+//   - manual set: rowKey()s the user explicitly hid from the drawer —
+//                 lets an ACTIVE key be tucked away too (e.g. a backup key
+//                 kept around but not routed).
+//
+// Persisted in localStorage (user decision 2026-07-15: a view preference
+// isn't worth a new CLI write API / vault extra field — see 慎重新建 API).
+// Known accepted caveat: personal rows' id == alias, so renaming a
+// manually-hidden personal key un-hides it (rename reads as "re-engaging
+// with this key" anyway). Losing the set (new browser / cleared storage)
+// only re-shows rows — no data risk.
+//
+// NOTE 2026-04-24 history: a status FILTER was deliberately removed from
+// this page ("99% of keys are active, the pill duplicated the row chip").
+// The hide pin is NOT that filter coming back — it's a noise-hiding
+// preference for users who accumulate dead keys; don't "clean it up" into
+// (or out of) a status filter without re-reading both decisions.
+const HIDE_PIN_LS_KEY = 'aikey:vault-hide-pin';
+const MANUAL_HIDDEN_LS_KEY = 'aikey:vault-manual-hidden';
+
+function readHidePin(): boolean {
+  try {
+    return window.localStorage.getItem(HIDE_PIN_LS_KEY) === '1';
+  } catch {
+    return false; // localStorage disabled — non-fatal, default to showing all
+  }
+}
+
+function persistHidePin(on: boolean) {
+  try {
+    if (on) window.localStorage.setItem(HIDE_PIN_LS_KEY, '1');
+    else window.localStorage.removeItem(HIDE_PIN_LS_KEY);
+  } catch {
+    /* localStorage disabled — non-fatal */
+  }
+}
+
+function readManualHidden(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(MANUAL_HIDDEN_LS_KEY);
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      console.warn('[vault] manual-hidden preference is not an array — resetting', { raw });
+      return new Set();
+    }
+    return new Set(parsed.filter((v): v is string => typeof v === 'string'));
+  } catch (e) {
+    console.warn('[vault] failed to read manual-hidden preference — resetting', e);
+    return new Set();
+  }
+}
+
+function persistManualHidden(keys: Set<string>) {
+  try {
+    if (keys.size === 0) window.localStorage.removeItem(MANUAL_HIDDEN_LS_KEY);
+    else window.localStorage.setItem(MANUAL_HIDDEN_LS_KEY, JSON.stringify([...keys]));
+  } catch {
+    /* localStorage disabled — non-fatal */
+  }
+}
+
 /** Team key share lifecycle → human chip text. Server-side semantics:
  *  - 'pending'  : key was issued by the team but the user has not run
  *                 `aikey use` to claim it yet (no local binding minted).
@@ -789,13 +857,53 @@ export default function UserVaultPage() {
   // they do appear the row-level status chip is already visually
   // distinct (red vs green pill) so the filter pills duplicate the
   // signal without meaningfully narrowing the list.
+  // (The 2026-07-15 hide pin below is NOT that filter returning — see
+  // the note above readHidePin() for how the two decisions coexist.)
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('created');
 
+  // Hidden-keys view preference (2026-07-15) — see the module-level
+  // helpers above rowKey() for the full design rationale.
+  const [hidePin, setHidePin] = useState<boolean>(readHidePin);
+  const [manualHidden, setManualHidden] = useState<Set<string>>(readManualHidden);
+  const toggleHidePin = useCallback(() => {
+    setHidePin((on) => {
+      persistHidePin(!on);
+      return !on;
+    });
+  }, []);
+  const toggleManualHidden = useCallback((r: VaultRowRecord) => {
+    const k = rowKey(r);
+    setManualHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      persistManualHidden(next);
+      return next;
+    });
+  }, []);
+  // What the pin hides: genuinely-unusable keys ('inactive' ONLY — user
+  // decision 2026-07-15: needs_login / pending_download are actionable
+  // waiting states whose recovery CTAs must stay visible) plus the
+  // manually-hidden set. Counted over ALL records (not the search/type-
+  // narrowed list) so the pin label reads as a stable vault-wide fact.
+  const pinHides = useCallback(
+    (r: VaultRowRecord) => r.status === 'inactive' || manualHidden.has(rowKey(r)),
+    [manualHidden],
+  );
+  const hiddenCount = useMemo(
+    () => records.filter(pinHides).length,
+    [records, pinHides],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filteredList = records.filter((r) => {
+      // Hide pin (2026-07-15): tidy mode drops inactive + manually-hidden
+      // rows. Applied FIRST so search can't "see through" the pin — a
+      // hidden key stays hidden until the pin is turned off.
+      if (hidePin && pinHides(r)) return false;
       // Type filter. Personal / Team are SCOPE (ownership) filters; OAuth is a
       // TYPE filter cutting across scope — they overlap on purpose (2026-07-07):
       //   Personal = 个人 VK + 个人 OAuth       (target 'personal' | 'oauth')
@@ -856,7 +964,7 @@ export default function UserVaultPage() {
           return b.created_at - a.created_at;
       }
     });
-  }, [records, typeFilter, search, sortKey]);
+  }, [records, typeFilter, search, sortKey, hidePin, pinHides]);
 
   // Row-level interactions (rename / delete / drawer).
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1679,6 +1787,9 @@ export default function UserVaultPage() {
             counts={counts}
             locked={!unlocked}
             onOpenAdd={() => setAddOpen(true)}
+            hidePin={hidePin}
+            onToggleHidePin={toggleHidePin}
+            hiddenCount={hiddenCount}
           />
 
           {/* When the vault has zero records, render JUST the empty
@@ -1704,7 +1815,16 @@ export default function UserVaultPage() {
               {listLoading && <EmptyState message={t('vault.emptyLoading')} />}
               {listError && <EmptyState message={`${t('vault.loadFailed')}${(listError as Error).message}`} />}
               {!listLoading && !listError && records.length > 0 && filtered.length === 0 && (
-                <EmptyState message={t('vault.emptyNoMatch')} />
+                // 防呆 (2026-07-15): when the hide pin is what emptied the
+                // view, say so — "no match" would send the user hunting
+                // through search/filters while the pin quietly hides rows.
+                <EmptyState
+                  message={
+                    hidePin && hiddenCount > 0
+                      ? t('vault.emptyAllHidden', { count: hiddenCount })
+                      : t('vault.emptyNoMatch')
+                  }
+                />
               )}
               {filtered.length > 0 && (
                 <table className="vault">
@@ -1828,6 +1948,7 @@ export default function UserVaultPage() {
                                 }}
                                 isLastInGroup={idx === sortedRecords.length - 1}
                                 isGroupCollapsed={collapsed}
+                                manuallyHidden={manualHidden.has(k)}
                                 switchPending={switchingIds.has(k)}
                                 justSwitched={justSwitchedIds.has(k)}
                                 onSwitch={() => switchTo(r, g.provider)}
@@ -1918,6 +2039,8 @@ export default function UserVaultPage() {
           switchPending={switchingIds.has(rowKey(drawerRecord))}
           hostToRoute={hostToRoute}
           providerToRoute={providerToRoute}
+          manuallyHidden={manualHidden.has(rowKey(drawerRecord))}
+          onToggleHidden={() => toggleManualHidden(drawerRecord)}
         />
       )}
 
@@ -2336,6 +2459,11 @@ function FilterStrip(props: {
   counts: { personal: number; oauth: number; team: number; total: number };
   locked: boolean;
   onOpenAdd: () => void;
+  /** Hide pin (2026-07-15): ON = hide inactive + manually-hidden keys.
+   *  hiddenCount is vault-wide (what the pin governs), not page-scoped. */
+  hidePin: boolean;
+  onToggleHidePin: () => void;
+  hiddenCount: number;
 }) {
   const { t } = useTranslation();
   return (
@@ -2403,6 +2531,38 @@ function FilterStrip(props: {
             count={props.counts.oauth}
           />
         </div>
+
+        {/* Hide pin (2026-07-15 user request) — a pin TOGGLE, deliberately
+            not part of the type-filter radiogroup: filters pick a slice,
+            the pin is a tidy-mode preference (hide inactive + manually-
+            hidden keys) that composes with whatever filter is active.
+            Reuses the filter-pill visual so the toolbar stays one system;
+            aria-pressed marks it as a toggle for screen readers. Rendered
+            only when it has something to govern (hiddenCount > 0) or is
+            already ON (so an active pin never becomes un-turn-off-able). */}
+        {(props.hiddenCount > 0 || props.hidePin) && (
+          /* Own .filter-group capsule (not a bare .filter-pill — the pill
+             style needs the capsule frame) so it reads as a sibling
+             control of the type-filter capsule without new CSS. */
+          <div className="filter-group">
+            <button
+              type="button"
+              className={`filter-pill${props.hidePin ? ' active' : ''}`}
+              aria-pressed={props.hidePin}
+              onClick={props.onToggleHidePin}
+              title={
+                props.hidePin
+                  ? t('vault.hidePinTitleOn', { count: props.hiddenCount })
+                  : t('vault.hidePinTitleOff', { count: props.hiddenCount })
+              }
+            >
+              <PinIcon className="w-2.5 h-2.5" />
+              {props.hidePin
+                ? t('vault.hidePinLabelOn', { count: props.hiddenCount })
+                : t('vault.hidePinLabelOff')}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Right-aligned actions. Sort tabs were moved into the table's
@@ -2781,6 +2941,10 @@ const Row = React.memo(function Row(props: {
    *  multi-provider keys / alias-collisions don't show in_use badge under
    *  groups they're not actually bound to. */
   groupProvider: string;
+  /** Manually hidden via the drawer (2026-07-15). Only visible while the
+   *  hide pin is OFF — the row renders a muted "Hidden" chip so the user
+   *  can find and un-hide it (drawer action). */
+  manuallyHidden?: boolean;
 }) {
   const { t } = useTranslation();
   const r = props.record;
@@ -2995,6 +3159,10 @@ const Row = React.memo(function Row(props: {
       </td>
 
       <td>
+        {/* Flex + wrap so the optional "Hidden" chip sits inline with the
+            status chip when it fits and drops to a left-aligned second line
+            (not indented) in this narrow 14% column when it doesn't. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {r.status === 'active' ? (
           <span className="chip success">
             <span className="status-dot" style={{ width: 5, height: 5 }} />
@@ -3024,6 +3192,18 @@ const Row = React.memo(function Row(props: {
             {r.status === 'inactive' ? t('vault.statusInactive') : String(r.status).toUpperCase()}
           </span>
         )}
+        {/* Manually-hidden marker (2026-07-15): shown only while the hide
+            pin is OFF (a hidden row isn't rendered at all when it's ON).
+            Plain chip, deliberately quieter than the status chips — this
+            is a view preference, not a key state. Un-hide lives in the
+            drawer next to where Hide was clicked. */}
+        {props.manuallyHidden && (
+          <span className="chip" title={t('vault.hiddenChipTitle')}>
+            <EyeOffIcon className="w-3 h-3" />
+            {t('vault.hiddenChip')}
+          </span>
+        )}
+        </div>
       </td>
 
       <td
@@ -3242,6 +3422,11 @@ const Row = React.memo(function Row(props: {
   // state — without this compare the spinner state goes stale and a
   // second click during a long probe looks like nothing happened.
   if (prev.testRunning !== next.testRunning) return false;
+  // manuallyHidden drives the "Hidden" marker chip (2026-07-15). This
+  // comparator is a WHITELIST — a new prop that isn't listed here never
+  // re-renders the row (caught live: un-hiding from the drawer left the
+  // stale chip on screen until the next poll beat).
+  if (prev.manuallyHidden !== next.manuallyHidden) return false;
   // editDraft only matters when this row is the one being edited.
   if (next.isEditing && prev.editDraft !== next.editDraft) return false;
   return true;
@@ -3468,6 +3653,11 @@ function DetailDrawer(props: {
   /** v4.3: provider_code → first-matching ProviderRoute, used as the family-
    *  level fallback when the stored base_url's host isn't in the table. */
   providerToRoute: Map<string, ProviderRoute>;
+  /** Manual hide (2026-07-15): view-layer only — no vault write, so the
+   *  button is NOT gated by `locked`. Any key (including active ones) can
+   *  be hidden; the toolbar hide pin governs whether hidden rows render. */
+  manuallyHidden: boolean;
+  onToggleHidden: () => void;
 }) {
   const { t } = useTranslation();
   const r = props.record;
@@ -4548,6 +4738,25 @@ function DetailDrawer(props: {
               >
                 <EditIcon className="w-3.5 h-3.5" />
                 {t('vault.renameAlias')}
+              </button>
+              {/* Hide / Un-hide (2026-07-15): view-layer tuck-away for ANY
+                  key incl. active ones (e.g. a spare key kept but not
+                  routed). No vault write → never gated by `locked`, and
+                  hiding an IN-USE key does NOT stop it routing — the title
+                  copy spells that out to prevent "I hid it so it's off"
+                  misreads. Rendering is governed by the toolbar hide pin. */}
+              <button
+                type="button"
+                className="action-btn"
+                onClick={props.onToggleHidden}
+                title={props.manuallyHidden ? t('vault.unhideKeyTitle') : t('vault.hideKeyTitle')}
+              >
+                {props.manuallyHidden ? (
+                  <EyeIcon className="w-3.5 h-3.5" />
+                ) : (
+                  <EyeOffIcon className="w-3.5 h-3.5" />
+                )}
+                {props.manuallyHidden ? t('vault.unhideKey') : t('vault.hideKey')}
               </button>
               <button
                 type="button"
@@ -7094,6 +7303,7 @@ function OAuthGuide({
   provider: string;
   onProviderChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   const cmd = `aikey auth login ${provider}`;
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
@@ -7122,7 +7332,7 @@ function OAuthGuide({
           value={provider}
           onChange={onProviderChange}
           options={OAUTH_PROVIDER_PRESETS.map((p) => ({ value: p, label: p }))}
-          placeholder="Search or type a provider…"
+          placeholder={t('vault.providerSearchPlaceholder')}
           allowCustom
         />
         <span className="form-help">
@@ -7293,6 +7503,11 @@ const ICON_LINK =
 // inventing new visual language.
 const ICON_ACTIVITY =
   'M22 12h-4l-3 9L9 3l-3 9H2';
+// Lucide "pin" — the toolbar hide-pin toggle (2026-07-15). A pushpin (not
+// an eye) so the control reads as "pin the tidy view", distinct from the
+// EyeOff icon used for the per-key Hide action in the drawer.
+const ICON_PIN =
+  'M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z';
 
 function EyeIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_EYE} {...p} />; }
 function EyeOffIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_EYE_OFF} {...p} />; }
@@ -7329,6 +7544,7 @@ function TagIcon(p: { className?: string; style?: React.CSSProperties }) { retur
 function GlobeIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_GLOBE} {...p} />; }
 function LinkIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_LINK} {...p} />; }
 function ActivityIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_ACTIVITY} {...p} />; }
+function PinIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_PIN} {...p} />; }
 
 // ── CSS ──────────────────────────────────────────────────────────────────
 // Phase 3B (2026-05-11): VAULT_CSS extracted to a shared module so the

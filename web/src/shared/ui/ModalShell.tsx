@@ -33,6 +33,7 @@
  */
 import { type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 /** Thin portal: mounts children on document.body, nothing else. */
 export function ModalPortal({
@@ -65,6 +66,7 @@ export function ModalShell({
   footer: ReactNode;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   return createPortal(
     <>
       <div className="fixed inset-0 z-[60]" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={onClose} />
@@ -80,7 +82,7 @@ export function ModalShell({
               dialog (bindings / packs / seats / provider-accounts) carries
               this same X — ModalShell consumers were the odd ones out.
               Overlay-click already closes, but that affordance is invisible. */}
-          <button type="button" onClick={onClose} aria-label="Close" className="flex-shrink-0" style={{ color: 'var(--muted-foreground)' }}>
+          <button type="button" onClick={onClose} aria-label={t('modalShell.closeAria')} className="flex-shrink-0" style={{ color: 'var(--muted-foreground)' }}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>

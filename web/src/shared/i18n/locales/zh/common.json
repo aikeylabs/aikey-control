@@ -70,7 +70,7 @@
     "navTeamUsage": "团队用量",
     "navPerformance": "性能",
     "navApps": "应用",
-    "navTrustCheck": "置信度检测",
+    "navTrustCheck": "降智检测",
     "navAccount": "账户",
     "navInvites": "邀请码",
     "groupKeys": "密钥",
@@ -238,6 +238,17 @@
     "colActions": "操作",
     "emptyLoading": "加载中…",
     "emptyNoMatch": "没有符合筛选条件的记录。",
+    "emptyAllHidden": "符合条件的密钥都被隐藏了（共 {{count}} 条）。点击工具栏的图钉可重新显示。",
+    "hidePinLabelOff": "隐藏失效",
+    "hidePinLabelOn": "已隐藏 {{count}}",
+    "hidePinTitleOff": "隐藏失效的密钥和你手动隐藏的密钥（共 {{count}} 条）。仅影响显示——被隐藏的密钥仍正常工作。",
+    "hidePinTitleOn": "当前为整洁视图——已隐藏 {{count}} 条密钥。点击可显示全部。",
+    "hiddenChip": "已隐藏",
+    "hiddenChipTitle": "你手动隐藏了这条密钥（抽屉里操作）。仅在工具栏图钉点亮时收起——密钥本身仍正常工作。",
+    "hideKey": "隐藏密钥",
+    "unhideKey": "取消隐藏",
+    "hideKeyTitle": "在工具栏图钉点亮时将这条密钥从列表收起。仅影响显示——即使正在使用中，密钥也照常工作。",
+    "unhideKeyTitle": "让这条密钥重新显示在列表中。",
     "loadFailed": "加载失败：",
     "lastRefreshed": "最近刷新",
     "refresh": "刷新",
@@ -628,7 +639,8 @@
     "errRequestRejectedTitle": "无法对该密钥执行检测",
     "errRequestRejectedDetail": "aikey-local-server 拒绝了这把密钥的检测请求。通常是因为页面上显示的这条密钥记录与保管库里的实际内容已不一致——它可能已被吊销、重新下发，或在其他窗口中被删除。",
     "errRequestRejectedAction": "刷新列表（右上角按钮）后重新检测。如果是团队密钥，请先重新同步：",
-    "errFallbackTitle": "检测无法运行"
+    "errFallbackTitle": "检测无法运行",
+    "providerSearchPlaceholder": "搜索或输入供应商…"
   },
   "import": {
     "errTextTooLarge": "粘贴的文本过大 —— 请拆分为更小的片段（≤ 1 MiB）。",
@@ -891,7 +903,7 @@
     "noAppUsageInRange": "该范围内暂无应用用量",
     "reqSuffix": "{{count}} 次请求",
     "badgeInternal": "内部",
-    "badgeInternalTitle": "AiKey 内置组件 — 使用的是你自己的 Token，但流量来自内部管线（例如置信度检测探针）。",
+    "badgeInternalTitle": "AiKey 内置组件 — 使用的是你自己的 Token，但流量来自内部管线（例如降智检测探针）。",
     "badgeDirect": "直连",
     "badgeDirectTitle": "直连 /v1/... CLI 流量 — 无已连接应用上下文。标签是根据供应商推断的 CLI 工具；代理无法判断实际调用的二进制程序。",
     "directBucketedByTitle": "直连 /v1/... 调用，按 {{provider}} 归类",
@@ -950,7 +962,7 @@
     "usageByModelRecent": "按模型的用量（近期）"
   },
   "trustCheck": {
-    "title": "置信度检测",
+    "title": "降智检测",
     "observer": {
       "on": {
         "label": "观察器运行中",
@@ -965,7 +977,7 @@
         "title": "trust-local 已离线 — 手动 Check 和实时检测都不可用。点击下方 Start service 或终端运行 aikey service start trust-local 恢复。"
       }
     },
-    "subtitle": "覆盖你所有供应商来源的置信度信号 · 由 trust-local 提供支持",
+    "subtitle": "通过置信度评分，评估模型是否存在降智风险 · 由 trust-local 提供支持",
     "refreshingTitle": "刷新中…",
     "refreshNowTitle": "立即重新拉取 /v1/status",
     "refreshing": "刷新中…",
@@ -975,7 +987,7 @@
     "runChecksTitle": "对表格中每一行触发一次检测",
     "running": "运行中…",
     "runChecks": "运行检测",
-    "notInstalledTitle": "置信度检测尚未安装。",
+    "notInstalledTitle": "降智检测尚未安装。",
     "notInstalledRun": "运行",
     "notInstalledDetail": "在终端中执行以安装 trust-local 服务（约 23MB 二进制，运行在 127.0.0.1:8801）。",
     "offlineTitle": "trust-local 已离线。",
@@ -2383,7 +2395,7 @@
     "navPacks": "合规包"
   },
   "compliancePage": {
-    "pageTitle": "AI 合规审计",
+    "pageTitle": "合规记录",
     "pageDescription": "本机检测到的合规事件 —— 自己视角。原文不会离开本机。",
     "toggleLabel": "合规检测",
     "toggleLocked": "保管库已锁定，请先解锁再切换",
@@ -2518,5 +2530,37 @@
     "addNoGroupsForProvider": "没有该供应商的池——你只加入了其他供应商的池。请管理员新建一个。",
     "addGroupsLoadFailed": "无法加载你的池组（服务器错误）。请重试，或让管理员检查团队服务端。",
     "addClose": "关闭"
+  },
+  "hookBanner": {
+    "rcPowershell": "你的 PowerShell $PROFILE",
+    "almostReadyTitle": "终端接管未开启 —— 在此启用的密钥暂不会在终端生效",
+    "almostReadyBodyModal": "本页的每次「使用」都要等终端接管开启后才会在终端生效。点击下方按钮会向 {{rcName}} 注入一小段受管代码块 —— 改动前会先完整展示给你确认。也可以在任意终端运行 `aikey hook install`。",
+    "almostReadyBodyCopy": "本页的每次「使用」都要等终端接管开启后才会在终端生效。运行一次下方命令即可开启（修改 {{rcName}} 前会先询问确认）。",
+    "enableCta": "开启终端接管",
+    "copyCommand": "复制命令",
+    "shellUndetectableTitle": "服务环境未检测到可识别的 shell",
+    "shellUndetectableBody": "由于服务环境中没有可识别的 shell，终端接管的安装被跳过。请在你的终端运行下方命令显式指定。",
+    "envMisconfiguredTitle": "Trial 服务的 $HOME 未设置",
+    "envMisconfiguredBody": "终端接管需要 $HOME 才能确定写入位置。Web 桥接运行时没有 HOME —— 常见于容器 / systemd 环境。请修复服务环境后重试，或在普通终端会话中用下方命令安装。",
+    "ioErrorTitle": "终端接管安装遇到文件系统错误",
+    "ioErrorBody": "Web 桥接无法写入 ~/.aikey/{{hookFile}}。请检查 ~/.aikey/ 目录权限，然后运行下方命令。",
+    "dismiss": "忽略",
+    "dismissAria": "关闭提示"
+  },
+  "hookModal": {
+    "title": "开启终端接管？",
+    "body": "向你的 shell 配置文件添加一小段受管代码块后，每个新开的终端都会自动拾取密钥变更（添加 / 使用 / 删除），无需手动重载。",
+    "appendToPosh": "将追加到你的 PowerShell $PROFILE：",
+    "appendToUnix": "将追加到 ~/.zshrc：",
+    "manualLabel": "或在任意终端手动运行：",
+    "copy": "复制",
+    "copied": "已复制",
+    "notNow": "暂不",
+    "allow": "允许",
+    "wiring": "配置中…",
+    "serverReported": "服务端返回 '{{reason}}' —— 配置未完成。"
+  },
+  "modalShell": {
+    "closeAria": "关闭"
   }
 }

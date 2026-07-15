@@ -238,6 +238,17 @@
     "colActions": "Actions",
     "emptyLoading": "Loading…",
     "emptyNoMatch": "No records match your filters.",
+    "emptyAllHidden": "All matching keys are hidden ({{count}} hidden). Click the pin in the toolbar to show them.",
+    "hidePinLabelOff": "Hide inactive",
+    "hidePinLabelOn": "{{count}} hidden",
+    "hidePinTitleOff": "Hide inactive keys and keys you hid manually ({{count}}). View preference only — hidden keys keep working.",
+    "hidePinTitleOn": "Showing a tidy list — {{count}} keys are hidden. Click to show all keys.",
+    "hiddenChip": "Hidden",
+    "hiddenChipTitle": "You hid this key (drawer action). It is only tucked away while the toolbar pin is on — it still works as usual.",
+    "hideKey": "Hide key",
+    "unhideKey": "Unhide key",
+    "hideKeyTitle": "Tuck this key away from the list when the toolbar pin is on. View preference only — the key keeps working, even if it is in use.",
+    "unhideKeyTitle": "Show this key in the list again.",
     "loadFailed": "Failed to load: ",
     "lastRefreshed": "Last refreshed",
     "refresh": "Refresh",
@@ -628,7 +639,8 @@
     "errRequestRejectedTitle": "The key could not be probed",
     "errRequestRejectedDetail": "aikey-local-server rejected the probe request for this key. Usually the key row the page is showing no longer matches the vault — it was revoked, re-delivered, or removed in another window.",
     "errRequestRejectedAction": "Refresh the list (top-right button) and re-run the test. For a team key, re-sync it first: ",
-    "errFallbackTitle": "Probe could not run"
+    "errFallbackTitle": "Probe could not run",
+    "providerSearchPlaceholder": "Search or type a provider…"
   },
   "import": {
     "errTextTooLarge": "Pasted text is too large — split into smaller chunks (≤ 1 MiB).",
@@ -2518,5 +2530,37 @@
     "addNoGroupsForProvider": "No pool for the selected provider — you've only joined pools of a different provider. Ask an admin to create one.",
     "addGroupsLoadFailed": "Couldn't load your pools (server error). Retry, or ask an admin to check the team server.",
     "addClose": "Close"
+  },
+  "hookBanner": {
+    "rcPowershell": "your PowerShell $PROFILE",
+    "almostReadyTitle": "Terminal auto-sync is off — keys you activate here won't reach your CLI yet",
+    "almostReadyBodyModal": "Every `Use` on this page only takes effect in your terminal after auto-sync is on. Click below to inject a small managed block into {{rcName}} — we'll show you exactly what before changing anything. You can also run `aikey hook install` from any terminal.",
+    "almostReadyBodyCopy": "Every `Use` on this page only takes effect in your terminal after auto-sync is on. Run the command below once to enable it (it will prompt before modifying {{rcName}}).",
+    "enableCta": "Enable auto-sync",
+    "copyCommand": "Copy command",
+    "shellUndetectableTitle": "The service environment did not expose a recognizable shell",
+    "shellUndetectableBody": "Terminal auto-sync setup was skipped because the service environment had no recognizable shell. Run the command below from your terminal to choose explicitly.",
+    "envMisconfiguredTitle": "Trial server's $HOME isn't set",
+    "envMisconfiguredBody": "Terminal auto-sync setup needs $HOME to know where to write. The Web bridge ran with no HOME — common in container / systemd contexts. Fix the service env and rerun, or install from a regular terminal session below.",
+    "ioErrorTitle": "Terminal auto-sync setup ran into a filesystem error",
+    "ioErrorBody": "The Web bridge could not write ~/.aikey/{{hookFile}}. Check ~/.aikey/ permissions, then run the command below.",
+    "dismiss": "Dismiss",
+    "dismissAria": "Dismiss banner"
+  },
+  "hookModal": {
+    "title": "Enable terminal auto-sync?",
+    "body": "Adding a small managed block to your shell profile lets every new terminal pick up key changes (Add / Use / Delete) automatically — no manual reload needed.",
+    "appendToPosh": "Will append to your PowerShell $PROFILE:",
+    "appendToUnix": "Will append to ~/.zshrc:",
+    "manualLabel": "Or run manually in any terminal:",
+    "copy": "Copy",
+    "copied": "Copied",
+    "notNow": "Not now",
+    "allow": "Allow",
+    "wiring": "Wiring...",
+    "serverReported": "Server reported '{{reason}}' — wiring did not complete."
+  },
+  "modalShell": {
+    "closeAria": "Close"
   }
 }

@@ -27,6 +27,7 @@
  * doesn't leak across browser sessions.
  */
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   useHookReadinessStore,
   hookBannerKind,
@@ -81,6 +82,7 @@ interface HookReadinessBannerProps {
 }
 
 export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps = {}) {
+  const { t } = useTranslation();
   const readiness = useHookReadinessStore((s) => s.readiness);
   const [dismissed, setDismissed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -141,33 +143,26 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
   // shown zsh paths + a `--shell zsh` fallback that fails verbatim on their
   // machine (the bridge actually writes $PROFILE + hook.ps1).
   const onWindows = isWindowsClient();
-  const rcName = onWindows ? 'your PowerShell $PROFILE' : '~/.zshrc';
+  const rcName = onWindows ? t('hookBanner.rcPowershell') : '~/.zshrc';
   switch (kind) {
     case 'almost-ready':
       // Consequence-oriented title (2026-07-10): "Almost ready" framed the
       // unwired state as safely postponable; the actual consequence is that
       // Web-activated keys never reach the CLI. Say that.
-      title = "Terminal auto-sync is off — keys you activate here won't reach your CLI yet";
+      title = t('hookBanner.almostReadyTitle');
       if (onEnableClick) {
-        body =
-          'Every `Use` on this page only takes effect in your terminal after auto-sync is on. ' +
-          `Click below to inject a small managed block into ${rcName} — we'll show you exactly what before changing anything. ` +
-          'You can also run `aikey hook install` from any terminal.';
-        ctaAction = { label: 'Enable auto-sync', onClick: onEnableClick };
+        body = t('hookBanner.almostReadyBodyModal', { rcName });
+        ctaAction = { label: t('hookBanner.enableCta'), onClick: onEnableClick };
       } else {
-        body =
-          'Every `Use` on this page only takes effect in your terminal after auto-sync is on. ' +
-          `Run the command below once to enable it (it will prompt before modifying ${rcName}).`;
-        cta = { label: 'Copy command', command: 'aikey hook install' };
+        body = t('hookBanner.almostReadyBodyCopy', { rcName });
+        cta = { label: t('hookBanner.copyCommand'), command: 'aikey hook install' };
       }
       break;
     case 'shell-undetectable':
-      title = 'The service environment did not expose a recognizable shell';
-      body =
-        'Terminal auto-sync setup was skipped because the service environment had no recognizable shell. ' +
-        'Run the command below from your terminal to choose explicitly.';
+      title = t('hookBanner.shellUndetectableTitle');
+      body = t('hookBanner.shellUndetectableBody');
       cta = {
-        label: 'Copy command',
+        label: t('hookBanner.copyCommand'),
         command: onWindows ? 'aikey hook install --shell powershell' : 'aikey hook install --shell zsh',
       };
       break;
@@ -176,20 +171,15 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
       // service env, then re-run", not "chmod ~/.aikey/". home_unset
       // typically means the trial service was launched without HOME
       // (containerized / systemd unit missing User= setup).
-      title = "Trial server's $HOME isn't set";
-      body =
-        'Terminal auto-sync setup needs $HOME to know where to write. The Web bridge ran ' +
-        'with no HOME — common in container / systemd contexts. Fix the service env ' +
-        'and rerun, or install from a regular terminal session below.';
-      cta = { label: 'Copy command', command: 'aikey hook install' };
+      title = t('hookBanner.envMisconfiguredTitle');
+      body = t('hookBanner.envMisconfiguredBody');
+      cta = { label: t('hookBanner.copyCommand'), command: 'aikey hook install' };
       break;
     case 'io-error':
     default:
-      title = 'Terminal auto-sync setup ran into a filesystem error';
-      body =
-        `The Web bridge could not write ~/.aikey/${onWindows ? 'hook.ps1' : 'hook.zsh'}. ` +
-        'Check ~/.aikey/ permissions, then run the command below.';
-      cta = { label: 'Copy command', command: 'aikey hook update' };
+      title = t('hookBanner.ioErrorTitle');
+      body = t('hookBanner.ioErrorBody', { hookFile: onWindows ? 'hook.ps1' : 'hook.zsh' });
+      cta = { label: t('hookBanner.copyCommand'), command: 'aikey hook update' };
       break;
   }
 
@@ -225,9 +215,9 @@ export function HookReadinessBanner({ onEnableClick }: HookReadinessBannerProps 
               type="button"
               className="hook-readiness-dismiss"
               onClick={handleDismiss}
-              aria-label="Dismiss banner"
+              aria-label={t('hookBanner.dismissAria')}
             >
-              Dismiss
+              {t('hookBanner.dismiss')}
             </button>
           )}
         </div>
