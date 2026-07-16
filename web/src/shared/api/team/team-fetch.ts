@@ -207,3 +207,43 @@ export async function teamPostJSON<T>(
     clearTimeout(timer);
   }
 }
+
+/**
+ * teamDeleteJSON DELETEs a team-scoped path on the remote master with the
+ * member's JWT. Same handshake + error classification as teamGetJSON/teamPostJSON.
+ * Returns undefined on success (204/empty body tolerated), else a typed error.
+ * `path` must start with '/'.
+ */
+export async function teamDeleteJSON(
+  path: string,
+): Promise<undefined | TeamFetchError | TeamWriteError> {
+  const handshake = await resolveTeamHandshake();
+  if (!handshake.ok) return handshake.err;
+  const { teamUrl, jwt } = handshake;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${teamUrl}${path}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${jwt}` },
+      signal: ctrl.signal,
+      credentials: 'omit',
+    });
+    if (res.ok) return undefined;
+    if (res.status === 401 || res.status === 403) return { kind: 'unauth' };
+    let code = `HTTP_${res.status}`;
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = (await res.json()) as { error?: string; message?: string };
+      if (data.error) code = data.error;
+      if (data.message) message = data.message;
+    } catch {
+      /* non-JSON error body */
+    }
+    return { kind: 'domain', status: res.status, code, message };
+  } catch (e) {
+    return { kind: 'unreachable', detail: String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+}

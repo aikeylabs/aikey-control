@@ -7,6 +7,13 @@
  */
 import { httpClient } from '../http-client';
 import { runtimeConfig } from '@/app/config/runtime';
+import {
+  teamGetJSON,
+  teamPostJSON,
+  teamDeleteJSON,
+  isTeamFetchError,
+  isTeamWriteError,
+} from '../team/team-fetch';
 
 // 2026-07-03 composing gateway: vault-bridge base — dual-homed family #3
 // (see RuntimeConfig.vaultBridgeApiBase). The plain /accounts/me IDENTITY
@@ -78,20 +85,35 @@ export const userAccountsApi = {
     return res.data;
   },
 
-  // Online agents this member owns (alpha.5). Team-plane API reached via the
-  // vault-bridge on the Personal web (same dual-homed path as mySeats).
+  // Online agents this member owns (alpha.5). Agents are TEAM-PLANE entities
+  // (seat principals in the org, created on the master), so they are fetched
+  // BROWSER→MASTER via team-fetch (/system/team-url + /system/team-jwt →
+  // {teamUrl}/accounts/me/agents), NOT the local vault-bridge — the Personal
+  // local-server serves /accounts/me/* as empty compatibility stubs and has no
+  // agents domain (2026-07-16 fix: P4 wired these to the vault-bridge by mistake,
+  // yielding a 404 on the standalone Personal web).
   myAgents: async (): Promise<MyAgentDTO[]> => {
-    const res = await httpClient.get<{ agents: MyAgentDTO[] }>(`${ME_BRIDGE_BASE}/agents`);
-    return res.data.agents ?? [];
+    const res = await teamGetJSON<{ agents: MyAgentDTO[] }>('/accounts/me/agents');
+    if (isTeamFetchError(res)) {
+      // No team session yet → no agents (empty, not an error). Real transport /
+      // auth failures throw so the page shows its error state.
+      if (res.kind === 'not-logged-in') return [];
+      throw new Error(`agents unavailable: ${res.kind}`);
+    }
+    return res.agents ?? [];
   },
 
   createAgent: async (body: { alias: string; provider_code?: string; oauth_group_id?: string }): Promise<MyAgentDTO> => {
-    const res = await httpClient.post<MyAgentDTO>(`${ME_BRIDGE_BASE}/agents`, body);
-    return res.data;
+    const res = await teamPostJSON<MyAgentDTO>('/accounts/me/agents', body);
+    if (isTeamWriteError(res)) throw new Error(res.message);
+    if (isTeamFetchError(res)) throw new Error(`create agent failed: ${res.kind}`);
+    return res;
   },
 
   deleteAgent: async (seatId: string): Promise<void> => {
-    await httpClient.delete(`${ME_BRIDGE_BASE}/agents/${seatId}`);
+    const res = await teamDeleteJSON(`/accounts/me/agents/${seatId}`);
+    if (isTeamWriteError(res)) throw new Error(res.message);
+    if (isTeamFetchError(res)) throw new Error(`delete agent failed: ${res.kind}`);
   },
 
   myReferrals: async (): Promise<ReferralDTO[]> => {
