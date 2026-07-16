@@ -20,6 +20,33 @@ export interface RegisterRequest {
   password: string;
 }
 
+// Derived credential source of an agent's VK (never stored server-side; the
+// backend projects it from the VK binding). `type` is polymorphic — this phase
+// always 'oauth_group'; 'api_key' is a designed evolution the UI already renders.
+export interface AgentSourceDTO {
+  type: string; // 'oauth_group' | 'api_key'
+  oauth_group_id?: string;
+  name?: string;
+  provider_code?: string;
+  owner_pool: boolean; // true = my own agent pool, false = a company pool
+}
+
+// One online agent (GET /accounts/me/agents). The connection fields
+// (base_url / vk / *_blocked / vk_pending) are populated ONLY on the CREATE
+// response — vk is the plaintext returned once at issue time (hash-only storage;
+// never recoverable later). On the list they are absent.
+export interface MyAgentDTO {
+  seat_id: string;
+  alias: string;
+  status: string;
+  source: AgentSourceDTO;
+  created_at: string;
+  base_url?: string;
+  base_url_blocked?: boolean;
+  vk?: string;
+  vk_pending?: boolean;
+}
+
 // Matches OrgSeat JSON from backend: seat_id, org_id, invited_email, seat_status, etc.
 export interface SeatSummaryDTO {
   seat_id: string;
@@ -49,6 +76,22 @@ export const userAccountsApi = {
   mySeats: async (): Promise<SeatSummaryDTO[]> => {
     const res = await httpClient.get<SeatSummaryDTO[]>(`${ME_BRIDGE_BASE}/seats`);
     return res.data;
+  },
+
+  // Online agents this member owns (alpha.5). Team-plane API reached via the
+  // vault-bridge on the Personal web (same dual-homed path as mySeats).
+  myAgents: async (): Promise<MyAgentDTO[]> => {
+    const res = await httpClient.get<{ agents: MyAgentDTO[] }>(`${ME_BRIDGE_BASE}/agents`);
+    return res.data.agents ?? [];
+  },
+
+  createAgent: async (body: { alias: string; provider_code?: string; oauth_group_id?: string }): Promise<MyAgentDTO> => {
+    const res = await httpClient.post<MyAgentDTO>(`${ME_BRIDGE_BASE}/agents`, body);
+    return res.data;
+  },
+
+  deleteAgent: async (seatId: string): Promise<void> => {
+    await httpClient.delete(`${ME_BRIDGE_BASE}/agents/${seatId}`);
   },
 
   myReferrals: async (): Promise<ReferralDTO[]> => {

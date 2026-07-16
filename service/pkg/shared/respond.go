@@ -94,6 +94,9 @@ func domainErrorStatus(code string) int {
 	case CodeBizAuthEmailTaken, CodeBizSeatEmailTaken,
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
 		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
+		// R39 recycle-bin guard: live references block deletion — a resource-state
+		// conflict the admin resolves (migrate channels / detach from group).
+		CodeBizCredHasActiveRefs,
 		CodeBizLoginSessionTerminated,
 		// 2026-07-03 (owner-approved delivery-family contract unification): "no
 		// active / not-deliverable binding" is a RESOURCE-STATE conflict an admin

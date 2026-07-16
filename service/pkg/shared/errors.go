@@ -170,8 +170,9 @@ var zhMessages = map[string]string{
 	CodeBizProvCodeTaken:  "已存在使用该代码的供应商",
 
 	// BIZ — Credential
-	CodeBizCredNotFound: "凭据 {{id}} 不存在",
-	CodeBizCredInactive: "凭据 {{id}} 未激活",
+	CodeBizCredNotFound:      "凭据 {{id}} 不存在",
+	CodeBizCredInactive:      "凭据 {{id}} 未激活",
+	CodeBizCredHasActiveRefs: "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、席位组 {{group_count}} 个），请先迁移通道或将账号移出席位组，再移入回收站",
 
 	// BIZ — Provider
 	CodeBizProvNotFound: "供应商 {{id}} 不存在",
@@ -277,6 +278,15 @@ const (
 	// BIZ — Credential
 	CodeBizCredNotFound = "BIZ_CRED_NOT_FOUND"
 	CodeBizCredInactive = "BIZ_CRED_INACTIVE"
+	// CodeBizCredHasActiveRefs: a provider credential/account could not be moved to
+	// the recycle bin because live references still point at it — active direct-bind
+	// channels (managed_provider_bindings) and/or a seat-group attachment
+	// (oauth_group_account). R39 (2026-07-16): deletion is BLOCKED while any active
+	// association exists; the admin first migrates the channels / removes the
+	// account from its group. Guarding at the write side keeps the delivery hot
+	// path untouched (it filters on binding_status only, not credential_status).
+	// 409 (resource-state conflict the admin resolves, same family as CRED_IN_USE).
+	CodeBizCredHasActiveRefs = "BIZ_CRED_HAS_ACTIVE_REFS"
 
 	// BIZ — Provider
 	CodeBizProvNotFound = "BIZ_PROV_NOT_FOUND"
@@ -485,6 +495,26 @@ func BizCredInactive(id string) *DomainError {
 	return &DomainError{Code: CodeBizCredInactive,
 		Message: fmt.Sprintf("credential %q is not active", id),
 		Meta:    map[string]any{"id": id}}
+}
+
+// BizCredHasActiveRefs — recycle-bin guard (R39): the credential still has live
+// references (active direct-bind channels and/or a seat-group attachment), so it
+// cannot be deleted yet. Meta carries the impact scope so the admin console can
+// render the blocked dialog (counts + affected groups) without a second call.
+func BizCredHasActiveRefs(id string, bindingCount, virtualKeyCount int, groupIDs []string) *DomainError {
+	if groupIDs == nil {
+		groupIDs = []string{}
+	}
+	return &DomainError{Code: CodeBizCredHasActiveRefs,
+		Message: fmt.Sprintf("credential %q is still in use (%d active channel binding(s), %d seat group(s)) — migrate its channels or remove it from the seat group first",
+			id, bindingCount, len(groupIDs)),
+		Meta: map[string]any{
+			"id":                id,
+			"binding_count":     bindingCount,
+			"virtual_key_count": virtualKeyCount,
+			"group_count":       len(groupIDs),
+			"group_ids":         groupIDs,
+		}}
 }
 
 // BizOauthGroupNotFound — a seat group (or a sub-resource keyed by id within the
