@@ -90,7 +90,9 @@
     "roleMember": "成员",
     "opensLink": "打开 {{url}}",
     "navSettings": "设置",
-    "navComplianceAudit": "合规审计"
+    "navComplianceAudit": "合规审计",
+    "sessionExpired": "未登录",
+    "sessionExpiredHint": "会话已过期"
   },
   "teamMenu": {
     "oauthContribute": "团队OAuth",
@@ -177,7 +179,11 @@
     "use": "使用",
     "opensHref": "打开 {{href}}",
     "footerVault": "aikey 保管库",
-    "statusPending": "待领取"
+    "statusPending": "待领取",
+    "greetingSignedOut": "未登录",
+    "statusSessionExpired": "会话已过期",
+    "bannerSessionExpired": "团队会话已过期。请在终端运行",
+    "bannerSessionExpiredHint": "重新登录。在此之前，团队密钥、席位与用量均不可用。"
   },
   "account": {
     "pageTitle": "我的账户",
