@@ -41,7 +41,7 @@ import {
   buildCrossAppUrl,
 } from '@/shared/cross-app-menu';
 import type { AccountDTO } from '@/shared/api/types/account';
-import { isTeamTokenRejected } from '@/shared/api/team-session';
+import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 
 // Phase 3B R23 (2026-05-11): same-side detection — A bundle's OWN_MENU
 // reference-equals OWN_PERSONAL_MENU; B bundle's points at OWN_TEAM_MENU.

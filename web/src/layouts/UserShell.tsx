@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useUserAuthStore } from '@/store';
 import { runtimeConfig } from '@/app/config/runtime';
 import { userAccountsApi } from '@/shared/api/user/accounts';
-import { isTeamTokenRejected } from '@/shared/api/team-session';
+import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
 import {
   OWN_MENU,
