@@ -34,6 +34,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { appsApi } from '../../../shared/api/user/apps';
 import { importApi } from '../../../shared/api/user/import';
+import { egressSummary } from './egress-summary';
 
 // Slug of the Stage-6 compliance fast-layer detector (proxy filter child).
 // Source of truth: aikey-cli/src/commands_app/install.rs TRUSTED_APPS +
@@ -1086,12 +1087,47 @@ type UpstreamProbe =
   | { kind: 'ok'; status: number; ms: number }
   | { kind: 'fail'; message: string };
 
+// EgressLayers mirrors the daemon's layered egress state (admin.EgressState,
+// GET /admin/upstream-proxy → egress). effective_* is resolved by the SAME
+// ProxyFunc the forwarding transport runs, so what this card shows is what
+// requests actually do. Node-level layers only — the per-account egress proxy an
+// admin sets for an OAuth pool account is not a node setting (see the card note).
+type EgressLayers = {
+  explicit_url?: string;
+  env_authoritative?: boolean;
+  env_vars?: Record<string, string>;
+  env_inherited_vars?: Record<string, string>;
+  system_supported?: boolean;
+  system_http?: string;
+  system_https?: string;
+  system_socks?: string;
+  /** "explicit" | "env" | "system" | "env_inherited" | "direct" */
+  effective_source?: string;
+  effective_url?: string;
+  multi_protocol?: boolean;
+};
+
 function UpstreamProxyCard() {
   const { t } = useTranslation();
   const [currentURL, setCurrentURL] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [probe, setProbe] = useState<UpstreamProbe>({ kind: 'idle' });
   const [save, setSave] = useState<UpstreamSave>({ kind: 'idle' });
+  // Capability: only builds with the enterprise multi-protocol (mihomo) engine
+  // accept a socks5 chain / config fragment. Reported by the daemon's egress
+  // state (GET /admin/upstream-proxy → egress.multi_protocol). Open-source builds
+  // report false → the card stays a single-URL input (degrades to the original
+  // mode). Gating the UI here mirrors the daemon-side validateNodeUpstream gate.
+  const [multiProtocol, setMultiProtocol] = useState(false);
+  // Layered egress state (GET /admin/upstream-proxy → egress): which proxy actually
+  // wins RIGHT NOW and at which layer. The daemon already computes this with the SAME
+  // resolver the forwarding transport uses (it backs `aikey env`), so the card just
+  // renders it — no second source of truth.
+  const [egress, setEgress] = useState<EgressLayers | null>(null);
+  // ② per-account egress PRESENCE (which pool accounts an admin gave their own exit
+  // proxy). Presence-only by design: the spec may embed credentials, and the exit IP
+  // needs a real dial (`aikey doctor`) — so this never probes the network.
+  const [accountEgress, setAccountEgress] = useState<string[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1099,20 +1135,35 @@ function UpstreamProxyCard() {
       try {
         const res = await fetch('/api/user/system/upstream-proxy', { credentials: 'same-origin' });
         if (!res.ok) return; // proxy unreachable / not wired — leave the field empty
-        const data = (await res.json().catch(() => ({}))) as { url?: string };
+        const data = (await res.json().catch(() => ({}))) as {
+          url?: string;
+          egress?: EgressLayers;
+        };
         const url = (data.url ?? '').trim();
         if (!cancelled) {
           setCurrentURL(url);
           setUrlInput(url);
+          setMultiProtocol(Boolean(data.egress?.multi_protocol));
+          setEgress(data.egress ?? null);
         }
       } catch {
         /* proxy not running — non-fatal; the field stays empty */
+      }
+      try {
+        const res = await fetch('/api/user/system/egress-selfcheck', { credentials: 'same-origin' });
+        if (!res.ok) return; // not wired (no pool) — the ② row falls back to "none"
+        const data = (await res.json().catch(() => ({}))) as { paths?: { label?: string }[] };
+        if (!cancelled) {
+          setAccountEgress((data.paths ?? []).map((p) => (p.label ?? '').trim()).filter(Boolean));
+        }
+      } catch {
+        /* proxy not running — non-fatal; the ② row shows "none" */
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [save.kind]); // re-read after a successful save so the effective layer refreshes
 
   const trimmed = urlInput.trim();
   const changed = trimmed !== currentURL.trim();
@@ -1186,24 +1237,171 @@ function UpstreamProxyCard() {
         {t('settings.upstreamProxy.description')}
       </p>
 
+      {/* Which proxy is effective RIGHT NOW, and at which layer. Rendered from the
+          daemon's own resolved state (same resolver the data plane uses), so this is
+          diagnostic truth rather than a re-derivation in the browser. */}
+      {egress && (() => {
+        const fmtVars = (v?: Record<string, string>) =>
+          v && Object.keys(v).length > 0
+            ? Object.entries(v)
+                .map(([k, val]) => `${k}=${val}`)
+                .join('  ')
+            : '';
+        const rows = [
+          { key: 'explicit', label: t('settings.upstreamProxy.layerExplicit'), value: (egress.explicit_url ?? '').trim() },
+          { key: 'env', label: t('settings.upstreamProxy.layerEnv'), value: fmtVars(egress.env_vars) },
+          {
+            key: 'system',
+            label: t('settings.upstreamProxy.layerSystem'),
+            value: egress.system_supported
+              ? egress.system_https || egress.system_http || egress.system_socks || ''
+              : t('settings.upstreamProxy.layerUnsupported'),
+          },
+          { key: 'env_inherited', label: t('settings.upstreamProxy.layerEnvInherited'), value: fmtVars(egress.env_inherited_vars) },
+          { key: 'direct', label: t('settings.upstreamProxy.layerDirect'), value: '—' },
+        ].map((r) => ({ ...r, active: egress.effective_source === r.key }));
+        const activeRow = rows.find((r) => r.active);
+        return (
+          <div
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: '10px 12px',
+              marginBottom: 14,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--muted-foreground)',
+                marginBottom: 6,
+              }}
+            >
+              {t('settings.upstreamProxy.effectiveLabel')}
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 13,
+                color: 'var(--foreground)',
+                // anywhere (not break-all): only split a token that can't fit on its
+                // own line, so a long host isn't chopped mid-word.
+                overflowWrap: 'anywhere',
+                marginBottom: 2,
+              }}
+            >
+              {egressSummary(egress.effective_url, t('settings.upstreamProxy.fragmentKind'), (n) =>
+                t('settings.upstreamProxy.fragmentLines', { count: n }),
+              ) || t('settings.upstreamProxy.effectiveDirect')}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--soft-foreground)', marginBottom: 10 }}>
+              {t('settings.upstreamProxy.effectiveFrom', {
+                layer: activeRow?.label ?? egress.effective_source ?? '—',
+              })}
+            </div>
+
+            <div
+              style={{
+                fontSize: 10,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--muted-foreground)',
+                marginBottom: 4,
+              }}
+            >
+              {t('settings.upstreamProxy.layersLabel')}
+            </div>
+            {rows.map((r) => (
+              <div
+                key={r.key}
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'baseline',
+                  padding: '2px 0',
+                  fontSize: 12,
+                  color: r.active ? 'var(--foreground)' : 'var(--muted-foreground)',
+                }}
+              >
+                <span style={{ minWidth: 140, flexShrink: 0 }}>{r.label}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', flex: 1, overflowWrap: 'anywhere' }}>
+                  {egressSummary(r.value, t('settings.upstreamProxy.fragmentKind'), (n) =>
+                    t('settings.upstreamProxy.fragmentLines', { count: n }),
+                  ) || t('settings.upstreamProxy.layerUnset')}
+                </span>
+                {r.active && (
+                  <span style={{ color: '#4ade80', flexShrink: 0 }}>{t('settings.upstreamProxy.layerActive')}</span>
+                )}
+              </div>
+            ))}
+            {/* ② per-account egress — a SEPARATE bottom row, not a node layer: each
+                pool account has its own, set by an admin. Presence only (the spec can
+                embed credentials; the exit IP needs `aikey doctor`'s real dial). It
+                outranks ③④⑤ for those accounts, and ① outranks it. */}
+            {(() => {
+              const accounts = accountEgress ?? [];
+              const explicitSet = (egress.explicit_url ?? '').trim() !== '';
+              const active = accounts.length > 0 && !explicitSet;
+              const overridden = accounts.length > 0 && explicitSet;
+              return (
+                <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      alignItems: 'baseline',
+                      fontSize: 12,
+                      color: active ? 'var(--foreground)' : 'var(--muted-foreground)',
+                    }}
+                  >
+                    <span style={{ minWidth: 140, flexShrink: 0 }}>{t('settings.upstreamProxy.layerAccount')}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', flex: 1, overflowWrap: 'anywhere' }}>
+                      {accounts.length > 0 ? accounts.join('、') : t('settings.upstreamProxy.layerUnset')}
+                    </span>
+                    {active && (
+                      <span style={{ color: '#4ade80', flexShrink: 0 }}>{t('settings.upstreamProxy.layerActive')}</span>
+                    )}
+                    {overridden && (
+                      <span style={{ flexShrink: 0 }}>{t('settings.upstreamProxy.layerOverridden')}</span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 6, marginBottom: 0 }}>
+                    {t('settings.upstreamProxy.accountEgressNote')}
+                  </p>
+                </div>
+              );
+            })()}
+          </div>
+        );
+      })()}
+
       <label
         className="block mb-1"
         style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground)' }}
       >
         {t('settings.upstreamProxy.urlLabel')}
       </label>
-      <input
-        type="text"
-        value={urlInput}
-        onChange={(e) => {
-          setUrlInput(e.target.value);
+      {multiProtocol && (
+        <>
+          <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 6 }}>
+            {t('settings.upstreamProxy.multiNote')}
+          </p>
+          {/* Anti-ban footgun for fallback/url-test: members must converge on ONE
+              exit, else the exit IP flips whenever the group switches. */}
+          <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 8 }}>
+            {t('settings.upstreamProxy.groupExitNote')}
+          </p>
+        </>
+      )}
+      {(() => {
+        const onChange = (v: string) => {
+          setUrlInput(v);
           setProbe({ kind: 'idle' }); // stale probe must not unlock Save for a new URL
           setSave({ kind: 'idle' });
-        }}
-        placeholder="http://127.0.0.1:7890"
-        spellCheck={false}
-        className="w-full mb-2"
-        style={{
+        };
+        const sharedStyle = {
           background: '#000000',
           border: '1px solid var(--border)',
           borderRadius: 6,
@@ -1212,8 +1410,38 @@ function UpstreamProxyCard() {
           fontSize: 13,
           color: 'var(--foreground)',
           outline: 'none',
-        }}
-      />
+        } as const;
+        // Multi-protocol builds accept a multi-line spec (chain / config fragment),
+        // so the field grows to a textarea aligned with the per-account editor.
+        // Single-URL builds keep the compact one-line input (no regression).
+        return multiProtocol ? (
+          <textarea
+            value={urlInput}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={t('settings.upstreamProxy.placeholderMulti')}
+            spellCheck={false}
+            rows={4}
+            className="w-full mb-2"
+            style={{ ...sharedStyle, resize: 'vertical', whiteSpace: 'pre', lineHeight: 1.5 }}
+          />
+        ) : (
+          <input
+            type="text"
+            value={urlInput}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="http://127.0.0.1:7890"
+            spellCheck={false}
+            className="w-full mb-2"
+            style={sharedStyle}
+          />
+        );
+      })()}
+
+      {trimmed !== '' && (
+        <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 8 }}>
+          {t('settings.upstreamProxy.internalBypassNote')}
+        </p>
+      )}
 
       <div style={{ minHeight: 18, marginBottom: 14, fontSize: 12 }}>
         {save.kind === 'saving' && (
@@ -1227,7 +1455,7 @@ function UpstreamProxyCard() {
           <span style={{ color: 'var(--muted-foreground)' }}>
             {changed && trimmed !== ''
               ? t('settings.upstreamProxy.statusReadyToTest')
-              : t('settings.upstreamProxy.statusHint')}
+              : t(multiProtocol ? 'settings.upstreamProxy.statusHintMulti' : 'settings.upstreamProxy.statusHint')}
           </span>
         )}
         {save.kind === 'idle' && probe.kind === 'probing' && (

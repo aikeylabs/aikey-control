@@ -96,6 +96,27 @@ export interface AppTotal {
   unpriced_request_count?: number;
 }
 
+/** 2026-07-17 — one row of the "Usage By Agent" breakdown on
+ *  /user/usage-ledger. One row per seat: the current user's own seat plus
+ *  each Agent (数字员工) they own (server resolves via
+ *  org_seats.parent_seat_id). Realizes D3 "计费按席位" as a display dimension.
+ *  Server enforces authorization — the caller only ever gets their own row
+ *  and their owned agents' rows. */
+export interface AgentTotal {
+  seat_id: string;
+  /** org_seats.alias; empty when unset — frontend falls back to a short seat_id. */
+  seat_alias: string;
+  /** true when the seat is an Agent (seat_type != 'human'); the caller's own row is false. */
+  is_agent: boolean;
+  /** Owner seat; equals the caller's seat for agent rows, empty for the own row. */
+  parent_seat_id: string;
+  total_tokens: number;
+  request_count: number;
+  cost_usd?: number;
+  priced_request_count?: number;
+  unpriced_request_count?: number;
+}
+
 /** Phase 3B R23 (2026-05-11) — raw recent request row surfaced by the
  *  Overview "Recent Requests" card. Sourced from `usage_event_ods`
  *  directly so canary probes can be filtered (DWD aggregates strip
@@ -368,6 +389,21 @@ export const usageApi = {
   personalByAppTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<AppTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const res = await httpClient.get<AppTotal[]>(`${PERSONAL_USAGE_BASE}/by-app/total`, {
+      params: { ...personalParams(id), ...range, tz: browserTZ() },
+    });
+    return res.data;
+  },
+
+  /**
+   * 2026-07-17 — "Usage By Agent" breakdown. Server returns one row per
+   * seat_id for the caller's own seat + the Agents they own (resolved via
+   * org_seats.parent_seat_id), sorted by `total_tokens DESC`. Authorization
+   * is server-side; the client cannot request another user's agents. Rows
+   * with `is_agent=false` are the caller's own (human) usage.
+   */
+  personalByAgentTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<AgentTotal[]> => {
+    const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
+    const res = await httpClient.get<AgentTotal[]>(`${PERSONAL_USAGE_BASE}/by-agent/total`, {
       params: { ...personalParams(id), ...range, tz: browserTZ() },
     });
     return res.data;

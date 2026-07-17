@@ -12,19 +12,21 @@
  * modal in a follow-up; this MVP creates against the member's own pool.
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { userAccountsApi, type MyAgentDTO } from '@/shared/api/user/accounts';
 import { Badge } from '@/shared/ui/Badge';
 import { ModalPortal } from '@/shared/ui/ModalShell';
 import { copyText } from '@/shared/utils/clipboard';
+import { formatDate } from '@/shared/utils/datetime-intl';
 
-function sourceBadge(src: MyAgentDTO['source']) {
+function sourceBadge(src: MyAgentDTO['source'], t: (k: string) => string) {
   const isApiKey = src.type === 'api_key';
   return (
     <span className="inline-flex items-center gap-1.5">
       <Badge variant={isApiKey ? 'gray' : 'green'}>{isApiKey ? 'API-KEY' : 'OAUTH'}</Badge>
-      <span style={{ color: 'var(--muted-foreground)' }}>{src.name || (src.owner_pool ? 'My pool' : '—')}</span>
+      <span style={{ color: 'var(--muted-foreground)' }}>{src.name || (src.owner_pool ? t('myAgents.myPool') : '—')}</span>
     </span>
   );
 }
@@ -32,6 +34,7 @@ function sourceBadge(src: MyAgentDTO['source']) {
 // ── Copyable connection field (base_url / VK) with reveal-once eye ─────────────
 
 function CopyField({ label, value, secret = false }: { label: string; value: string; secret?: boolean }) {
+  const { t } = useTranslation();
   const [revealed, setRevealed] = useState(!secret);
   const [copied, setCopied] = useState(false);
   const shown = revealed ? value : value.replace(/./g, '•').slice(0, 40);
@@ -43,7 +46,7 @@ function CopyField({ label, value, secret = false }: { label: string; value: str
         {secret && (
           <button
             onClick={() => setRevealed(r => !r)}
-            title={revealed ? 'Hide' : 'Reveal'}
+            title={revealed ? t('myAgents.hide') : t('myAgents.reveal')}
             className="text-[10px] font-mono px-2 py-2 rounded border"
             style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
           >
@@ -55,7 +58,7 @@ function CopyField({ label, value, secret = false }: { label: string; value: str
           className="text-[10px] font-mono px-2.5 py-2 rounded border whitespace-nowrap"
           style={{ borderColor: copied ? 'rgba(74,222,128,0.4)' : 'var(--border)', color: copied ? '#4ade80' : 'var(--muted-foreground)' }}
         >
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t('myAgents.copied') : t('myAgents.copy')}
         </button>
       </div>
     </div>
@@ -65,6 +68,7 @@ function CopyField({ label, value, secret = false }: { label: string; value: str
 // ── Create Agent (two-step: name → connection reveal) ─────────────────────────
 
 function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [alias, setAlias] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -89,7 +93,7 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
       setCreated(agent); // → step 2: reveal base_url + VK
     } catch (e) {
       const anyE = e as { response?: { data?: { message?: string; error?: string } } };
-      setErr(anyE.response?.data?.message || anyE.response?.data?.error || 'Failed to create agent');
+      setErr(anyE.response?.data?.message || anyE.response?.data?.error || t('myAgents.create.failed'));
     } finally {
       setSubmitting(false);
     }
@@ -105,7 +109,7 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
       >
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
-            {created ? 'AGENT CREATED' : 'CREATE AGENT'}
+            {created ? t('myAgents.create.titleCreated') : t('myAgents.create.titleNew')}
           </h3>
           <button onClick={close} disabled={submitting} style={{ color: 'var(--muted-foreground)' }}>✕</button>
         </div>
@@ -113,19 +117,19 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
         {!created ? (
           <>
             <div className="px-6 py-5 space-y-3">
-              <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>AGENT NAME</label>
+              <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.create.nameLabel')}</label>
               <input className="w-full px-3 py-2 text-sm" placeholder="my-research-agent" value={alias} onChange={e => setAlias(e.target.value)} disabled={submitting} />
               <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
-                The agent draws from your own agent pool. After creating it, add and log in your OAuth accounts to make it usable.
+                {t('myAgents.create.hint')}
               </p>
               {err && (
                 <div className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>{err}</div>
               )}
             </div>
             <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
-              <button onClick={close} className="px-4 py-2 text-xs font-mono font-bold rounded border" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>Cancel</button>
+              <button onClick={close} className="px-4 py-2 text-xs font-mono font-bold rounded border" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>{t('myAgents.create.cancel')}</button>
               <button onClick={submit} disabled={!alias.trim() || submitting} className="btn btn-primary text-xs px-4 py-2 disabled:opacity-40">
-                {submitting ? 'Creating...' : 'Create'}
+                {submitting ? t('myAgents.create.submitting') : t('myAgents.create.submit')}
               </button>
             </div>
           </>
@@ -133,34 +137,34 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
           <>
             <div className="px-6 py-5 space-y-4">
               <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
-                Point your third-party agent's API base at this base_url, using the key below as the Bearer token.
+                {t('myAgents.create.connHint')}
               </p>
               {created.base_url_blocked ? (
                 <div className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
-                  base_url is not configured on this deployment. Ask your admin to set the oauth-routing ingress domain.
+                  {t('myAgents.create.baseUrlBlocked')}
                 </div>
               ) : (
-                <CopyField label="BASE URL" value={created.base_url ?? ''} />
+                <CopyField label={t('myAgents.create.baseUrlLabel')} value={created.base_url ?? ''} />
               )}
               {created.vk_pending ? (
                 <div className="text-[10px] font-mono px-3 py-2 rounded space-y-2" style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}>
-                  <p>No key yet — your agent pool has no accounts. Add and log in an OAuth account to activate this agent; its key then appears on re-open.</p>
+                  <p>{t('myAgents.create.vkPending')}</p>
                   {/* Hand off to the canonical add-account + login surface
                       (Team OAuth / pool-login) instead of duplicating that flow
                       here — reuse, not re-implement. */}
                   <Link to="/user/team-oauth" onClick={close} className="inline-block font-bold" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
-                    Add &amp; log in accounts in Team OAuth →
+                    {t('myAgents.create.vkPendingCta')}
                   </Link>
                 </div>
               ) : (
                 <>
-                  <CopyField label="TEAM OAUTH VK (shown once)" value={created.vk ?? ''} secret />
-                  <p className="text-[10px] font-mono" style={{ color: '#f59e0b' }}>⚠ This key is shown only once. Copy it now — it cannot be retrieved later.</p>
+                  <CopyField label={t('myAgents.create.vkLabel')} value={created.vk ?? ''} secret />
+                  <p className="text-[10px] font-mono" style={{ color: '#f59e0b' }}>{t('myAgents.create.vkOnce')}</p>
                 </>
               )}
             </div>
             <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
-              <button onClick={close} className="btn btn-primary text-xs px-6 py-2">Done</button>
+              <button onClick={close} className="btn btn-primary text-xs px-6 py-2">{t('myAgents.create.done')}</button>
             </div>
           </>
         )}
@@ -172,6 +176,7 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
 // ── Disable button ────────────────────────────────────────────────────────────
 
 function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [loading, setLoading] = useState(false);
   async function del() {
@@ -192,7 +197,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
       className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
       style={{ color: '#f97316', borderColor: 'rgba(249,115,22,0.3)', backgroundColor: 'rgba(249,115,22,0.06)' }}
     >
-      {loading ? '...' : 'Disable'}
+      {loading ? '...' : t('myAgents.disable')}
     </button>
   );
 }
@@ -200,6 +205,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function MyAgentsPage() {
+  const { t } = useTranslation();
   const [createOpen, setCreateOpen] = useState(false);
   const { data: agents, isLoading, isError } = useQuery({
     queryKey: ['my-agents'],
@@ -210,10 +216,10 @@ export default function MyAgentsPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-mono font-bold tracking-widest" style={{ color: 'var(--foreground)' }}>MY AGENTS</h1>
-          <p className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>Online agents you own — GET /accounts/me/agents</p>
+          <h1 className="text-lg font-mono font-bold tracking-widest" style={{ color: 'var(--foreground)' }}>{t('myAgents.title')}</h1>
+          <p className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.subtitle')}</p>
         </div>
-        <button onClick={() => setCreateOpen(true)} className="btn btn-primary text-xs px-4 py-2">+ New Agent</button>
+        <button onClick={() => setCreateOpen(true)} className="btn btn-primary text-xs px-4 py-2">{t('myAgents.newAgent')}</button>
       </div>
 
       <div className="rounded border overflow-hidden" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}>
@@ -221,32 +227,32 @@ export default function MyAgentsPage() {
           <table className="w-full whitespace-nowrap">
             <thead>
               <tr>
-                <th className="px-5 py-3 text-left">AGENT</th>
-                <th className="px-5 py-3 text-left">SOURCE</th>
-                <th className="px-5 py-3 text-left">STATUS</th>
-                <th className="px-5 py-3 text-left">CREATED</th>
-                <th className="px-5 py-3 text-right">ACTIONS</th>
+                <th className="px-5 py-3 text-left">{t('myAgents.col.agent')}</th>
+                <th className="px-5 py-3 text-left">{t('myAgents.col.source')}</th>
+                <th className="px-5 py-3 text-left">{t('myAgents.col.status')}</th>
+                <th className="px-5 py-3 text-left">{t('myAgents.col.created')}</th>
+                <th className="px-5 py-3 text-right">{t('myAgents.col.actions')}</th>
               </tr>
             </thead>
             <tbody className="font-mono text-xs">
               {isLoading && (
-                <tr><td colSpan={5} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>LOADING...</td></tr>
+                <tr><td colSpan={5} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.loading')}</td></tr>
               )}
               {isError && (
-                <tr><td colSpan={5} className="px-5 py-8 text-center" style={{ color: 'var(--destructive)' }}>Failed to load agents.</td></tr>
+                <tr><td colSpan={5} className="px-5 py-8 text-center" style={{ color: 'var(--destructive)' }}>{t('myAgents.loadError')}</td></tr>
               )}
               {agents && agents.length === 0 && (
-                <tr><td colSpan={5} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>No agents yet. Create one to expose a team OAuth VK to a third-party agent.</td></tr>
+                <tr><td colSpan={5} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.empty')}</td></tr>
               )}
               {agents?.map(agent => (
                 <tr key={agent.seat_id}>
                   <td className="px-5 py-4" style={{ color: 'var(--soft-foreground)' }}>{agent.alias}</td>
-                  <td className="px-5 py-4">{sourceBadge(agent.source)}</td>
+                  <td className="px-5 py-4">{sourceBadge(agent.source, t)}</td>
                   <td className="px-5 py-4">
                     <span className={`badge ${agent.status === 'active' ? 'badge-active' : 'badge-neutral'}`}>{agent.status}</span>
                   </td>
                   <td className="px-5 py-4" style={{ color: 'var(--muted-foreground)' }}>
-                    {agent.created_at ? new Date(agent.created_at).toLocaleDateString(navigator.language) : '—'}
+                    {agent.created_at ? formatDate(agent.created_at) : '—'}
                   </td>
                   <td className="px-5 py-4 text-right"><AgentRowActions agent={agent} /></td>
                 </tr>

@@ -28,3 +28,15 @@ func UpstreamProxySetHandler(w http.ResponseWriter, r *http.Request) {
 func UpstreamProxyProbeHandler(w http.ResponseWriter, r *http.Request) {
 	forward(w, r, http.MethodPost, proxyBase()+"/admin/upstream-proxy/probe", true)
 }
+
+// EgressSelfCheckHandler relays GET /api/user/system/egress-selfcheck →
+// GET /admin/egress/selfcheck (presence mode — NO ?dial, so no network probe).
+// Response: {"dialed":false,"paths":[{"label":"<account identity>"}]} — which pool
+// accounts have an ADMIN-configured per-account egress proxy. The Settings →
+// Upstream proxy card renders this as the ② layer row, so the user can see that
+// pool-account traffic may leave through an account egress rather than this node's
+// layers. Presence-only by design: the spec may embed credentials (never echoed to
+// the browser) and the exit IP needs a real dial (that's `aikey doctor`).
+func EgressSelfCheckHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodGet, proxyBase()+"/admin/egress/selfcheck", false)
+}

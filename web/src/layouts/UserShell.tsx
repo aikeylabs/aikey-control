@@ -392,6 +392,11 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   performance:    { label: 'Performance', originName: 'Cost' },
   'usage-detail': { label: 'Usage Detail' },
   apps:           { label: 'Apps',        originName: 'Connected Apps' },
+  // 2026-07-16: my-agents was in navGroups but absent here, so its top
+  // breadcrumb fell back to the raw URL segment ("用户 / my-agents") instead
+  // of the localized nav label. Label matches navGroups so tNavLabel resolves
+  // the same i18n key (navMyAgents), present in en+zh.
+  'my-agents':    { label: 'My Agents',   originName: 'My Agents' },
   invites:        { label: 'Invites' },
   'trust-check':  { label: 'Trust Check' },
   compliance:     { label: 'Compliance Audit' },
@@ -448,6 +453,7 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
   'Team Usage': 'navTeamUsage',
   Performance: 'navPerformance',
   Apps: 'navApps',
+  'My Agents': 'navMyAgents',
   'Trust Check': 'navTrustCheck',
   'Compliance Audit': 'navComplianceAudit',
   Account: 'navAccount',

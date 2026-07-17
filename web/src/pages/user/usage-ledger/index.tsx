@@ -324,6 +324,15 @@ export default function UserUsageLedgerPage() {
     enabled: hasIdentity,
   });
 
+  // 2026-07-17 "Usage By Agent" — one row per seat (you + your owned agents).
+  // Server scopes to the caller's own seat + its child seats; nobody else's
+  // agents can appear. Same identity + range as the other personal queries.
+  const byAgent = useQuery({
+    queryKey: ['user-usage-by-agent', identityKey, range],
+    queryFn: () => usageApi.personalByAgentTotal(identity!, startDate, endDate),
+    enabled: hasIdentity,
+  });
+
   // Derive friendly key labels (F2 landed).
   //   1. `alias`                    — personal keys + named team keys
   //   2. `identity`                 — OAuth email (from ODS oauth_identity)
@@ -496,6 +505,34 @@ export default function UserUsageLedgerPage() {
       };
     });
   }, [byApp.data]);
+
+  // 2026-07-17 by-agent rows. Keep 0-token rows OUT (same hygiene as appRows)
+  // EXCEPT we still want the section to appear only when the user actually
+  // owns at least one agent — a plain member with no agents would otherwise
+  // see a one-row "by agent" section (just themselves), which is noise. So
+  // `hasAgents` gates the whole section; when true we show the caller's own
+  // row plus each agent, sorted by tokens (server already sorted).
+  const agentRows = useMemo(() => {
+    const all = (byAgent.data ?? []).filter((r) => r.total_tokens > 0);
+    const top = all[0]?.total_tokens ?? 1;
+    const grand = all.reduce((s, r) => s + r.total_tokens, 0) || 1;
+    return all.map((r) => ({
+      key: r.seat_id,
+      // Alias when set, else a short seat_id tail so the row is still identifiable.
+      label: r.seat_alias || r.seat_id.slice(0, 8),
+      is_agent: r.is_agent,
+      total_tokens: r.total_tokens,
+      request_count: r.request_count,
+      cost_usd: r.cost_usd,
+      unpriced_request_count: r.unpriced_request_count,
+      barPct: (r.total_tokens / top) * 100,
+      sharePct: (r.total_tokens / grand) * 100,
+      // Agents in a cool tone, the user's own row in gold (matches the
+      // INTERNAL/self accent used elsewhere on the page).
+      color: r.is_agent ? '#38bdf8' : '#ca8a04',
+    }));
+  }, [byAgent.data]);
+  const hasAgents = useMemo(() => agentRows.some((r) => r.is_agent), [agentRows]);
 
   if (!hasIdentity && !seats.isLoading) {
     return (
@@ -1068,6 +1105,90 @@ export default function UserUsageLedgerPage() {
             </ul>
           )}
         </section>
+
+        {/* ── Usage by agent (2026-07-17). Shown ONLY when the user owns at
+            least one agent (hasAgents) — otherwise it's a redundant one-row
+            "just me" section. One row per seat: the user's own (YOU badge) +
+            each owned agent (AGENT badge), billed per seat. Reuses the
+            .app-row / .key-bar CSS for visual consistency with "Usage by
+            app" above. Server enforces the authorization scope. */}
+        {hasAgents ? (
+          <section className="chart-card">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <div className="chart-title">{t('usageLedger.byAgentTitle')}</div>
+                <div className="chart-sub">{t('usageLedger.byAgentSub', { range })}</div>
+              </div>
+            </div>
+
+            {byAgent.isLoading ? (
+              <div className="mt-6"><Placeholder>{t('usageLedger.loading')}</Placeholder></div>
+            ) : (
+              <ul className="mt-4 space-y-2.5">
+                {agentRows.map((a) => (
+                  <li key={a.key} className="app-row">
+                    <span
+                      className="font-mono text-[11.5px] truncate flex items-center gap-1.5"
+                      title={a.label}
+                      style={{ color: 'var(--foreground)' }}
+                    >
+                      <span className="truncate">{a.label}</span>
+                      {a.is_agent ? (
+                        <span
+                          className="text-[9px] font-mono uppercase tracking-wider px-1 py-0 rounded"
+                          style={{
+                            background: 'transparent',
+                            color: '#38bdf8',
+                            border: '1px solid #38bdf8',
+                            flexShrink: 0,
+                          }}
+                          title={t('usageLedger.agentBadgeAgentTitle')}
+                        >
+                          {t('usageLedger.agentBadgeAgent')}
+                        </span>
+                      ) : (
+                        <span
+                          className="text-[9px] font-mono uppercase tracking-wider px-1 py-0 rounded"
+                          style={{
+                            background: '#ca8a04',
+                            color: 'var(--primary-foreground, #18181b)',
+                            flexShrink: 0,
+                          }}
+                          title={t('usageLedger.agentBadgeSelf')}
+                        >
+                          {t('usageLedger.agentBadgeSelf')}
+                        </span>
+                      )}
+                    </span>
+                    <div className="key-bar">
+                      <span
+                        style={{
+                          width: `${Math.max(a.barPct, 0.5)}%`,
+                          background: a.color,
+                          boxShadow: a.color === '#ca8a04' ? '0 0 8px rgba(250, 204, 21,0.3)' : undefined,
+                        }}
+                      />
+                    </div>
+                    <div className="flex flex-col items-end whitespace-nowrap">
+                      <span className="font-mono text-[11.5px]">
+                        <span style={{ color: 'var(--foreground)' }}>{formatTokens(a.total_tokens)}</span>
+                        <span className="ml-1" style={{ color: 'var(--muted-foreground)' }}>
+                          {a.sharePct < 1 ? '<1%' : `${Math.round(a.sharePct)}%`}
+                        </span>
+                        <span className="ml-2" style={{ color: 'var(--muted-foreground)' }}>
+                          {t('usageLedger.reqSuffix', { count: a.request_count })}
+                        </span>
+                      </span>
+                      <span className="font-mono text-[10px]">
+                        <CostCell value={a.cost_usd} unpricedCount={a.unpriced_request_count} />
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
 
         {/* ── Estimated-cost footnote (Stage 4) — sets the "reference,
             not billed" expectation for every cost figure on the page. */}
