@@ -91,7 +91,9 @@
     "roleMember": "member",
     "opensLink": "Opens {{url}}",
     "navSettings": "Settings",
-    "navComplianceAudit": "Compliance Audit"
+    "navComplianceAudit": "Compliance Audit",
+    "sessionExpired": "Signed out",
+    "sessionExpiredHint": "SESSION EXPIRED"
   },
   "teamMenu": {
     "oauthContribute": "Team OAuth",
@@ -178,7 +180,11 @@
     "use": "Use",
     "opensHref": "Opens {{href}}",
     "footerVault": "aikey vault",
-    "statusPending": "PENDING"
+    "statusPending": "PENDING",
+    "greetingSignedOut": "Signed out",
+    "statusSessionExpired": "SESSION EXPIRED",
+    "bannerSessionExpired": "Your team session has expired. Run",
+    "bannerSessionExpiredHint": "in your terminal to sign in again. Team keys, seats and usage are unavailable until you do."
   },
   "account": {
     "pageTitle": "My Account",

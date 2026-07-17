@@ -41,6 +41,7 @@ import {
   buildCrossAppUrl,
 } from '@/shared/cross-app-menu';
 import type { AccountDTO } from '@/shared/api/types/account';
+import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 
 // Phase 3B R23 (2026-05-11): same-side detection — A bundle's OWN_MENU
 // reference-equals OWN_PERSONAL_MENU; B bundle's points at OWN_TEAM_MENU.
@@ -232,12 +233,27 @@ export default function UserOverviewPage() {
   const vaultUninitialized = !!vaultStatus && vaultStatus.initialized === false;
 
   // R23: Identity (me) + Seats — cross-fetch from A on B side.
-  const { data: me } = useQuery({
+  const { data: me, error: meError } = useQuery({
     queryKey: ['me', dataScope],
     queryFn: crossClient
       ? async () => (await crossClient.get<AccountDTO>('/accounts/me')).data
       : userAccountsApi.me,
+    // Deliberately NOT short-circuiting retries on a rejected token.
+    // "Rejected" is not the same as "expired": right after `aikey login`
+    // the gateway can still be serving the pre-login JWT out of its vault
+    // cache (DefaultVaultCacheTTL = 2s, aikey-trial-server
+    // internal/gateway/gateway.go), so the first /accounts/me after the
+    // activation redirect legitimately 401s on a session that is about to
+    // be fine. React Query's default backoff spans that window, so the
+    // race self-heals; short-circuiting here would pin "Session expired —
+    // run aikey login" on a user who just ran exactly that. Real expiry
+    // only pays a few seconds before the banner, which is the right trade.
   });
+  // The gateway forwarded our vault JWT and the team server rejected it
+  // (expired, or the account is gone). Every /accounts/* read is 401ing,
+  // so the identity, role and seat numbers below are all unknown — say so
+  // rather than dressing the placeholders up as a healthy session.
+  const teamSessionExpired = isTeamTokenRejected(meError);
   // R23 (revised 2026-05-11): Seats is a B-side concept — Personal A
   // has no team/seat domain (A's `/accounts/me/seats` is an empty stub
   // for FE-compat). On A side this query returns []; on B side it
@@ -520,6 +536,12 @@ export default function UserOverviewPage() {
   const recentKeys = allKeys.slice(0, 5);
   const emailDisplay = me?.email ?? '—';
   const initial = emailDisplay.slice(0, 1).toUpperCase();
+  // On a rejected token there is no identity to greet — `Hi, —` next to a
+  // green ACTIVE badge reads as "signed in, name still loading", which is
+  // the opposite of the truth.
+  const greeting = teamSessionExpired
+    ? t('overview.greetingSignedOut')
+    : t('overview.greeting', { email: emailDisplay });
 
   return (
     <div className="overview-page p-6">
@@ -570,20 +592,31 @@ export default function UserOverviewPage() {
               className="w-9 h-9 rounded border flex items-center justify-center text-[13px] font-mono font-bold"
               style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
             >
-              {initial}
+              {teamSessionExpired ? '?' : initial}
             </div>
             <div className="min-w-0">
               <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>
-                {t('overview.greeting', { email: emailDisplay })}
+                {greeting}
               </div>
               <div className="flex items-center gap-2 text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                <span>{me?.role ? me.role.toUpperCase() : t('overview.roleMember')}</span>
-                <span style={{ opacity: 0.4 }}>·</span>
-                <span className="inline-flex items-center gap-1.5" style={{ color: '#4ade80' }}>
-                  <span className="status-dot" />
-                  {t('overview.statusActive')}
-                </span>
-                {me?.created_at && (
+                {!teamSessionExpired && (
+                  <>
+                    <span>{me?.role ? me.role.toUpperCase() : t('overview.roleMember')}</span>
+                    <span style={{ opacity: 0.4 }}>·</span>
+                  </>
+                )}
+                {teamSessionExpired ? (
+                  <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--muted-foreground)' }}>
+                    <span className="status-dot status-dot-stale" />
+                    {t('overview.statusSessionExpired')}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5" style={{ color: '#4ade80' }}>
+                    <span className="status-dot" />
+                    {t('overview.statusActive')}
+                  </span>
+                )}
+                {!teamSessionExpired && me?.created_at && (
                   <>
                     <span style={{ opacity: 0.4 }}>·</span>
                     <span>{t('overview.joinedOn', { date: new Date(me.created_at).toLocaleDateString(navigator.language) })}</span>
@@ -604,6 +637,23 @@ export default function UserOverviewPage() {
         </section>
 
         {/* ── Auto-claim info banner ── */}
+        {/* Not dismissible: unlike the auto-claim notice this is not an
+            FYI — every team-backed number on the page is unavailable until
+            the user re-authenticates, and the fix is one command. */}
+        {teamSessionExpired && (
+          <div className="warn-banner" role="alert">
+            <span className="dot" aria-hidden="true" />
+            <span className="flex-1 min-w-0 text-[12.5px]" style={{ color: 'var(--foreground)' }}>
+              {t('overview.bannerSessionExpired')}{' '}
+              <code className="font-mono" style={{ color: 'var(--display-foreground)' }}>
+                aikey login
+              </code>{' '}
+              <span style={{ color: 'var(--muted-foreground)' }}>
+                {t('overview.bannerSessionExpiredHint')}
+              </span>
+            </span>
+          </div>
+        )}
         {!bannerDismissed && recentAutoClaim && (
           <div className="info-banner" role="status">
             <span className="dot" aria-hidden="true" />
@@ -1621,6 +1671,29 @@ const OVERVIEW_CSS = `
   background: #4ade80;
   box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
   flex-shrink: 0;
+}
+
+/* Amber, not green: a dead team session is a degraded state the user has
+   to act on, and it must not read as another healthy info-banner. */
+.overview-page .warn-banner {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 6px;
+  background: rgba(251, 191, 36, 0.06);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+.overview-page .warn-banner .dot {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.7);
+  flex-shrink: 0;
+}
+/* The live-session dot pulses; a stale one must not — a pulsing dot next
+   to "SESSION EXPIRED" still signals liveness. */
+.overview-page .status-dot-stale {
+  background: var(--muted-foreground);
+  box-shadow: none;
+  animation: none;
 }
 
 .overview-page .metric {

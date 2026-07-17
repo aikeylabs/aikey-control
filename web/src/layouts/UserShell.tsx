@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useUserAuthStore } from '@/store';
 import { runtimeConfig } from '@/app/config/runtime';
 import { userAccountsApi } from '@/shared/api/user/accounts';
+import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
 import {
   OWN_MENU,
@@ -566,9 +567,16 @@ export function UserShell() {
   // the server returns `local@localhost`; in JWT mode it returns the
   // authenticated user. The zustand store is a secondary fallback for
   // the first paint before the query resolves.
+  // Default retries kept on purpose — see the Overview comment: a token
+  // rejected moments after `aikey login` is the gateway's 2s vault cache,
+  // not a dead session, and the default backoff is what heals it.
   const meQuery = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
-  const identityEmail = meQuery.data?.email ?? user?.email;
-  const identityRole = meQuery.data?.role ?? user?.role;
+  // Gateway forwarded the vault JWT and the team server rejected it. The
+  // store fallback below would happily serve a stale email from the dead
+  // session, so this has to win over it.
+  const teamSessionExpired = isTeamTokenRejected(meQuery.error);
+  const identityEmail = teamSessionExpired ? undefined : (meQuery.data?.email ?? user?.email);
+  const identityRole = teamSessionExpired ? undefined : (meQuery.data?.role ?? user?.role);
   // Phase 4G (2026-06-01): the sidebar bottom button no longer calls
   // `clearAuth` directly — it navigates to /user/settings where the
   // proper /system/logout endpoint runs (clears vault row + team-key
@@ -1416,9 +1424,13 @@ export function UserShell() {
                 sync. `role` is lowercased by the auth store so we
                 upper-case it at the display boundary (same as the
                 Profile page's .role-badge rendering). */}
-            <div className="nav-user-name truncate">{identityEmail ?? '…'}</div>
+            <div className="nav-user-name truncate">
+              {identityEmail ?? (teamSessionExpired ? t('userShell.sessionExpired') : '…')}
+            </div>
             <div className="nav-user-role truncate">
-              {(identityRole ?? t('userShell.roleMember')).toUpperCase()}
+              {teamSessionExpired
+                ? t('userShell.sessionExpiredHint')
+                : (identityRole ?? t('userShell.roleMember')).toUpperCase()}
             </div>
           </div>
           <SettingsIcon />
