@@ -31,7 +31,7 @@ import { deliveryApi, routedGroupAccount, type GroupAccountRef, type UserKeyDTO,
 import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
-import { displayProtocolFamily } from '@/shared/api/user/protocolFamily';
+import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
 import {
   HookWireRcModal,
   useHookWireRcModal,
@@ -81,6 +81,41 @@ function keyProviderFamily(k: { provider_code?: string | null; protocol_type?: s
   return providerFamily(
     k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || displayProtocolFamily(k.protocol_type),
   );
+}
+
+/** EVERY display family this VK can route (2026-07-13).
+ *
+ *  Why: a VK carries N protocol channels by design (baseline ER —
+ *  uq_mpb_vk_protocol_provider is per (vk, protocol, provider)), but
+ *  `provider_code` / `protocol_type` only ever hold the FIRST binding's values
+ *  (the master snapshot projects them as a primary hint for legacy readers).
+ *  Grouping / labelling off them alone renders a multi-protocol VK as
+ *  single-protocol — the openai channel of a VK bound to anthropic+openai simply
+ *  vanished from this page. `supported_providers` carries the full set and the CLI
+ *  has always emitted it; we just never read it here.
+ *
+ *  This mirrors the vault page's expansion (2026-04-30 / 2026-05-12) — same
+ *  familyOfProviderCode口径, now via the shared helper. Falls back to the single
+ *  family when supported_providers is absent (older server) or empty (e.g. an
+ *  orphaned group VK, whose protocol still resolves through keyProviderFamily).
+ */
+function keyProviderFamilies(k: UserKeyDTO): string[] {
+  const sp = k.supported_providers;
+  if (Array.isArray(sp) && sp.length > 0) {
+    const seen = new Set<string>();
+    const fams: string[] = [];
+    for (const code of sp) {
+      const raw = (code ?? '').toString().trim();
+      if (!raw) continue;
+      const fam = familyOfProviderCode(raw);
+      if (!seen.has(fam)) {
+        seen.add(fam);
+        fams.push(fam);
+      }
+    }
+    if (fams.length > 0) return fams;
+  }
+  return [keyProviderFamily(k)];
 }
 
 function providerBrandColor(provider: string | null | undefined): string {
@@ -416,12 +451,17 @@ export default function UserVirtualKeysPage() {
     const order: string[] = [];
     const map = new Map<string, UserKeyDTO[]>();
     for (const k of filtered) {
-      const fam = keyProviderFamily(k);
-      if (!map.has(fam)) {
-        map.set(fam, []);
-        order.push(fam);
+      // Multi-protocol expansion (2026-07-13): a VK bound to anthropic+openai
+      // must appear under BOTH groups — same contract the vault page and the CLI
+      // `aikey use` picker already honour. Grouping by the single primary family
+      // hid every channel but the first.
+      for (const fam of keyProviderFamilies(k)) {
+        if (!map.has(fam)) {
+          map.set(fam, []);
+          order.push(fam);
+        }
+        map.get(fam)!.push(k);
       }
-      map.get(fam)!.push(k);
     }
     return order.map((provider) => ({
       provider,
@@ -432,6 +472,9 @@ export default function UserVirtualKeysPage() {
 
   // Drawer + selected row
   const [drawerKey, setDrawerKey] = useState<UserKeyDTO | null>(null);
+  // Family group the drawer was opened from (multi-protocol VKs render one
+  // row per group — the drawer highlights THIS group's family, mutes others).
+  const [drawerGroup, setDrawerGroup] = useState<string | null>(null);
   const [summary, setSummary] = useState<KeySummaryDTO | null>(null);
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
@@ -515,8 +558,12 @@ export default function UserVirtualKeysPage() {
     },
   });
 
-  function openDrawer(k: UserKeyDTO) {
+  function openDrawer(k: UserKeyDTO, groupFamily: string) {
     setDrawerKey(k);
+    // A multi-protocol VK renders one row per family group; the drawer must
+    // know WHICH group it was opened from to highlight that family
+    // (2026-07-13 user spec, mirrors the vault-page drawer).
+    setDrawerGroup(groupFamily);
     setDrawerError(null);
     setSummary(null);
     if (k.key_status === 'active') {
@@ -603,10 +650,13 @@ export default function UserVirtualKeysPage() {
                         />
                         {g.records.map((k, idx) => (
                           <Row
-                            key={k.virtual_key_id}
+                            // Keyed by (group, vk): a multi-protocol VK renders
+                            // once per family group, so vk id alone collides.
+                            key={`${g.provider}:${k.virtual_key_id}`}
                             record={k}
+                            groupFamily={g.provider}
                             isLastInGroup={idx === g.records.length - 1}
-                            onOpenDrawer={() => openDrawer(k)}
+                            onOpenDrawer={() => openDrawer(k, g.provider)}
                             onClaim={() => claimMut.mutate(k.virtual_key_id)}
                             onUse={() => useMutTeam.mutate(k.virtual_key_id)}
                             claimPending={claimMut.isPending && claimMut.variables === k.virtual_key_id}
@@ -636,6 +686,7 @@ export default function UserVirtualKeysPage() {
       {drawerKey && (
         <DetailDrawer
           record={drawerKey}
+          groupFamily={drawerGroup ?? keyProviderFamily(drawerKey)}
           summary={summary}
           summaryPending={viewMut.isPending}
           summaryError={drawerError}
@@ -803,11 +854,16 @@ const Row = React.memo(function Row(props: {
    *  single tab so back-button returns them to the team listing).
    *  Undefined on A side. */
   useHref?: string;
+  /** The family of the GROUP this row is rendered under (2026-07-13). A
+   *  multi-protocol VK appears under every family it supports, so the row's
+   *  provider chip must show THAT group's family — not the VK's primary one,
+   *  which would label the openai row "anthropic". */
+  groupFamily?: string;
 }) {
   const { t } = useTranslation();
   const r = props.record;
   const status = statusMeta(r.key_status, t);
-  const fam = keyProviderFamily(r);
+  const fam = props.groupFamily ?? keyProviderFamily(r);
   const expiresStr = formatExpiresAt(r.expires_at, t);
   const trClasses = [
     'group-child',
@@ -940,6 +996,10 @@ const Row = React.memo(function Row(props: {
 // ── Detail drawer ────────────────────────────────────────────────────────
 function DetailDrawer(props: {
   record: UserKeyDTO;
+  /** Family group this drawer was opened from. Multi-protocol VKs render one
+   *  row per group; the drawer shows ALL families with THIS one highlighted
+   *  bold and the rest muted (2026-07-13 user spec, mirrors vault drawer). */
+  groupFamily: string;
   summary: KeySummaryDTO | null;
   summaryPending: boolean;
   summaryError: string | null;
@@ -960,7 +1020,13 @@ function DetailDrawer(props: {
   const { t } = useTranslation();
   const r = props.record;
   const status = statusMeta(r.key_status, t);
-  const fam = keyProviderFamily(r);
+  // Current-group family drives the dot color + the highlighted entry; the
+  // full family list is shown with the others muted (multi-protocol VKs).
+  const fam = props.groupFamily;
+  const famList = (() => {
+    const all = keyProviderFamilies(r);
+    return all.includes(fam) ? [fam, ...all.filter((f) => f !== fam)] : all;
+  })();
   const expiresStr = formatExpiresAt(r.expires_at, t);
 
   React.useEffect(() => {
@@ -988,6 +1054,8 @@ function DetailDrawer(props: {
             <div className="meta-row">
               <span className="provider-cell">
                 <span className="prov-dot" style={{ background: providerBrandColor(fam) }} />
+                {/* Head shows ONLY the current group's protocol (2026-07-13 user
+                    spec); the full multi-protocol list lives in META below. */}
                 <span className="name font-mono" style={{ color: 'var(--muted-foreground)' }}>{fam}</span>
                 <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
               </span>
@@ -1354,7 +1422,25 @@ function DetailDrawer(props: {
             </div>
             <div className="drawer-field">
               <span className="k">{t('teamKeys.fieldProtocol')}</span>
-              <span className="v">{fam}<span className="ro-pill">RO</span></span>
+              <span className="v">
+                {/* One protocol per line (2026-07-13 user spec) — current group
+                    bold, others muted. */}
+                <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+                  {famList.map((f) => (
+                    <span
+                      key={f}
+                      style={
+                        f === fam
+                          ? { fontWeight: 700 }
+                          : { color: 'var(--muted-foreground)', opacity: 0.55 }
+                      }
+                    >
+                      {f}
+                    </span>
+                  ))}
+                </span>
+                <span className="ro-pill">RO</span>
+              </span>
             </div>
             <div className="drawer-field">
               <span className="k">{t('teamKeys.fieldType')}</span>

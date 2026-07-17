@@ -169,6 +169,11 @@ const ICON_SETTINGS =
 const ICON_APPS =
   'M6 7 H18 a2 2 0 0 1 2 2 V20 a2 2 0 0 1 -2 2 H6 a2 2 0 0 1 -2 -2 V9 a2 2 0 0 1 2 -2 Z M8 3 H16 M12 3 V7 M2 14 H4 M20 14 H22 M9 13 V16 M15 13 V16';
 
+// lucide "bot" — Online Agents (alpha.5) sidebar glyph. Robot head + antenna
+// with a face (eyes + mouth) to read distinctly from ICON_APPS.
+const ICON_BOT =
+  'M12 3 V5 M8 9 H16 a2 2 0 0 1 2 2 V17 a2 2 0 0 1 -2 2 H8 a2 2 0 0 1 -2 -2 V11 a2 2 0 0 1 2 -2 Z M9 13 H9.01 M15 13 H15.01 M10 16 H14';
+
 // lucide "radar" — Trust Check (degrade-detector M5) sidebar glyph.
 // Multi-path icon, so we can't reuse the single-`d` NavIcon path; the
 // RadarIcon function below renders all paths inline. The radar metaphor
@@ -187,6 +192,7 @@ function ReceiptIcon()     { return <NavIcon d={ICON_RECEIPT} />; }
 function DollarIcon()      { return <NavIcon d={ICON_DOLLAR} />; }
 function UploadCloudIcon() { return <NavIcon d={ICON_UPLOAD_CLOUD} />; }
 function AppsIcon()        { return <NavIcon d={ICON_APPS} />; }
+function BotIcon()         { return <NavIcon d={ICON_BOT} />; }
 function UserPlusIcon()    { return <NavIcon d={ICON_USER_PLUS} />; }
 function ShieldIcon()      { return <NavIcon d={ICON_SHIELD} />; }
 function FingerprintIcon() { return <NavIcon d={ICON_FINGERPRINT} />; }
@@ -314,6 +320,7 @@ function crossAppIconFor(iconName: string | undefined): React.ReactNode {
     case 'team-chart':   return <TeamUsageIcon />;
     case 'cost':         return <DollarIcon />;
     case 'apps':         return <AppsIcon />;
+    case 'my-agents':    return <BotIcon />;
     case 'trust-check':  return <RadarIcon />;
     case 'compliance':   return <FingerprintIcon />;
     case 'oauth-contribute': return <ShareIcon />;
@@ -385,6 +392,11 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   performance:    { label: 'Performance', originName: 'Cost' },
   'usage-detail': { label: 'Usage Detail' },
   apps:           { label: 'Apps',        originName: 'Connected Apps' },
+  // 2026-07-16: my-agents was in navGroups but absent here, so its top
+  // breadcrumb fell back to the raw URL segment ("用户 / my-agents") instead
+  // of the localized nav label. Label matches navGroups so tNavLabel resolves
+  // the same i18n key (navMyAgents), present in en+zh.
+  'my-agents':    { label: 'My Agents',   originName: 'My Agents' },
   invites:        { label: 'Invites' },
   'trust-check':  { label: 'Trust Check' },
   compliance:     { label: 'Compliance Audit' },
@@ -441,6 +453,7 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
   'Team Usage': 'navTeamUsage',
   Performance: 'navPerformance',
   Apps: 'navApps',
+  'My Agents': 'navMyAgents',
   'Trust Check': 'navTrustCheck',
   'Compliance Audit': 'navComplianceAudit',
   Account: 'navAccount',
@@ -501,6 +514,7 @@ const CROSS_APP_LABEL_I18N_KEY: Record<string, string> = {
   // a Personal entry now (was the team-side 'team-oauth-contribute'). Label =
   // the menu nav label ("团队OAuth" / "Team OAuth").
   'personal-oauth-contribute': 'userShell.navOauthContribute',
+  'personal-my-agents': 'userShell.navMyAgents',
 };
 
 function initials(email: string): string {
@@ -959,6 +973,9 @@ export function UserShell() {
       title: 'Apps',
       items: [
         { path: '/user/apps', icon: <AppsIcon />, label: 'Apps', originName: 'Connected Apps', personalOnly: true },
+        // Online Agents (alpha.5) — peer of Apps (方案 A). Local page (8090);
+        // requiresTeamLogin since agents only exist in a cluster/team org.
+        { path: '/user/my-agents', icon: <BotIcon />, label: 'My Agents', originName: 'My Agents', personalOnly: true, requiresTeamLogin: true },
       ],
     },
     {

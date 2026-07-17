@@ -28,6 +28,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { hookApi } from '@/shared/api/user/hook';
 import { pickHookReadiness, type HookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
@@ -130,6 +131,7 @@ Remove-Variable -Name _aikeyBin,_aikeyHookFile -Scope Local -ErrorAction Silentl
 const MANUAL_COMMAND = 'aikey hook install';
 
 export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
+  const { t } = useTranslation();
   const setReadiness = useHookReadinessStore((s) => s.setReadiness);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -172,7 +174,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
         // didn't complete — surface the reason inline so the user can
         // pick a remediation (manual command, retry, or close).
         const reason = res.hook_failure_reason ?? 'unknown';
-        setErrorMsg(`Server reported '${reason}' — wiring did not complete.`);
+        setErrorMsg(t('hookModal.serverReported', { reason }));
       }
     } catch (e) {
       const msg = (e as Error).message ?? 'unknown error';
@@ -230,17 +232,15 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
           className="text-sm font-mono font-bold tracking-wider mb-2"
           style={{ color: 'var(--foreground)' }}
         >
-          Enable terminal auto-sync?
+          {t('hookModal.title')}
         </h3>
         <p className="text-xs font-mono leading-relaxed mb-4" style={{ color: 'var(--muted-foreground)' }}>
-          Adding a small managed block to your shell profile lets every new
-          terminal pick up key changes (Add / Use / Delete) automatically — no
-          manual reload needed.
+          {t('hookModal.body')}
         </p>
 
         {/* Diff preview */}
         <p className="text-[10px] font-mono uppercase tracking-wider mb-1" style={{ color: 'var(--muted-foreground)' }}>
-          {onWindows ? 'Will append to your PowerShell $PROFILE:' : 'Will append to ~/.zshrc:'}
+          {onWindows ? t('hookModal.appendToPosh') : t('hookModal.appendToUnix')}
         </p>
         <pre
           className="font-mono text-xs leading-relaxed p-3 rounded border mb-4 whitespace-pre-wrap"
@@ -255,7 +255,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
 
         {/* Manual fallback */}
         <p className="text-[10px] font-mono uppercase tracking-wider mb-1" style={{ color: 'var(--muted-foreground)' }}>
-          Or run manually in any terminal:
+          {t('hookModal.manualLabel')}
         </p>
         <div
           className="flex items-center gap-2 p-2 rounded border mb-4"
@@ -281,7 +281,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
             }}
             title={MANUAL_COMMAND}
           >
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? t('hookModal.copied') : t('hookModal.copy')}
           </button>
         </div>
 
@@ -308,7 +308,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
             className="px-4 py-2 text-xs font-mono font-bold tracking-wider rounded border transition-colors disabled:opacity-40"
             style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
           >
-            Not now
+            {t('hookModal.notNow')}
           </button>
           <button
             type="button"
@@ -321,7 +321,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
               color: '#22c55e',
             }}
           >
-            {busy ? 'Wiring...' : 'Allow'}
+            {busy ? t('hookModal.wiring') : t('hookModal.allow')}
           </button>
         </div>
       </div>

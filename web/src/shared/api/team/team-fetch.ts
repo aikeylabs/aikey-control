@@ -42,44 +42,80 @@ export function isTeamWriteError(v: unknown): v is TeamWriteError {
   return typeof v === 'object' && v !== null && (v as { kind?: string }).kind === 'domain';
 }
 
-async function readTeamURL(): Promise<string> {
+/**
+ * Result of reading one of the two local `/system/*` handshake endpoints.
+ *
+ * Why a discriminated union instead of a bare string (2026-07-12 bugfix):
+ * both readers used to `catch { return '' }`, collapsing "the endpoint
+ * answered, but the value is empty" (the user genuinely never ran
+ * `aikey login`) into the same '' as "the request threw / timed out / 5xx"
+ * (a TRANSPORT failure). teamGetJSON then reported BOTH as
+ * `{ kind: 'not-logged-in' }`, so a network outage told the user to
+ * "run aikey login" (wrong remedy) and silently suppressed the Vault
+ * team banner, which returns null on not-logged-in by design. Keeping the
+ * two apart lets callers render the right thing (see TeamFetchError).
+ */
+type LocalRead = { ok: true; value: string } | { ok: false; detail: string };
+
+/** GET a local /system/* endpoint, keeping transport failure distinguishable
+ *  from an empty (= not configured) value. */
+async function readLocalSystemValue(
+  endpoint: string,
+  pick: (data: Record<string, unknown>) => string,
+): Promise<LocalRead> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(TEAM_URL_ENDPOINT, {
+    const res = await fetch(endpoint, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: ctrl.signal,
       credentials: 'omit',
     });
-    if (!res.ok) return '';
-    const data = (await res.json()) as { team_url?: string };
-    return (data.team_url || '').trim().replace(/\/$/, '');
-  } catch {
-    return '';
+    // A non-2xx from the LOCAL server is a transport-class failure, not a
+    // statement that the user isn't logged in — the local-server is supposed
+    // to answer 200 with an empty value in that case.
+    if (!res.ok) return { ok: false, detail: `${endpoint} HTTP ${res.status}` };
+    const data = (await res.json()) as Record<string, unknown>;
+    return { ok: true, value: pick(data) };
+  } catch (e) {
+    return { ok: false, detail: `${endpoint}: ${String(e)}` };
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function readTeamJWT(): Promise<string> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(TEAM_JWT_ENDPOINT, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      signal: ctrl.signal,
-      credentials: 'omit',
-    });
-    if (!res.ok) return '';
-    const data = (await res.json()) as { jwt?: string };
-    return (data.jwt || '').trim();
-  } catch {
-    return '';
-  } finally {
-    clearTimeout(timer);
+function readTeamURL(): Promise<LocalRead> {
+  return readLocalSystemValue(TEAM_URL_ENDPOINT, (d) =>
+    String(d.team_url || '').trim().replace(/\/$/, ''),
+  );
+}
+
+function readTeamJWT(): Promise<LocalRead> {
+  return readLocalSystemValue(TEAM_JWT_ENDPOINT, (d) => String(d.jwt || '').trim());
+}
+
+/**
+ * resolveTeamHandshake performs the local two-hop prelude shared by
+ * teamGetJSON / teamPostJSON: read team_url + jwt, and classify the outcome.
+ * Returns the credentials, or the TeamFetchError to surface as-is.
+ */
+async function resolveTeamHandshake(): Promise<
+  { ok: true; teamUrl: string; jwt: string } | { ok: false; err: TeamFetchError }
+> {
+  const [urlRead, jwtRead] = await Promise.all([readTeamURL(), readTeamJWT()]);
+  // Transport failure on either local hop → unreachable, NOT not-logged-in.
+  if (!urlRead.ok || !jwtRead.ok) {
+    const detail = [!urlRead.ok ? urlRead.detail : '', !jwtRead.ok ? jwtRead.detail : '']
+      .filter(Boolean)
+      .join('; ');
+    return { ok: false, err: { kind: 'unreachable', detail } };
   }
+  // Endpoints answered, but there is no team configured / no session yet.
+  if (!urlRead.value || !jwtRead.value) {
+    return { ok: false, err: { kind: 'not-logged-in' } };
+  }
+  return { ok: true, teamUrl: urlRead.value, jwt: jwtRead.value };
 }
 
 /**
@@ -88,10 +124,9 @@ async function readTeamJWT(): Promise<string> {
  * with '/' (e.g. '/accounts/me/oauth-accounts').
  */
 export async function teamGetJSON<T>(path: string): Promise<T | TeamFetchError> {
-  const [teamUrl, jwt] = await Promise.all([readTeamURL(), readTeamJWT()]);
-  if (!teamUrl || !jwt) {
-    return { kind: 'not-logged-in' };
-  }
+  const handshake = await resolveTeamHandshake();
+  if (!handshake.ok) return handshake.err;
+  const { teamUrl, jwt } = handshake;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -130,10 +165,9 @@ export async function teamPostJSON<T>(
   path: string,
   body: unknown,
 ): Promise<T | TeamFetchError | TeamWriteError> {
-  const [teamUrl, jwt] = await Promise.all([readTeamURL(), readTeamJWT()]);
-  if (!teamUrl || !jwt) {
-    return { kind: 'not-logged-in' };
-  }
+  const handshake = await resolveTeamHandshake();
+  if (!handshake.ok) return handshake.err;
+  const { teamUrl, jwt } = handshake;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -165,6 +199,46 @@ export async function teamPostJSON<T>(
       if (data.message) message = data.message;
     } catch {
       /* keep the HTTP fallback */
+    }
+    return { kind: 'domain', status: res.status, code, message };
+  } catch (e) {
+    return { kind: 'unreachable', detail: String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * teamDeleteJSON DELETEs a team-scoped path on the remote master with the
+ * member's JWT. Same handshake + error classification as teamGetJSON/teamPostJSON.
+ * Returns undefined on success (204/empty body tolerated), else a typed error.
+ * `path` must start with '/'.
+ */
+export async function teamDeleteJSON(
+  path: string,
+): Promise<undefined | TeamFetchError | TeamWriteError> {
+  const handshake = await resolveTeamHandshake();
+  if (!handshake.ok) return handshake.err;
+  const { teamUrl, jwt } = handshake;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${teamUrl}${path}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${jwt}` },
+      signal: ctrl.signal,
+      credentials: 'omit',
+    });
+    if (res.ok) return undefined;
+    if (res.status === 401 || res.status === 403) return { kind: 'unauth' };
+    let code = `HTTP_${res.status}`;
+    let message = `HTTP ${res.status}`;
+    try {
+      const data = (await res.json()) as { error?: string; message?: string };
+      if (data.error) code = data.error;
+      if (data.message) message = data.message;
+    } catch {
+      /* non-JSON error body */
     }
     return { kind: 'domain', status: res.status, code, message };
   } catch (e) {

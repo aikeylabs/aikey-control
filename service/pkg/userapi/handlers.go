@@ -278,6 +278,12 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(oauth.UpstreamProxySetHandler)))
 		mux.Handle("POST /api/user/system/upstream-proxy/probe",
 			authMW(http.HandlerFunc(oauth.UpstreamProxyProbeHandler)))
+		// Per-account egress presence relay (→ proxy /admin/egress/selfcheck, no
+		// ?dial): the same card shows WHICH pool accounts have an admin-configured
+		// account egress (the ② layer), so the node layers it lists aren't mistaken
+		// for the whole story. Presence-only — no network probe, no spec echoed.
+		mux.Handle("GET /api/user/system/egress-selfcheck",
+			authMW(http.HandlerFunc(oauth.EgressSelfCheckHandler)))
 	}
 
 	// Import endpoints. ConfirmHandler needs an unlocked session.

@@ -82,7 +82,10 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizAuthTokenNotActive, CodeBizAuthAccessDenied,
 		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied,
 		CodeBizSSOTenantMismatch,
-		CodeBizOauthMemberTokenForbidden:
+		CodeBizOauthMemberTokenForbidden,
+		// Refused BY DESIGN (form-①): still a 403, but the code tells the client
+		// it's policy, not a permission fault (2026-07-13).
+		CodeBizDeliveryCentralOnly:
 		return http.StatusForbidden
 
 	// ── 404 Not Found ─────────────────────────────────────────────────────────
@@ -96,6 +99,9 @@ func DomainErrorHTTPStatus(code string) int {
 	case CodeBizAuthEmailTaken, CodeBizSeatEmailTaken,
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
 		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
+		// R39 recycle-bin guard: live references block deletion — a resource-state
+		// conflict the admin resolves (migrate channels / detach from group).
+		CodeBizCredHasActiveRefs,
 		CodeBizLoginSessionTerminated, CodeBizSSOIdentityConflict,
 		// 2026-07-03 (owner-approved delivery-family contract unification): "no
 		// active / not-deliverable binding" is a RESOURCE-STATE conflict an admin
@@ -111,7 +117,7 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizKeyDuplicateProtocol, CodeBizBindProtocolMismatch,
 		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
 		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,
-		CodeBizSSOProviderDisabled:
+		CodeBizVKGroupExclusive, CodeBizSSOProviderDisabled:
 		return http.StatusUnprocessableEntity
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────

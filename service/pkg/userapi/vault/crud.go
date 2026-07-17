@@ -683,6 +683,14 @@ func (h *CRUDHandlers) EntryAddHandler(w http.ResponseWriter, r *http.Request) {
 type useRequest struct {
 	Target string `json:"target"`
 	ID     string `json:"id"`
+	// Claude Desktop consent replay (阶段7, 2026-07-13): after the browser
+	// consent modal the web re-invokes `use` carrying the answer. Typed
+	// passthrough is REQUIRED — json.Unmarshal drops unknown fields, so
+	// without these the CLI would never see the consent (verified). The
+	// response direction needs no fields here: cli.Result.Data is a raw
+	// json.RawMessage passed through verbatim.
+	DesktopConsent  string `json:"desktop_consent,omitempty"`
+	DesktopRemember bool   `json:"desktop_remember,omitempty"`
 }
 
 // UseHandler: POST /api/user/vault/use.

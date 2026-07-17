@@ -16,6 +16,7 @@
  *   - POST /api/user/oauth/pool/*           → pool sign-in (relay → proxy broker)
  */
 import React, { useMemo, useState, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ModalPortal } from '@/shared/ui/ModalShell';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -141,7 +142,22 @@ export default function OAuthContributePage() {
   // Which routed account's sign-in panel is open, by credential_id. A member in
   // MULTIPLE pools has one routed account PER pool (2026-07-01) — each must expand
   // independently, so this is a per-account id, not a single shared boolean.
-  const [expandedCred, setExpandedCred] = useState<string | null>(null);
+  //
+  // Deep-link auto-expand (2026-07-12): the vault page's 登录 CTA arrives with
+  // ?expand=<credential_id> — seed it as the INITIAL expanded card so the user
+  // lands directly on that account's sign-in panel instead of hunting for it.
+  // Initial-state-only (lazy initializer): after that the user's own toggles own
+  // the state; the param is not re-applied on re-render. The existing render gate
+  // (`is_routed && expandedCred === credential_id`) still applies, so a deep link
+  // to a non-routed account degrades to today's behavior (row visible, no panel —
+  // only routed accounts have sign-in controls).
+  const [searchParams] = useSearchParams();
+  const [expandedCred, setExpandedCred] = useState<string | null>(
+    () => searchParams.get('expand'),
+  );
+  // The deep-linked id, frozen at mount (a plain ref, NOT re-read from the URL):
+  // used only for the one-time scroll-into-view of the auto-expanded row.
+  const deepLinkCred = useRef(searchParams.get('expand')).current;
   const [showAdd, setShowAdd] = useState(false);
 
   // Toast stack — transient feedback for add (mirrors the team-keys page's
@@ -258,8 +274,13 @@ export default function OAuthContributePage() {
             />
           )}
 
-          {/* Search + status filter — only meaningful once there's history. */}
-          {ready && accounts.length > 0 && (
+          {/* Search + status filter. Kept on the ERROR path (was gated behind
+              `ready`, which is false on fetchErr) so a failed load degrades the
+              way Team Keys does — page keeps its skeleton, only the table body
+              swaps to the message — instead of collapsing to a bare card
+              (2026-07-12 alignment). The no-accounts happy path still hides the
+              strip, as before: searching an empty list is meaningless. */}
+          {!listQ.isLoading && (fetchErr || accounts.length > 0) && (
             <div className="flex items-center gap-4 flex-wrap">
               <div className="relative">
                 <SearchIcon
@@ -341,6 +362,10 @@ export default function OAuthContributePage() {
                         key={a.credential_id}
                         account={a}
                         expanded={!!a.is_routed && expandedCred === a.credential_id}
+                        // Deep-link arrival (2026-07-12): scroll the auto-expanded card
+                        // into view once — the vault CTA's whole point is landing the
+                        // user ON the right account, not above/below it off-screen.
+                        scrollOnMount={deepLinkCred === a.credential_id}
                         onToggle={() =>
                           setExpandedCred((c) => (c === a.credential_id ? null : a.credential_id))
                         }
@@ -402,19 +427,33 @@ function ToastStack({ toasts, onDismiss }: {
 function AccountRow({
   account,
   expanded,
+  scrollOnMount,
   onToggle,
 }: {
   account: MyPoolAccount;
   expanded: boolean;
+  /** Deep-link arrival (2026-07-12): scroll this row into view once on mount so the
+   * vault CTA lands the user ON the auto-expanded account. Mount-time only — manual
+   * expand/collapse never scrolls. */
+  scrollOnMount?: boolean;
   onToggle: () => void;
 }) {
   const { t } = useTranslation();
   const sc = statusChip(account.status);
   const isRouted = !!account.is_routed;
+  // Callback ref (not useEffect): fires exactly when the <tr> mounts, which for a
+  // deep link is the first data render — no re-fire on expand/collapse re-renders.
+  const scrollRef = useCallback(
+    (el: HTMLTableRowElement | null) => {
+      if (el && scrollOnMount) el.scrollIntoView({ block: 'center' });
+    },
+    [scrollOnMount],
+  );
 
   return (
     <>
       <tr
+        ref={scrollRef}
         className={isRouted ? 'row-clickable' : undefined}
         style={
           isRouted

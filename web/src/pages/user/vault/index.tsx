@@ -48,8 +48,12 @@ import {
   HookWireRcModal,
   useHookWireRcModal,
 } from '@/shared/components/HookWireRcModal';
+import {
+  DesktopConsentModal,
+  useDesktopConsentModal,
+} from '@/shared/components/DesktopConsentModal';
 import { friendlyTestError } from './friendlyTestError';
-import { displayProtocolFamily } from '@/shared/api/user/protocolFamily';
+import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
 import { ENTRY_BY_FAMILY } from '@/shared/generated/provider-registry';
@@ -107,6 +111,26 @@ interface OauthGroupAccountRef {
   // Refreshed from the proxy's group_runtime rail (≤60s) so it reflects a completed
   // login without a manual key sync. Absent on api_key candidates / older snapshots.
   login_status?: string;
+  // credential_id (2026-07-12): the account's real credential id — the SAME id the
+  // team-oauth page keys its rows by (MyPoolAccount.credential_id), threaded from the
+  // master snapshot (snapshot/group.go). The login CTA appends it as ?expand= so the
+  // team-oauth page auto-expands this account's sign-in card instead of making the
+  // user hunt for it. Absent on older snapshots / rail-only accounts → CTA falls
+  // back to the plain (un-targeted) link.
+  credential_id?: string;
+}
+
+/**
+ * teamOauthLoginHref: deep-link for the 登录 CTA — /user/team-oauth with the target
+ * account's credential_id as ?expand= so the landing page auto-expands that account's
+ * sign-in card (2026-07-12). credential_id may be absent (older master snapshots
+ * predate it; rail-only accounts don't carry it) → plain un-targeted link, same
+ * behavior as before this change.
+ */
+function teamOauthLoginHref(credentialId?: string): string {
+  return credentialId
+    ? `/user/team-oauth?expand=${encodeURIComponent(credentialId)}`
+    : '/user/team-oauth';
 }
 
 interface TeamRowRecord {
@@ -187,6 +211,74 @@ type VaultRowRecord = VaultRecord | TeamRowRecord;
 
 function rowKey(r: VaultRowRecord): string {
   return `${r.target}:${r.id}`;
+}
+
+// ── Hidden-keys view preference (2026-07-15 user request) ───────────────
+//
+// Two pieces of state, both PURE VIEW-LAYER (no vault write, no API):
+//   - hide pin  : the toolbar pin toggle. ON = hide inactive keys AND
+//                 manually-hidden keys ("tidy mode"). One switch governs
+//                 both buckets by design (user decision 2026-07-15) so the
+//                 user has a single mental model: pin lit = list is tidy.
+//   - manual set: rowKey()s the user explicitly hid from the drawer —
+//                 lets an ACTIVE key be tucked away too (e.g. a backup key
+//                 kept around but not routed).
+//
+// Persisted in localStorage (user decision 2026-07-15: a view preference
+// isn't worth a new CLI write API / vault extra field — see 慎重新建 API).
+// Known accepted caveat: personal rows' id == alias, so renaming a
+// manually-hidden personal key un-hides it (rename reads as "re-engaging
+// with this key" anyway). Losing the set (new browser / cleared storage)
+// only re-shows rows — no data risk.
+//
+// NOTE 2026-04-24 history: a status FILTER was deliberately removed from
+// this page ("99% of keys are active, the pill duplicated the row chip").
+// The hide pin is NOT that filter coming back — it's a noise-hiding
+// preference for users who accumulate dead keys; don't "clean it up" into
+// (or out of) a status filter without re-reading both decisions.
+const HIDE_PIN_LS_KEY = 'aikey:vault-hide-pin';
+const MANUAL_HIDDEN_LS_KEY = 'aikey:vault-manual-hidden';
+
+function readHidePin(): boolean {
+  try {
+    return window.localStorage.getItem(HIDE_PIN_LS_KEY) === '1';
+  } catch {
+    return false; // localStorage disabled — non-fatal, default to showing all
+  }
+}
+
+function persistHidePin(on: boolean) {
+  try {
+    if (on) window.localStorage.setItem(HIDE_PIN_LS_KEY, '1');
+    else window.localStorage.removeItem(HIDE_PIN_LS_KEY);
+  } catch {
+    /* localStorage disabled — non-fatal */
+  }
+}
+
+function readManualHidden(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(MANUAL_HIDDEN_LS_KEY);
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      console.warn('[vault] manual-hidden preference is not an array — resetting', { raw });
+      return new Set();
+    }
+    return new Set(parsed.filter((v): v is string => typeof v === 'string'));
+  } catch (e) {
+    console.warn('[vault] failed to read manual-hidden preference — resetting', e);
+    return new Set();
+  }
+}
+
+function persistManualHidden(keys: Set<string>) {
+  try {
+    if (keys.size === 0) window.localStorage.removeItem(MANUAL_HIDDEN_LS_KEY);
+    else window.localStorage.setItem(MANUAL_HIDDEN_LS_KEY, JSON.stringify([...keys]));
+  } catch {
+    /* localStorage disabled — non-fatal */
+  }
 }
 
 /** Team key share lifecycle → human chip text. Server-side semantics:
@@ -490,6 +582,28 @@ function providerDisplayName(r: VaultRowRecord): string {
   return raw.toLowerCase().replace(/_oauth$|_api$/, '');
 }
 
+/** Provider label for a team row rendered INSIDE a specific display-family
+ *  group. A multi-protocol team key (`supported_providers` spanning families,
+ *  e.g. anthropic + openai) renders one row per family (see `grouped`), and
+ *  each row must label itself with the provider belonging to ITS group —
+ *  falling back to the record's single `protocol_family` made the openai-group
+ *  row of an anthropic+openai key read "anthropic" (2026-07-13 user report;
+ *  mirrors the virtual-keys page's per-family Row fix). Returns null when the
+ *  record has no supported provider in this family (caller falls back to
+ *  providerDisplayName). */
+function teamProviderForGroup(r: VaultRowRecord, groupProvider: string): string | null {
+  if (r.target !== 'team') return null;
+  const sp = (r as TeamRowRecord).supported_providers;
+  if (!Array.isArray(sp)) return null;
+  for (const p of sp) {
+    const raw = (p ?? '').toString().trim();
+    if (raw && familyOfProviderCode(raw) === groupProvider) {
+      return raw.toLowerCase().replace(/_oauth$|_api$/, '');
+    }
+  }
+  return null;
+}
+
 /** Shell wrapper that honours the currently-routed account for a given
  *  provider family. Users don't need `aikey` at all at call time — they
  *  just run e.g. `claude` / `codex` / `kimi` and the aikey proxy maps
@@ -508,33 +622,6 @@ function providerShellCommand(family: string | null | undefined): string | null 
   return null;
 }
 
-/** V-layer helper: provider_code → display family for vault group rendering.
- *
- *  2026-05-08 显示层 family-grouping (详见 update/20260508-display-family-grouping.md)
- *
- *  Source of truth: CLI registry (`aikey-cli/data/provider_registry.yaml`
- *  RegistryEntry.family) + Rust `provider_registry::family_of()` helper.
- *  This frontend mapping mirrors only the multi-platform families (currently
- *  just Kimi) so the vault page can group personal keys by family even when
- *  the V data is delivered via `supported_providers` (per-record provider_code
- *  array) rather than the per-record `protocol_family` field.
- *
- *  Why duplicated here: vault `grouped` memo iterates `supported_providers` for
- *  multi-provider expansion (e.g. 0011 gateway key supports anthropic+openai
- *  → shows in BOTH groups). Each element is a provider_code, not a family. To
- *  family-group correctly without exposing extra response fields, the V layer
- *  maps each provider_code → family at render time.
- *
- *  Single-platform providers (anthropic / openai / google_gemini / ...) return
- *  input unchanged — matches CLI registry's `family defaults to code` rule.
- */
-function familyOfProviderCode(code: string): string {
-  const lc = (code ?? '').trim().toLowerCase();
-  if (lc === 'kimi_code' || lc === 'moonshot' || lc === 'kimi') return 'kimi';
-  // Add other multi-platform families here when they appear in the registry.
-  // Single-platform: family == code (e.g. anthropic, openai, deepseek).
-  return lc;
-}
 
 
 
@@ -770,13 +857,53 @@ export default function UserVaultPage() {
   // they do appear the row-level status chip is already visually
   // distinct (red vs green pill) so the filter pills duplicate the
   // signal without meaningfully narrowing the list.
+  // (The 2026-07-15 hide pin below is NOT that filter returning — see
+  // the note above readHidePin() for how the two decisions coexist.)
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('created');
 
+  // Hidden-keys view preference (2026-07-15) — see the module-level
+  // helpers above rowKey() for the full design rationale.
+  const [hidePin, setHidePin] = useState<boolean>(readHidePin);
+  const [manualHidden, setManualHidden] = useState<Set<string>>(readManualHidden);
+  const toggleHidePin = useCallback(() => {
+    setHidePin((on) => {
+      persistHidePin(!on);
+      return !on;
+    });
+  }, []);
+  const toggleManualHidden = useCallback((r: VaultRowRecord) => {
+    const k = rowKey(r);
+    setManualHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      persistManualHidden(next);
+      return next;
+    });
+  }, []);
+  // What the pin hides: genuinely-unusable keys ('inactive' ONLY — user
+  // decision 2026-07-15: needs_login / pending_download are actionable
+  // waiting states whose recovery CTAs must stay visible) plus the
+  // manually-hidden set. Counted over ALL records (not the search/type-
+  // narrowed list) so the pin label reads as a stable vault-wide fact.
+  const pinHides = useCallback(
+    (r: VaultRowRecord) => r.status === 'inactive' || manualHidden.has(rowKey(r)),
+    [manualHidden],
+  );
+  const hiddenCount = useMemo(
+    () => records.filter(pinHides).length,
+    [records, pinHides],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filteredList = records.filter((r) => {
+      // Hide pin (2026-07-15): tidy mode drops inactive + manually-hidden
+      // rows. Applied FIRST so search can't "see through" the pin — a
+      // hidden key stays hidden until the pin is turned off.
+      if (hidePin && pinHides(r)) return false;
       // Type filter. Personal / Team are SCOPE (ownership) filters; OAuth is a
       // TYPE filter cutting across scope — they overlap on purpose (2026-07-07):
       //   Personal = 个人 VK + 个人 OAuth       (target 'personal' | 'oauth')
@@ -837,13 +964,19 @@ export default function UserVaultPage() {
           return b.created_at - a.created_at;
       }
     });
-  }, [records, typeFilter, search, sortKey]);
+  }, [records, typeFilter, search, sortKey, hidePin, pinHides]);
 
   // Row-level interactions (rename / delete / drawer).
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [drawerRecord, setDrawerRecord] = useState<VaultRowRecord | null>(null);
+  // Which display-family group the drawer was opened FROM. A multi-protocol
+  // key renders one row per family (openai + anthropic), so "the record's
+  // group" is ambiguous without carrying it — the old premise "a row lives in
+  // exactly one protocol group" broke when multi-protocol keys landed
+  // (2026-07-13). Drives the drawer's highlighted protocol + its Use scope.
+  const [drawerGroup, setDrawerGroup] = useState<string | null>(null);
   // Drawer open "mode" (2026-04-24 user request):
   //   - 'persistent' → opened by the explicit View details button; stays
   //     open even as the user scrolls the table behind the drawer.
@@ -865,6 +998,10 @@ export default function UserVaultPage() {
   // The hook is local-edition gated and session-throttled internally —
   // see useHookWireRcModal in HookWireRcModal.tsx.
   const wireRcModal = useHookWireRcModal();
+  // Claude Desktop takeover consent (阶段7, 2026-07-13): auto-pops when a
+  // `use` on a claude credential reports desktop_switch.needs_consent.
+  // Local-edition gated inside the hook, same as wireRcModal.
+  const desktopModal = useDesktopConsentModal();
 
   const renameMut = useMutation({
     mutationFn: vaultApi.rename,
@@ -964,6 +1101,10 @@ export default function UserVaultPage() {
       const r = pickHookReadiness(res);
       setHookReadinessFromMutation(r);
       wireRcModal.openIfNeeded(r, true);
+      // Claude Desktop consent (阶段7): pops only on needs_consent — a
+      // normal credential switch under an existing takeover is a no-op
+      // (D1/D3) and stays silent here.
+      desktopModal.openIfNeeded(res);
       qc.invalidateQueries({ queryKey: ['vault-list'] });
     },
   });
@@ -1075,7 +1216,7 @@ export default function UserVaultPage() {
             return n;
           });
         },
-        onSuccess: () => {
+        onSuccess: (res) => {
           // Flash route-pulse once (650ms window matches .just-switched CSS).
           setJustSwitchedIds((prev) => {
             const n = new Set(prev);
@@ -1092,10 +1233,20 @@ export default function UserVaultPage() {
           const providerTag = providerDisplayName(target).toUpperCase();
           const aliasLabel = target.alias ?? '(unnamed)';
           const cli = 'aikey use ' + (target.alias ?? '');
+          // Desktop is a cold-switch surface: when THIS use changed its
+          // config (restart_required), say so in the toast sub — the
+          // `cliHint` field is not rendered by the toast row, only `sub`
+          // is (阶段7 plan §5.3).
+          const desktopHint = res.desktop_switch?.restart_required
+            ? ' · ' + t('vault.desktopRestartHint')
+            : '';
           pushToast({
             kind: 'success',
             title: providerTag + ' now routes through ' + aliasLabel,
-            sub: (previousForUndo ? 'was ' + (previousForUndo.alias ?? '(unnamed)') + ' · ' : '') + cli,
+            sub:
+              (previousForUndo ? 'was ' + (previousForUndo.alias ?? '(unnamed)') + ' · ' : '') +
+              cli +
+              desktopHint,
             cliHint: cli,
             // Undo routes the same group context — the previous holder was
             // active for THIS group before we replaced it, so re-applying it
@@ -1215,23 +1366,40 @@ export default function UserVaultPage() {
       .catch(
         (err: Error & {
           code?: string;
-          response?: { status?: number; data?: { error?: string; message?: string } };
+          response?: {
+            status?: number;
+            data?: { error_code?: string; error_message?: string; error?: string; message?: string };
+          };
         }) => {
           // Surface the raw HTTP status alongside the error code so the popup's
           // friendly-text mapping can branch correctly. PREFER the backend's
-          // error_code (response body `error`, e.g. I_PROXY_NOT_RUNNING) over the
-          // axios transport code (ERR_BAD_RESPONSE for any 5xx): friendlyTestError
+          // error code (e.g. I_PROXY_NOT_RUNNING) over the axios transport code
+          // (ERR_BAD_REQUEST / ERR_BAD_RESPONSE for ANY non-2xx): friendlyTestError
           // keys on the I_* code, so falling back to the axios code collapsed every
           // mapped failure (proxy down / cluster node / credential not found) into
-          // the generic 5xx "restart web" copy — the wrong next-step. Same for the
-          // message: the backend's human message beats axios's bare "Request failed
-          // with status code 503". Bugfix 2026-06-26-vault-test-error-code-not-surfaced.
+          // the generic fallback — raw axios text and NO next-step.
+          //
+          // FIELD NAMES (2026-07-12 bugfix — the 2026-06-26 fix read the wrong
+          // ones, so it never actually took effect): this endpoint is on
+          // aikey-local-server, whose error envelope is
+          // `{status, error_code, error_message}` (see userapi/cli/errors.go
+          // JSONError, and the ErrEnvelope type in shared/api/user/vault.ts).
+          // The `{error, message}` shape is the MASTER/team API's envelope — a
+          // different service. Reading `data.error` here always yielded
+          // undefined, so every I_* branch was dead for HTTP-error responses
+          // (e.g. a team key's I_CREDENTIAL_NOT_FOUND 404 rendered as the bare
+          // "Request failed with status code 404"). We read the local shape
+          // first and keep the master shape as a defensive fallback.
           const httpStatus = err.response?.status;
           const data = err.response?.data;
           setTestError({
-            code: data?.error ?? err.code,
+            code: data?.error_code ?? data?.error ?? err.code,
             httpStatus,
-            message: data?.message || err.message || 'Test failed for an unknown reason',
+            message:
+              data?.error_message ||
+              data?.message ||
+              err.message ||
+              'Test failed for an unknown reason',
           });
           setTestPhase('error');
         },
@@ -1553,6 +1721,24 @@ export default function UserVaultPage() {
               session-persistent fallback / re-opener). */}
           <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
           <HookWireRcModal open={wireRcModal.open} onClose={wireRcModal.close} />
+          <DesktopConsentModal
+            open={desktopModal.open}
+            replay={desktopModal.replay}
+            onClose={desktopModal.close}
+            onGranted={(d) => {
+              // Granted replay finished: refresh the list (binding state is
+              // idempotent but cheap to re-read) and surface the cold-switch
+              // hint — takeover only takes effect after a Desktop restart.
+              qc.invalidateQueries({ queryKey: ['vault-list'] });
+              if (d?.restart_required) {
+                pushToast({
+                  kind: 'success',
+                  title: t('vault.desktopConsentTitle'),
+                  sub: t('vault.desktopRestartHint'),
+                });
+              }
+            }}
+          />
           {/* Phase 3A-2 team-fetch banner: surfaces categorical errors
               (not-logged-in / unauth / unreachable / parse-error) above
               the page so the user understands why the Team rows are
@@ -1601,6 +1787,9 @@ export default function UserVaultPage() {
             counts={counts}
             locked={!unlocked}
             onOpenAdd={() => setAddOpen(true)}
+            hidePin={hidePin}
+            onToggleHidePin={toggleHidePin}
+            hiddenCount={hiddenCount}
           />
 
           {/* When the vault has zero records, render JUST the empty
@@ -1626,7 +1815,16 @@ export default function UserVaultPage() {
               {listLoading && <EmptyState message={t('vault.emptyLoading')} />}
               {listError && <EmptyState message={`${t('vault.loadFailed')}${(listError as Error).message}`} />}
               {!listLoading && !listError && records.length > 0 && filtered.length === 0 && (
-                <EmptyState message={t('vault.emptyNoMatch')} />
+                // 防呆 (2026-07-15): when the hide pin is what emptied the
+                // view, say so — "no match" would send the user hunting
+                // through search/filters while the pin quietly hides rows.
+                <EmptyState
+                  message={
+                    hidePin && hiddenCount > 0
+                      ? t('vault.emptyAllHidden', { count: hiddenCount })
+                      : t('vault.emptyNoMatch')
+                  }
+                />
               )}
               {filtered.length > 0 && (
                 <table className="vault">
@@ -1745,10 +1943,12 @@ export default function UserVaultPage() {
                                 deletePending={deleteMut.isPending}
                                 onOpenDrawer={(mode) => {
                                   setDrawerRecord(r);
+                                  setDrawerGroup(g.provider);
                                   setDrawerMode(mode ?? 'persistent');
                                 }}
                                 isLastInGroup={idx === sortedRecords.length - 1}
                                 isGroupCollapsed={collapsed}
+                                manuallyHidden={manualHidden.has(k)}
                                 switchPending={switchingIds.has(k)}
                                 justSwitched={justSwitchedIds.has(k)}
                                 onSwitch={() => switchTo(r, g.provider)}
@@ -1823,18 +2023,24 @@ export default function UserVaultPage() {
             setDrawerRecord(null);
           }}
           // Phase 3B (2026-05-11): drawer "Use" button — same single-source-
-          // of-truth as the inline row Use. groupProvider here is the
-          // record's protocol_family because the drawer doesn't carry the
-          // group context (drawer is opened from a row that already lives
-          // in exactly one protocol group, so family is unambiguous).
-          onUse={() => switchTo(drawerRecord, drawerRecord.protocol_family ?? 'unknown')}
+          // of-truth as the inline row Use. 2026-07-13: family now comes from
+          // the GROUP the drawer was opened from (drawerGroup) — the old
+          // "a row lives in exactly one protocol group, so protocol_family is
+          // unambiguous" premise broke with multi-protocol keys, which render
+          // one row per family; the openai-group drawer must Use for openai.
+          // Fallback to protocol_family only for stale state (drawer survived
+          // a records refresh that dropped the group).
+          groupProvider={drawerGroup ?? (displayProtocolFamily(drawerRecord.protocol_family) || 'unknown')}
+          onUse={() => switchTo(drawerRecord, drawerGroup ?? (drawerRecord.protocol_family ?? 'unknown'))}
           // Test connection moved to the row Actions column 2026-05-22;
           // popup state is still owned at page level so the popup
           // overlays the page rather than the drawer.
-          inUse={recordInUseForGroup(drawerRecord, drawerRecord.protocol_family ?? 'unknown')}
+          inUse={recordInUseForGroup(drawerRecord, drawerGroup ?? (drawerRecord.protocol_family ?? 'unknown'))}
           switchPending={switchingIds.has(rowKey(drawerRecord))}
           hostToRoute={hostToRoute}
           providerToRoute={providerToRoute}
+          manuallyHidden={manualHidden.has(rowKey(drawerRecord))}
+          onToggleHidden={() => toggleManualHidden(drawerRecord)}
         />
       )}
 
@@ -2253,6 +2459,11 @@ function FilterStrip(props: {
   counts: { personal: number; oauth: number; team: number; total: number };
   locked: boolean;
   onOpenAdd: () => void;
+  /** Hide pin (2026-07-15): ON = hide inactive + manually-hidden keys.
+   *  hiddenCount is vault-wide (what the pin governs), not page-scoped. */
+  hidePin: boolean;
+  onToggleHidePin: () => void;
+  hiddenCount: number;
 }) {
   const { t } = useTranslation();
   return (
@@ -2320,6 +2531,38 @@ function FilterStrip(props: {
             count={props.counts.oauth}
           />
         </div>
+
+        {/* Hide pin (2026-07-15 user request) — a pin TOGGLE, deliberately
+            not part of the type-filter radiogroup: filters pick a slice,
+            the pin is a tidy-mode preference (hide inactive + manually-
+            hidden keys) that composes with whatever filter is active.
+            Reuses the filter-pill visual so the toolbar stays one system;
+            aria-pressed marks it as a toggle for screen readers. Rendered
+            only when it has something to govern (hiddenCount > 0) or is
+            already ON (so an active pin never becomes un-turn-off-able). */}
+        {(props.hiddenCount > 0 || props.hidePin) && (
+          /* Own .filter-group capsule (not a bare .filter-pill — the pill
+             style needs the capsule frame) so it reads as a sibling
+             control of the type-filter capsule without new CSS. */
+          <div className="filter-group">
+            <button
+              type="button"
+              className={`filter-pill${props.hidePin ? ' active' : ''}`}
+              aria-pressed={props.hidePin}
+              onClick={props.onToggleHidePin}
+              title={
+                props.hidePin
+                  ? t('vault.hidePinTitleOn', { count: props.hiddenCount })
+                  : t('vault.hidePinTitleOff', { count: props.hiddenCount })
+              }
+            >
+              <PinIcon className="w-2.5 h-2.5" />
+              {props.hidePin
+                ? t('vault.hidePinLabelOn', { count: props.hiddenCount })
+                : t('vault.hidePinLabelOff')}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Right-aligned actions. Sort tabs were moved into the table's
@@ -2698,6 +2941,10 @@ const Row = React.memo(function Row(props: {
    *  multi-provider keys / alias-collisions don't show in_use badge under
    *  groups they're not actually bound to. */
   groupProvider: string;
+  /** Manually hidden via the drawer (2026-07-15). Only visible while the
+   *  hide pin is OFF — the row renders a muted "Hidden" chip so the user
+   *  can find and un-hide it (drawer action). */
+  manuallyHidden?: boolean;
 }) {
   const { t } = useTranslation();
   const r = props.record;
@@ -2712,7 +2959,8 @@ const Row = React.memo(function Row(props: {
   const isTeamOAuthGroup = isTeam && !!(r as TeamRowRecord).oauth_group_id;
   const groupAccts = isTeamOAuthGroup ? (r as TeamRowRecord).group_accounts : null;
   const groupProto = routedGroupAccount(groupAccts)?.provider_code;
-  const providerName = groupProto || providerDisplayName(r);
+  const providerName =
+    groupProto || teamProviderForGroup(r, props.groupProvider) || providerDisplayName(r);
   // Kind chip. Fully i18n'd (2026-07-07, user request): in Chinese the four
   // kinds render 密钥 / OAuth / 团队 / 团队 OAuth; English keeps KEY / OAUTH /
   // TEAM / TEAM-OAUTH. Values live in the vault namespace of the locale files.
@@ -2911,6 +3159,10 @@ const Row = React.memo(function Row(props: {
       </td>
 
       <td>
+        {/* Flex + wrap so the optional "Hidden" chip sits inline with the
+            status chip when it fits and drops to a left-aligned second line
+            (not indented) in this narrow 14% column when it doesn't. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {r.status === 'active' ? (
           <span className="chip success">
             <span className="status-dot" style={{ width: 5, height: 5 }} />
@@ -2926,7 +3178,11 @@ const Row = React.memo(function Row(props: {
         ) : r.status === 'pending_download' ? (
           // Amber like needs_login: key material not delivered locally yet —
           // actionable (unlock+reload triggers the full sync / `aikey key sync`).
-          <span className="chip warning">
+          // The chip carries the remedy in its title (2026-07-13): the state is
+          // self-healing on an unlocked page load, but a locked vault can't
+          // decrypt material, so the user needs the terminal command spelled out
+          // — mirrors the needs_login chip's needsLoginCtaTitle precedent.
+          <span className="chip warning" title={t('vault.pendingDownloadTitle')}>
             <span className="status-dot" style={{ width: 5, height: 5 }} />
             {t('vault.statusPendingDownload')}
           </span>
@@ -2936,6 +3192,18 @@ const Row = React.memo(function Row(props: {
             {r.status === 'inactive' ? t('vault.statusInactive') : String(r.status).toUpperCase()}
           </span>
         )}
+        {/* Manually-hidden marker (2026-07-15): shown only while the hide
+            pin is OFF (a hidden row isn't rendered at all when it's ON).
+            Plain chip, deliberately quieter than the status chips — this
+            is a view preference, not a key state. Un-hide lives in the
+            drawer next to where Hide was clicked. */}
+        {props.manuallyHidden && (
+          <span className="chip" title={t('vault.hiddenChipTitle')}>
+            <EyeOffIcon className="w-3 h-3" />
+            {t('vault.hiddenChip')}
+          </span>
+        )}
+        </div>
       </td>
 
       <td
@@ -3045,10 +3313,15 @@ const Row = React.memo(function Row(props: {
                 member logs into the routed pool account. Instead of just hiding the Use
                 button (which leaves the row looking dead), offer a one-click link to the
                 team-oauth page where the routed account is auto-highlighted with the
-                sign-in control. Occupies the same primary-action slot as Use. */}
+                sign-in control. Occupies the same primary-action slot as Use.
+                2026-07-12: the link now carries ?expand=<credential_id> of the ROUTED
+                account (the one whose missing token made this VK needs_login) so the
+                team-oauth page auto-expands its sign-in card on arrival. */}
             {isTeam && (r as TeamRowRecord).effective_status === 'needs_login' && !inUse && (
               <Link
-                to="/user/team-oauth"
+                to={teamOauthLoginHref(
+                  routedGroupAccount((r as TeamRowRecord).group_accounts)?.credential_id,
+                )}
                 className="row-use-btn"
                 title={t('vault.needsLoginCtaTitle')}
                 onClick={(e) => e.stopPropagation()}
@@ -3149,6 +3422,11 @@ const Row = React.memo(function Row(props: {
   // state — without this compare the spinner state goes stale and a
   // second click during a long probe looks like nothing happened.
   if (prev.testRunning !== next.testRunning) return false;
+  // manuallyHidden drives the "Hidden" marker chip (2026-07-15). This
+  // comparator is a WHITELIST — a new prop that isn't listed here never
+  // re-renders the row (caught live: un-hiding from the drawer left the
+  // stale chip on screen until the next poll beat).
+  if (prev.manuallyHidden !== next.manuallyHidden) return false;
   // editDraft only matters when this row is the one being edited.
   if (next.isEditing && prev.editDraft !== next.editDraft) return false;
   return true;
@@ -3349,6 +3627,10 @@ function DetailDrawer(props: {
    *  Personal/OAuth code paths are unchanged; team rows render a
    *  Virtual-Key section instead of Credential and skip the Delete button. */
   record: VaultRowRecord;
+  /** Display-family group this drawer was opened from. Multi-protocol keys
+   *  render one row per family; the drawer highlights THIS family's provider
+   *  (bold) and mutes the others (2026-07-13 user spec). Also scopes Use. */
+  groupProvider: string;
   locked: boolean;
   onClose: () => void;
   onBeginRename: () => void;
@@ -3371,6 +3653,11 @@ function DetailDrawer(props: {
   /** v4.3: provider_code → first-matching ProviderRoute, used as the family-
    *  level fallback when the stored base_url's host isn't in the table. */
   providerToRoute: Map<string, ProviderRoute>;
+  /** Manual hide (2026-07-15): view-layer only — no vault write, so the
+   *  button is NOT gated by `locked`. Any key (including active ones) can
+   *  be hidden; the toolbar hide pin governs whether hidden rows render. */
+  manuallyHidden: boolean;
+  onToggleHidden: () => void;
 }) {
   const { t } = useTranslation();
   const r = props.record;
@@ -3434,7 +3721,38 @@ function DetailDrawer(props: {
   const groupProto = team?.oauth_group_id
     ? routedGroupAccount(team.group_accounts)?.provider_code
     : undefined;
-  const providerName = groupProto || providerDisplayName(r);
+  const providerName =
+    groupProto || teamProviderForGroup(r, props.groupProvider) || providerDisplayName(r);
+  // Full protocol surface of the key (multi-protocol direct-bind keys carry
+  // several supported_providers). The drawer shows ALL of them: the current
+  // group's provider bold/highlighted, the rest muted — so a user opening the
+  // openai-group drawer of an anthropic+openai key sees both, with openai
+  // emphasized (2026-07-13 user spec). OAuth pool VKs stay single (per routed
+  // account). Order preserved but the current provider is hoisted first.
+  const allProviders: string[] = (() => {
+    if (groupProto) return [providerName];
+    const sp =
+      r.target === 'team' || r.target === 'personal'
+        ? (r as PersonalVaultRecord | TeamRowRecord).supported_providers
+        : null;
+    if (Array.isArray(sp) && sp.length > 0) {
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const p of sp) {
+        const raw = (p ?? '').toString().trim().toLowerCase().replace(/_oauth$|_api$/, '');
+        if (raw && !seen.has(raw)) {
+          seen.add(raw);
+          out.push(raw);
+        }
+      }
+      if (out.length > 0) {
+        return out.includes(providerName)
+          ? [providerName, ...out.filter((p) => p !== providerName)]
+          : out;
+      }
+    }
+    return [providerName];
+  })();
 
   return (
     <>
@@ -3449,6 +3767,8 @@ function DetailDrawer(props: {
                   className="prov-dot"
                   style={{ background: providerBrandColor(providerName) }}
                 />
+                {/* Head shows ONLY the current group's protocol (2026-07-13 user
+                    spec); the full multi-protocol list lives in META below. */}
                 <span
                   className="name font-mono"
                   style={{ color: 'var(--muted-foreground)' }}
@@ -3470,7 +3790,8 @@ function DetailDrawer(props: {
                   {t('vault.statusNeedsLogin')}
                 </span>
               ) : r.status === 'pending_download' ? (
-                <span className="chip warning">
+                // Same remedy hint as the row chip (2026-07-13) — see there.
+                <span className="chip warning" title={t('vault.pendingDownloadTitle')}>
                   <span className="status-dot" style={{ width: 5, height: 5 }} />
                   {t('vault.statusPendingDownload')}
                 </span>
@@ -3558,10 +3879,11 @@ function DetailDrawer(props: {
                         {/* 登录 CTA (2026-07-03, 防呆): a needs_login pool account is one
                             web sign-in away from making this VK usable — link straight to
                             the team-oauth page (the routed account is auto-highlighted there
-                            with the sign-in control). */}
+                            with the sign-in control). 2026-07-12: carries THIS account's
+                            ?expand=<credential_id> so its sign-in card auto-expands there. */}
                         {a.credential_type === 'oauth_account' && a.login_status === 'needs_login' && (
                           <Link
-                            to="/user/team-oauth"
+                            to={teamOauthLoginHref(a.credential_id)}
                             className="chip warning"
                             style={{ textDecoration: 'none', cursor: 'pointer' }}
                             title={t('vault.needsLoginCtaTitle')}
@@ -4417,6 +4739,25 @@ function DetailDrawer(props: {
                 <EditIcon className="w-3.5 h-3.5" />
                 {t('vault.renameAlias')}
               </button>
+              {/* Hide / Un-hide (2026-07-15): view-layer tuck-away for ANY
+                  key incl. active ones (e.g. a spare key kept but not
+                  routed). No vault write → never gated by `locked`, and
+                  hiding an IN-USE key does NOT stop it routing — the title
+                  copy spells that out to prevent "I hid it so it's off"
+                  misreads. Rendering is governed by the toolbar hide pin. */}
+              <button
+                type="button"
+                className="action-btn"
+                onClick={props.onToggleHidden}
+                title={props.manuallyHidden ? t('vault.unhideKeyTitle') : t('vault.hideKeyTitle')}
+              >
+                {props.manuallyHidden ? (
+                  <EyeIcon className="w-3.5 h-3.5" />
+                ) : (
+                  <EyeOffIcon className="w-3.5 h-3.5" />
+                )}
+                {props.manuallyHidden ? t('vault.unhideKey') : t('vault.hideKey')}
+              </button>
               <button
                 type="button"
                 className="action-btn danger"
@@ -4456,7 +4797,22 @@ function DetailDrawer(props: {
             <div className="drawer-field">
               <span className="k">{t('vault.protocol')}</span>
               <span className="v">
-                {providerName}
+                {/* One protocol per line (2026-07-13 user spec) — current group
+                    bold, others muted. */}
+                <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+                  {allProviders.map((p) => (
+                    <span
+                      key={p}
+                      style={
+                        p === providerName
+                          ? { fontWeight: 700 }
+                          : { color: 'var(--muted-foreground)', opacity: 0.55 }
+                      }
+                    >
+                      {p}
+                    </span>
+                  ))}
+                </span>
                 <span className="ro-pill">RO</span>
               </span>
             </div>
@@ -6947,6 +7303,7 @@ function OAuthGuide({
   provider: string;
   onProviderChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   const cmd = `aikey auth login ${provider}`;
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
@@ -6975,7 +7332,7 @@ function OAuthGuide({
           value={provider}
           onChange={onProviderChange}
           options={OAUTH_PROVIDER_PRESETS.map((p) => ({ value: p, label: p }))}
-          placeholder="Search or type a provider…"
+          placeholder={t('vault.providerSearchPlaceholder')}
           allowCustom
         />
         <span className="form-help">
@@ -7146,6 +7503,11 @@ const ICON_LINK =
 // inventing new visual language.
 const ICON_ACTIVITY =
   'M22 12h-4l-3 9L9 3l-3 9H2';
+// Lucide "pin" — the toolbar hide-pin toggle (2026-07-15). A pushpin (not
+// an eye) so the control reads as "pin the tidy view", distinct from the
+// EyeOff icon used for the per-key Hide action in the drawer.
+const ICON_PIN =
+  'M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z';
 
 function EyeIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_EYE} {...p} />; }
 function EyeOffIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_EYE_OFF} {...p} />; }
@@ -7182,6 +7544,7 @@ function TagIcon(p: { className?: string; style?: React.CSSProperties }) { retur
 function GlobeIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_GLOBE} {...p} />; }
 function LinkIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_LINK} {...p} />; }
 function ActivityIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_ACTIVITY} {...p} />; }
+function PinIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_PIN} {...p} />; }
 
 // ── CSS ──────────────────────────────────────────────────────────────────
 // Phase 3B (2026-05-11): VAULT_CSS extracted to a shared module so the

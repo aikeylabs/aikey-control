@@ -12,6 +12,12 @@ import { Button } from '@/shared/ui/Button';
  * one button is cleaner in the header; see 2026-05-30 design decision.)
  *
  * Reuses the shared `Button` atom so it inherits the project's `.btn` theming.
+ *
+ * 2026-05-30 dual-edit sync: master was a chip-styled inline `<button>` to
+ * blend with AppShell's Org/Env chips; user/web used the shared Button
+ * atom. After audit, user chose the shared-atom direction so the trial
+ * composer (whose `@` resolves to master/web) gets the same look as
+ * Personal's UserShell header. Verbatim copy of user/web.
  */
 const LABELS: Record<string, string> = { en: 'EN', zh: '中' };
 // Native name of the language a click will switch TO — used for the tooltip.

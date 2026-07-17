@@ -79,6 +79,19 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
     visibility: 'always',
     icon: 'apps',
   },
+  // Online Agents (alpha.5). A PEER of Apps (方案 A, 2026-07-16) — an agent is a
+  // seat principal that exposes a team OAuth VK, NOT a consuming app, so it's a
+  // distinct entry rather than merged into the Apps page. team-logged-in: agents
+  // only exist in a cluster/team org (a Personal-only user can't create one), so
+  // the entry is hidden until team context, like Team OAuth.
+  {
+    id: 'personal-my-agents',
+    group: 'APPS',
+    label: 'My Agents',
+    path: '/user/my-agents',
+    visibility: 'team-logged-in',
+    icon: 'my-agents',
+  },
   // M5 (2026-05-21): degrade-detector Trust Check. Belongs to the
   // QUALITY group (added 2026-05-21 in types.ts). Peers on older
   // binaries don't know QUALITY → matchesGroup() drops the entry

@@ -9,9 +9,10 @@ package crossappmenu
 // own sidebar renders.
 //
 // When changing this list:
-//   1. Update OWN_PERSONAL_MENU in the TS file
-//   2. Add the corresponding route to A's React router
-//   3. Run cross-app-menu-check to verify Go ↔ TS match
+//  1. Update OWN_PERSONAL_MENU in the TS file
+//  2. Add the corresponding route to A's React router
+//  3. Run cross-app-menu-check to verify Go ↔ TS match
+//
 // Phase 3B R11 (2026-05-11): labels mirror A's own sidebar exactly
 // (Vault / Import / Usage / Profile — no "Personal " prefix). When B
 // fetches this menu via /system/cross-app-menu, B's sidebar renders
@@ -71,6 +72,18 @@ var PersonalMenu = []Entry{
 		Path:       "/user/apps",
 		Visibility: VisibilityAlways,
 		Icon:       "apps",
+	},
+	// Online Agents (alpha.5). PEER of Apps (方案 A, 2026-07-16): an agent is a
+	// seat principal exposing a team OAuth VK, not a consuming app. team-logged-in
+	// — agents only exist in a cluster/team org. MUST match own-menu.ts
+	// (ts_drift_test asserts id+path parity).
+	{
+		ID:         "personal-my-agents",
+		Group:      GroupApps,
+		Label:      "My Agents",
+		Path:       "/user/my-agents",
+		Visibility: VisibilityTeamLoggedIn,
+		Icon:       "my-agents",
 	},
 	// M5 (2026-05-21): degrade-detector Trust Check. Sits in the new
 	// QUALITY group (added 2026-05-21 in types.go). Peers on older
@@ -154,10 +167,11 @@ var PersonalMenu = []Entry{
 // TestPersonalMenuZhLabels_CoverAllEntries enforces this so a future entry
 // can't silently fall back to English for zh users.
 var personalMenuZhLabels = map[string]string{
-	"personal-vault":       "保管库",
-	"personal-usage":       "用量",
-	"personal-cost":        "性能", // Label "Performance"; ID kept for back-compat.
-	"personal-apps":        "应用",
+	"personal-vault":            "保管库",
+	"personal-usage":            "用量",
+	"personal-cost":             "性能", // Label "Performance"; ID kept for back-compat.
+	"personal-apps":             "应用",
+	"personal-my-agents":        "我的 Agent",
 	"personal-trust-check":      "置信度检测",
 	"personal-compliance":       "合规审计",
 	"personal-oauth-contribute": "团队OAuth",
