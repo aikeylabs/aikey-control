@@ -238,9 +238,16 @@ export default function UserOverviewPage() {
     queryFn: crossClient
       ? async () => (await crossClient.get<AccountDTO>('/accounts/me')).data
       : userAccountsApi.me,
-    // A rejected team token is a terminal state, not a blip: retrying
-    // just burns four more 401s before the banner appears.
-    retry: (count, err) => !isTeamTokenRejected(err) && count < 3,
+    // Deliberately NOT short-circuiting retries on a rejected token.
+    // "Rejected" is not the same as "expired": right after `aikey login`
+    // the gateway can still be serving the pre-login JWT out of its vault
+    // cache (DefaultVaultCacheTTL = 2s, aikey-trial-server
+    // internal/gateway/gateway.go), so the first /accounts/me after the
+    // activation redirect legitimately 401s on a session that is about to
+    // be fine. React Query's default backoff spans that window, so the
+    // race self-heals; short-circuiting here would pin "Session expired —
+    // run aikey login" on a user who just ran exactly that. Real expiry
+    // only pays a few seconds before the banner, which is the right trade.
   });
   // The gateway forwarded our vault JWT and the team server rejected it
   // (expired, or the account is gone). Every /accounts/* read is 401ing,

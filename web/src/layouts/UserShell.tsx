@@ -561,12 +561,10 @@ export function UserShell() {
   // the server returns `local@localhost`; in JWT mode it returns the
   // authenticated user. The zustand store is a secondary fallback for
   // the first paint before the query resolves.
-  const meQuery = useQuery({
-    queryKey: ['me'],
-    queryFn: userAccountsApi.me,
-    // See Overview: a rejected team token is terminal, don't retry into it.
-    retry: (count, err) => !isTeamTokenRejected(err) && count < 3,
-  });
+  // Default retries kept on purpose — see the Overview comment: a token
+  // rejected moments after `aikey login` is the gateway's 2s vault cache,
+  // not a dead session, and the default backoff is what heals it.
+  const meQuery = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   // Gateway forwarded the vault JWT and the team server rejected it. The
   // store fallback below would happily serve a stale email from the dead
   // session, so this has to win over it.
