@@ -179,6 +179,9 @@ export default function UserLoginPage() {
               ? t('login.signInPromptInvite')
               : t('login.signInPromptDefault')}
           </p>
+          <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+            {t('login.ssoHint')}
+          </p>
           <div
             className="rounded border p-3 flex items-center justify-between"
             style={{ backgroundColor: '#000', borderColor: 'var(--border)' }}

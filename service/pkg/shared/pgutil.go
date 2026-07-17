@@ -14,6 +14,12 @@ import (
 //
 //	"Key (col)=(val) already exists."  — included as meta["db_detail"] for debugging.
 var pgConstraintMap = map[string]func(detail string) *DomainError{
+	// member SSO identity mapping
+	"pk_account_external_identities": func(detail string) *DomainError {
+		return &DomainError{Code: CodeBizSSOIdentityConflict,
+			Message: "this SSO identity is already bound to another account",
+			Meta:    map[string]any{"db_detail": detail}}
+	},
 	// identity
 	"uq_global_accounts_email": func(detail string) *DomainError {
 		return &DomainError{Code: CodeBizAuthEmailTaken,

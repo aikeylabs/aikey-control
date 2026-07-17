@@ -26,7 +26,7 @@ func TestDomainErrorStatus_ChangePasswordCodes(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.code, func(t *testing.T) {
-			got := domainErrorStatus(tc.code)
+			got := DomainErrorHTTPStatus(tc.code)
 			if got != tc.want {
 				t.Errorf("domainErrorStatus(%q) = %d, want %d (NOT 500 — see "+
 					"Master Settings → Change Password 401-interceptor rationale)", tc.code, got, tc.want)
