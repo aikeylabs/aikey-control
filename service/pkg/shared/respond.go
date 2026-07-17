@@ -47,10 +47,13 @@ func DomainErrorResponse(w http.ResponseWriter, err *DomainError) {
 		}
 		slog.Debug("domain error internal detail (stripped from response)", attrs...)
 	}
-	JSON(w, domainErrorStatus(err.Code), err.LocalizedResponseBody(LocaleFromWriter(w)))
+	JSON(w, DomainErrorHTTPStatus(err.Code), err.LocalizedResponseBody(LocaleFromWriter(w)))
 }
 
-func domainErrorStatus(code string) int {
+// DomainErrorHTTPStatus is the single HTTP status mapping for JSON and HTML
+// transports. Keeping it exported prevents an HTML handler from inventing a
+// second status contract for the same domain error code.
+func DomainErrorHTTPStatus(code string) int {
 	switch code {
 	// ── 400 Bad Request ────────────────────────────────────────────────────────
 	// CodeBizAuthWrongCurrentPwd / CodeBizAuthWeakPassword (added 2026-06-02):
@@ -61,7 +64,8 @@ func domainErrorStatus(code string) int {
 	// (which clears the session + redirects to /master/login on 401), which
 	// is exactly the wrong UX for "you typed the current password wrong".
 	case CodeDataInvalidBody, CodeDataMissingField, CodeDataInvalidField,
-		CodeBizAuthWrongCurrentPwd, CodeBizAuthWeakPassword:
+		CodeBizAuthWrongCurrentPwd, CodeBizAuthWeakPassword,
+		CodeBizSSOStateInvalid:
 		return http.StatusBadRequest
 
 	// ── 401 Unauthorised ──────────────────────────────────────────────────────
@@ -77,6 +81,7 @@ func domainErrorStatus(code string) int {
 		CodeBizAuthTokenExpired, CodeBizAuthTokenRecycled,
 		CodeBizAuthTokenNotActive, CodeBizAuthAccessDenied,
 		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied,
+		CodeBizSSOTenantMismatch,
 		CodeBizOauthMemberTokenForbidden,
 		// Refused BY DESIGN (form-①): still a 403, but the code tells the client
 		// it's policy, not a permission fault (2026-07-13).
@@ -97,7 +102,7 @@ func domainErrorStatus(code string) int {
 		// R39 recycle-bin guard: live references block deletion — a resource-state
 		// conflict the admin resolves (migrate channels / detach from group).
 		CodeBizCredHasActiveRefs,
-		CodeBizLoginSessionTerminated,
+		CodeBizLoginSessionTerminated, CodeBizSSOIdentityConflict,
 		// 2026-07-03 (owner-approved delivery-family contract unification): "no
 		// active / not-deliverable binding" is a RESOURCE-STATE conflict an admin
 		// resolves by configuring the binding — not a service outage. As 503s these
@@ -112,7 +117,7 @@ func domainErrorStatus(code string) int {
 		CodeBizKeyDuplicateProtocol, CodeBizBindProtocolMismatch,
 		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
 		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,
-		CodeBizVKGroupExclusive:
+		CodeBizVKGroupExclusive, CodeBizSSOProviderDisabled:
 		return http.StatusUnprocessableEntity
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────
@@ -120,7 +125,8 @@ func domainErrorStatus(code string) int {
 		return http.StatusTooManyRequests
 
 	// ── 502 Bad Gateway ───────────────────────────────────────────────────────
-	case CodeExtProviderUpstream, CodeExtProviderAuthFailure:
+	case CodeExtProviderUpstream, CodeExtProviderAuthFailure,
+		CodeBizSSOExchangeFailed:
 		return http.StatusBadGateway
 
 	// ── 503 Service Unavailable ───────────────────────────────────────────────

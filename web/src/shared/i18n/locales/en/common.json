@@ -1445,6 +1445,7 @@
     "stepSignInTitle": "Sign in",
     "signInPromptInvite": "Run this command — your email will be pre-filled in the browser:",
     "signInPromptDefault": "Run this command in your terminal to authenticate:",
+    "ssoHint": "When your administrator enables it, the browser page opened by the CLI also offers Continue with Feishu.",
     "stepConsoleTitle": "Open Console",
     "consoleHintPrefix": "After login, run",
     "consoleHintSuffix": "to open the console in your browser.",

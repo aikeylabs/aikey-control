@@ -1445,6 +1445,7 @@
     "stepSignInTitle": "登录",
     "signInPromptInvite": "运行此命令——您的邮箱将在浏览器中预填：",
     "signInPromptDefault": "在终端运行此命令以完成认证：",
+    "ssoHint": "管理员启用后，CLI 打开的浏览器登录页也会显示 Continue with Feishu。",
     "stepConsoleTitle": "打开控制台",
     "consoleHintPrefix": "登录后，运行",
     "consoleHintSuffix": "以在浏览器中打开控制台。",
