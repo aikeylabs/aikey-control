@@ -58,27 +58,14 @@ var PersonalMenu = []Entry{
 		Visibility: VisibilityAlways,
 		Icon:       "cost",
 	},
-	// Phase 4 阶段 3 (2026-05-21): Connected Apps. Same shape as the
-	// other personalOnly entries — published here so B's sidebar can
-	// surface a cross-app link back to A's /user/apps page.
-	// /api/user/apps/* lives on A's local-server; B has no own
-	// /user/apps route.
-	// 2026-06-26: Group moved INSIGHTS → APPS (Apps split into its own
-	// sidebar group). Must match own-menu.ts and UserShell's 'Apps' group.
-	{
-		ID:         "personal-apps",
-		Group:      GroupApps,
-		Label:      "Apps",
-		Path:       "/user/apps",
-		Visibility: VisibilityAlways,
-		Icon:       "apps",
-	},
 	// Online Agents (alpha.5). PEER of Apps (方案 A, 2026-07-16): an agent is a
 	// seat principal exposing a team OAuth VK, not a consuming app. team-logged-in
 	// — agents only exist in a cluster/team org. MUST match own-menu.ts
 	// (ts_drift_test asserts id+path parity).
 	// 2026-07-17: label "My Agents" → "Agents" (sidebar group display-renamed
 	// to "Agents & Apps"). ID unchanged — wire-contract identity.
+	// 2026-07-18 (user decision): Agents listed BEFORE Apps, matching the
+	// group title order ("Agents & Apps"). Keep in sync with own-menu.ts.
 	{
 		ID:         "personal-my-agents",
 		Group:      GroupApps,
@@ -86,6 +73,21 @@ var PersonalMenu = []Entry{
 		Path:       "/user/my-agents",
 		Visibility: VisibilityTeamLoggedIn,
 		Icon:       "my-agents",
+	},
+	// Phase 4 阶段 3 (2026-05-21): Connected Apps. Same shape as the
+	// other personalOnly entries — published here so B's sidebar can
+	// surface a cross-app link back to A's /user/apps page.
+	// /api/user/apps/* lives on A's local-server; B has no own
+	// /user/apps route.
+	// 2026-06-26: Group moved INSIGHTS → APPS (Apps split into its own
+	// sidebar group). Must match own-menu.ts and UserShell's group.
+	{
+		ID:         "personal-apps",
+		Group:      GroupApps,
+		Label:      "Apps",
+		Path:       "/user/apps",
+		Visibility: VisibilityAlways,
+		Icon:       "apps",
 	},
 	// M5 (2026-05-21): degrade-detector Trust Check. Sits in the new
 	// QUALITY group (added 2026-05-21 in types.go). Peers on older
@@ -173,7 +175,12 @@ var personalMenuZhLabels = map[string]string{
 	"personal-usage":            "用量",
 	"personal-cost":             "性能", // Label "Performance"; ID kept for back-compat.
 	"personal-apps":             "应用",
-	"personal-my-agents":        "我的 Agent",
+	// 2026-07-17 rename ("My Agents" → "Agents"): the zh label follows the
+	// same decision — "Agent" is a domain proper noun kept untranslated
+	// (naming dictionary), and the "my" prefix is redundant on the user-side
+	// console. Missing this map while the web-side key was renamed is exactly
+	// how zh consumers of /system/cross-app-menu kept showing the old name.
+	"personal-my-agents":        "Agents",
 	"personal-trust-check":      "置信度检测",
 	"personal-compliance":       "合规审计",
 	"personal-oauth-contribute": "团队OAuth",

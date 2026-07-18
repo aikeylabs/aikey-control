@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useUserAuthStore } from '@/store';
 import { runtimeConfig } from '@/app/config/runtime';
+import { BrandWordmark } from '@/shared/ui/BrandWordmark';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
@@ -594,13 +595,11 @@ export function UserShell() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const breadcrumbTrail = useBreadcrumbTrail();
-  /* Single brand label shared with `runtimeConfig.branding.logoText`
-     (defaults to "AiKey", server may override). Renamed from
-     "AiKey Vault" → "AiKey" 2026-04-22 to match the unified product
-     branding. Hardcoded here rather than read from runtimeConfig so the
-     user shell renders synchronously even if window.__AIKEY_CONFIG__
-     hasn't loaded yet. */
-  const logoText = 'AiKey';
+  /* Brand wordmark: was a hardcoded 'AiKey' text label (renamed from
+     "AiKey Vault" 2026-04-22); replaced 2026-07-18 by the BrandWordmark
+     SVG (i-dot in brand yellow). Still deliberately NOT read from
+     runtimeConfig so the user shell renders synchronously even if
+     window.__AIKEY_CONFIG__ hasn't loaded yet. */
 
   // ── Sidebar collapse state ─────────────────────────────────────────
   //
@@ -994,12 +993,14 @@ export function UserShell() {
       // the new title back via TITLE_TO_GROUP_ALIASES.
       title: 'Agents & Apps',
       items: [
-        { path: '/user/apps', icon: <AppsIcon />, label: 'Apps', originName: 'Connected Apps', personalOnly: true },
         // Online Agents (alpha.5) — peer of Apps (方案 A). Local page (8090);
         // requiresTeamLogin since agents only exist in a cluster/team org.
         // 2026-07-17: label "My Agents" → "Agents" ("My" redundant on the
         // user-side console); originName keeps 'My Agents' for selectors.
+        // 2026-07-18 (user decision): Agents listed BEFORE Apps, matching the
+        // group title order ("Agents & Apps").
         { path: '/user/my-agents', icon: <BotIcon />, label: 'Agents', originName: 'My Agents', personalOnly: true, requiresTeamLogin: true },
+        { path: '/user/apps', icon: <AppsIcon />, label: 'Apps', originName: 'Connected Apps', personalOnly: true },
       ],
     },
     {
@@ -1138,9 +1139,15 @@ export function UserShell() {
                 // read as a faint warmth at the chip's edge rather
                 // than a glow; the inset top 1px white@4% still
                 // provides a specular chip-face highlight.
+                // 2026-07-18: chip colors aligned to the user-provided
+                // brand reference image — YELLOW "AK" + YELLOW outline
+                // (var(--primary)), superseding the 2026-06-06 favicon
+                // cream/amber-700 treatment above. The favicons were
+                // synced to the same yellow on 2026-07-18 (all three
+                // web trees' public/favicon*.svg).
                 background: '#0c0c0e',
-                color: '#fef3c7',
-                border: '1px solid #ca8a04',
+                color: 'var(--primary)',
+                border: '1.5px solid var(--primary)',
                 fontFamily: 'var(--font-display)',
                 fontWeight: 700,
                 fontSize: 13,
@@ -1151,7 +1158,9 @@ export function UserShell() {
             >
               AK
             </div>
-            <span className="nav-brand-text">{logoText}</span>
+            {/* SVG wordmark: i-dot in brand yellow (2026-07-18); logoText
+                here is the fixed 'AiKey' constant (see comment above). */}
+            <BrandWordmark className="nav-brand-text" />
           </div>
         </div>
 

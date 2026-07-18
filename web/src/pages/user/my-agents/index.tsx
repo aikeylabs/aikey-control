@@ -20,6 +20,13 @@ import { Badge } from '@/shared/ui/Badge';
 import { ModalPortal } from '@/shared/ui/ModalShell';
 import { copyText } from '@/shared/utils/clipboard';
 import { formatDate } from '@/shared/utils/datetime-intl';
+// Shared keys-family table skin (same one virtual-keys / team-oauth / vault
+// inject): mono uppercase thead, row rhythm, borders. Scoped under
+// `.vault-page` + `table.vault`, so injecting it is inert until both classes
+// are applied. Reusing it (2026-07-18 user request: align this table header
+// with /user/virtual-keys) instead of hand-copying the values keeps a single
+// source of truth for the keys-page table look.
+import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 
 function sourceBadge(src: MyAgentDTO['source'], t: (k: string) => string) {
   const isApiKey = src.type === 'api_key';
@@ -306,7 +313,8 @@ export default function MyAgentsPage() {
   });
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="vault-page p-6 space-y-6">
+      <style>{KEYS_PAGE_CSS}</style>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-mono font-bold tracking-widest" style={{ color: 'var(--foreground)' }}>{t('myAgents.title')}</h1>
@@ -317,14 +325,19 @@ export default function MyAgentsPage() {
 
       <div className="rounded border overflow-hidden" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}>
         <div className="overflow-x-auto">
-          <table className="w-full whitespace-nowrap">
+          <table className="vault w-full whitespace-nowrap">
             <thead>
               <tr>
-                <th className="px-5 py-3 text-left">{t('myAgents.col.agent')}</th>
-                <th className="px-5 py-3 text-left">{t('myAgents.col.source')}</th>
-                <th className="px-5 py-3 text-left">{t('myAgents.col.status')}</th>
-                <th className="px-5 py-3 text-left">{t('myAgents.col.created')}</th>
-                <th className="px-5 py-3 text-right">{t('myAgents.col.actions')}</th>
+                {/* Padding/align/typography come from KEYS_PAGE_CSS's
+                    `.vault-page table.vault th` (12px 20px, left, mono
+                    uppercase). Actions header stays right-aligned inline —
+                    the shared rule's text-align:left outranks a utility
+                    class, so inline style is the reliable override. */}
+                <th>{t('myAgents.col.agent')}</th>
+                <th>{t('myAgents.col.source')}</th>
+                <th>{t('myAgents.col.status')}</th>
+                <th>{t('myAgents.col.created')}</th>
+                <th style={{ textAlign: 'right' }}>{t('myAgents.col.actions')}</th>
               </tr>
             </thead>
             <tbody className="font-mono text-xs">

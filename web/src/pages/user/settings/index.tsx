@@ -1338,13 +1338,13 @@ function UpstreamProxyCard() {
             ))}
             {/* ② per-account egress — a SEPARATE bottom row, not a node layer: each
                 pool account has its own, set by an admin. Presence only (the spec can
-                embed credentials; the exit IP needs `aikey doctor`'s real dial). It
-                outranks ③④⑤ for those accounts, and ① outranks it. */}
+                embed credentials; the exit IP needs `aikey doctor`'s real dial).
+                2026-07-18: it is ACCOUNT-level and INDEPENDENT — the node upstream (①)
+                no longer overrides it (① only applies to traffic WITHOUT a per-account
+                egress). So an account with an egress is always active. */}
             {(() => {
               const accounts = accountEgress ?? [];
-              const explicitSet = (egress.explicit_url ?? '').trim() !== '';
-              const active = accounts.length > 0 && !explicitSet;
-              const overridden = accounts.length > 0 && explicitSet;
+              const active = accounts.length > 0;
               return (
                 <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}>
                   <div
@@ -1362,9 +1362,6 @@ function UpstreamProxyCard() {
                     </span>
                     {active && (
                       <span style={{ color: '#4ade80', flexShrink: 0 }}>{t('settings.upstreamProxy.layerActive')}</span>
-                    )}
-                    {overridden && (
-                      <span style={{ flexShrink: 0 }}>{t('settings.upstreamProxy.layerOverridden')}</span>
                     )}
                   </div>
                   <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 6, marginBottom: 0 }}>

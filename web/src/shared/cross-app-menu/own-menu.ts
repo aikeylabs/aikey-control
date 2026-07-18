@@ -65,20 +65,6 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
     visibility: 'always',
     icon: 'cost',
   },
-  // Phase 4 阶段 3 (2026-05-21): Apps — surface A's local Connected
-  // Apps list to B's sidebar. /api/user/apps/* lives on A's
-  // local-server; B has no own /user/apps route.
-  // 2026-06-26: Apps moved from INSIGHTS to its own APPS group (split out
-  // of the Cost group into a standalone sidebar group). Must match
-  // personal_menu.go's GroupApps and the new 'Apps' navGroup in UserShell.
-  {
-    id: 'personal-apps',
-    group: 'APPS',
-    label: 'Apps',
-    path: '/user/apps',
-    visibility: 'always',
-    icon: 'apps',
-  },
   // Online Agents (alpha.5). A PEER of Apps (方案 A, 2026-07-16) — an agent is a
   // seat principal that exposes a team OAuth VK, NOT a consuming app, so it's a
   // distinct entry rather than merged into the Apps page. team-logged-in: agents
@@ -87,6 +73,9 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
   // 2026-07-17: label "My Agents" → "Agents" (group header display-renamed
   // to "Agents & Apps"; "My" prefix redundant on the user-side console).
   // id stays 'personal-my-agents' — wire-contract identity never changes.
+  // 2026-07-18 (user decision): Agents listed BEFORE Apps, matching the group
+  // title order ("Agents & Apps"). Keep in sync with UserShell navGroups +
+  // personal_menu.go.
   {
     id: 'personal-my-agents',
     group: 'APPS',
@@ -94,6 +83,20 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
     path: '/user/my-agents',
     visibility: 'team-logged-in',
     icon: 'my-agents',
+  },
+  // Phase 4 阶段 3 (2026-05-21): Apps — surface A's local Connected
+  // Apps list to B's sidebar. /api/user/apps/* lives on A's
+  // local-server; B has no own /user/apps route.
+  // 2026-06-26: Apps moved from INSIGHTS to its own APPS group (split out
+  // of the Cost group into a standalone sidebar group). Must match
+  // personal_menu.go's GroupApps and the 'Agents & Apps' navGroup in UserShell.
+  {
+    id: 'personal-apps',
+    group: 'APPS',
+    label: 'Apps',
+    path: '/user/apps',
+    visibility: 'always',
+    icon: 'apps',
   },
   // M5 (2026-05-21): degrade-detector Trust Check. Belongs to the
   // QUALITY group (added 2026-05-21 in types.ts). Peers on older
