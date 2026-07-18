@@ -77,10 +77,12 @@ var PersonalMenu = []Entry{
 	// seat principal exposing a team OAuth VK, not a consuming app. team-logged-in
 	// — agents only exist in a cluster/team org. MUST match own-menu.ts
 	// (ts_drift_test asserts id+path parity).
+	// 2026-07-17: label "My Agents" → "Agents" (sidebar group display-renamed
+	// to "Agents & Apps"). ID unchanged — wire-contract identity.
 	{
 		ID:         "personal-my-agents",
 		Group:      GroupApps,
-		Label:      "My Agents",
+		Label:      "Agents",
 		Path:       "/user/my-agents",
 		Visibility: VisibilityTeamLoggedIn,
 		Icon:       "my-agents",

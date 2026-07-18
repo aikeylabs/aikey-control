@@ -65,6 +65,79 @@ function CopyField({ label, value, secret = false }: { label: string; value: str
   );
 }
 
+// ── Connection reveal (base_url + VK) — reused by create step-2 AND the list
+//    "Get VK" rotate modal, so the reveal-once surface is defined once. onGetVK
+//    (when set) renders a "get my VK now" button on the vk_pending state — the
+//    member clicks it after adding + logging in a pool account to mint/rotate a
+//    fresh VK without re-creating the agent. ──
+function ConnectionReveal({ agent, onGetVK, gettingVK, onNavigate }: {
+  agent: MyAgentDTO; onGetVK?: () => void; gettingVK?: boolean; onNavigate?: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-4">
+      {agent.base_url_blocked ? (
+        <div className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
+          {t('myAgents.create.baseUrlBlocked')}
+        </div>
+      ) : (
+        <CopyField label={t('myAgents.create.baseUrlLabel')} value={agent.base_url ?? ''} />
+      )}
+      {agent.vk_pending ? (
+        <div className="text-[10px] font-mono px-3 py-2 rounded space-y-2" style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}>
+          <p>{t('myAgents.create.vkPending')}</p>
+          {/* Reuse the canonical add-account + login surface (Team OAuth pool-login)
+              instead of duplicating it here. After adding an account, click "Get my
+              VK" (below, or on the agent row in the list) to mint + reveal it. */}
+          <Link to="/user/team-oauth" onClick={onNavigate} className="inline-block font-bold" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
+            {t('myAgents.create.vkPendingCta')}
+          </Link>
+          {onGetVK && (
+            <div>
+              <button onClick={onGetVK} disabled={gettingVK} className="mt-1 text-[10px] font-mono px-2.5 py-1 rounded border disabled:opacity-40" style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.4)' }}>
+                {gettingVK ? t('myAgents.vk.getting') : t('myAgents.vk.getNow')}
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <CopyField label={t('myAgents.create.vkLabel')} value={agent.vk ?? ''} secret />
+          <p className="text-[10px] font-mono" style={{ color: '#f59e0b' }}>{t('myAgents.create.vkOnce')}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Get / rotate VK modal (list row) — the recovery for a VK whose plaintext was
+//    never captured (empty-pool create) or is lost. Rotating re-mints the token,
+//    so this always yields a fresh usable VK (reveal-once). ──
+function VKRevealModal({ agent, onClose }: { agent: MyAgentDTO; onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <ModalPortal>
+      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={onClose} />
+      <div
+        className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border"
+        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+      >
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('myAgents.vk.title', { name: agent.alias })}</h3>
+          <button onClick={onClose} style={{ color: 'var(--muted-foreground)' }}>✕</button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.vk.hint')}</p>
+          <ConnectionReveal agent={agent} onNavigate={onClose} />
+        </div>
+        <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
+          <button onClick={onClose} className="btn btn-primary text-xs px-6 py-2">{t('myAgents.create.done')}</button>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 // ── Create Agent (two-step: name → connection reveal) ─────────────────────────
 
 function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -74,9 +147,23 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [created, setCreated] = useState<MyAgentDTO | null>(null);
+  const [gettingVK, setGettingVK] = useState(false);
 
   function reset() {
-    setAlias(''); setErr(null); setCreated(null); setSubmitting(false);
+    setAlias(''); setErr(null); setCreated(null); setSubmitting(false); setGettingVK(false);
+  }
+
+  async function getVK() {
+    if (!created) return;
+    setGettingVK(true);
+    try {
+      const r = await userAccountsApi.rotateAgentVK(created.seat_id);
+      setCreated(r); // reveals the VK inline (or stays pending if the pool is still empty)
+    } catch {
+      // surfaced globally
+    } finally {
+      setGettingVK(false);
+    }
   }
   function close() { reset(); onClose(); }
 
@@ -139,29 +226,7 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
               <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
                 {t('myAgents.create.connHint')}
               </p>
-              {created.base_url_blocked ? (
-                <div className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
-                  {t('myAgents.create.baseUrlBlocked')}
-                </div>
-              ) : (
-                <CopyField label={t('myAgents.create.baseUrlLabel')} value={created.base_url ?? ''} />
-              )}
-              {created.vk_pending ? (
-                <div className="text-[10px] font-mono px-3 py-2 rounded space-y-2" style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}>
-                  <p>{t('myAgents.create.vkPending')}</p>
-                  {/* Hand off to the canonical add-account + login surface
-                      (Team OAuth / pool-login) instead of duplicating that flow
-                      here — reuse, not re-implement. */}
-                  <Link to="/user/team-oauth" onClick={close} className="inline-block font-bold" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
-                    {t('myAgents.create.vkPendingCta')}
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  <CopyField label={t('myAgents.create.vkLabel')} value={created.vk ?? ''} secret />
-                  <p className="text-[10px] font-mono" style={{ color: '#f59e0b' }}>{t('myAgents.create.vkOnce')}</p>
-                </>
-              )}
+              <ConnectionReveal agent={created} onNavigate={close} onGetVK={getVK} gettingVK={gettingVK} />
             </div>
             <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
               <button onClick={close} className="btn btn-primary text-xs px-6 py-2">{t('myAgents.create.done')}</button>
@@ -179,6 +244,8 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [loading, setLoading] = useState(false);
+  const [getting, setGetting] = useState(false);
+  const [revealed, setRevealed] = useState<MyAgentDTO | null>(null);
   async function del() {
     setLoading(true);
     try {
@@ -190,15 +257,41 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
       setLoading(false);
     }
   }
+  // Get / rotate the agent's team OAuth VK and reveal it (reveal-once). The list
+  // never carries the VK (hash-only storage), so this is the recovery path for a
+  // VK missed at create or lost. Only meaningful for active agents.
+  async function getVK() {
+    setGetting(true);
+    try {
+      setRevealed(await userAccountsApi.rotateAgentVK(agent.seat_id));
+    } catch {
+      // surfaced globally
+    } finally {
+      setGetting(false);
+    }
+  }
   return (
-    <button
-      onClick={del}
-      disabled={loading}
-      className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
-      style={{ color: '#f97316', borderColor: 'rgba(249,115,22,0.3)', backgroundColor: 'rgba(249,115,22,0.06)' }}
-    >
-      {loading ? '...' : t('myAgents.disable')}
-    </button>
+    <div className="flex items-center justify-end gap-2">
+      {agent.status === 'active' && (
+        <button
+          onClick={getVK}
+          disabled={getting}
+          className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
+          style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.3)', backgroundColor: 'rgba(96,165,250,0.06)' }}
+        >
+          {getting ? '...' : t('myAgents.vk.button')}
+        </button>
+      )}
+      <button
+        onClick={del}
+        disabled={loading}
+        className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
+        style={{ color: '#f97316', borderColor: 'rgba(249,115,22,0.3)', backgroundColor: 'rgba(249,115,22,0.06)' }}
+      >
+        {loading ? '...' : t('myAgents.disable')}
+      </button>
+      {revealed && <VKRevealModal agent={revealed} onClose={() => setRevealed(null)} />}
+    </div>
   );
 }
 

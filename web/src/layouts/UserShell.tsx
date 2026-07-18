@@ -397,7 +397,10 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   // breadcrumb fell back to the raw URL segment ("用户 / my-agents") instead
   // of the localized nav label. Label matches navGroups so tNavLabel resolves
   // the same i18n key (navMyAgents), present in en+zh.
-  'my-agents':    { label: 'My Agents',   originName: 'My Agents' },
+  // 2026-07-17: display rename "My Agents" → "Agents" (group header now
+  // reads "Agents & Apps", so the "My" prefix was redundant). originName
+  // keeps 'My Agents' so data-origin-name selectors stay stable.
+  'my-agents':    { label: 'Agents',      originName: 'My Agents' },
   invites:        { label: 'Invites' },
   'trust-check':  { label: 'Trust Check' },
   compliance:     { label: 'Compliance Audit' },
@@ -454,7 +457,7 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
   'Team Usage': 'navTeamUsage',
   Performance: 'navPerformance',
   Apps: 'navApps',
-  'My Agents': 'navMyAgents',
+  Agents: 'navMyAgents',
   'Trust Check': 'navTrustCheck',
   'Compliance Audit': 'navComplianceAudit',
   Account: 'navAccount',
@@ -469,7 +472,11 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
 const GROUP_TITLE_I18N_KEY: Record<string, string> = {
   Keys: 'groupKeys',
   Cost: 'groupCost',
-  Apps: 'groupApps',
+  // 2026-07-17: group display rename Apps → "Agents & Apps" (the group
+  // header used to duplicate its own "Apps" item's label, and Agents —
+  // per 方案 A, NOT an app — sat under a header that said otherwise).
+  // i18n key stays groupApps; cross-app protocol enum stays APPS.
+  'Agents & Apps': 'groupApps',
   Quality: 'groupQuality',
   Account: 'groupAccount',
 };
@@ -808,6 +815,9 @@ export function UserShell() {
     if (!navGroupTitle) return false;
     const TITLE_TO_GROUP_ALIASES: Record<string, CrossAppMenuGroup> = {
       COST: 'INSIGHTS', // Phase 4 阶段 3 (2026-05-21) display rename
+      // 2026-07-17 display rename Apps → "Agents & Apps"; protocol enum
+      // stays APPS for backwards compat (same pattern as COST above).
+      'AGENTS & APPS': 'APPS',
     };
     const normalized = navGroupTitle.toUpperCase();
     const aliased = TITLE_TO_GROUP_ALIASES[normalized] ?? normalized;
@@ -978,12 +988,18 @@ export function UserShell() {
       // this group by path; a header-less top-level item could not (a
       // group with no title yields no matchesGroup candidates on B).
       // Placed after Quality & Compliance (2026-06-26 user decision).
-      title: 'Apps',
+      // 2026-07-17: group display-renamed Apps → "Agents & Apps" (header
+      // used to duplicate the "Apps" item label, and Agents is NOT an app
+      // per 方案 A). Cross-app group enum stays APPS — matchesGroup maps
+      // the new title back via TITLE_TO_GROUP_ALIASES.
+      title: 'Agents & Apps',
       items: [
         { path: '/user/apps', icon: <AppsIcon />, label: 'Apps', originName: 'Connected Apps', personalOnly: true },
         // Online Agents (alpha.5) — peer of Apps (方案 A). Local page (8090);
         // requiresTeamLogin since agents only exist in a cluster/team org.
-        { path: '/user/my-agents', icon: <BotIcon />, label: 'My Agents', originName: 'My Agents', personalOnly: true, requiresTeamLogin: true },
+        // 2026-07-17: label "My Agents" → "Agents" ("My" redundant on the
+        // user-side console); originName keeps 'My Agents' for selectors.
+        { path: '/user/my-agents', icon: <BotIcon />, label: 'Agents', originName: 'My Agents', personalOnly: true, requiresTeamLogin: true },
       ],
     },
     {

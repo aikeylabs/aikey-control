@@ -116,6 +116,18 @@ export const userAccountsApi = {
     if (isTeamFetchError(res)) throw new Error(`delete agent failed: ${res.kind}`);
   },
 
+  // Rotate / recover an agent's team OAuth VK — re-mints its token and returns the
+  // NEW plaintext ONCE (base_url + vk, same shape as create). The recovery for a VK
+  // whose plaintext was never captured at create (empty pool) or is lost; the DB is
+  // hash-only, so rotation is the only way to reveal a usable VK again. vk_pending
+  // when the pool still has no enabled account.
+  rotateAgentVK: async (seatId: string): Promise<MyAgentDTO> => {
+    const res = await teamPostJSON<MyAgentDTO>(`/accounts/me/agents/${seatId}/vk`, {});
+    if (isTeamWriteError(res)) throw new Error(res.message);
+    if (isTeamFetchError(res)) throw new Error(`rotate agent VK failed: ${res.kind}`);
+    return res;
+  },
+
   myReferrals: async (): Promise<ReferralDTO[]> => {
     const res = await httpClient.get<ReferralDTO[]>('/accounts/me/referrals');
     return res.data;

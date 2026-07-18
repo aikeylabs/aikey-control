@@ -70,13 +70,13 @@
     "navTeamUsage": "Team Usage",
     "navPerformance": "Performance",
     "navApps": "Apps",
-    "navMyAgents": "My Agents",
+    "navMyAgents": "Agents",
     "navTrustCheck": "Trust Check",
     "navAccount": "Account",
     "navInvites": "Invites",
     "groupKeys": "Keys",
     "groupCost": "Cost",
-    "groupApps": "Apps",
+    "groupApps": "Agents & Apps",
     "groupQuality": "Quality & Compliance",
     "groupAccount": "Account",
     "expandSidebar": "Expand sidebar",
@@ -2599,7 +2599,7 @@
     "closeAria": "Close"
   },
   "myAgents": {
-    "title": "MY AGENTS",
+    "title": "AGENTS",
     "subtitle": "Online agents you own",
     "newAgent": "+ New Agent",
     "col": {
@@ -2631,10 +2631,17 @@
       "connHint": "Point your third-party agent's API base at this base_url, using the key below as the Bearer token.",
       "baseUrlBlocked": "base_url is not configured on this deployment. Ask your admin to set the oauth-routing ingress domain.",
       "baseUrlLabel": "BASE URL",
-      "vkPending": "No key yet — your agent pool has no accounts. Add and log in an OAuth account to activate this agent; its key then appears on re-open.",
+      "vkPending": "No key yet — your agent pool has no accounts. Add and log in an OAuth account, then use Get VK (here or on the agent row) to mint and reveal it.",
       "vkPendingCta": "Add & log in accounts in Team OAuth →",
       "vkLabel": "TEAM OAUTH VK (shown once)",
       "vkOnce": "⚠ This key is shown only once. Copy it now — it cannot be retrieved later."
+    },
+    "vk": {
+      "button": "Get VK",
+      "getNow": "Get my VK now",
+      "getting": "Getting...",
+      "title": "VK — {{name}}",
+      "hint": "Shown once — copy it now. Rotating re-mints the token, so any previously copied key stops working."
     }
   }
 }

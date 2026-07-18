@@ -70,13 +70,13 @@
     "navTeamUsage": "团队用量",
     "navPerformance": "性能",
     "navApps": "应用",
-    "navMyAgents": "我的 Agent",
+    "navMyAgents": "Agents",
     "navTrustCheck": "降智检测",
     "navAccount": "账户",
     "navInvites": "邀请码",
     "groupKeys": "密钥",
     "groupCost": "成本",
-    "groupApps": "应用",
+    "groupApps": "Agents 与应用",
     "groupQuality": "质量与合规",
     "groupAccount": "账户",
     "expandSidebar": "展开侧栏",
@@ -2599,7 +2599,7 @@
     "closeAria": "关闭"
   },
   "myAgents": {
-    "title": "我的 AGENT",
+    "title": "AGENTS",
     "subtitle": "你拥有的在线 Agent",
     "newAgent": "+ 新建 Agent",
     "col": {
@@ -2631,10 +2631,17 @@
       "connHint": "把第三方 Agent 的 API base 指向下面的 base_url，并用下面的密钥作为 Bearer token。",
       "baseUrlBlocked": "本部署尚未配置 base_url。请联系管理员设置 oauth-routing ingress 域名。",
       "baseUrlLabel": "BASE URL",
-      "vkPending": "暂无密钥 —— 你的 Agent 账号池还没有账号。添加并登录一个 OAuth 账号来激活这个 Agent；密钥会在重新打开时出现。",
+      "vkPending": "暂无密钥 —— 你的 Agent 账号池还没有账号。添加并登录一个 OAuth 账号后，点「获取 VK」（这里或列表行上）来签发并显示密钥。",
       "vkPendingCta": "去「团队 OAuth」添加并登录账号 →",
       "vkLabel": "团队 OAUTH 虚拟密钥（仅显示一次）",
       "vkOnce": "⚠ 该密钥只显示一次。请立即复制，之后无法再取回。"
+    },
+    "vk": {
+      "button": "获取 VK",
+      "getNow": "立即获取我的 VK",
+      "getting": "获取中…",
+      "title": "VK —— {{name}}",
+      "hint": "仅显示一次，请立即复制。轮换会重新签发令牌，之前复制过的密钥将失效。"
     }
   }
 }

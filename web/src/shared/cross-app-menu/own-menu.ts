@@ -84,10 +84,13 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
   // distinct entry rather than merged into the Apps page. team-logged-in: agents
   // only exist in a cluster/team org (a Personal-only user can't create one), so
   // the entry is hidden until team context, like Team OAuth.
+  // 2026-07-17: label "My Agents" → "Agents" (group header display-renamed
+  // to "Agents & Apps"; "My" prefix redundant on the user-side console).
+  // id stays 'personal-my-agents' — wire-contract identity never changes.
   {
     id: 'personal-my-agents',
     group: 'APPS',
-    label: 'My Agents',
+    label: 'Agents',
     path: '/user/my-agents',
     visibility: 'team-logged-in',
     icon: 'my-agents',
