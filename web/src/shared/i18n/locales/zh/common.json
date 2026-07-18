@@ -2599,6 +2599,11 @@
     "closeAria": "关闭"
   },
   "myAgents": {
+    "cardAll": "全部 Agent",
+    "cardTotal": "共 {{count}} 个",
+    "cardActive": "启用 {{count}} 个",
+    "cardSuspended": "停用 {{count}} 个",
+    "cardRevoked": "已吊销 {{count}} 个",
     "title": "AGENTS",
     "subtitle": "你拥有的在线 Agent",
     "newAgent": "+ 新建 Agent",

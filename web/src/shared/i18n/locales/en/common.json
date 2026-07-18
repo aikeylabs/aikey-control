@@ -2599,6 +2599,11 @@
     "closeAria": "Close"
   },
   "myAgents": {
+    "cardAll": "All agents",
+    "cardTotal": "{{count}} total",
+    "cardActive": "{{count}} active",
+    "cardSuspended": "{{count}} disabled",
+    "cardRevoked": "{{count}} revoked",
     "title": "AGENTS",
     "subtitle": "Online agents you own",
     "newAgent": "+ New Agent",

@@ -312,6 +312,16 @@ export default function MyAgentsPage() {
     queryFn: userAccountsApi.myAgents,
   });
 
+  // Card-header chip counts — same strip the Team Keys card renders above its
+  // thead (2026-07-18 user request: align with /user/virtual-keys). Chip
+  // classes (.chip/.status-dot) come from the shared KEYS_PAGE_CSS skin.
+  const counts = {
+    total: agents?.length ?? 0,
+    active: agents?.filter(a => a.status === 'active').length ?? 0,
+    suspended: agents?.filter(a => a.status === 'suspended').length ?? 0,
+    revoked: agents?.filter(a => a.status === 'revoked').length ?? 0,
+  };
+
   return (
     <div className="vault-page p-6 space-y-6">
       <style>{KEYS_PAGE_CSS}</style>
@@ -323,7 +333,36 @@ export default function MyAgentsPage() {
         <button onClick={() => setCreateOpen(true)} className="btn btn-primary text-xs px-4 py-2">{t('myAgents.newAgent')}</button>
       </div>
 
-      <div className="rounded border overflow-hidden" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}>
+      <section className="card overflow-hidden">
+        {/* Summary strip above the thead — mirrors virtual-keys' CardHeader
+            (label + count chips), so the two tables read as one family. */}
+        <div className="card-header flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+            <span>{t('myAgents.cardAll')}</span>
+            <span className="chip">
+              <span className="status-dot idle" style={{ width: 5, height: 5 }} />
+              {t('myAgents.cardTotal', { count: counts.total })}
+            </span>
+            {counts.active > 0 && (
+              <span className="chip success">
+                <span className="status-dot" style={{ width: 5, height: 5 }} />
+                {t('myAgents.cardActive', { count: counts.active })}
+              </span>
+            )}
+            {counts.suspended > 0 && (
+              <span className="chip warning">
+                <span className="status-dot stale" style={{ width: 5, height: 5 }} />
+                {t('myAgents.cardSuspended', { count: counts.suspended })}
+              </span>
+            )}
+            {counts.revoked > 0 && (
+              <span className="chip danger">
+                <span className="status-dot error" style={{ width: 5, height: 5 }} />
+                {t('myAgents.cardRevoked', { count: counts.revoked })}
+              </span>
+            )}
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="vault w-full whitespace-nowrap">
             <thead>
@@ -366,7 +405,7 @@ export default function MyAgentsPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       <CreateAgentModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
