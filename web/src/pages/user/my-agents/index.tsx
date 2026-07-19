@@ -107,11 +107,36 @@ function ConnectionReveal({ agent, onGetVK, gettingVK, onNavigate }: {
             </div>
           )}
         </div>
-      ) : (
+      ) : agent.vk ? (
         <>
-          <CopyField label={t('myAgents.create.vkLabel')} value={agent.vk ?? ''} secret />
+          <CopyField label={t('myAgents.create.vkLabel')} value={agent.vk} secret />
           <p className="text-[10px] font-mono" style={{ color: '#f59e0b' }}>{t('myAgents.create.vkOnce')}</p>
+          {/* pool_empty (2026-07-18): a VK can exist while the pool has ZERO
+              enabled accounts — every call would 503. Warn ALONGSIDE the token
+              instead of implying the key is usable. */}
+          {agent.pool_empty && (
+            <div className="text-[10px] font-mono px-3 py-2 rounded space-y-1" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
+              <p>{t('myAgents.create.poolEmptyWarn')}</p>
+              <Link to="/user/team-oauth" onClick={onNavigate} className="inline-block font-bold" style={{ color: '#f59e0b', textDecoration: 'underline' }}>
+                {t('myAgents.create.vkPendingCta')}
+              </Link>
+            </div>
+          )}
         </>
+      ) : (
+        /* Reuse-first no-op (2026-07-19): an active VK already exists but its
+           plaintext is unrecoverable (hash-only), so we reveal NOTHING new — only
+           the masked hint so the member can confirm "this is the VK I hold". The
+           old key keeps working; Rotate is the explicit path to a fresh usable one. */
+        <div className="space-y-2">
+          {agent.vk_hint && (
+            <div className="space-y-1">
+              <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.vk.hintLabel')}</label>
+              <code className="block px-3 py-2 text-xs rounded truncate" style={{ background: 'var(--muted)', border: '1px solid var(--border)', color: 'var(--foreground)' }}>{agent.vk_hint}</code>
+            </div>
+          )}
+          <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.vk.existingHint')}</p>
+        </div>
       )}
     </div>
   );
@@ -151,6 +176,10 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [alias, setAlias] = useState('');
+  // Provider choice (2026-07-18, user requirement "新建 Agent 支持选协议"): drives
+  // WHICH per-provider agent pool the server auto-provisions/attaches (R34 one
+  // provider per pool — a claude and a codex agent live in separate pools).
+  const [provider, setProvider] = useState<'anthropic' | 'openai'>('anthropic');
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [created, setCreated] = useState<MyAgentDTO | null>(null);
@@ -164,7 +193,9 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
     if (!created) return;
     setGettingVK(true);
     try {
-      const r = await userAccountsApi.rotateAgentVK(created.seat_id);
+      // ensure (non-destructive): first-issues if the pool now has an account,
+      // else stays pending — never rotates an already-issued VK.
+      const r = await userAccountsApi.getAgentVK(created.seat_id);
       setCreated(r); // reveals the VK inline (or stays pending if the pool is still empty)
     } catch {
       // surfaced globally
@@ -181,8 +212,8 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
     setErr(null);
     try {
       // Omit oauth_group_id → the server attaches the agent to the member's own
-      // per-provider agent pool (auto-provisioned on first agent).
-      const agent = await userAccountsApi.createAgent({ alias: name });
+      // per-provider agent pool (auto-provisioned on first agent of this provider).
+      const agent = await userAccountsApi.createAgent({ alias: name, provider_code: provider });
       qc.invalidateQueries({ queryKey: ['my-agents'] });
       setCreated(agent); // → step 2: reveal base_url + VK
     } catch (e) {
@@ -211,6 +242,23 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
         {!created ? (
           <>
             <div className="px-6 py-5 space-y-3">
+              <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.create.providerLabel')}</label>
+              <div className="flex gap-2">
+                {([['anthropic', 'Claude'], ['openai', 'Codex']] as const).map(([code, label]) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => setProvider(code)}
+                    disabled={submitting}
+                    className="px-3 py-1.5 text-xs font-mono font-bold rounded border"
+                    style={provider === code
+                      ? { borderColor: '#60a5fa', color: '#60a5fa', background: 'rgba(96,165,250,0.08)' }
+                      : { borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.create.nameLabel')}</label>
               <input className="w-full px-3 py-2 text-sm" placeholder="my-research-agent" value={alias} onChange={e => setAlias(e.target.value)} disabled={submitting} />
               <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
@@ -245,13 +293,57 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
   );
 }
 
-// ── Disable button ────────────────────────────────────────────────────────────
+// ── Rotate confirm (destructive) ──────────────────────────────────────────────
+// Rotation is the ONE destructive VK action: it re-mints the token and instantly
+// invalidates the current one. Gated behind an explicit confirm so a member can
+// never lose a working VK by reflex — the reuse-first "Get VK" is non-destructive.
+function RotateConfirmModal({ agent, busy, onConfirm, onClose }: {
+  agent: MyAgentDTO; busy: boolean; onConfirm: () => void; onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <ModalPortal>
+      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={!busy ? onClose : undefined} />
+      <div
+        className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border"
+        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+      >
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('myAgents.vk.rotateConfirm.title')}</h3>
+          <button onClick={onClose} disabled={busy} style={{ color: 'var(--muted-foreground)' }}>✕</button>
+        </div>
+        <div className="px-6 py-5">
+          <div className="text-[11px] font-mono leading-relaxed px-3 py-2 rounded" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
+            {t('myAgents.vk.rotateConfirm.body', { name: agent.alias })}
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
+          <button onClick={onClose} disabled={busy} className="px-4 py-2 text-xs font-mono font-bold rounded border disabled:opacity-40" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+            {t('myAgents.vk.rotateConfirm.cancel')}
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className="text-xs font-mono font-bold px-4 py-2 rounded border disabled:opacity-40"
+            style={{ color: '#f59e0b', borderColor: 'rgba(245,158,11,0.5)', backgroundColor: 'rgba(245,158,11,0.1)' }}
+          >
+            {busy ? t('myAgents.vk.rotating') : t('myAgents.vk.rotateConfirm.confirm')}
+          </button>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
+// ── Row actions ───────────────────────────────────────────────────────────────
 
 function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [getting, setGetting] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [confirmRotate, setConfirmRotate] = useState(false);
   const [revealed, setRevealed] = useState<MyAgentDTO | null>(null);
   async function del() {
     setLoading(true);
@@ -264,30 +356,56 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
       setLoading(false);
     }
   }
-  // Get / rotate the agent's team OAuth VK and reveal it (reveal-once). The list
-  // never carries the VK (hash-only storage), so this is the recovery path for a
-  // VK missed at create or lost. Only meaningful for active agents.
+  // Get VK — NON-destructive (reuse-first). First-issues when the agent has no VK
+  // yet; otherwise a no-op that reveals only the masked hint (plaintext is
+  // hash-only / unrecoverable). Safe to click repeatedly — never invalidates a
+  // VK already in use.
   async function getVK() {
     setGetting(true);
     try {
-      setRevealed(await userAccountsApi.rotateAgentVK(agent.seat_id));
+      setRevealed(await userAccountsApi.getAgentVK(agent.seat_id));
     } catch {
       // surfaced globally
     } finally {
       setGetting(false);
     }
   }
+  // Rotate — DESTRUCTIVE re-mint, only after explicit confirm. Reveals the new
+  // plaintext once and invalidates the old key.
+  async function rotate() {
+    setRotating(true);
+    try {
+      const r = await userAccountsApi.rotateAgentVK(agent.seat_id);
+      setConfirmRotate(false);
+      setRevealed(r);
+      qc.invalidateQueries({ queryKey: ['my-agents'] }); // refresh the list hint
+    } catch {
+      // surfaced globally
+    } finally {
+      setRotating(false);
+    }
+  }
   return (
     <div className="flex items-center justify-end gap-2">
       {agent.status === 'active' && (
-        <button
-          onClick={getVK}
-          disabled={getting}
-          className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
-          style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.3)', backgroundColor: 'rgba(96,165,250,0.06)' }}
-        >
-          {getting ? '...' : t('myAgents.vk.button')}
-        </button>
+        <>
+          <button
+            onClick={getVK}
+            disabled={getting}
+            className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
+            style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.3)', backgroundColor: 'rgba(96,165,250,0.06)' }}
+          >
+            {getting ? '...' : t('myAgents.vk.button')}
+          </button>
+          <button
+            onClick={() => setConfirmRotate(true)}
+            disabled={rotating}
+            className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
+            style={{ color: '#f59e0b', borderColor: 'rgba(245,158,11,0.3)', backgroundColor: 'rgba(245,158,11,0.06)' }}
+          >
+            {t('myAgents.vk.rotate')}
+          </button>
+        </>
       )}
       <button
         onClick={del}
@@ -297,6 +415,9 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
       >
         {loading ? '...' : t('myAgents.disable')}
       </button>
+      {confirmRotate && (
+        <RotateConfirmModal agent={agent} busy={rotating} onConfirm={rotate} onClose={() => setConfirmRotate(false)} />
+      )}
       {revealed && <VKRevealModal agent={revealed} onClose={() => setRevealed(null)} />}
     </div>
   );
@@ -375,19 +496,20 @@ export default function MyAgentsPage() {
                 <th>{t('myAgents.col.agent')}</th>
                 <th>{t('myAgents.col.source')}</th>
                 <th>{t('myAgents.col.status')}</th>
+                <th>{t('myAgents.col.vk')}</th>
                 <th>{t('myAgents.col.created')}</th>
                 <th style={{ textAlign: 'right' }}>{t('myAgents.col.actions')}</th>
               </tr>
             </thead>
             <tbody className="font-mono text-xs">
               {isLoading && (
-                <tr><td colSpan={5} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.loading')}</td></tr>
+                <tr><td colSpan={6} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.loading')}</td></tr>
               )}
               {isError && (
-                <tr><td colSpan={5} className="px-5 py-8 text-center" style={{ color: 'var(--destructive)' }}>{t('myAgents.loadError')}</td></tr>
+                <tr><td colSpan={6} className="px-5 py-8 text-center" style={{ color: 'var(--destructive)' }}>{t('myAgents.loadError')}</td></tr>
               )}
               {agents && agents.length === 0 && (
-                <tr><td colSpan={5} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.empty')}</td></tr>
+                <tr><td colSpan={6} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.empty')}</td></tr>
               )}
               {agents?.map(agent => (
                 <tr key={agent.seat_id}>
@@ -395,6 +517,12 @@ export default function MyAgentsPage() {
                   <td className="px-5 py-4">{sourceBadge(agent.source, t)}</td>
                   <td className="px-5 py-4">
                     <span className={`badge ${agent.status === 'active' ? 'badge-active' : 'badge-neutral'}`}>{agent.status}</span>
+                  </td>
+                  {/* Masked VK hint (2026-07-19 reuse-first): head+tail so the member
+                      can identify which VK this agent holds WITHOUT rotating it. "—"
+                      when no VK yet or the VK predates hints (rotate to populate). */}
+                  <td className="px-5 py-4" style={{ color: agent.vk_hint ? 'var(--soft-foreground)' : 'var(--muted-foreground)' }}>
+                    {agent.vk_hint || t('myAgents.vkHintNone')}
                   </td>
                   <td className="px-5 py-4" style={{ color: 'var(--muted-foreground)' }}>
                     {agent.created_at ? formatDate(agent.created_at) : '—'}

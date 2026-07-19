@@ -1128,6 +1128,18 @@ function UpstreamProxyCard() {
   // proxy). Presence-only by design: the spec may embed credentials, and the exit IP
   // needs a real dial (`aikey doctor`) — so this never probes the network.
   const [accountEgress, setAccountEgress] = useState<string[] | null>(null);
+  // Escape hatch (2026-07-19): opt-in flag that overrides OAuth per-account egress
+  // (②) with the node chain (① env system direct), for self-rescue when an admin's
+  // account egress line is down. Default off = coexist. Node-local, hot-applied.
+  const [override, setOverride] = useState(false);
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  // Team-context gate (2026-07-19): the ② per-account egress block AND the escape
+  // hatch are OAuth-POOL concepts — meaningless for a personal-only user who has
+  // no pool accounts. Show them ONLY after the user has logged into a team (master).
+  // Signal = a non-empty team URL from the local-server (`/system/team-url`), the
+  // same "am I a team member" discriminator the cross-app menu uses (NOT authMode,
+  // per the gateway-local-bypass rule). Empty / not-wired → personal → hidden.
+  const [teamLoggedIn, setTeamLoggedIn] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1150,6 +1162,16 @@ function UpstreamProxyCard() {
         /* proxy not running — non-fatal; the field stays empty */
       }
       try {
+        // Team-context gate: non-empty team_url = logged into a team (master).
+        const res = await fetch('/system/team-url', { credentials: 'same-origin' });
+        if (res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { team_url?: string };
+          if (!cancelled) setTeamLoggedIn(Boolean((data.team_url ?? '').trim()));
+        }
+      } catch {
+        /* not wired → personal → the ② block + escape hatch stay hidden */
+      }
+      try {
         const res = await fetch('/api/user/system/egress-selfcheck', { credentials: 'same-origin' });
         if (!res.ok) return; // not wired (no pool) — the ② row falls back to "none"
         const data = (await res.json().catch(() => ({}))) as { paths?: { label?: string }[] };
@@ -1159,11 +1181,39 @@ function UpstreamProxyCard() {
       } catch {
         /* proxy not running — non-fatal; the ② row shows "none" */
       }
+      try {
+        const res = await fetch('/api/user/system/oauth-egress-override', { credentials: 'same-origin' });
+        if (!res.ok) return; // not wired (older build) — the checkbox stays off/hidden-effect
+        const data = (await res.json().catch(() => ({}))) as { enabled?: boolean };
+        if (!cancelled) setOverride(Boolean(data.enabled));
+      } catch {
+        /* proxy not running — non-fatal; the checkbox stays off */
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, [save.kind]); // re-read after a successful save so the effective layer refreshes
+
+  async function onToggleOverride(next: boolean) {
+    setOverrideSaving(true);
+    // Optimistic: reflect the intent immediately; revert on failure so the
+    // checkbox never lies about what the node is actually doing.
+    setOverride(next);
+    try {
+      const res = await fetch('/api/user/system/oauth-egress-override', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (!res.ok) setOverride(!next);
+    } catch {
+      setOverride(!next);
+    } finally {
+      setOverrideSaving(false);
+    }
+  }
 
   const trimmed = urlInput.trim();
   const changed = trimmed !== currentURL.trim();
@@ -1341,8 +1391,10 @@ function UpstreamProxyCard() {
                 embed credentials; the exit IP needs `aikey doctor`'s real dial).
                 2026-07-18: it is ACCOUNT-level and INDEPENDENT — the node upstream (①)
                 no longer overrides it (① only applies to traffic WITHOUT a per-account
-                egress). So an account with an egress is always active. */}
-            {(() => {
+                egress). So an account with an egress is always active.
+                2026-07-19: this whole block (② row + escape hatch) is TEAM-ONLY — a
+                personal-only user has no pool accounts, so it's hidden until team login. */}
+            {teamLoggedIn && (() => {
               const accounts = accountEgress ?? [];
               const active = accounts.length > 0;
               return (
@@ -1367,6 +1419,32 @@ function UpstreamProxyCard() {
                   <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 6, marginBottom: 0 }}>
                     {t('settings.upstreamProxy.accountEgressNote')}
                   </p>
+                  {/* Escape hatch (2026-07-19): opt-in override of ② with the node
+                      chain — self-rescue when the admin's account egress line is
+                      down. Default off. Warning: while on, all OAuth accounts share
+                      this node's exit IP (anti-ban off). Placed under the ② row
+                      because it is precisely "override ②". */}
+                  <label
+                    style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 10, cursor: 'pointer' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={override}
+                      disabled={overrideSaving}
+                      onChange={(e) => void onToggleOverride(e.target.checked)}
+                      style={{ marginTop: 2, flexShrink: 0 }}
+                    />
+                    <span style={{ fontSize: 12 }}>
+                      <span style={{ color: 'var(--foreground)' }}>
+                        {t('settings.upstreamProxy.overrideLabel')}
+                      </span>
+                      <span
+                        style={{ display: 'block', fontSize: 11, color: 'var(--warning, #f97316)', marginTop: 3 }}
+                      >
+                        {t('settings.upstreamProxy.overrideWarning')}
+                      </span>
+                    </span>
+                  </label>
                 </div>
               );
             })()}
@@ -1384,6 +1462,10 @@ function UpstreamProxyCard() {
         <>
           <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 6 }}>
             {t('settings.upstreamProxy.multiNote')}
+            {/* The pool-egress coexistence clause is a TEAM concept (personal users
+                have no per-account egress) — appended only for team members so a
+                personal user never sees "账号出口代理" here (2026-07-19). */}
+            {teamLoggedIn && ' ' + t('settings.upstreamProxy.multiNoteTeamCoexist')}
           </p>
           {/* Anti-ban footgun for fallback/url-test: members must converge on ONE
               exit, else the exit IP flips whenever the group switches. */}

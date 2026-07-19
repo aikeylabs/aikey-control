@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useUserAuthStore } from '@/store';
 import { runtimeConfig } from '@/app/config/runtime';
-import { BrandWordmark } from '@/shared/ui/BrandWordmark';
+import { BrandWordmark, BrandMark } from '@/shared/ui/BrandWordmark';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
@@ -1109,58 +1109,18 @@ export function UserShell() {
               fontFamily: 'var(--font-display)',
             }}
           >
-            <div
-              className="nav-brand-mark w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0"
-              style={{
-                // Favicon-aligned treatment (2026-06-06): the previous
-                // dim-amber chip (faint amber fill + 22% border + pure
-                // amber text) read soft against the dark sidebar. The
-                // browser-tab favicon (public/favicon.svg) is the
-                // brand's most-seen letterform — a solid dark square +
-                // amber-700 stroke + warm cream "AK". Aligning the
-                // sidebar chip with that treatment gives the brand a
-                // single recognisable letterform across favicon /
-                // sidebar / printed material, and the inset darker
-                // fill + crisp stroke read as a small engraved chip
-                // rather than a tinted patch — more premium texture.
-                //
-                // Geometry: rx 10→8 to match the favicon's 16/64≈25%
-                // rounding ratio at the 32px scale.
-                // Fill: solid #0c0c0e sits ~1 step darker than the
-                // sidebar zinc-900, giving the chip a subtle inset
-                // depth without any explicit drop shadow.
-                // Stroke: solid #ca8a04 amber-700 — the favicon's
-                // stroke color.
-                // Text: #fef3c7 amber-100 cream — the favicon's text
-                // color. Warmer than #facc15 amber-400, reads as
-                // polished rather than electric.
-                // Halo: amber outer glow 10% (2026-06-06 v2 — was
-                // 18%, user feedback "外发光弱一些"). Subtle enough to
-                // read as a faint warmth at the chip's edge rather
-                // than a glow; the inset top 1px white@4% still
-                // provides a specular chip-face highlight.
-                // 2026-07-18: chip colors aligned to the user-provided
-                // brand reference image — YELLOW "AK" + YELLOW outline
-                // (var(--primary)), superseding the 2026-06-06 favicon
-                // cream/amber-700 treatment above. The favicons were
-                // synced to the same yellow on 2026-07-18 (all three
-                // web trees' public/favicon*.svg).
-                background: '#0c0c0e',
-                color: 'var(--primary)',
-                border: '1.5px solid var(--primary)',
-                fontFamily: 'var(--font-display)',
-                fontWeight: 700,
-                fontSize: 13,
-                letterSpacing: '-0.02em',
-                boxShadow: '0 0 10px rgba(250, 204, 21, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
-              }}
-              aria-hidden="true"
-            >
-              AK
-            </div>
+            {/* Brand chip — 2026-07-18 rev 7: consolidated onto the shared
+                BrandMark (was an inline "AK" text chip). "AK" is now a static
+                vector (no web font → no FOUT flash); `nav-brand-mark` keeps
+                the collapsed-sidebar hook, size 28 = the prior in-shell chip
+                ("登录后的 logo 稍微小一些"). */}
+            <BrandMark className="nav-brand-mark" size={28} />
             {/* SVG wordmark: i-dot in brand yellow (2026-07-18); logoText
-                here is the fixed 'AiKey' constant (see comment above). */}
-            <BrandWordmark className="nav-brand-text" />
+                here is the fixed 'AiKey' constant (see comment above).
+                tagline={false} (2026-07-18 user request): the "AI RUNTIME
+                GOVERNANCE" line shows only on login screens, not inside
+                the logged-in shells. */}
+            <BrandWordmark className="nav-brand-text" tagline={false} scale={1} />
           </div>
         </div>
 

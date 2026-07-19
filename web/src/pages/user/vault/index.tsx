@@ -551,19 +551,6 @@ function formatExpiresIn(unix: number | null | undefined, t: TFunction): string 
   return t('vault.expiresInDays', { count: Math.floor(diff / 86400) });
 }
 
-/** Canonical brand color for a provider, matching the 3.1 template's
- *  `--chart-*` palette. Unknown / unmapped providers fall through to a
- *  neutral gray rather than inventing new colors (keeps the chip system
- *  disciplined the way import-page chips are). */
-function providerBrandColor(provider: string | null | undefined): string {
-  const p = (provider ?? '').toLowerCase();
-  if (p.includes('anthropic') || p.includes('claude')) return 'var(--chart-anthropic)';
-  if (p.includes('openai')) return 'var(--chart-openai)';
-  if (p.includes('codex')) return 'var(--chart-codex)';
-  if (p.includes('kimi') || p.includes('moonshot')) return 'var(--chart-kimi)';
-  if (p.includes('gemini') || p.includes('google')) return 'var(--chart-gemini)';
-  return 'var(--chart-neutral)';
-}
 
 /** Short display name for the Provider column. Strips "_oauth" / "_api"
  *  suffixes and lowercases. Returns the raw per-credential provider (so
@@ -7553,5 +7540,6 @@ function PinIcon(p: { className?: string; style?: React.CSSProperties }) { retur
 // `.vault-page` on its outer wrapper and rendering the same <style>.
 // Source of truth: pages/user/_shared/keys-page-css.ts.
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
+import { providerBrandColor } from '../_shared/provider-brand';
 import { VAULT_PAGE_SKIN_V1 } from '../_shared/vault-page-skin';
 const VAULT_CSS = KEYS_PAGE_CSS;

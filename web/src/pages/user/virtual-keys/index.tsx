@@ -40,6 +40,7 @@ import { copyText } from '@/shared/utils/clipboard';
 import { mapUseError } from '@/shared/utils/mapUseError';
 import { formatDate } from '@/shared/utils/datetime-intl';
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
+import { providerBrandColor } from '../_shared/provider-brand';
 import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl, buildCrossAppUrl, isTeamGatewayActive, getCrossAppLinkBase } from '@/shared/cross-app-menu';
 
 // Phase 3B R23 revised (2026-05-11): on B (team server) the Team Keys
@@ -118,15 +119,6 @@ function keyProviderFamilies(k: UserKeyDTO): string[] {
   return [keyProviderFamily(k)];
 }
 
-function providerBrandColor(provider: string | null | undefined): string {
-  const p = (provider ?? '').toLowerCase();
-  if (p.includes('anthropic') || p.includes('claude')) return 'var(--chart-anthropic)';
-  if (p.includes('openai')) return 'var(--chart-openai)';
-  if (p.includes('codex')) return 'var(--chart-codex)';
-  if (p.includes('kimi') || p.includes('moonshot')) return 'var(--chart-kimi)';
-  if (p.includes('gemini') || p.includes('google')) return 'var(--chart-gemini)';
-  return 'var(--chart-neutral)';
-}
 
 /** key_status (CLI side) → vault page chip semantics. Pure helper —
  *  the i18n translator is threaded in by callers (this isn't a React

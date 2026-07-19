@@ -2270,7 +2270,7 @@
       "urlLabel": "PROXY URL",
       "statusHint": "http / https / socks5, with host:port. Empty = follow OS system proxy, or direct when none.",
       "statusHintMulti": "A single address (http / https / socks5), a socks5 chain (socks5://a,socks5://b), a protocol config (ss / vmess / trojan), or a config with proxy-groups (fallback / url-test / load-balance). Empty = follow the OS system proxy; direct if there is none.",
-      "multiNote": "Besides a single address, this node accepts a socks5 multi-hop chain, an ss / vmess / trojan node config, or a fallback / url-test / load-balance group (formats shown in the field below). It applies to traffic WITHOUT a per-account egress (API keys / VKs); accounts that have a per-account egress keep using theirs (both coexist).",
+      "multiNote": "Besides a single URL, this also accepts a socks5 multi-hop chain, ss / vmess / trojan node configs, and fallback / url-test / load-balance groups (format shown in the box below).",
       "placeholderMulti": "socks5://127.0.0.1:1080\nsocks5://front:1080,socks5://exit:1080   ← multi-hop chain (last hop = exit)\n{\"proxies\":[…]}                          ← ss/vmess/trojan node; chain a front via dialer-proxy\n{\"proxies\":[…],\"proxy-groups\":[{\"type\":\"fallback\",…}]}  ← multi-front failover to one exit",
       "internalBypassNote": "Internal destinations still go direct: loopback and any host in NO_PROXY bypass this proxy, so a self-hosted provider on an internal IP is reachable without routing through it.",
       "effectiveLabel": "Currently effective",
@@ -2300,7 +2300,10 @@
       "saveDisabledHint": "Run Test connectivity first — Save unlocks once the proxy reaches the providers (or clear the field to go direct).",
       "layerAccount": "② Account egress proxy",
       "layerOverridden": "overridden by ①",
-      "groupExitNote": "With fallback / url-test / load-balance, keep every member converging on the same exit node (members should differ only in how they reach it) so the exit IP stays constant; if members exit through different nodes, the exit IP changes when the group switches."
+      "groupExitNote": "With fallback / url-test / load-balance, keep every member converging on the same exit node (members should differ only in how they reach it) so the exit IP stays constant; if members exit through different nodes, the exit IP changes when the group switches.",
+      "overrideLabel": "Emergency: let this node’s upstream take over OAuth account traffic (override dedicated egress)",
+      "overrideWarning": "Turn on only temporarily, when an admin-configured dedicated egress line is unstable and requests fail. While on, every OAuth pool account on this node routes through the node upstream above (or direct if none) and shares one exit IP — single-IP-per-account anti-ban is off on this node. Turn it back off once the line recovers.",
+      "multiNoteTeamCoexist": "It serves traffic WITHOUT a per-account egress (API KEY / VK); accounts that have their own account egress keep using it (they coexist)."
     },
     "masterPassword": {
       "title": "Master Password",
@@ -2505,7 +2508,6 @@
     "colStatus": "Status",
     "empty": "No accounts yet.",
     "noRoutedAccount": "You are not currently routed to a pool account.",
-    "currentBadge": "Current",
     "reveal": "Show",
     "hide": "Hide",
     "copyEmail": "Copy email",
@@ -2564,7 +2566,12 @@
     "providerCodex": "Codex (OpenAI / ChatGPT)",
     "addNoGroupsForProvider": "No pool for the selected provider — you've only joined pools of a different provider. Ask an admin to create one.",
     "addGroupsLoadFailed": "Couldn't load your pools (server error). Retry, or ask an admin to check the team server.",
-    "addClose": "Close"
+    "addClose": "Close",
+    "ownerPoolTitle": "My agent pool · {{alias}} ({{provider}}) — pre-login every account",
+    "ownerPoolEmpty": "No accounts in this pool yet — use Add Account and pick this pool",
+    "colProvider": "Provider",
+    "egressChip": "Egress",
+    "egressChipHint": "This account reaches the upstream through an admin-configured dedicated egress line (its own exit IP)."
   },
   "hookBanner": {
     "rcPowershell": "your PowerShell $PROFILE",
@@ -2611,9 +2618,11 @@
       "agent": "AGENT",
       "source": "SOURCE",
       "status": "STATUS",
+      "vk": "VK",
       "created": "CREATED",
       "actions": "ACTIONS"
     },
+    "vkHintNone": "—",
     "loading": "LOADING...",
     "loadError": "Failed to load agents.",
     "empty": "No agents yet. Create one to expose a team OAuth VK to a third-party agent.",
@@ -2639,14 +2648,26 @@
       "vkPending": "No key yet — your agent pool has no accounts. Add and log in an OAuth account, then use Get VK (here or on the agent row) to mint and reveal it.",
       "vkPendingCta": "Add & log in accounts in Team OAuth →",
       "vkLabel": "TEAM OAUTH VK (shown once)",
-      "vkOnce": "⚠ This key is shown only once. Copy it now — it cannot be retrieved later."
+      "vkOnce": "⚠ This key is shown only once. Copy it now — it cannot be retrieved later.",
+      "providerLabel": "Protocol (decides which account pool this agent uses)",
+      "poolEmptyWarn": "Note: this agent's account pool has no usable account yet — calls will fail. Add and sign in an account under Team OAuth first."
     },
     "vk": {
       "button": "Get VK",
       "getNow": "Get my VK now",
       "getting": "Getting...",
       "title": "VK — {{name}}",
-      "hint": "Shown once — copy it now. Rotating re-mints the token, so any previously copied key stops working."
+      "hint": "Shown once — copy it now. If you already have a VK, getting it again does NOT change it. To mint a brand-new key, use Rotate (the old one stops working).",
+      "rotate": "Rotate",
+      "rotating": "Rotating...",
+      "hintLabel": "VK (masked)",
+      "existingHint": "You already have an active VK for this agent (masked above). The full key can't be retrieved — if you lost it, Rotate to mint a new one. The old key keeps working until you rotate.",
+      "rotateConfirm": {
+        "title": "Rotate this VK?",
+        "body": "Rotating re-mints the key and immediately invalidates the current one. Any third-party agent using the old key must be updated with the new key.",
+        "confirm": "Rotate",
+        "cancel": "Cancel"
+      }
     }
   }
 }

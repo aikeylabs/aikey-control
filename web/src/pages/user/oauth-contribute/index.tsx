@@ -41,6 +41,7 @@ import { copyText } from '@/shared/utils/clipboard';
 // classes below render unstyled (the page looked "messy"). Same opt-in as the
 // virtual-keys / vault pages.
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
+import { providerBrandColor } from '../_shared/provider-brand';
 
 // Per-provider pool sign-in profile — ONE source for everything that varies by
 // provider on this page (R34 codex pools; extend for kimi with one row). The
@@ -73,6 +74,18 @@ function loginProfile(providerCode?: string): ProviderLoginProfile {
 /** Providers a member can self-contribute accounts for — derived from the login
  * table (matches the server-side pool-supported gate). value = provider CODE. */
 const ADDABLE_PROVIDERS = PROVIDER_LOGIN.map((p) => ({ code: p.code, labelKey: p.labelKey }));
+
+/** Display label key for an account's provider (2026-07-19 user request: the
+ * account list must SHOW which provider/protocol each pool account serves —
+ * multi-pool members otherwise can't tell a Claude slot from a Codex slot).
+ * Reuses the SAME labels as the Add form / master 账号池 page (名词一致:
+ * "Claude (Anthropic)" / "Codex (OpenAI / ChatGPT)"). Unlike loginProfile()
+ * this does NOT fall back to claude for a missing code — a wrong flow default
+ * is safe, a wrong LABEL is misinformation — unknown/absent codes render no
+ * chip at the call site. */
+function providerLabelKey(providerCode?: string): string | undefined {
+  return PROVIDER_LOGIN.find((p) => p.code === providerCode)?.labelKey;
+}
 
 /** status → chip class + status-dot modifier, matching the local web's chip CSS
  * (success / warning / danger). Mirrors virtual-keys' statusMeta. */
@@ -155,6 +168,15 @@ export default function OAuthContributePage() {
   const [expandedCred, setExpandedCred] = useState<string | null>(
     () => searchParams.get('expand'),
   );
+  // Owner agent pools (2026-07-18): the caller's own pools with their FULL account
+  // composition — every account gets sign-in controls (an unattended agent may be
+  // routed to any of them, so all must be pre-logged-in; the "routed-only" gate
+  // below is a company-pool rule and does not apply to pools the caller owns).
+  const ownerGroupsQ = useQuery({ queryKey: ['my-oauth-groups'], queryFn: fetchMyGroups });
+  const ownerPools: MyOauthGroup[] = useMemo(() => {
+    const gs = Array.isArray(ownerGroupsQ.data) ? ownerGroupsQ.data : [];
+    return gs.filter((g) => g.is_owner);
+  }, [ownerGroupsQ.data]);
   // The deep-linked id, frozen at mount (a plain ref, NOT re-read from the URL):
   // used only for the one-time scroll-into-view of the auto-expanded row.
   const deepLinkCred = useRef(searchParams.get('expand')).current;
@@ -328,6 +350,65 @@ export default function OAuthContributePage() {
             </div>
           )}
 
+          {/* Owner agent pools — FULL composition, every account sign-in-able
+              (2026-07-18): one card per owned pool, provider-partitioned by
+              construction (R34 one-provider-per-group). */}
+          {ownerPools.map((g) => (
+            <section key={g.oauth_group_id} className="card overflow-hidden">
+              <div className="card-header flex items-center gap-2 px-4 py-3">
+                <span
+                  className="text-[10px] font-mono uppercase tracking-wider"
+                  style={{ color: 'var(--muted-foreground)' }}
+                >
+                  {t('oauthContribute.ownerPoolTitle', { alias: g.alias, provider: g.provider_code || 'anthropic' })}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                {(g.accounts?.length ?? 0) === 0 ? (
+                  <EmptyState message={t('oauthContribute.ownerPoolEmpty')} />
+                ) : (
+                  <table className="vault">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '34%' }}>{t('oauthContribute.colEmail')}</th>
+                        <th style={{ width: '18%' }}>{t('oauthContribute.colPoolGroup')}</th>
+                        <th style={{ width: '16%' }}>{t('oauthContribute.colLastLogin')}</th>
+                        <th style={{ width: '12%' }}>{t('oauthContribute.colStatus')}</th>
+                        <th style={{ width: '20%', textAlign: 'right' }} aria-hidden="true" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(g.accounts ?? []).map((oa) => (
+                        <AccountRow
+                          key={'own-' + oa.credential_id}
+                          account={{
+                            credential_id: oa.credential_id,
+                            identity: oa.identity,
+                            status: oa.login_status,
+                            last_login_at: 0,
+                            expires_at: 0,
+                            // Owner ⇒ sign-in controls on EVERY account (the server's
+                            // member-or-owner predicate authorizes reveal + login).
+                            is_routed: true,
+                            oauth_group_id: g.oauth_group_id,
+                            group_alias: g.alias,
+                            provider_code: oa.provider_code,
+                            has_egress: oa.has_egress,
+                          }}
+                          expanded={expandedCred === oa.credential_id}
+                          scrollOnMount={deepLinkCred === oa.credential_id}
+                          onToggle={() =>
+                            setExpandedCred((c) => (c === oa.credential_id ? null : oa.credential_id))
+                          }
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
+          ))}
+
           <section className="card overflow-hidden">
             <div className="card-header flex items-center gap-2 px-4 py-3">
               <span
@@ -468,7 +549,47 @@ function AccountRow({
         <td>
           <div className="alias-main" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ wordBreak: 'break-all' }}>{account.identity || account.credential_id}</span>
-            {isRouted && <span className="chip success">{t('oauthContribute.currentBadge')}</span>}
+            {/* Provider short-brand chip ("claude" / "codex") after the email —
+                user decisions 2026-07-19: chip not column; short slug not full
+                label; beside the EMAIL not the pool name. Full label stays in
+                the tooltip. No chip for absent/unknown provider_code (older
+                server) — a wrong label misleads (no claude fallback here).
+                The former 当前 chip was removed the same round: the routed-row
+                highlight (green bg + left accent) + the hint line above the
+                table already carry that state, and owner-pool rows (is_routed
+                on every row) wrongly showed 当前 on all of them. */}
+            {account.provider_code && providerLabelKey(account.provider_code) && (
+              // Same chip system as the vault page's provider group chip
+              // (user decision 2026-07-19 四轮: 与保管库一致): shared
+              // `.gr-chip` class + providerBrandColor brand background,
+              // white lowercase label. brokerSlug ('claude'/'codex') maps
+              // to the right brand color by substring.
+              <span
+                className="gr-chip"
+                style={{ background: providerBrandColor(loginProfile(account.provider_code).brokerSlug) }}
+                title={t(providerLabelKey(account.provider_code)!)}
+              >
+                {loginProfile(account.provider_code).brokerSlug}
+              </span>
+            )}
+            {/* Egress presence chip (2026-07-19): this account exits through a
+                configured egress line (admin per-account override OR inherited
+                group default, R46 effective egress). PRESENCE ONLY — the URL is
+                never sent to the member plane (may embed proxy creds). Neutral
+                chip (not brand-colored): it's a routing FACT, not a provider.
+                Why members see it: it explains "my traffic leaves via a
+                dedicated line", which also seeds the mental model for the
+                planned settings-upstream escape hatch (self-rescue when that
+                line is down) — the hint text stays fact-only until that ships. */}
+            {account.has_egress && (
+              <span
+                className="chip"
+                style={{ padding: '1px 6px', fontSize: 9.5 }}
+                title={t('oauthContribute.egressChipHint')}
+              >
+                {t('oauthContribute.egressChip')}
+              </span>
+            )}
           </div>
         </td>
         {/* Pool group name (group_alias): which OAuth pool this account belongs to.

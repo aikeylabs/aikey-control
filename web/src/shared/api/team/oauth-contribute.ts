@@ -23,6 +23,26 @@ export interface MyOauthGroup {
    * the group dropdown to the picked provider (前置防呆). "" for older servers →
    * the frontend shows all groups (the AttachAccount gate still enforces). */
   provider_code?: string;
+  /** 2026-07-18 agent-pool owner access (additive): true for the caller's OWN
+   * agent pools (listed by ownership — the parent seat is not a member row).
+   * Owner pools also carry their full account composition so the page can render
+   * "pre-login every account" (an unattended agent may be routed to any of them). */
+  is_owner?: boolean;
+  accounts?: OwnerPoolAccount[];
+}
+
+/** One account of the caller's OWN agent pool (owner view; no secrets). */
+export interface OwnerPoolAccount {
+  credential_id: string;
+  identity: string;
+  provider_code: string;
+  enabled: boolean;
+  /** logged_in | needs_login | auth_failed | revoked */
+  login_status: string;
+  /** whether this account exits through a configured egress line (own override
+   * OR inherited group default, R46). Presence only — the raw URL never reaches
+   * the member plane. Omitted by older servers → no chip. */
+  has_egress?: boolean;
 }
 
 /** fetchMyGroups lists the groups the member has joined (add-account dropdown). */
@@ -80,6 +100,10 @@ export interface MyPoolAccount {
    * pools): claude = paste-code, codex = local-callback polling. Omitted by older
    * servers → the page falls back to the claude flow. */
   provider_code?: string;
+  /** whether this account exits through a configured egress line (own override
+   * OR inherited group default, R46). Presence only — the raw URL never reaches
+   * the member plane. Omitted by older servers → no chip. */
+  has_egress?: boolean;
 }
 
 /**

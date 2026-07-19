@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { runtimeConfig } from '@/app/config/runtime';
 import { copyText } from '@/shared/utils/clipboard';
+import { BrandLockup } from '@/shared/ui/BrandWordmark';
 
 const REFERRER_KEY = 'aikey-referrer';
 const REFERRER_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -67,16 +68,12 @@ export default function UserLoginPage() {
 
       {/* Header */}
       <div className="p-8 pb-6 text-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.01)' }}>
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <div
-            className="w-10 h-10 rounded flex items-center justify-center"
-            style={{ border: '1px solid rgba(250, 204, 21,0.3)', backgroundColor: 'rgba(250, 204, 21,0.1)', boxShadow: '0 0 15px rgba(250, 204, 21,0.15)' }}
-          >
-            <KeyIcon />
-          </div>
-          <h1 className="text-xl font-mono font-bold tracking-[0.2em]" style={{ color: 'var(--foreground)' }}>
-            AIKEY <span style={{ color: 'var(--primary)' }}>USER</span>
-          </h1>
+        {/* 2026-07-18 (user request): standard brand lockup (AK chip +
+            wordmark + tagline), same treatment as the sidebar brand —
+            replaces the KeyIcon box + "AIKEY USER" mono heading. The
+            user/master designation lives in the subtitle below. */}
+        <div className="flex items-center justify-center mb-4">
+          <BrandLockup />
         </div>
         <p className="text-[10px] font-mono tracking-[0.15em]" style={{ color: 'var(--muted-foreground)' }}>
           {t('login.subtitle')}
@@ -267,9 +264,8 @@ function CopyBtn({ text, copied, onCopy }: { text: string; copied: boolean; onCo
 }
 
 /* ── Icons ── */
-function KeyIcon() {
-  return <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg>;
-}
+// KeyIcon removed 2026-07-18: the header now renders the shared BrandLockup
+// (AK chip + wordmark) instead of the key glyph box.
 function MailIcon() {
   return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>;
 }
