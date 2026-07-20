@@ -25,9 +25,13 @@ import {
   fetchRoutedCredential,
   fetchMyGroups,
   addOauthAccount,
+  fetchAccountEgress,
+  setAccountEgress,
+  saveAccountExitIP,
   type MyPoolAccount,
   type RoutedCredential,
   type MyOauthGroup,
+  type MemberEgressView,
 } from '@/shared/api/team/oauth-contribute';
 import {
   isTeamFetchError,
@@ -85,6 +89,33 @@ const ADDABLE_PROVIDERS = PROVIDER_LOGIN.map((p) => ({ code: p.code, labelKey: p
  * chip at the call site. */
 function providerLabelKey(providerCode?: string): string | undefined {
   return PROVIDER_LOGIN.find((p) => p.code === providerCode)?.labelKey;
+}
+
+// exitIPEcho is the browser-side exit-IP echo (2026-07-19, P1=A). ping0.cc sends
+// no CORS header + returns HTML → a browser fetch can't read it; api.ipify.org is
+// CORS-enabled and returns a bare/JSON IP. The IP is objective, so it compares
+// cleanly against the master baseline (which was captured server-side, ping0.cc).
+// Overridable for tests / air-gapped deployments.
+const EXIT_IP_ECHO = 'https://api.ipify.org?format=json';
+
+// fetchBrowserExitIP measures THIS BROWSER's current public exit IP — i.e. the IP
+// the OAuth LOGIN (opened in this same browser) will come from. If the member has
+// configured this Chrome profile to route through the account's egress (P2 guide),
+// it equals the account egress exit IP; otherwise it's the member's raw IP — which
+// is exactly the divergence the login-IP self-check is meant to catch.
+async function fetchBrowserExitIP(): Promise<string> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const res = await fetch(EXIT_IP_ECHO, { signal: ctrl.signal, credentials: 'omit' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json().catch(() => ({}))) as { ip?: string };
+    const ip = (data.ip ?? '').trim();
+    if (!ip) throw new Error('no ip in echo response');
+    return ip;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** status → chip class + status-dot modifier, matching the local web's chip CSS
@@ -688,6 +719,93 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   // device_code flow would be its own branch).
   const pollFlow = profile.flow === 'auth_code';
 
+  // ── egress management + exit-IP self-check (2026-07-19, P3/P4/P5) ──
+  // egressView: account-own editor state + resolved effective config + baseline.
+  // The latest M1 decision lets both pool types view/copy the effective config;
+  // only owner pools receive the account-own value as editor prefill.
+  const egressQ = useQuery({
+    queryKey: ['account-egress', account.credential_id],
+    queryFn: () => fetchAccountEgress(account.credential_id),
+  });
+  const egressView: MemberEgressView | undefined =
+    egressQ.data && !isTeamFetchError(egressQ.data) ? (egressQ.data as MemberEgressView) : undefined;
+  const [egressInput, setEgressInput] = useState('');
+  const [egressDirty, setEgressDirty] = useState(false);
+  const [egressChangedSinceTest, setEgressChangedSinceTest] = useState(false);
+  const [egressConfigOpen, setEgressConfigOpen] = useState(false);
+  const effectiveEgress = (egressView?.effective_egress_url ?? '').trim();
+  // Seed the editor with the owner's own value once loaded. Company members view
+  // the effective config separately and type/paste an explicit account override.
+  const ownEgress = egressView?.egress_proxy_url ?? '';
+  const [lastSeededOwn, setLastSeededOwn] = useState<string | null>(null);
+  if (egressView && !egressDirty && lastSeededOwn !== ownEgress) {
+    setLastSeededOwn(ownEgress);
+    setEgressInput(ownEgress);
+  }
+  const egressMut = useMutation({
+    mutationFn: (url: string) => setAccountEgress(account.credential_id, url),
+    onSuccess: (res) => {
+      if (isTeamFetchError(res) || (res && typeof res === 'object' && 'kind' in res)) {
+        setErr(t('oauthContribute.egressSaveFailed'));
+        return;
+      }
+      setErr('');
+      setEgressDirty(false);
+      // Config changed → the old baseline is stale; force a re-test before login (req 5).
+      setEgressChangedSinceTest(true);
+      setIpTested(false);
+      egressQ.refetch();
+    },
+  });
+
+  // Exit-IP self-check state. ipTested gates login (req 4); currentIP vs baseline
+  // (egressView.last_exit_ip) drives the mismatch warning.
+  const [ipTested, setIpTested] = useState(false);
+  const [ipTesting, setIpTesting] = useState(false);
+  const [currentIP, setCurrentIP] = useState('');
+  const [ipErr, setIpErr] = useState('');
+  const baselineIP = (egressView?.last_exit_ip ?? '').trim();
+  const ipMismatch = ipTested && !!currentIP && !!baselineIP && currentIP !== baselineIP;
+  const noBaseline = ipTested && !!currentIP && !baselineIP;
+
+  async function onTestExitIP() {
+    setIpTesting(true);
+    setIpErr('');
+    try {
+      const ip = await fetchBrowserExitIP();
+      setCurrentIP(ip);
+      setIpTested(true);
+    } catch (e) {
+      setIpErr(e instanceof Error ? e.message : String(e));
+      setIpTested(false);
+    } finally {
+      setIpTesting(false);
+    }
+  }
+
+  const saveBaselineMut = useMutation({
+    mutationFn: () => saveAccountExitIP(account.credential_id, currentIP),
+    onSuccess: (res) => {
+      if (isTeamFetchError(res) || (res && typeof res === 'object' && 'kind' in res)) {
+        setIpErr(t('oauthContribute.baselineSaveFailed'));
+        return;
+      }
+      setEgressChangedSinceTest(false);
+      egressQ.refetch(); // baseline now == currentIP → mismatch clears
+    },
+  });
+
+  // Login gate confirm dialog (req 4): a mismatched exit IP turns the login button
+  // red; clicking it opens this confirm instead of logging in directly.
+  const [loginConfirmOpen, setLoginConfirmOpen] = useState(false);
+  function onLoginClick() {
+    if (ipMismatch) {
+      setLoginConfirmOpen(true);
+      return;
+    }
+    startMut.mutate();
+  }
+
   const startMut = useMutation({
     mutationFn: () => poolAuthorizeURL(profile.brokerSlug, account.credential_id),
     onSuccess: (res) => {
@@ -791,46 +909,152 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       className="px-4 py-4 space-y-4"
       style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid var(--border)' }}
     >
-      {/* Password row */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span
-          className="text-[10px] font-mono uppercase tracking-wider"
-          style={{ color: 'var(--muted-foreground)', minWidth: 64 }}
-        >
-          {t('oauthContribute.colEmail')}
-        </span>
-        <span className="font-mono text-[12px]" style={{ color: 'var(--foreground)' }}>
-          {revealed && credVal ? credVal.login_email : account.identity}
-        </span>
-        <CopyBtn
-          value={revealed && credVal ? credVal.login_email : account.identity}
-          label={t('oauthContribute.copyEmail')}
-        />
-        <span className="font-mono text-[12px]" style={{ color: 'var(--foreground)' }}>
-          {revealed ? (credVal ? credVal.password : '••••••') : '••••••••'}
-        </span>
-        {/* Password copy appears only once revealed (empty value → CopyBtn renders nothing). */}
-        <CopyBtn
-          value={revealed && credVal ? credVal.password : ''}
-          label={t('oauthContribute.copyPassword')}
-        />
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={() => setRevealed((v) => !v)}
-          title={revealed ? t('oauthContribute.hide') : t('oauthContribute.reveal')}
-        >
-          {revealed ? <EyeOffIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
-        </button>
+      {/* Step 1: egress config + exit-IP self-check. Both pool types can view/copy
+          the resolved config; edits remain account-level overrides. */}
+      <div
+        className="rounded px-3 py-3 space-y-2"
+        style={{ border: '1px solid var(--border)', background: 'rgba(0,0,0,0.15)' }}
+      >
+        <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full" style={{ color: 'var(--primary)', border: '1px solid var(--primary)' }}>1</span>
+          {t('oauthContribute.egressSectionTitle')}
+        </div>
+        {/* The scope chip names the active source. View opens the potentially long
+            socks5 chain or mihomo fragment in a copy-friendly modal. */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', minWidth: 64 }}>
+            {t('oauthContribute.egressLabel')}
+          </span>
+          <span className="chip" style={{ padding: '1px 6px', fontSize: 9.5 }}>
+            {egressView?.scope === 'overridden'
+              ? t('oauthContribute.egressOverridden')
+              : t('oauthContribute.egressInherited')}
+          </span>
+          {effectiveEgress && (
+            <button type="button" className="row-use-btn" onClick={() => setEgressConfigOpen(true)}>
+              {t('oauthContribute.viewEgressConfig')}
+            </button>
+          )}
+          <input
+            type="text"
+            className="px-2 py-1 text-[11px] font-mono flex-1"
+            style={{ minWidth: 260 }}
+            value={egressInput}
+            onChange={(e) => {
+              setEgressInput(e.target.value);
+              setEgressDirty(true);
+            }}
+            placeholder={
+              egressView?.is_owner
+                ? t('oauthContribute.egressPlaceholderOwner')
+                : t('oauthContribute.egressPlaceholderCompany')
+            }
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            className="row-use-btn"
+            onClick={() => egressMut.mutate(egressInput.trim())}
+            disabled={egressMut.isPending || !egressDirty}
+          >
+            {egressMut.isPending ? t('oauthContribute.submitting') : t('oauthContribute.egressSave')}
+          </button>
+        </div>
+        {/* baseline + test */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', minWidth: 64 }}>
+            {t('oauthContribute.exitIpLabel')}
+          </span>
+          <span className="text-[11px] font-mono" style={{ color: 'var(--foreground)' }}>
+            {baselineIP
+              ? t('oauthContribute.baselineIs', { ip: baselineIP })
+              : t('oauthContribute.baselineNone')}
+          </span>
+          <button
+            type="button"
+            className="row-use-btn"
+            onClick={() => void onTestExitIP()}
+            disabled={ipTesting}
+          >
+            {ipTesting ? t('oauthContribute.testing') : t('oauthContribute.testExitIp')}
+          </button>
+          {ipTested && currentIP && (
+            <span
+              className="text-[11px] font-mono"
+              style={{ color: ipMismatch ? 'var(--warning, #f97316)' : '#4ade80' }}
+            >
+              {t('oauthContribute.currentExitIp', { ip: currentIP })}
+              {ipMismatch ? ` — ${t('oauthContribute.exitIpMismatch')}` : ''}
+            </span>
+          )}
+          {(noBaseline || egressChangedSinceTest) && ipTested && currentIP && (
+            <button
+              type="button"
+              className="row-use-btn"
+              onClick={() => saveBaselineMut.mutate()}
+              disabled={saveBaselineMut.isPending}
+            >
+              {t('oauthContribute.saveBaseline')}
+            </button>
+          )}
+        </div>
+        {ipErr && <p className="text-[11px]" style={{ color: '#fca5a5' }}>{t('oauthContribute.exitIpTestFailed')}: {ipErr}</p>}
+        <p className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>
+          {t('oauthContribute.egressGuideNote')}
+        </p>
       </div>
+
+      {/* Step 2: account credentials + sign-in. The first step's browser exit-IP
+          test remains the hard gate for the login action. */}
+      <div
+        className="rounded px-3 py-3 space-y-3"
+        style={{ border: '1px solid var(--border)', background: 'rgba(0,0,0,0.15)' }}
+      >
+        <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full" style={{ color: 'var(--primary)', border: '1px solid var(--primary)' }}>2</span>
+          {t('oauthContribute.loginSectionTitle')}
+        </div>
+
+        {/* Password row */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <span
+            className="text-[10px] font-mono uppercase tracking-wider"
+            style={{ color: 'var(--muted-foreground)', minWidth: 64 }}
+          >
+            {t('oauthContribute.colEmail')}
+          </span>
+          <span className="font-mono text-[12px]" style={{ color: 'var(--foreground)' }}>
+            {revealed && credVal ? credVal.login_email : account.identity}
+          </span>
+          <CopyBtn value={revealed && credVal ? credVal.login_email : account.identity} label={t('oauthContribute.copyEmail')} />
+          <span className="font-mono text-[12px]" style={{ color: 'var(--foreground)' }}>
+            {revealed ? (credVal ? credVal.password : '••••••') : '••••••••'}
+          </span>
+          <CopyBtn value={revealed && credVal ? credVal.password : ''} label={t('oauthContribute.copyPassword')} />
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setRevealed((v) => !v)}
+            title={revealed ? t('oauthContribute.hide') : t('oauthContribute.reveal')}
+          >
+            {revealed ? <EyeOffIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
+          </button>
+        </div>
 
       {/* Sign-in flow */}
       <div className="flex items-center gap-3 flex-wrap">
+        {!ipTested && (
+          <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+            {t('oauthContribute.testBeforeLogin')}
+          </span>
+        )}
         <button
           type="button"
           className="row-use-btn"
-          onClick={() => startMut.mutate()}
-          disabled={startMut.isPending}
+          onClick={onLoginClick}
+          disabled={startMut.isPending || !ipTested}
+          style={ipMismatch ? { color: '#fca5a5', borderColor: 'var(--destructive, #ef4444)' } : undefined}
+          title={ipMismatch ? t('oauthContribute.loginMismatchTitle') : undefined}
         >
           <ZapIcon className="w-3 h-3" />
           {t('oauthContribute.startSignIn')}
@@ -921,6 +1145,96 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         <span aria-hidden="true">→</span>
       </a>
       {err && <p className="text-[11px]" style={{ color: '#fca5a5' }}>{err}</p>}
+      </div>
+
+      {egressConfigOpen && effectiveEgress && (
+        <ModalPortal scopeClassName="vault-page">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setEgressConfigOpen(false)}
+          >
+            <div
+              className="card w-[640px] max-w-[92vw] p-5 space-y-4"
+              style={{ background: 'var(--surface-1)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold font-mono" style={{ color: 'var(--display-foreground)' }}>
+                    {t('oauthContribute.egressConfigTitle')}
+                  </div>
+                  <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                    {egressView?.scope === 'overridden'
+                      ? t('oauthContribute.egressConfigOverriddenHint')
+                      : t('oauthContribute.egressConfigInheritedHint')}
+                  </div>
+                </div>
+                <button type="button" className="icon-btn" onClick={() => setEgressConfigOpen(false)} aria-label={t('oauthContribute.close')}>
+                  <XIcon className="w-4 h-4" />
+                </button>
+              </div>
+              <pre
+                className="text-[11px] font-mono whitespace-pre-wrap break-all max-h-[55vh] overflow-auto rounded p-3"
+                style={{ color: 'var(--foreground)', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}
+              >
+                {effectiveEgress}
+              </pre>
+              <div className="flex items-center justify-end gap-2">
+                <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{t('oauthContribute.copyEgressConfig')}</span>
+                <CopyBtn value={effectiveEgress} label={t('oauthContribute.copyEgressConfig')} />
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {/* Login-gate confirm (req 4): exit IP ≠ baseline → logging in would register
+          this account from a different IP than it normally uses (login IP ≠ usage
+          IP = a ban signal). Force an explicit confirm before opening the login. */}
+      {loginConfirmOpen && (
+        <ModalPortal scopeClassName="vault-page">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setLoginConfirmOpen(false)}
+          >
+          <div
+            className="rounded p-5 space-y-4"
+            style={{ background: 'var(--surface-1)', border: '1px solid var(--destructive, #ef4444)', maxWidth: 460 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-[13px] font-bold" style={{ color: 'var(--destructive, #ef4444)' }}>
+              {t('oauthContribute.loginMismatchTitle')}
+            </div>
+            <p className="text-[12px]" style={{ color: 'var(--foreground)' }}>
+              {t('oauthContribute.loginMismatchBody', { current: currentIP, baseline: baselineIP })}
+            </p>
+            <div className="flex items-center gap-3 justify-end">
+              <button
+                type="button"
+                className="text-[12px]"
+                style={{ color: 'var(--muted-foreground)' }}
+                onClick={() => setLoginConfirmOpen(false)}
+              >
+                {t('oauthContribute.cancel')}
+              </button>
+              <button
+                type="button"
+                className="row-use-btn"
+                style={{ color: '#fca5a5', borderColor: 'var(--destructive, #ef4444)' }}
+                onClick={() => {
+                  setLoginConfirmOpen(false);
+                  startMut.mutate();
+                }}
+              >
+                {t('oauthContribute.loginMismatchConfirm')}
+              </button>
+            </div>
+          </div>
+          </div>
+        </ModalPortal>
+      )}
     </div>
   );
 }

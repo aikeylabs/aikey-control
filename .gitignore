@@ -2,6 +2,12 @@
 service/bin/
 web/dist/
 web/node_modules/
+# tsc byproducts of the vite.config.ts project reference (tsconfig.node.json is
+# `composite: true`, which forces emit — cannot be disabled without breaking the
+# project reference). Vite consumes vite.config.ts directly; these are unused.
+web/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
 
 # Go
 *.test
