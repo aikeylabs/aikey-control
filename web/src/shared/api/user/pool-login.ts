@@ -9,6 +9,9 @@
 export interface PoolAuthorizeStart {
   session_id: string;
   authorize_url: string;
+  provider_code: string;
+  flow: 'setup_token' | 'auth_code';
+  expected_identity?: string;
 }
 
 /** PoolLoginError mirrors the relay's {"error":{code,message}} envelope. */
@@ -41,9 +44,10 @@ export function isPoolLoginError(v: unknown): v is PoolLoginError {
   return typeof v === 'object' && v !== null && 'code' in v && 'message' in v;
 }
 
-/** Start the pool sign-in for a specific routed account → {session_id, authorize_url}. */
-export function poolAuthorizeURL(provider: string, credentialID: string) {
-  return postPool<PoolAuthorizeStart>('authorize-url', { provider, credential_id: credentialID });
+/** Start sign-in for one credential. Provider + flow are resolved by master and
+ * bound server-side; the browser never chooses or defaults the provider model. */
+export function poolAuthorizeURL(credentialID: string) {
+  return postPool<PoolAuthorizeStart>('authorize-url', { credential_id: credentialID });
 }
 
 /**
@@ -55,7 +59,14 @@ export function poolAuthorizeURL(provider: string, credentialID: string) {
  *     (status:"ok"). Idempotent per session, so re-sending the same code is safe.
  */
 export function poolSubmitCode(sessionID: string, code: string, confirm = false) {
-  return postPool<{ status: string; identity?: string }>('submit-code', {
+  return postPool<{
+    status: string;
+    identity?: string;
+    expected_identity?: string;
+    provider_code?: string;
+    sync_status?: 'ok' | 'pending';
+    sync_error?: string;
+  }>('submit-code', {
     session_id: sessionID,
     code,
     confirm,

@@ -152,16 +152,19 @@ var zhMessages = map[string]string{
 	CodeBizBindNotDelivered:     "绑定已存在，但无法下发至代理",
 
 	// BIZ — Login Session / OAuth
-	CodeBizLoginSessionNotFound:   "登录会话 {{id}} 不存在",
-	CodeBizLoginSessionExpired:    "登录会话已过期，请重新运行 aikey login",
-	CodeBizLoginSessionDenied:     "登录会话已被拒绝",
-	CodeBizLoginResendCooldown:    "请等待 {{retry_after_seconds}} 秒后再请求新的邮件",
-	CodeBizLoginSessionTerminated: "该登录会话已结束，请重新运行 `aikey account login` 开始新的会话",
-	CodeBizLoginTokenInvalid:      "登录令牌无效或与会话不匹配",
-	CodeBizLoginTokenAlreadyUsed:  "登录令牌已被使用",
-	CodeBizJoinTokenInvalid:       "加入令牌无效、已撤销或已过期",
-	CodeBizRefreshTokenInvalid:    "刷新令牌无效或已过期，请重新运行 aikey login",
-	CodeBizRefreshTokenRevoked:    "刷新令牌已被吊销，请重新运行 aikey login",
+	CodeBizLoginSessionNotFound:         "登录会话 {{id}} 不存在",
+	CodeBizLoginSessionExpired:          "登录会话已过期，请重新运行 aikey login",
+	CodeBizLoginSessionDenied:           "登录会话已被拒绝",
+	CodeBizLoginResendCooldown:          "请等待 {{retry_after_seconds}} 秒后再请求新的邮件",
+	CodeBizLoginSessionTerminated:       "该登录会话已结束，请重新运行 `aikey account login` 开始新的会话",
+	CodeBizLoginTokenInvalid:            "登录令牌无效或与会话不匹配",
+	CodeBizLoginTokenAlreadyUsed:        "登录令牌已被使用",
+	CodeBizJoinTokenInvalid:             "加入令牌无效、已撤销或已过期",
+	CodeBizRefreshTokenInvalid:          "刷新令牌无效或已过期，请重新运行 aikey login",
+	CodeBizRefreshTokenRevoked:          "刷新令牌已被吊销，请重新运行 aikey login",
+	CodeBizOauthLoginBindingChanged:     "登录期间账号与供应商绑定已变化，请刷新账号列表后重新登录",
+	CodeBizOauthLoginContextUnavailable: "该账号的登录上下文不完整，请刷新账号列表或联系管理员",
+	CodeBizOauthRoutedAccountAmbiguous:  "当前存在多个账号池路由，旧版未指定账号的请求无法安全选择；请刷新页面或升级客户端后重试",
 
 	// BIZ — Member SSO
 	CodeBizSSOProviderDisabled: "该 SSO 登录方式未启用",
@@ -361,6 +364,22 @@ const (
 	// login credential (RW7 GET /accounts/me/group-routed-credential) but the admin
 	// has not stored a login email/password for that account yet. 404.
 	CodeBizOauthLoginCredNotProvisioned = "BIZ_OAUTH_LOGIN_CRED_NOT_PROVISIONED"
+	// CodeBizOauthLoginBindingChanged: the immutable credential/provider binding
+	// captured when a local OAuth login session started no longer matches the
+	// credential at write-back time. The exchanged token is intentionally not
+	// written under a different provider model; the proxy keeps the session so the
+	// member can refresh/retry without silently corrupting account attribution. 409.
+	CodeBizOauthLoginBindingChanged = "BIZ_OAUTH_LOGIN_BINDING_CHANGED"
+	// CodeBizOauthLoginContextUnavailable: the target credential is authorized but
+	// lacks a complete enabled group/provider binding, so a provider login cannot
+	// be initialized deterministically. This is configuration/state, not an empty
+	// account list and not an upstream outage. 409.
+	CodeBizOauthLoginContextUnavailable = "BIZ_OAUTH_LOGIN_CONTEXT_UNAVAILABLE"
+	// CodeBizOauthRoutedAccountAmbiguous: a legacy Pull omitted credential_id
+	// while the caller has routes in multiple pools. Picking an arbitrary map row
+	// could reveal the wrong account password, so current clients must send the
+	// explicit credential selected by the route/account panel. 409.
+	CodeBizOauthRoutedAccountAmbiguous = "BIZ_OAUTH_ROUTED_ACCOUNT_AMBIGUOUS"
 
 	// DATA — client input validation
 	CodeDataInvalidBody  = "DATA_INVALID_BODY"
@@ -587,6 +606,30 @@ func BizOauthMemberTokenForbidden() *DomainError {
 func BizOauthLoginCredNotProvisioned() *DomainError {
 	return &DomainError{Code: CodeBizOauthLoginCredNotProvisioned,
 		Message: "no login credential has been provisioned for this account"}
+}
+
+// BizOauthLoginBindingChanged reports a stale or inconsistent OAuth login
+// session binding. expected/actual are canonical provider codes, never secrets.
+func BizOauthLoginBindingChanged(expectedProvider, actualProvider, expectedGroup, actualGroup, expectedAccount, actualAccount string) *DomainError {
+	return &DomainError{Code: CodeBizOauthLoginBindingChanged,
+		Message: "OAuth account binding changed while sign-in was in progress; refresh the account list and retry sign-in",
+		Meta: map[string]any{
+			"expected_provider": expectedProvider, "actual_provider": actualProvider,
+			"expected_group_id": expectedGroup, "actual_group_id": actualGroup,
+			"expected_account_id": expectedAccount, "actual_account_id": actualAccount,
+		}}
+}
+
+func BizOauthLoginContextUnavailable(credentialID string) *DomainError {
+	return &DomainError{Code: CodeBizOauthLoginContextUnavailable,
+		Message: "OAuth login context is incomplete for this account; refresh the account list or contact an administrator",
+		Meta:    map[string]any{"credential_id": credentialID}}
+}
+
+func BizOauthRoutedAccountAmbiguous(count int) *DomainError {
+	return &DomainError{Code: CodeBizOauthRoutedAccountAmbiguous,
+		Message: "multiple OAuth pool routes are active; credential_id is required so the server does not reveal an arbitrary account",
+		Meta:    map[string]any{"routed_count": count}}
 }
 
 // BizBindTargetInvalid — a binding's target shape is invalid (must be exactly one

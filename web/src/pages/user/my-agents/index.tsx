@@ -38,6 +38,106 @@ function sourceBadge(src: MyAgentDTO['source'], t: (k: string) => string) {
   );
 }
 
+function readinessStatus(agent: MyAgentDTO): 'ready' | 'no_login' | 'degraded' {
+  // Compatibility with a pre-readiness master: preserve the old pool_empty
+  // warning and otherwise avoid claiming ready without server evidence.
+  return agent.pool_readiness || (agent.pool_empty ? 'no_login' : 'degraded');
+}
+
+function readinessMessageKey(agent: MyAgentDTO): string {
+  if (agent.pool_readiness_reason === 'read_failed' || agent.pool_readiness_reason === 'source_unavailable') {
+    return 'myAgents.readiness.readFailedDetail';
+  }
+  if (agent.pool_readiness_reason === 'pool_disabled') return 'myAgents.readiness.disabledDetail';
+  if ((agent.pool_accounts_total ?? 0) === 0) return 'myAgents.readiness.emptyDetail';
+  if (readinessStatus(agent) === 'no_login') return 'myAgents.readiness.noLoginDetail';
+  if (readinessStatus(agent) === 'degraded') return 'myAgents.readiness.degradedDetail';
+  return 'myAgents.readiness.readyDetail';
+}
+
+function readinessLabel(status: 'ready' | 'no_login' | 'degraded', t: (key: string) => string): string {
+  if (status === 'ready') return t('myAgents.readiness.ready');
+  if (status === 'no_login') return t('myAgents.readiness.no_login');
+  return t('myAgents.readiness.degraded');
+}
+
+function PoolReadinessBadge({ agent }: { agent: MyAgentDTO }) {
+  const { t } = useTranslation();
+  const status = readinessStatus(agent);
+  const color = status === 'ready' ? '#4ade80' : status === 'no_login' ? '#f59e0b' : '#fb923c';
+  const bg = status === 'ready' ? 'rgba(74,222,128,0.07)' : status === 'no_login' ? 'rgba(245,158,11,0.08)' : 'rgba(251,146,60,0.08)';
+  const symbol = status === 'ready' ? '✓' : status === 'no_login' ? '!' : '△';
+  return (
+    <div className="space-y-1" title={t(readinessMessageKey(agent), { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}>
+      <span
+        className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold"
+        style={{ color, background: bg, border: `1px solid ${color}55` }}
+      >
+        <span aria-hidden="true">{symbol}</span>
+        {readinessLabel(status, t)}
+      </span>
+      <div className="text-[9px]" style={{ color: 'var(--muted-foreground)' }}>
+        {t('myAgents.readiness.count', { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}
+      </div>
+    </div>
+  );
+}
+
+function PoolReadinessAlert({ agent }: { agent: MyAgentDTO }) {
+  const { t } = useTranslation();
+  const status = readinessStatus(agent);
+  if (status === 'ready') return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="text-[10px] font-mono px-3 py-2 rounded space-y-1"
+      style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', color: '#f59e0b' }}
+    >
+      <p>
+        <strong>{readinessLabel(status, t)}：</strong>{' '}
+        {t(readinessMessageKey(agent), { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}
+      </p>
+      <Link to="/user/team-oauth" className="inline-block font-bold" style={{ color: '#f59e0b', textDecoration: 'underline' }}>
+        {t('myAgents.create.vkPendingCta')}
+      </Link>
+    </div>
+  );
+}
+
+function SelfCheckRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-2 text-[10px] font-mono">
+      <span aria-hidden="true" style={{ color: ok ? '#4ade80' : '#f59e0b' }}>{ok ? '✓' : '!'}</span>
+      <div>
+        <div className="font-bold" style={{ color: ok ? '#4ade80' : '#f59e0b' }}>{label}</div>
+        <div style={{ color: 'var(--muted-foreground)' }}>{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function ConnectionSelfCheck({ agent }: { agent: MyAgentDTO }) {
+  const { t } = useTranslation();
+  const baseReady = !agent.base_url_blocked && !!agent.base_url;
+  const vkReady = !agent.vk_pending && !!(agent.vk || agent.vk_hint);
+  const poolReady = readinessStatus(agent) === 'ready';
+  return (
+    <div className="rounded px-3 py-3 space-y-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
+      <div className="text-[10px] font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
+        {t('myAgents.create.selfCheckTitle')}
+      </div>
+      <SelfCheckRow ok={baseReady} label={t('myAgents.create.selfCheckBase')} detail={baseReady ? t('myAgents.create.selfCheckPassed') : t('myAgents.create.baseUrlBlocked')} />
+      <SelfCheckRow ok={vkReady} label={t('myAgents.create.selfCheckVK')} detail={vkReady ? t('myAgents.create.selfCheckPassed') : t('myAgents.create.selfCheckVKPending')} />
+      <SelfCheckRow
+        ok={poolReady}
+        label={t('myAgents.create.selfCheckPool')}
+        detail={t(readinessMessageKey(agent), { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}
+      />
+    </div>
+  );
+}
+
 // ── Copyable connection field (base_url / VK) with reveal-once eye ─────────────
 
 function CopyField({ label, value, secret = false }: { label: string; value: string; secret?: boolean }) {
@@ -111,17 +211,6 @@ function ConnectionReveal({ agent, onGetVK, gettingVK, onNavigate }: {
         <>
           <CopyField label={t('myAgents.create.vkLabel')} value={agent.vk} secret />
           <p className="text-[10px] font-mono" style={{ color: '#f59e0b' }}>{t('myAgents.create.vkOnce')}</p>
-          {/* pool_empty (2026-07-18): a VK can exist while the pool has ZERO
-              enabled accounts — every call would 503. Warn ALONGSIDE the token
-              instead of implying the key is usable. */}
-          {agent.pool_empty && (
-            <div className="text-[10px] font-mono px-3 py-2 rounded space-y-1" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
-              <p>{t('myAgents.create.poolEmptyWarn')}</p>
-              <Link to="/user/team-oauth" onClick={onNavigate} className="inline-block font-bold" style={{ color: '#f59e0b', textDecoration: 'underline' }}>
-                {t('myAgents.create.vkPendingCta')}
-              </Link>
-            </div>
-          )}
         </>
       ) : (
         /* Reuse-first no-op (2026-07-19): an active VK already exists but its
@@ -138,6 +227,10 @@ function ConnectionReveal({ agent, onGetVK, gettingVK, onNavigate }: {
           <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.vk.existingHint')}</p>
         </div>
       )}
+      {/* A minted VK does not imply the source pool can serve. Keep the
+          availability warning beside the connection material; login remains
+          non-blocking and is repaired on the canonical Team OAuth page. */}
+      {!agent.vk_pending && <PoolReadinessAlert agent={agent} />}
     </div>
   );
 }
@@ -172,7 +265,7 @@ function VKRevealModal({ agent, onClose }: { agent: MyAgentDTO; onClose: () => v
 
 // ── Create Agent (two-step: name → connection reveal) ─────────────────────────
 
-function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: () => void; agents: MyAgentDTO[] }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [alias, setAlias] = useState('');
@@ -184,6 +277,9 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [err, setErr] = useState<string | null>(null);
   const [created, setCreated] = useState<MyAgentDTO | null>(null);
   const [gettingVK, setGettingVK] = useState(false);
+  const existingProviderPool = agents.find((agent) =>
+    agent.source.owner_pool && (agent.source.provider_code || 'anthropic') === provider,
+  );
 
   function reset() {
     setAlias(''); setErr(null); setCreated(null); setSubmitting(false); setGettingVK(false);
@@ -196,9 +292,11 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
       // ensure (non-destructive): first-issues if the pool now has an account,
       // else stays pending — never rotates an already-issued VK.
       const r = await userAccountsApi.getAgentVK(created.seat_id);
+      setErr(null);
       setCreated(r); // reveals the VK inline (or stays pending if the pool is still empty)
-    } catch {
-      // surfaced globally
+      qc.invalidateQueries({ queryKey: ['my-agents'] });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : t('myAgents.create.getVKFailed'));
     } finally {
       setGettingVK(false);
     }
@@ -218,7 +316,7 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
       setCreated(agent); // → step 2: reveal base_url + VK
     } catch (e) {
       const anyE = e as { response?: { data?: { message?: string; error?: string } } };
-      setErr(anyE.response?.data?.message || anyE.response?.data?.error || t('myAgents.create.failed'));
+      setErr(anyE.response?.data?.message || anyE.response?.data?.error || (e instanceof Error ? e.message : t('myAgents.create.failed')));
     } finally {
       setSubmitting(false);
     }
@@ -259,13 +357,40 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
                   </button>
                 ))}
               </div>
+              <div
+                role="status"
+                className="rounded px-3 py-2 space-y-1"
+                style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}
+              >
+                <div className="text-[10px] font-mono font-bold" style={{ color: 'var(--foreground)' }}>
+                  {t('myAgents.create.preflightTitle')}
+                </div>
+                {existingProviderPool ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                      {t(readinessMessageKey(existingProviderPool), {
+                        ready: existingProviderPool.pool_accounts_ready ?? 0,
+                        total: existingProviderPool.pool_accounts_total ?? 0,
+                      })}
+                    </p>
+                    <PoolReadinessBadge agent={existingProviderPool} />
+                  </div>
+                ) : (
+                  <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                    {t('myAgents.create.preflightNewPool')}
+                  </p>
+                )}
+                <p className="text-[9px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                  {t('myAgents.create.preflightNonBlocking')}
+                </p>
+              </div>
               <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.create.nameLabel')}</label>
               <input className="w-full px-3 py-2 text-sm" placeholder="my-research-agent" value={alias} onChange={e => setAlias(e.target.value)} disabled={submitting} />
               <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
                 {t('myAgents.create.hint')}
               </p>
               {err && (
-                <div className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>{err}</div>
+                <div role="alert" aria-live="assertive" className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>{err}</div>
               )}
             </div>
             <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
@@ -282,6 +407,7 @@ function CreateAgentModal({ open, onClose }: { open: boolean; onClose: () => voi
                 {t('myAgents.create.connHint')}
               </p>
               <ConnectionReveal agent={created} onNavigate={close} onGetVK={getVK} gettingVK={gettingVK} />
+              <ConnectionSelfCheck agent={created} />
             </div>
             <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
               <button onClick={close} className="btn btn-primary text-xs px-6 py-2">{t('myAgents.create.done')}</button>
@@ -345,13 +471,15 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
   const [rotating, setRotating] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
   const [revealed, setRevealed] = useState<MyAgentDTO | null>(null);
+  const [actionErr, setActionErr] = useState('');
   async function del() {
     setLoading(true);
     try {
       await userAccountsApi.deleteAgent(agent.seat_id);
+      setActionErr('');
       qc.invalidateQueries({ queryKey: ['my-agents'] });
-    } catch {
-      // surfaced globally
+    } catch (e) {
+      setActionErr(e instanceof Error ? e.message : t('myAgents.actionFailed'));
     } finally {
       setLoading(false);
     }
@@ -364,8 +492,9 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
     setGetting(true);
     try {
       setRevealed(await userAccountsApi.getAgentVK(agent.seat_id));
-    } catch {
-      // surfaced globally
+      setActionErr('');
+    } catch (e) {
+      setActionErr(e instanceof Error ? e.message : t('myAgents.actionFailed'));
     } finally {
       setGetting(false);
     }
@@ -376,17 +505,24 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
     setRotating(true);
     try {
       const r = await userAccountsApi.rotateAgentVK(agent.seat_id);
+      setActionErr('');
       setConfirmRotate(false);
       setRevealed(r);
       qc.invalidateQueries({ queryKey: ['my-agents'] }); // refresh the list hint
-    } catch {
-      // surfaced globally
+    } catch (e) {
+      setActionErr(e instanceof Error ? e.message : t('myAgents.actionFailed'));
     } finally {
       setRotating(false);
     }
   }
   return (
-    <div className="flex items-center justify-end gap-2">
+    <div className="space-y-1">
+      {actionErr && (
+        <div role="alert" aria-live="assertive" className="max-w-[300px] whitespace-normal text-[9px] font-mono text-left rounded px-2 py-1" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)' }}>
+          {actionErr}
+        </div>
+      )}
+      <div className="flex items-center justify-end gap-2">
       {agent.status === 'active' && (
         <>
           <button
@@ -419,6 +555,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
         <RotateConfirmModal agent={agent} busy={rotating} onConfirm={rotate} onClose={() => setConfirmRotate(false)} />
       )}
       {revealed && <VKRevealModal agent={revealed} onClose={() => setRevealed(null)} />}
+      </div>
     </div>
   );
 }
@@ -428,9 +565,12 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
 export default function MyAgentsPage() {
   const { t } = useTranslation();
   const [createOpen, setCreateOpen] = useState(false);
-  const { data: agents, isLoading, isError } = useQuery({
+  const { data: agents, isLoading, isError, refetch } = useQuery({
     queryKey: ['my-agents'],
     queryFn: userAccountsApi.myAgents,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   // Card-header chip counts — same strip the Team Keys card renders above its
@@ -496,6 +636,7 @@ export default function MyAgentsPage() {
                 <th>{t('myAgents.col.agent')}</th>
                 <th>{t('myAgents.col.source')}</th>
                 <th>{t('myAgents.col.status')}</th>
+                <th>{t('myAgents.col.availability')}</th>
                 <th>{t('myAgents.col.vk')}</th>
                 <th>{t('myAgents.col.created')}</th>
                 <th style={{ textAlign: 'right' }}>{t('myAgents.col.actions')}</th>
@@ -503,13 +644,20 @@ export default function MyAgentsPage() {
             </thead>
             <tbody className="font-mono text-xs">
               {isLoading && (
-                <tr><td colSpan={6} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.loading')}</td></tr>
+                <tr><td colSpan={7} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.loading')}</td></tr>
               )}
               {isError && (
-                <tr><td colSpan={6} className="px-5 py-8 text-center" style={{ color: 'var(--destructive)' }}>{t('myAgents.loadError')}</td></tr>
+                <tr>
+                  <td colSpan={7} className="px-5 py-8 text-center">
+                    <div role="alert" aria-live="assertive" className="inline-flex items-center gap-3 rounded px-3 py-2" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.38)' }}>
+                      <span>{t('myAgents.loadError')}</span>
+                      <button type="button" className="row-use-btn" onClick={() => void refetch()}>{t('myAgents.retry')}</button>
+                    </div>
+                  </td>
+                </tr>
               )}
               {agents && agents.length === 0 && (
-                <tr><td colSpan={6} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.empty')}</td></tr>
+                <tr><td colSpan={7} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.empty')}</td></tr>
               )}
               {agents?.map(agent => (
                 <tr key={agent.seat_id}>
@@ -518,6 +666,7 @@ export default function MyAgentsPage() {
                   <td className="px-5 py-4">
                     <span className={`badge ${agent.status === 'active' ? 'badge-active' : 'badge-neutral'}`}>{agent.status}</span>
                   </td>
+                  <td className="px-5 py-4"><PoolReadinessBadge agent={agent} /></td>
                   {/* Masked VK hint (2026-07-19 reuse-first): head+tail so the member
                       can identify which VK this agent holds WITHOUT rotating it. "—"
                       when no VK yet or the VK predates hints (rotate to populate). */}
@@ -535,7 +684,7 @@ export default function MyAgentsPage() {
         </div>
       </section>
 
-      <CreateAgentModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateAgentModal open={createOpen} onClose={() => setCreateOpen(false)} agents={agents ?? []} />
     </div>
   );
 }

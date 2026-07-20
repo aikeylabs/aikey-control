@@ -50,48 +50,35 @@ import { copyText } from '@/shared/utils/clipboard';
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { providerBrandColor } from '../_shared/provider-brand';
 
-// Per-provider pool sign-in profile — ONE source for everything that varies by
-// provider on this page (R34 codex pools; extend for kimi with one row). The
-// `flow` vocabulary mirrors aikey-auth-broker's FlowType so web and broker speak
-// one dictionary (single 名词字典):
-//   - setup_token (Claude): the provider page shows a code#state to PASTE.
-//   - auth_code   (Codex):  the broker's localhost:1455 callback exchanges
-//                           in-place → the page POLLS pool/status (no paste).
-//   - device_code (Kimi, future): device-code polling (not yet wired).
-// brokerSlug ≠ provider code: 'claude'/'codex' are the broker's login vocabulary
-// (poolAuthorizeURL), 'anthropic'/'openai' are provider codes (the Add form sends
-// the CODE; the backend resolves it to the per-deployment provider_id).
-type LoginFlow = 'setup_token' | 'auth_code' | 'device_code';
-interface ProviderLoginProfile {
+// Provider display profile only. Login provider + flow are intentionally absent:
+// master resolves and binds those at session initialization. Keeping display
+// fallbacks incapable of selecting a broker prevents model/account drift.
+interface ProviderDisplayProfile {
   code: string;
-  brokerSlug: string;
-  flow: LoginFlow;
+  brandSlug: string;
   labelKey: string;
 }
-const PROVIDER_LOGIN: ProviderLoginProfile[] = [
-  { code: 'anthropic', brokerSlug: 'claude', flow: 'setup_token', labelKey: 'oauthContribute.providerClaude' },
-  { code: 'openai', brokerSlug: 'codex', flow: 'auth_code', labelKey: 'oauthContribute.providerCodex' },
-  // Future: { code: 'kimi_code', brokerSlug: 'kimi', flow: 'device_code', labelKey: 'oauthContribute.providerKimi' },
+const PROVIDER_DISPLAY: ProviderDisplayProfile[] = [
+  { code: 'anthropic', brandSlug: 'claude', labelKey: 'oauthContribute.providerClaude' },
+  { code: 'openai', brandSlug: 'codex', labelKey: 'oauthContribute.providerCodex' },
+  // Future: { code: 'kimi_code', brandSlug: 'kimi', labelKey: 'oauthContribute.providerKimi' },
 ];
-// Missing/unknown provider_code (older server) falls back to the first profile
-// (claude / setup_token), preserving pre-R34 behavior.
-function loginProfile(providerCode?: string): ProviderLoginProfile {
-  return PROVIDER_LOGIN.find((p) => p.code === providerCode) ?? PROVIDER_LOGIN[0];
+function displayProfile(providerCode?: string): ProviderDisplayProfile {
+  return PROVIDER_DISPLAY.find((p) => p.code === providerCode) ?? PROVIDER_DISPLAY[0];
 }
-/** Providers a member can self-contribute accounts for — derived from the login
+/** Providers a member can self-contribute accounts for — derived from the display
  * table (matches the server-side pool-supported gate). value = provider CODE. */
-const ADDABLE_PROVIDERS = PROVIDER_LOGIN.map((p) => ({ code: p.code, labelKey: p.labelKey }));
+const ADDABLE_PROVIDERS = PROVIDER_DISPLAY.map((p) => ({ code: p.code, labelKey: p.labelKey }));
 
 /** Display label key for an account's provider (2026-07-19 user request: the
  * account list must SHOW which provider/protocol each pool account serves —
  * multi-pool members otherwise can't tell a Claude slot from a Codex slot).
  * Reuses the SAME labels as the Add form / master 账号池 page (名词一致:
- * "Claude (Anthropic)" / "Codex (OpenAI / ChatGPT)"). Unlike loginProfile()
- * this does NOT fall back to claude for a missing code — a wrong flow default
- * is safe, a wrong LABEL is misinformation — unknown/absent codes render no
- * chip at the call site. */
+ * "Claude (Anthropic)" / "Codex (OpenAI / ChatGPT)"). Unlike displayProfile()
+ * this does NOT fall back to Claude for a missing code: a wrong label is
+ * misinformation. Unknown/absent codes render no chip at the call site. */
 function providerLabelKey(providerCode?: string): string | undefined {
-  return PROVIDER_LOGIN.find((p) => p.code === providerCode)?.labelKey;
+  return PROVIDER_DISPLAY.find((p) => p.code === providerCode)?.labelKey;
 }
 
 // exitIPEcho is the browser-side exit-IP echo (2026-07-19, P1=A). ping0.cc sends
@@ -206,7 +193,16 @@ export default function OAuthContributePage() {
   // composition — every account gets sign-in controls (an unattended agent may be
   // routed to any of them, so all must be pre-logged-in; the "routed-only" gate
   // below is a company-pool rule and does not apply to pools the caller owns).
-  const ownerGroupsQ = useQuery({ queryKey: ['my-oauth-groups'], queryFn: fetchMyGroups });
+  const ownerGroupsQ = useQuery({
+    queryKey: ['my-oauth-groups'],
+    queryFn: fetchMyGroups,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+  const ownerGroupsErr = ownerGroupsQ.data && isTeamFetchError(ownerGroupsQ.data)
+    ? ownerGroupsQ.data
+    : undefined;
   const ownerPools: MyOauthGroup[] = useMemo(() => {
     const gs = Array.isArray(ownerGroupsQ.data) ? ownerGroupsQ.data : [];
     return gs.filter((g) => g.is_owner);
@@ -237,6 +233,11 @@ export default function OAuthContributePage() {
   const listQ = useQuery({
     queryKey: ['my-pool-accounts'],
     queryFn: fetchMyPoolAccounts,
+    // Routing is live control-plane state. Refresh while the page stays open so
+    // a reassignment or recovered resolver does not leave stale login controls.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const result = listQ.data;
@@ -270,7 +271,10 @@ export default function OAuthContributePage() {
   }, [accounts]);
   const routed = accounts.find((a) => a.is_routed);
 
-  const ready = !listQ.isLoading && !fetchErr;
+  const listQueryError = listQ.isError
+    ? (listQ.error instanceof Error ? listQ.error.message : String(listQ.error))
+    : '';
+  const ready = !listQ.isLoading && !fetchErr && !listQueryError;
 
   return (
     <div className="vault-page h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
@@ -319,6 +323,7 @@ export default function OAuthContributePage() {
               onAdded={() => {
                 setShowAdd(false);
                 qc.invalidateQueries({ queryKey: ['my-pool-accounts'] });
+                qc.invalidateQueries({ queryKey: ['my-oauth-groups'] });
                 // Thank-you confirmation: the account is now in the pool and
                 // will be assigned to pool-group members on demand.
                 pushToast({
@@ -330,13 +335,27 @@ export default function OAuthContributePage() {
             />
           )}
 
+          {ownerGroupsErr && (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="rounded px-4 py-3 flex items-center justify-between gap-3"
+              style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.38)' }}
+            >
+              <span className="text-[12px] font-mono">{t(fetchErrKey(ownerGroupsErr))}</span>
+              <button type="button" className="row-use-btn flex-shrink-0" onClick={() => void ownerGroupsQ.refetch()}>
+                {t('oauthContribute.retryLoad')}
+              </button>
+            </div>
+          )}
+
           {/* Search + status filter. Kept on the ERROR path (was gated behind
               `ready`, which is false on fetchErr) so a failed load degrades the
               way Team Keys does — page keeps its skeleton, only the table body
               swaps to the message — instead of collapsing to a bare card
               (2026-07-12 alignment). The no-accounts happy path still hides the
               strip, as before: searching an empty list is meaningless. */}
-          {!listQ.isLoading && (fetchErr || accounts.length > 0) && (
+          {!listQ.isLoading && (fetchErr || listQueryError || accounts.length > 0) && (
             <div className="flex items-center gap-4 flex-wrap">
               <div className="relative">
                 <SearchIcon
@@ -449,13 +468,24 @@ export default function OAuthContributePage() {
                 className="text-[10px] font-mono uppercase tracking-wider"
                 style={{ color: 'var(--muted-foreground)' }}
               >
-                {routed ? t('oauthContribute.historyNote') : t('oauthContribute.noRoutedAccount')}
+                {fetchErr || listQueryError
+                  ? t('oauthContribute.accountListUnavailable')
+                  : routed
+                    ? t('oauthContribute.historyNote')
+                    : t('oauthContribute.noRoutedAccount')}
               </span>
             </div>
 
             <div className="overflow-x-auto">
               {listQ.isLoading && <EmptyState message={t('oauthContribute.loading')} />}
-              {fetchErr && <EmptyState message={t(fetchErrKey(fetchErr))} tone="error" />}
+              {(fetchErr || listQueryError) && (
+                <EmptyState
+                  message={fetchErr ? t(fetchErrKey(fetchErr)) : listQueryError}
+                  tone="error"
+                  onRetry={() => void listQ.refetch()}
+                  retryLabel={t('oauthContribute.retryLoad')}
+                />
+              )}
               {ready && accounts.length === 0 && <EmptyState message={t('oauthContribute.empty')} />}
               {ready && accounts.length > 0 && filtered.length === 0 && (
                 <EmptyState message={t('oauthContribute.empty')} />
@@ -596,14 +626,14 @@ function AccountRow({
               // Same chip system as the vault page's provider group chip
               // (user decision 2026-07-19 四轮: 与保管库一致): shared
               // `.gr-chip` class + providerBrandColor brand background,
-              // white lowercase label. brokerSlug ('claude'/'codex') maps
+                // white lowercase label. brandSlug ('claude'/'codex') maps
               // to the right brand color by substring.
               <span
                 className="gr-chip"
-                style={{ background: providerBrandColor(loginProfile(account.provider_code).brokerSlug) }}
+                style={{ background: providerBrandColor(displayProfile(account.provider_code).brandSlug) }}
                 title={t(providerLabelKey(account.provider_code)!)}
               >
-                {loginProfile(account.provider_code).brokerSlug}
+                {displayProfile(account.provider_code).brandSlug}
               </span>
             )}
             {/* Egress presence chip (2026-07-19): this account exits through a
@@ -708,6 +738,10 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   const [sessionId, setSessionId] = useState('');
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
+  // A successful OAuth writeback can still be waiting for the local runtime
+  // rail. Keep that distinction visible without forcing the user to repeat
+  // the login or holding the form open.
+  const [syncWarning, setSyncWarning] = useState('');
   // The provider account email resolved by step-1 exchange. Shown for review; a yellow
   // warning appears if it doesn't match this team slot. `awaitingConfirm` = the token
   // is exchanged + held but NOT yet written — the member must click Confirm to submit.
@@ -716,11 +750,12 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   // auth_code (codex) only: authorize opened, waiting for the broker's localhost
   // callback to fire (page polls pool/status; no code to paste).
   const [waitingCallback, setWaitingCallback] = useState(false);
-  const profile = loginProfile(account.provider_code);
-  // pollFlow = the sign-in has no paste step; the broker's localhost callback
-  // exchanges in place and the page polls for completion (codex today; a future
-  // device_code flow would be its own branch).
-  const pollFlow = profile.flow === 'auth_code';
+  // Provider/flow are immutable session context resolved from the credential by
+  // master. Never infer them from the list row: that row is display enrichment
+  // and may be absent/stale on an older or degraded control plane.
+  const [sessionFlow, setSessionFlow] = useState<'setup_token' | 'auth_code' | ''>('');
+  const [expectedLoginIdentity, setExpectedLoginIdentity] = useState(account.identity);
+  const pollFlow = sessionFlow === 'auth_code';
 
   // ── egress management + exit-IP self-check (2026-07-19, P3/P4/P5) ──
   // egressView: resolved effective config + baseline. Editing lives entirely in
@@ -865,15 +900,18 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   }
 
   const startMut = useMutation({
-    mutationFn: () => poolAuthorizeURL(profile.brokerSlug, account.credential_id),
+    mutationFn: () => poolAuthorizeURL(account.credential_id),
     onSuccess: (res) => {
       if (isPoolLoginError(res)) {
         setErr(res.message);
         return;
       }
       setErr('');
+      setSyncWarning('');
       setSessionId(res.session_id);
-      if (pollFlow) setWaitingCallback(true);
+      setSessionFlow(res.flow);
+      setExpectedLoginIdentity(res.expected_identity || account.identity);
+      if (res.flow === 'auth_code') setWaitingCallback(true);
       window.open(res.authorize_url, '_blank', 'noopener');
     },
   });
@@ -903,11 +941,19 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         return;
       }
       setErr('');
+      setSyncWarning(
+        res.sync_status === 'pending'
+          ? t('oauthContribute.loginSyncPending', { detail: res.sync_error || t('oauthContribute.loginSyncPendingFallback') })
+          : '',
+      );
       setSignedInAs('');
       setAwaitingConfirm(false);
       setSessionId('');
       setCode('');
+      setSessionFlow('');
+      setExpectedLoginIdentity(account.identity);
       qc.invalidateQueries({ queryKey: ['my-pool-accounts'] });
+      qc.invalidateQueries({ queryKey: ['my-oauth-groups'] });
     },
   });
 
@@ -953,12 +999,14 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     setSessionId('');
     setCode('');
     setWaitingCallback(false);
+    setSessionFlow('');
+    setExpectedLoginIdentity(account.identity);
   }
 
   // Team-account match check (advisory, not enforced): the token IS written either
   // way; we only warn (yellow) so the member notices they logged into the wrong
   // Claude account. Compare case-insensitively against this slot's expected email.
-  const expectedEmail = account.identity.trim().toLowerCase();
+  const expectedEmail = expectedLoginIdentity.trim().toLowerCase();
   const actualEmail = signedInAs.trim().toLowerCase();
   const emailMismatch = !!actualEmail && !!expectedEmail && actualEmail !== expectedEmail;
 
@@ -1134,7 +1182,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             }
           >
             {emailMismatch
-              ? t('oauthContribute.signedInMismatch', { actual: signedInAs, expected: account.identity })
+              ? t('oauthContribute.signedInMismatch', { actual: signedInAs, expected: expectedLoginIdentity })
               : t('oauthContribute.signedInMatch', { actual: signedInAs })}
           </div>
           <div className="flex items-center gap-3">
@@ -1174,7 +1222,26 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         💡 {t('oauthContribute.profileGuideHint')}
         <span aria-hidden="true">→</span>
       </a>
-      {err && <p className="text-[11px]" style={{ color: '#fca5a5' }}>{err}</p>}
+      {err && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="text-[11px] font-mono rounded px-3 py-2"
+          style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.38)' }}
+        >
+          {err}
+        </div>
+      )}
+      {syncWarning && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="text-[11px] font-mono rounded px-3 py-2"
+          style={{ color: '#facc15', background: 'rgba(250,204,21,0.08)', border: '1px solid rgba(250,204,21,0.38)' }}
+        >
+          {syncWarning}
+        </div>
+      )}
       </div>
 
       {/* The editor must open even when the effective config is empty or its
@@ -1572,13 +1639,33 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
   );
 }
 
-function EmptyState({ message, tone }: { message: string; tone?: 'error' }) {
+function EmptyState({
+  message,
+  tone,
+  onRetry,
+  retryLabel,
+}: {
+  message: string;
+  tone?: 'error';
+  onRetry?: () => void;
+  retryLabel?: string;
+}) {
+  const isError = tone === 'error';
   return (
     <div
-      className="text-center py-16"
-      style={{ color: tone === 'error' ? '#fca5a5' : 'var(--muted-foreground)' }}
+      role={isError ? 'alert' : undefined}
+      aria-live={isError ? 'assertive' : undefined}
+      className="text-center py-16 px-4"
+      style={isError
+        ? { color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.38)' }
+        : { color: 'var(--muted-foreground)' }}
     >
       <div className="text-[12px] font-mono">{message}</div>
+      {onRetry && retryLabel && (
+        <button type="button" className="row-use-btn mt-3" onClick={onRetry}>
+          {retryLabel}
+        </button>
+      )}
     </div>
   );
 }

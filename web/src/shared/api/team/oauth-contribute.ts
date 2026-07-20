@@ -97,9 +97,8 @@ export interface MyPoolAccount {
    * group_alias. */
   oauth_group_id?: string;
   group_alias?: string;
-  /** provider code (anthropic | openai | …) — picks the sign-in flow (R34 codex
-   * pools): claude = paste-code, codex = local-callback polling. Omitted by older
-   * servers → the page falls back to the claude flow. */
+  /** provider code (anthropic | openai | …), used only for row labels/branding.
+   * Sign-in provider + flow come from the strict server login context. */
   provider_code?: string;
   /** whether this account exits through a configured egress line (own override
    * OR inherited group default, R46). Presence only — the raw URL never reaches
