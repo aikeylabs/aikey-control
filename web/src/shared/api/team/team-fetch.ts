@@ -164,8 +164,9 @@ export async function teamGetJSON<T>(path: string): Promise<T | TeamFetchError> 
 export async function teamPostJSON<T>(
   path: string,
   body: unknown,
+  timeoutMs = FETCH_TIMEOUT_MS,
 ): Promise<T | TeamFetchError | TeamWriteError> {
-  return teamWriteJSON<T>('POST', path, body);
+  return teamWriteJSON<T>('POST', path, body, timeoutMs);
 }
 
 /**
@@ -177,8 +178,9 @@ export async function teamPostJSON<T>(
 export async function teamPutJSON<T>(
   path: string,
   body: unknown,
+  timeoutMs = FETCH_TIMEOUT_MS,
 ): Promise<T | TeamFetchError | TeamWriteError> {
-  return teamWriteJSON<T>('PUT', path, body);
+  return teamWriteJSON<T>('PUT', path, body, timeoutMs);
 }
 
 // teamWriteJSON is the shared POST/PUT body-write core (extracted 2026-07-19 so
@@ -187,12 +189,13 @@ async function teamWriteJSON<T>(
   method: 'POST' | 'PUT',
   path: string,
   body: unknown,
+  timeoutMs: number,
 ): Promise<T | TeamFetchError | TeamWriteError> {
   const handshake = await resolveTeamHandshake();
   if (!handshake.ok) return handshake.err;
   const { teamUrl, jwt } = handshake;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(`${teamUrl}${path}`, {
       method,

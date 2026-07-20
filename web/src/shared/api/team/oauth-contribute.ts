@@ -132,6 +132,14 @@ export interface MemberEgressView {
   last_exit_ip?: string;
 }
 
+export interface MemberEgressTestResult {
+  ok: boolean;
+  exit_ip?: string;
+  latency_ms?: number;
+  engine?: string;
+  error?: string;
+}
+
 /** fetchAccountEgress reads one pool account's egress status + exit-IP baseline
  * (GET /accounts/me/oauth-accounts/{id}/egress). */
 export function fetchAccountEgress(credentialID: string): Promise<MemberEgressView | TeamFetchError> {
@@ -141,9 +149,20 @@ export function fetchAccountEgress(credentialID: string): Promise<MemberEgressVi
 /** setAccountEgress sets (or clears with "") the account-level egress OVERRIDE —
  * never the group default (R46). Reaches the master's member-authz endpoint. */
 export function setAccountEgress(credentialID: string, egressProxyURL: string) {
-  return teamPutJSON<{ credential_id: string; scope: string }>(
+  return teamPutJSON<{ credential_id: string; scope: string; last_exit_ip?: string }>(
     `/accounts/me/oauth-accounts/${encodeURIComponent(credentialID)}/egress`,
     { egress_proxy_url: egressProxyURL },
+    20_000,
+  );
+}
+
+/** Test the exact unsaved modal draft through the control plane's production
+ * egress engine. The save endpoint independently repeats this probe. */
+export function testAccountEgress(credentialID: string, egressProxyURL: string) {
+  return teamPostJSON<MemberEgressTestResult>(
+    `/accounts/me/oauth-accounts/${encodeURIComponent(credentialID)}/egress/test`,
+    { egress_proxy_url: egressProxyURL },
+    20_000,
   );
 }
 

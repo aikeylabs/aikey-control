@@ -27,11 +27,13 @@ import {
   addOauthAccount,
   fetchAccountEgress,
   setAccountEgress,
+  testAccountEgress,
   saveAccountExitIP,
   type MyPoolAccount,
   type RoutedCredential,
   type MyOauthGroup,
   type MemberEgressView,
+  type MemberEgressTestResult,
 } from '@/shared/api/team/oauth-contribute';
 import {
   isTeamFetchError,
@@ -732,20 +734,30 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   const [egressConfigOpen, setEgressConfigOpen] = useState(false);
   const [egressModalDraft, setEgressModalDraft] = useState('');
   const [egressModalDirty, setEgressModalDirty] = useState(false);
+  const [egressTestedDraft, setEgressTestedDraft] = useState('');
+  const [egressDraftTest, setEgressDraftTest] = useState<MemberEgressTestResult | null>(null);
+  const [egressDraftTesting, setEgressDraftTesting] = useState(false);
   const effectiveEgress = (egressView?.effective_egress_url ?? '').trim();
   const egressMut = useMutation({
     mutationFn: (url: string) => setAccountEgress(account.credential_id, url),
     onSuccess: (res, url) => {
-      if (isTeamFetchError(res) || (res && typeof res === 'object' && 'kind' in res)) {
-        setErr(t('oauthContribute.egressSaveFailed'));
+      if (isTeamFetchError(res) || isTeamWriteError(res)) {
+        setEgressDraftTest({
+          ok: false,
+          error: isTeamWriteError(res) ? res.message : t('oauthContribute.egressSaveFailed'),
+        });
         return;
       }
       setErr('');
       setEgressModalDraft(url);
       setEgressModalDirty(false);
+      setEgressTestedDraft('');
+      setEgressDraftTest(null);
       setEgressConfigOpen(false);
-      // Config changed → the old baseline is stale; force a re-test before login (req 5).
-      setEgressChangedSinceTest(true);
+      // The authoritative save re-tested this exact spec and persisted its exit
+      // IP as the new baseline. The browser still has to run its own login-IP
+      // self-check before step 2 unlocks.
+      setEgressChangedSinceTest(false);
       setIpTested(false);
       egressQ.refetch();
     },
@@ -756,6 +768,8 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     // serializes the config, so comments, indentation and key order survive.
     setEgressModalDraft(effectiveEgress);
     setEgressModalDirty(false);
+    setEgressTestedDraft('');
+    setEgressDraftTest(null);
     setEgressConfigOpen(true);
     if (!egressView) void egressQ.refetch();
   }
@@ -768,6 +782,23 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       setEgressModalDraft(effectiveEgress);
     }
   }, [egressConfigOpen, egressView, egressModalDirty, effectiveEgress]);
+
+  async function onTestEgressDraft() {
+    const draft = egressModalDraft.trim();
+    if (!draft) return;
+    setEgressDraftTesting(true);
+    setEgressDraftTest(null);
+    setEgressTestedDraft('');
+    const res = await testAccountEgress(account.credential_id, draft);
+    if (isTeamFetchError(res) || isTeamWriteError(res)) {
+      setEgressDraftTest({ ok: false, error: isTeamWriteError(res) ? res.message : t('oauthContribute.egressTestFailed') });
+    } else {
+      const usable = res.ok && !!res.exit_ip;
+      setEgressDraftTest(usable ? res : { ok: false, error: res.error ?? t('oauthContribute.egressTestNoExitIp') });
+      if (usable) setEgressTestedDraft(draft);
+    }
+    setEgressDraftTesting(false);
+  }
 
   // Exit-IP self-check state. ipTested gates login (req 4); currentIP vs baseline
   // (egressView.last_exit_ip) drives the mismatch warning.
@@ -1181,6 +1212,8 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                   onChange={(e) => {
                     setEgressModalDraft(e.target.value);
                     setEgressModalDirty(true);
+                    setEgressTestedDraft('');
+                    setEgressDraftTest(null);
                   }}
                   disabled={!egressView || egressMut.isPending}
                   spellCheck={false}
@@ -1190,6 +1223,20 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
               <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
                 {t('oauthContribute.egressConfigFormatHint')}
               </p>
+              {egressDraftTest && (
+                <p
+                  className="text-[11px] font-mono break-all"
+                  style={{ color: egressDraftTest.ok ? 'var(--success, #16a34a)' : 'var(--destructive, #ef4444)' }}
+                  role="status"
+                >
+                  {egressDraftTest.ok
+                    ? t('oauthContribute.egressTestPassed', {
+                        ip: egressDraftTest.exit_ip,
+                        ms: egressDraftTest.latency_ms ?? 0,
+                      })
+                    : `${t('oauthContribute.egressTestFailed')}: ${egressDraftTest.error ?? ''}`}
+                </p>
+              )}
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{t('oauthContribute.copyEgressConfig')}</span>
@@ -1208,8 +1255,24 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                   <button
                     type="button"
                     className="row-use-btn"
+                    onClick={() => void onTestEgressDraft()}
+                    disabled={!egressView || egressMut.isPending || egressDraftTesting || !egressModalDraft.trim()}
+                  >
+                    {egressDraftTesting
+                      ? t('oauthContribute.testing')
+                      : t('oauthContribute.testEgressConfig')}
+                  </button>
+                  <button
+                    type="button"
+                    className="row-use-btn"
                     onClick={() => egressMut.mutate(egressModalDraft.trim())}
-                    disabled={!egressView || egressMut.isPending || egressModalDraft.trim() === effectiveEgress}
+                    disabled={
+                      !egressView ||
+                      egressMut.isPending ||
+                      egressDraftTesting ||
+                      egressModalDraft.trim() === effectiveEgress ||
+                      (!!egressModalDraft.trim() && egressTestedDraft !== egressModalDraft.trim())
+                    }
                   >
                     {egressMut.isPending
                       ? t('oauthContribute.submitting')
