@@ -57,15 +57,20 @@ export function ModelMappingBanner() {
         gap: 10,
         padding: '8px 12px',
         marginBottom: 12,
-        borderRadius: 8,
-        border: '1px solid rgba(245,158,11,0.35)',
-        background: 'rgba(245,158,11,0.08)',
+        // Match the sibling advisory banner (HookReadinessBanner dismissible
+        // base): tokens, not raw amber literals, and the same 4px radius so
+        // the two advisory strips read as one visual language. This is the
+        // advisory (dismissible) severity — the actionable variant adds the
+        // gold gradient + primary inset rail, which we deliberately do NOT use.
+        borderRadius: 4,
+        border: '1px solid var(--border)',
+        background: 'var(--surface-warn, rgba(234, 179, 8, 0.08))',
         color: 'var(--foreground)',
         fontSize: 12,
         fontFamily: 'var(--font-mono)',
       }}
     >
-      <span aria-hidden="true" style={{ color: '#f59e0b' }}>▲</span>
+      <span aria-hidden="true" style={{ color: 'var(--primary)' }}>▲</span>
       <span style={{ flex: 1 }}>
         {reason}
         {digest && (

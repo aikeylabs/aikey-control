@@ -1463,9 +1463,21 @@ export default function UserVaultPage() {
           const protos: string[] = [];
           for (const b of bindings) {
             const proto = (b.protocol ?? '').toString().trim();
-            if (proto && !seen.has(proto)) {
-              seen.add(proto);
-              protos.push(proto);
+            if (!proto) continue;
+            // Fold to the pool's provider family at PUSH time so the group
+            // value agrees with EVERY consumer: the group header, the
+            // PROTOCOLS column, and the in-group provider-chip filter all
+            // fold via displayProtocolFamily. Pushing the RAW protocol made
+            // an `openai_compatible` group header mismatch the folded
+            // `openai` the column renders, and made the chip filter
+            // (displayProtocolFamily(b.protocol) === groupProvider) compare
+            // folded-vs-raw so it never matched → the chip lost its per-group
+            // scoping. Dedup on the folded value. Mirrors the virtual-keys
+            // page, which already folds its group key (displayProtocolFamily).
+            const fam = displayProtocolFamily(proto) || proto;
+            if (!seen.has(fam)) {
+              seen.add(fam);
+              protos.push(fam);
             }
           }
           if (protos.length > 0) return protos;
@@ -4868,11 +4880,30 @@ function DetailDrawer(props: {
               <div className="drawer-field">
                 <span className="k">{t('vault.provider')}</span>
                 <span className="v">
-                  {(detailProviders.length > 0 ? detailProviders : allProviders).map((p) => (
-                    <span key={p} className="kind-pill" style={{ marginRight: 4 }}>
-                      {p}
-                    </span>
-                  ))}
+                  {(detailProviders.length > 0 ? detailProviders : allProviders).map((p) => {
+                    // Restore the 2026-07-13 spec emphasis (dropped in the P1f
+                    // two-axis refactor): the current group's provider bold, the
+                    // others muted — so opening the openai-group drawer of an
+                    // anthropic+openai key shows both with openai emphasized.
+                    // Strip any `(alias)` suffix before matching providerName
+                    // (the current group's provider). Prevents a regression once
+                    // multi-binding lands and this list holds >1 provider.
+                    const base = p.replace(/\s*\(.*\)$/, '').toLowerCase();
+                    const isCurrent = base === providerName.toLowerCase();
+                    return (
+                      <span
+                        key={p}
+                        className="kind-pill"
+                        style={
+                          isCurrent
+                            ? { marginRight: 4, fontWeight: 700 }
+                            : { marginRight: 4, color: 'var(--muted-foreground)', opacity: 0.55 }
+                        }
+                      >
+                        {p}
+                      </span>
+                    );
+                  })}
                   <span className="ro-pill">RO</span>
                 </span>
               </div>

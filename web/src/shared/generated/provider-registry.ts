@@ -148,8 +148,9 @@ export function displayLabelFull(e: ProviderRegistryEntry): string {
 /** P1i.5 (design D-14/D-15): the (provider → supported protocols) compatibility
  *  matrix, derived from provider_fingerprint.yaml `provider_routes` — the same
  *  source master + proxy read. A (provider, protocol) pair is legal iff listed
- *  here. Forms filter their option lists off this; the backend still rejects an
- *  illegal combo with PROVIDER_PROTOCOL_UNSUPPORTED (defence in depth). */
+ *  here. The backend is authoritative — it rejects an illegal combo with
+ *  PROVIDER_PROTOCOL_UNSUPPORTED. This matrix has no web consumer today; it is
+ *  kept as data for a possible future form-side pre-filter. */
 export const PROVIDER_PROTOCOL_MATRIX: ReadonlyMap<string, readonly string[]> = new Map([
   ["anthropic", ["anthropic"]],
   ["deepseek", ["openai_compatible"]],
