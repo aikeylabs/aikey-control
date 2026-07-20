@@ -145,8 +145,8 @@ var zhMessages = map[string]string{
 	CodeBizBindNotFound:         "绑定 {{id}} 不存在",
 	CodeBizBindProtocolMismatch: "绑定协议 {{binding_protocol}} 与凭据供应商协议 {{cred_protocol}} 不匹配",
 	CodeBizBindDuplicateTarget:  "该虚拟密钥上已存在协议 {{protocol_type}} / 供应商 {{provider_id}} 的激活绑定",
-	CodeBizBindOAuthDirect:      "OAuth 账号凭据只能通过席位组分配，不能直接绑定到席位",
-	CodeBizVKGroupExclusive:     "该虚拟密钥已绑定 OAuth 组，不能再挂载直连凭据（反之亦然）；请为该凭据单独签发一把虚拟密钥",
+	CodeBizBindOAuthDirect:      "OAuth 账号凭据只能通过 OAuth 账号池分配，不能直接绑定到席位",
+	CodeBizVKGroupExclusive:     "该虚拟密钥已绑定 OAuth 账号池，不能再挂载直连凭据（反之亦然）；请为该凭据单独签发一把虚拟密钥",
 	CodeBizDeliveryCentralOnly:  "该组织为集群集中交付模式（form-①）：密钥材料按策略保留在中心节点，不下发到个人机器。请通过集群节点路由使用；如需本机持有密钥，请联系管理员开启 EMPLOYEE_KEY_MODE=local",
 	CodeBizBindNoActive:         "未找到该令牌的激活协议绑定",
 	CodeBizBindNotDelivered:     "绑定已存在，但无法下发至代理",
@@ -179,7 +179,7 @@ var zhMessages = map[string]string{
 	// BIZ — Credential
 	CodeBizCredNotFound:      "凭据 {{id}} 不存在",
 	CodeBizCredInactive:      "凭据 {{id}} 未激活",
-	CodeBizCredHasActiveRefs: "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、席位组 {{group_count}} 个），请先迁移通道或将账号移出席位组，再移入回收站",
+	CodeBizCredHasActiveRefs: "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、OAuth 账号池 {{group_count}} 个），请先迁移通道或将账号移出账号池，再移入回收站",
 
 	// BIZ — Provider
 	CodeBizProvNotFound:                "供应商 {{id}} 不存在",
@@ -495,7 +495,7 @@ func BizBindProtocolMismatch(bindingProtocol, credProtocol string) *DomainError 
 // up front and point the admin at seat groups.
 func BizBindOAuthDirect(credentialID string) *DomainError {
 	return &DomainError{Code: CodeBizBindOAuthDirect,
-		Message: "OAuth account credentials can only be assigned through a seat group, not bound directly to a seat",
+		Message: "OAuth account credentials can only be assigned through an OAuth account pool, not bound directly to a seat",
 		Meta:    map[string]any{"credential_id": credentialID}}
 }
 func BizBindDuplicateTarget(protocol, providerID string) *DomainError {
@@ -533,7 +533,7 @@ func BizCredHasActiveRefs(id string, bindingCount, virtualKeyCount int, groupIDs
 		groupIDs = []string{}
 	}
 	return &DomainError{Code: CodeBizCredHasActiveRefs,
-		Message: fmt.Sprintf("credential %q is still in use (%d active channel binding(s), %d seat group(s)) — migrate its channels or remove it from the seat group first",
+		Message: fmt.Sprintf("credential %q is still in use (%d active channel binding(s), %d OAuth account pool(s)) — migrate its channels or remove the account from the pool first",
 			id, bindingCount, len(groupIDs)),
 		Meta: map[string]any{
 			"id":                id,
@@ -548,21 +548,21 @@ func BizCredHasActiveRefs(id string, bindingCount, virtualKeyCount int, groupIDs
 // oauth-group domain) was not found / not in this org.
 func BizOauthGroupNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupNotFound,
-		Message: fmt.Sprintf("seat group %q not found", id),
+		Message: fmt.Sprintf("OAuth account pool %q not found", id),
 		Meta:    map[string]any{"id": id}}
 }
 
 // BizOauthGroupDefaultProtected — the per-org default group cannot be deleted.
 func BizOauthGroupDefaultProtected() *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupDefaultProtected,
-		Message: "the default seat group cannot be deleted"}
+		Message: "the default OAuth account pool cannot be deleted"}
 }
 
 // BizOauthGroupCredInUse — a credential already belongs to a seat group
 // (credential_id UNIQUE: 1 credential ∈ at most 1 group).
 func BizOauthGroupCredInUse(credentialID string) *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupCredInUse,
-		Message: fmt.Sprintf("credential %q already belongs to a seat group", credentialID),
+		Message: fmt.Sprintf("credential %q already belongs to an OAuth account pool", credentialID),
 		Meta:    map[string]any{"credential_id": credentialID}}
 }
 
@@ -571,7 +571,7 @@ func BizOauthGroupCredInUse(credentialID string) *DomainError {
 // (relieve the bottleneck at the source) before issuing more seats.
 func BizOauthGroupRatioRejected(seats, accounts int, limit float64) *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupRatioRejected,
-		Message: fmt.Sprintf("seat group is over capacity: %d seats vs %d accounts exceeds the %.0f:1 limit — add accounts before issuing more keys", seats, accounts, limit),
+		Message: fmt.Sprintf("OAuth account pool is over capacity: %d seats vs %d accounts exceeds the %.0f:1 limit — add accounts before issuing more keys", seats, accounts, limit),
 		Meta:    map[string]any{"seats": seats, "accounts": accounts, "reject_ratio": limit}}
 }
 
@@ -579,7 +579,7 @@ func BizOauthGroupRatioRejected(seats, accounts int, limit float64) *DomainError
 // feature is not enabled in this deployment.
 func BizOauthGroupDisabled() *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupDisabled,
-		Message: "seat group binding targets are not enabled in this deployment"}
+		Message: "OAuth account pool binding targets are not enabled in this deployment"}
 }
 
 // BizOauthMemberTokenForbidden — the caller tried to write back a per-member OAuth

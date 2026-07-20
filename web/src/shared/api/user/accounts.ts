@@ -39,9 +39,9 @@ export interface AgentSourceDTO {
 }
 
 // One online agent (GET /accounts/me/agents). The connection fields
-// (base_url / vk / *_blocked / vk_pending) are populated ONLY on the CREATE
-// response — vk is the plaintext returned once at issue time (hash-only storage;
-// never recoverable later). On the list they are absent.
+// (base_url / vk / *_blocked / vk_pending) are populated ONLY on the CREATE /
+// get-VK response — vk is the plaintext returned once at issue time (hash-only
+// storage; never recoverable later). On the list they are absent EXCEPT vk_hint.
 export interface MyAgentDTO {
   seat_id: string;
   alias: string;
@@ -52,6 +52,15 @@ export interface MyAgentDTO {
   base_url_blocked?: boolean;
   vk?: string;
   vk_pending?: boolean;
+  /** 2026-07-18 (additive): VK exists but the pool has ZERO enabled accounts —
+   * calls would 503; the reveal warns alongside the token. */
+  pool_empty?: boolean;
+  /** 2026-07-19 (additive, reuse-first): MASKED head+tail of the agent's active
+   * VK (e.g. "aikey_team_oauth_1a2b3c••••7f8g"). Carried on the LIST so a member
+   * can IDENTIFY which VK an agent holds WITHOUT rotating it. Empty when no VK
+   * yet, or when the VK predates hints (issued before v1.0.1-alpha.5) — rotate to
+   * populate. Never the plaintext (unrecoverable). */
+  vk_hint?: string;
 }
 
 // Matches OrgSeat JSON from backend: seat_id, org_id, invited_email, seat_status, etc.
@@ -114,6 +123,30 @@ export const userAccountsApi = {
     const res = await teamDeleteJSON(`/accounts/me/agents/${seatId}`);
     if (isTeamWriteError(res)) throw new Error(res.message);
     if (isTeamFetchError(res)) throw new Error(`delete agent failed: ${res.kind}`);
+  },
+
+  // getAgentVK — NON-destructive "get VK" (reuse-first, 2026-07-19). First-issues
+  // the VK when the agent has none yet (returns the plaintext once); if a VK
+  // already exists it is a no-op that reveals NOTHING new (returns vk_hint only, no
+  // vk), so checking a VK can never invalidate the one already configured in a
+  // third-party agent. Same Agent shape as create. vk_pending when the pool still
+  // has no enabled account.
+  getAgentVK: async (seatId: string): Promise<MyAgentDTO> => {
+    const res = await teamPostJSON<MyAgentDTO>(`/accounts/me/agents/${seatId}/vk`, { action: 'ensure' });
+    if (isTeamWriteError(res)) throw new Error(res.message);
+    if (isTeamFetchError(res)) throw new Error(`get agent VK failed: ${res.kind}`);
+    return res;
+  },
+
+  // rotateAgentVK — EXPLICIT, DESTRUCTIVE re-mint. Invalidates the current VK and
+  // returns a NEW plaintext ONCE. The DB is hash-only, so rotation is the only way
+  // to reveal a usable VK again once the original is lost/leaked. The UI gates this
+  // behind a confirmation because any agent using the old key must be re-keyed.
+  rotateAgentVK: async (seatId: string): Promise<MyAgentDTO> => {
+    const res = await teamPostJSON<MyAgentDTO>(`/accounts/me/agents/${seatId}/vk`, { action: 'rotate' });
+    if (isTeamWriteError(res)) throw new Error(res.message);
+    if (isTeamFetchError(res)) throw new Error(`rotate agent VK failed: ${res.kind}`);
+    return res;
   },
 
   myReferrals: async (): Promise<ReferralDTO[]> => {

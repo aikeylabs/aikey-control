@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useUserAuthStore } from '@/store';
 import { runtimeConfig } from '@/app/config/runtime';
+import { BrandWordmark, BrandMark } from '@/shared/ui/BrandWordmark';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
@@ -397,7 +398,10 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   // breadcrumb fell back to the raw URL segment ("用户 / my-agents") instead
   // of the localized nav label. Label matches navGroups so tNavLabel resolves
   // the same i18n key (navMyAgents), present in en+zh.
-  'my-agents':    { label: 'My Agents',   originName: 'My Agents' },
+  // 2026-07-17: display rename "My Agents" → "Agents" (group header now
+  // reads "Agents & Apps", so the "My" prefix was redundant). originName
+  // keeps 'My Agents' so data-origin-name selectors stay stable.
+  'my-agents':    { label: 'Agents',      originName: 'My Agents' },
   invites:        { label: 'Invites' },
   'trust-check':  { label: 'Trust Check' },
   compliance:     { label: 'Compliance Audit' },
@@ -454,7 +458,7 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
   'Team Usage': 'navTeamUsage',
   Performance: 'navPerformance',
   Apps: 'navApps',
-  'My Agents': 'navMyAgents',
+  Agents: 'navMyAgents',
   'Trust Check': 'navTrustCheck',
   'Compliance Audit': 'navComplianceAudit',
   Account: 'navAccount',
@@ -469,7 +473,11 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
 const GROUP_TITLE_I18N_KEY: Record<string, string> = {
   Keys: 'groupKeys',
   Cost: 'groupCost',
-  Apps: 'groupApps',
+  // 2026-07-17: group display rename Apps → "Agents & Apps" (the group
+  // header used to duplicate its own "Apps" item's label, and Agents —
+  // per 方案 A, NOT an app — sat under a header that said otherwise).
+  // i18n key stays groupApps; cross-app protocol enum stays APPS.
+  'Agents & Apps': 'groupApps',
   Quality: 'groupQuality',
   Account: 'groupAccount',
 };
@@ -587,13 +595,11 @@ export function UserShell() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const breadcrumbTrail = useBreadcrumbTrail();
-  /* Single brand label shared with `runtimeConfig.branding.logoText`
-     (defaults to "AiKey", server may override). Renamed from
-     "AiKey Vault" → "AiKey" 2026-04-22 to match the unified product
-     branding. Hardcoded here rather than read from runtimeConfig so the
-     user shell renders synchronously even if window.__AIKEY_CONFIG__
-     hasn't loaded yet. */
-  const logoText = 'AiKey';
+  /* Brand wordmark: was a hardcoded 'AiKey' text label (renamed from
+     "AiKey Vault" 2026-04-22); replaced 2026-07-18 by the BrandWordmark
+     SVG (i-dot in brand yellow). Still deliberately NOT read from
+     runtimeConfig so the user shell renders synchronously even if
+     window.__AIKEY_CONFIG__ hasn't loaded yet. */
 
   // ── Sidebar collapse state ─────────────────────────────────────────
   //
@@ -808,6 +814,9 @@ export function UserShell() {
     if (!navGroupTitle) return false;
     const TITLE_TO_GROUP_ALIASES: Record<string, CrossAppMenuGroup> = {
       COST: 'INSIGHTS', // Phase 4 阶段 3 (2026-05-21) display rename
+      // 2026-07-17 display rename Apps → "Agents & Apps"; protocol enum
+      // stays APPS for backwards compat (same pattern as COST above).
+      'AGENTS & APPS': 'APPS',
     };
     const normalized = navGroupTitle.toUpperCase();
     const aliased = TITLE_TO_GROUP_ALIASES[normalized] ?? normalized;
@@ -978,12 +987,20 @@ export function UserShell() {
       // this group by path; a header-less top-level item could not (a
       // group with no title yields no matchesGroup candidates on B).
       // Placed after Quality & Compliance (2026-06-26 user decision).
-      title: 'Apps',
+      // 2026-07-17: group display-renamed Apps → "Agents & Apps" (header
+      // used to duplicate the "Apps" item label, and Agents is NOT an app
+      // per 方案 A). Cross-app group enum stays APPS — matchesGroup maps
+      // the new title back via TITLE_TO_GROUP_ALIASES.
+      title: 'Agents & Apps',
       items: [
-        { path: '/user/apps', icon: <AppsIcon />, label: 'Apps', originName: 'Connected Apps', personalOnly: true },
         // Online Agents (alpha.5) — peer of Apps (方案 A). Local page (8090);
         // requiresTeamLogin since agents only exist in a cluster/team org.
-        { path: '/user/my-agents', icon: <BotIcon />, label: 'My Agents', originName: 'My Agents', personalOnly: true, requiresTeamLogin: true },
+        // 2026-07-17: label "My Agents" → "Agents" ("My" redundant on the
+        // user-side console); originName keeps 'My Agents' for selectors.
+        // 2026-07-18 (user decision): Agents listed BEFORE Apps, matching the
+        // group title order ("Agents & Apps").
+        { path: '/user/my-agents', icon: <BotIcon />, label: 'Agents', originName: 'My Agents', personalOnly: true, requiresTeamLogin: true },
+        { path: '/user/apps', icon: <AppsIcon />, label: 'Apps', originName: 'Connected Apps', personalOnly: true },
       ],
     },
     {
@@ -1092,50 +1109,18 @@ export function UserShell() {
               fontFamily: 'var(--font-display)',
             }}
           >
-            <div
-              className="nav-brand-mark w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0"
-              style={{
-                // Favicon-aligned treatment (2026-06-06): the previous
-                // dim-amber chip (faint amber fill + 22% border + pure
-                // amber text) read soft against the dark sidebar. The
-                // browser-tab favicon (public/favicon.svg) is the
-                // brand's most-seen letterform — a solid dark square +
-                // amber-700 stroke + warm cream "AK". Aligning the
-                // sidebar chip with that treatment gives the brand a
-                // single recognisable letterform across favicon /
-                // sidebar / printed material, and the inset darker
-                // fill + crisp stroke read as a small engraved chip
-                // rather than a tinted patch — more premium texture.
-                //
-                // Geometry: rx 10→8 to match the favicon's 16/64≈25%
-                // rounding ratio at the 32px scale.
-                // Fill: solid #0c0c0e sits ~1 step darker than the
-                // sidebar zinc-900, giving the chip a subtle inset
-                // depth without any explicit drop shadow.
-                // Stroke: solid #ca8a04 amber-700 — the favicon's
-                // stroke color.
-                // Text: #fef3c7 amber-100 cream — the favicon's text
-                // color. Warmer than #facc15 amber-400, reads as
-                // polished rather than electric.
-                // Halo: amber outer glow 10% (2026-06-06 v2 — was
-                // 18%, user feedback "外发光弱一些"). Subtle enough to
-                // read as a faint warmth at the chip's edge rather
-                // than a glow; the inset top 1px white@4% still
-                // provides a specular chip-face highlight.
-                background: '#0c0c0e',
-                color: '#fef3c7',
-                border: '1px solid #ca8a04',
-                fontFamily: 'var(--font-display)',
-                fontWeight: 700,
-                fontSize: 13,
-                letterSpacing: '-0.02em',
-                boxShadow: '0 0 10px rgba(250, 204, 21, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
-              }}
-              aria-hidden="true"
-            >
-              AK
-            </div>
-            <span className="nav-brand-text">{logoText}</span>
+            {/* Brand chip — 2026-07-18 rev 7: consolidated onto the shared
+                BrandMark (was an inline "AK" text chip). "AK" is now a static
+                vector (no web font → no FOUT flash); `nav-brand-mark` keeps
+                the collapsed-sidebar hook, size 28 = the prior in-shell chip
+                ("登录后的 logo 稍微小一些"). */}
+            <BrandMark className="nav-brand-mark" size={28} />
+            {/* SVG wordmark: i-dot in brand yellow (2026-07-18); logoText
+                here is the fixed 'AiKey' constant (see comment above).
+                tagline={false} (2026-07-18 user request): the "AI RUNTIME
+                GOVERNANCE" line shows only on login screens, not inside
+                the logged-in shells. */}
+            <BrandWordmark className="nav-brand-text" tagline={false} scale={1} />
           </div>
         </div>
 

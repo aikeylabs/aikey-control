@@ -70,13 +70,13 @@
     "navTeamUsage": "团队用量",
     "navPerformance": "性能",
     "navApps": "应用",
-    "navMyAgents": "我的 Agent",
+    "navMyAgents": "Agents",
     "navTrustCheck": "降智检测",
     "navAccount": "账户",
     "navInvites": "邀请码",
     "groupKeys": "密钥",
     "groupCost": "成本",
-    "groupApps": "应用",
+    "groupApps": "Agents 与应用",
     "groupQuality": "质量与合规",
     "groupAccount": "账户",
     "expandSidebar": "展开侧栏",
@@ -2273,7 +2273,7 @@
       "urlLabel": "代理地址",
       "statusHint": "http / https / socks5，需带 host:port。留空 = 跟随系统代理，无系统代理则直连。",
       "statusHintMulti": "单个地址（http / https / socks5）、socks5 链（socks5://a,socks5://b）、协议配置（ss / vmess / trojan），或带 proxy-groups 的配置（fallback / url-test / load-balance）。留空 = 跟随系统代理，无系统代理则直连。",
-      "multiNote": "除单个地址外，还支持 socks5 多跳链、ss / vmess / trojan 节点配置，以及 fallback / url-test / load-balance 容灾组（格式见下方输入框）。设置后对全部流量生效，并覆盖单账号出口代理。",
+      "multiNote": "除单个地址外，还支持 socks5 多跳链、ss / vmess / trojan 节点配置，以及 fallback / url-test / load-balance 容灾组（格式见下方输入框）。",
       "placeholderMulti": "socks5://127.0.0.1:1080\nsocks5://front:1080,socks5://exit:1080   ← 多跳链（最后一跳=出口）\n{\"proxies\":[…]}                          ← ss/vmess/trojan 节点，可用 dialer-proxy 串前置\n{\"proxies\":[…],\"proxy-groups\":[{\"type\":\"fallback\",…}]}  ← 多前置容灾，收敛到同一出口",
       "internalBypassNote": "内网目标仍走直连：loopback 及 NO_PROXY 里的主机会绕过此代理，因此内网 IP 上自托管的服务商无需经过它即可访问。",
       "effectiveLabel": "当前生效",
@@ -2290,7 +2290,7 @@
       "layerUnset": "未设置",
       "layerUnsupported": "本平台不支持自动读取",
       "layerActive": "← 生效",
-      "accountEgressNote": "② 账号出口代理由管理员为 OAuth 池账号单独配置、只作用于该账号，不是本机设置（此处只列出哪些账号已配，不显示线路本身）。它压过 ③④⑤；本机配了 ① 则会覆盖它。各账号实际出口 IP 请在本机跑 aikey doctor 查看。",
+      "accountEgressNote": "② 账号出口代理由管理员为 OAuth 池账号单独配置、只作用于该账号，不是本机设置（此处只列出哪些账号已配，不显示线路本身）。它是账号级、独立生效：始终为该账号服务，本机上游代理（①）**不会覆盖它**（① 只作用于没有账号出口代理的流量）。各账号实际出口 IP 请在本机跑 aikey doctor 查看。",
       "statusReadyToTest": "点「测试连通性」验证此代理能否到达 AI 服务商。",
       "statusProbing": "正在通过代理测试连通性…",
       "statusReachable": "✓ 可达（HTTP {{status}}，{{ms}} ms）—— 点保存应用。",
@@ -2303,7 +2303,10 @@
       "saveDisabledHint": "请先点「测试连通性」—— 代理能到达服务商后才能保存（或清空走直连）。",
       "layerAccount": "② 账号出口代理",
       "layerOverridden": "被 ① 覆盖",
-      "groupExitNote": "用 fallback / url-test / load-balance 时，请让各成员收敛到同一个出口节点（成员之间只是到达方式不同），这样出口 IP 才恒定；若各成员出口不同，出口 IP 会随切换而变。"
+      "groupExitNote": "用 fallback / url-test / load-balance 时，请让各成员收敛到同一个出口节点（成员之间只是到达方式不同），这样出口 IP 才恒定；若各成员出口不同，出口 IP 会随切换而变。",
+      "overrideLabel": "应急：让本机上游接管 OAuth 账号流量（覆盖专属出口）",
+      "overrideWarning": "仅在管理员配置的专属出口线路不稳定、导致请求失败时临时开启。开启后本机所有 OAuth 池账号将改走上方节点上游（无则直连），共用同一个出口 IP —— 一账号一 IP 的防封在本机临时失效；线路恢复后请关闭。",
+      "multiNoteTeamCoexist": "它作用于没有账号出口代理的流量（API KEY / VK）；有账号出口代理的账号仍走它自己的（两者共存）。"
     },
     "masterPassword": {
       "title": "主密码",
@@ -2508,7 +2511,6 @@
     "colStatus": "状态",
     "empty": "暂无账号。",
     "noRoutedAccount": "你当前未被路由到任何账号池账号。",
-    "currentBadge": "当前",
     "reveal": "显示",
     "hide": "隐藏",
     "copyEmail": "复制邮箱",
@@ -2567,7 +2569,12 @@
     "providerCodex": "Codex (OpenAI / ChatGPT)",
     "addNoGroupsForProvider": "没有该供应商的池——你只加入了其他供应商的池。请管理员新建一个。",
     "addGroupsLoadFailed": "无法加载你的池组（服务器错误）。请重试，或让管理员检查团队服务端。",
-    "addClose": "关闭"
+    "addClose": "关闭",
+    "ownerPoolTitle": "我的 Agent 池 · {{alias}}（{{provider}}）— 全部账号需预先登录",
+    "ownerPoolEmpty": "此池还没有账号 — 在右上「添加账号」选择本池加入",
+    "colProvider": "服务商",
+    "egressChip": "专属出口",
+    "egressChipHint": "此账号通过管理员配置的专属出口线路访问上游（独立出口 IP）。"
   },
   "hookBanner": {
     "rcPowershell": "你的 PowerShell $PROFILE",
@@ -2602,16 +2609,23 @@
     "closeAria": "关闭"
   },
   "myAgents": {
-    "title": "我的 AGENT",
+    "cardAll": "全部 Agent",
+    "cardTotal": "共 {{count}} 个",
+    "cardActive": "启用 {{count}} 个",
+    "cardSuspended": "停用 {{count}} 个",
+    "cardRevoked": "已吊销 {{count}} 个",
+    "title": "AGENTS",
     "subtitle": "你拥有的在线 Agent",
     "newAgent": "+ 新建 Agent",
     "col": {
       "agent": "AGENT",
       "source": "来源",
       "status": "状态",
+      "vk": "VK",
       "created": "创建时间",
       "actions": "操作"
     },
+    "vkHintNone": "—",
     "loading": "加载中...",
     "loadError": "加载 Agent 列表失败。",
     "empty": "还没有 Agent。新建一个，把团队 OAuth 虚拟密钥开放给第三方 Agent 使用。",
@@ -2634,10 +2648,29 @@
       "connHint": "把第三方 Agent 的 API base 指向下面的 base_url，并用下面的密钥作为 Bearer token。",
       "baseUrlBlocked": "本部署尚未配置 base_url。请联系管理员设置 oauth-routing ingress 域名。",
       "baseUrlLabel": "BASE URL",
-      "vkPending": "暂无密钥 —— 你的 Agent 账号池还没有账号。添加并登录一个 OAuth 账号来激活这个 Agent；密钥会在重新打开时出现。",
+      "vkPending": "暂无密钥 —— 你的 Agent 账号池还没有账号。添加并登录一个 OAuth 账号后，点「获取 VK」（这里或列表行上）来签发并显示密钥。",
       "vkPendingCta": "去「团队 OAuth」添加并登录账号 →",
       "vkLabel": "团队 OAUTH 虚拟密钥（仅显示一次）",
-      "vkOnce": "⚠ 该密钥只显示一次。请立即复制，之后无法再取回。"
+      "vkOnce": "⚠ 该密钥只显示一次。请立即复制，之后无法再取回。",
+      "providerLabel": "协议（决定 Agent 使用哪个账号池）",
+      "poolEmptyWarn": "注意：该 Agent 的账号池还没有可用账号 — 调用会失败。先去「团队 OAuth」添加并登录账号。"
+    },
+    "vk": {
+      "button": "获取 VK",
+      "getNow": "立即获取我的 VK",
+      "getting": "获取中…",
+      "title": "VK —— {{name}}",
+      "hint": "仅显示一次，请立即复制。若你已有一把 VK，再次获取不会改变它；要生成一把全新的密钥请用「轮换」（旧密钥将失效）。",
+      "rotate": "轮换",
+      "rotating": "轮换中…",
+      "hintLabel": "VK（掩码）",
+      "existingHint": "该 Agent 已有一把可用 VK（上方为掩码）。完整密钥无法找回 —— 若已丢失，请点「轮换」生成新的。在你轮换之前，旧密钥仍然有效。",
+      "rotateConfirm": {
+        "title": "轮换这把 VK？",
+        "body": "轮换会重新签发密钥，并立即作废当前这把。任何正在使用旧密钥的第三方 Agent 都必须换用新密钥。",
+        "confirm": "确认轮换",
+        "cancel": "取消"
+      }
     }
   }
 }

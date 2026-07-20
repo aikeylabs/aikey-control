@@ -38,6 +38,20 @@ func MappingDiagnosticsHandler(w http.ResponseWriter, r *http.Request) {
 	forward(w, r, http.MethodGet, proxyBase()+"/v1/diagnostics/pipeline", false)
 }
 
+// OAuthEgressOverrideGetHandler relays GET /api/user/system/oauth-egress-override →
+// GET /admin/oauth-egress-override. Response: {"enabled": bool} — the opt-in
+// escape-hatch state the Settings card renders as a checkbox (2026-07-19).
+func OAuthEgressOverrideGetHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodGet, proxyBase()+"/admin/oauth-egress-override", false)
+}
+
+// OAuthEgressOverrideSetHandler relays PUT /api/user/system/oauth-egress-override →
+// PUT /admin/oauth-egress-override. Body {"enabled"}; the proxy persists it to
+// aikey-user.yaml and hot-applies it (OAuth per-account egress → node chain).
+func OAuthEgressOverrideSetHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodPut, proxyBase()+"/admin/oauth-egress-override", true)
+}
+
 // EgressSelfCheckHandler relays GET /api/user/system/egress-selfcheck →
 // GET /admin/egress/selfcheck (presence mode — NO ?dial, so no network probe).
 // Response: {"dialed":false,"paths":[{"label":"<account identity>"}]} — which pool

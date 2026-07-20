@@ -278,6 +278,12 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(oauth.UpstreamProxySetHandler)))
 		mux.Handle("POST /api/user/system/upstream-proxy/probe",
 			authMW(http.HandlerFunc(oauth.UpstreamProxyProbeHandler)))
+		// Escape hatch (2026-07-19): the same card's opt-in checkbox reads/sets
+		// whether OAuth per-account egress is overridden by the node upstream chain.
+		mux.Handle("GET /api/user/system/oauth-egress-override",
+			authMW(http.HandlerFunc(oauth.OAuthEgressOverrideGetHandler)))
+		mux.Handle("PUT /api/user/system/oauth-egress-override",
+			authMW(http.HandlerFunc(oauth.OAuthEgressOverrideSetHandler)))
 		// Per-account egress presence relay (→ proxy /admin/egress/selfcheck, no
 		// ?dial): the same card shows WHICH pool accounts have an admin-configured
 		// account egress (the ② layer), so the node layers it lists aren't mistaken

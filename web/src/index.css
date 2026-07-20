@@ -294,6 +294,19 @@ body {
   margin: 0 0 6px 0;
   user-select: none;
 }
+/* 2026-07-17 (user feedback): in the zh locale a mixed-script group title
+   ("AGENTS 与应用") carries a CJK↔Latin separator space that renders a full
+   character cell wide in the mono font (~0.6em) + 0.05em tracking — visually
+   too wide. word-spacing shrinks only the space glyph (letter tracking
+   untouched); -0.35em leaves ~0.25em, the customary thin-space look of
+   zh/Latin mixed text. :lang(zh) keeps EN group titles (QUALITY &
+   COMPLIANCE etc.) at their normal word gaps — <html lang> is kept in sync
+   by shared/i18n/i18n.ts precisely for :lang() CSS like this. The i18n
+   string keeps its real space per the project-wide mixed-script convention
+   (e.g. "我的 Agent", "AiKey 托管") — this is a V-layer-only adjustment. */
+.user-sidebar .nav-group-title:lang(zh) {
+  word-spacing: -0.35em;
+}
 
 /* Bottom user chip — rounded surface card, no top border. */
 .user-sidebar .nav-user {
