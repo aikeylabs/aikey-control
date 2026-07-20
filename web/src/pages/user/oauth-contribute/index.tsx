@@ -35,6 +35,7 @@ import {
   type MemberEgressView,
   type MemberEgressTestResult,
 } from '@/shared/api/team/oauth-contribute';
+import { deriveEgressPresentation } from './egress-presentation';
 import {
   isTeamFetchError,
   isTeamWriteError,
@@ -738,6 +739,21 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   const [egressDraftTest, setEgressDraftTest] = useState<MemberEgressTestResult | null>(null);
   const [egressDraftTesting, setEgressDraftTesting] = useState(false);
   const effectiveEgress = (egressView?.effective_egress_url ?? '').trim();
+  const egressPresentation = deriveEgressPresentation(egressView, egressQ.isPending);
+  const egressPresentationKey = {
+    loading: 'oauthContribute.egressLoading',
+    load_failed: 'oauthContribute.egressLoadFailed',
+    overridden: 'oauthContribute.egressOverridden',
+    inherited: 'oauthContribute.egressInherited',
+    not_configured: 'oauthContribute.egressNotConfigured',
+  }[egressPresentation];
+  const egressConfigHintKey = {
+    loading: 'oauthContribute.egressConfigLoading',
+    load_failed: 'oauthContribute.egressConfigLoadFailed',
+    overridden: 'oauthContribute.egressConfigOverriddenHint',
+    inherited: 'oauthContribute.egressConfigInheritedHint',
+    not_configured: 'oauthContribute.egressConfigNotConfiguredHint',
+  }[egressPresentation];
   const egressMut = useMutation({
     mutationFn: (url: string) => setAccountEgress(account.credential_id, url),
     onSuccess: (res, url) => {
@@ -968,9 +984,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             {t('oauthContribute.egressLabel')}
           </span>
           <span className="chip" style={{ padding: '1px 6px', fontSize: 9.5 }}>
-            {egressView?.scope === 'overridden'
-              ? t('oauthContribute.egressOverridden')
-              : t('oauthContribute.egressInherited')}
+            {t(egressPresentationKey)}
           </span>
           <button type="button" className="row-use-btn" onClick={openEgressConfig}>
             {t('oauthContribute.viewEgressConfig')}
@@ -1185,9 +1199,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                     {t('oauthContribute.egressConfigTitle')}
                   </div>
                   <div className="text-[11px] font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                    {egressView?.scope === 'overridden'
-                      ? t('oauthContribute.egressConfigOverriddenHint')
-                      : t('oauthContribute.egressConfigInheritedHint')}
+                    {t(egressConfigHintKey)}
                   </div>
                 </div>
                 <button type="button" className="icon-btn" onClick={() => setEgressConfigOpen(false)} aria-label={t('oauthContribute.close')}>
