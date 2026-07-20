@@ -731,6 +731,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   const [egressChangedSinceTest, setEgressChangedSinceTest] = useState(false);
   const [egressConfigOpen, setEgressConfigOpen] = useState(false);
   const [egressModalDraft, setEgressModalDraft] = useState('');
+  const [egressModalDirty, setEgressModalDirty] = useState(false);
   const effectiveEgress = (egressView?.effective_egress_url ?? '').trim();
   const egressMut = useMutation({
     mutationFn: (url: string) => setAccountEgress(account.credential_id, url),
@@ -741,6 +742,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       }
       setErr('');
       setEgressModalDraft(url);
+      setEgressModalDirty(false);
       setEgressConfigOpen(false);
       // Config changed → the old baseline is stale; force a re-test before login (req 5).
       setEgressChangedSinceTest(true);
@@ -753,8 +755,19 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     // Preserve the server's verbatim YAML / URL text. The UI never parses or
     // serializes the config, so comments, indentation and key order survive.
     setEgressModalDraft(effectiveEgress);
+    setEgressModalDirty(false);
     setEgressConfigOpen(true);
+    if (!egressView) void egressQ.refetch();
   }
+
+  // A fast click can open the modal before the account egress GET finishes.
+  // Seed it when the server value arrives, but never overwrite text the user
+  // has already started editing.
+  React.useEffect(() => {
+    if (egressConfigOpen && egressView && !egressModalDirty) {
+      setEgressModalDraft(effectiveEgress);
+    }
+  }, [egressConfigOpen, egressView, egressModalDirty, effectiveEgress]);
 
   // Exit-IP self-check state. ipTested gates login (req 4); currentIP vs baseline
   // (egressView.last_exit_ip) drives the mismatch warning.
@@ -1119,7 +1132,11 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       {err && <p className="text-[11px]" style={{ color: '#fca5a5' }}>{err}</p>}
       </div>
 
-      {egressConfigOpen && effectiveEgress && (
+      {/* The editor must open even when the effective config is empty or its
+          initial GET failed. Requiring effectiveEgress here made the button a
+          no-op for exactly the accounts that need to create their first
+          override (and hid backend errors behind a missing modal). */}
+      {egressConfigOpen && (
         <ModalPortal scopeClassName="vault-page">
           <div
             className="fixed inset-0 z-50 flex items-center justify-center"
@@ -1146,6 +1163,13 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                   <XIcon className="w-4 h-4" />
                 </button>
               </div>
+              {!egressView && (
+                <p className="text-[11px] font-mono" style={{ color: egressQ.isPending ? 'var(--muted-foreground)' : '#fca5a5' }}>
+                  {egressQ.isPending
+                    ? t('oauthContribute.egressConfigLoading')
+                    : t('oauthContribute.egressConfigLoadFailed')}
+                </p>
+              )}
               <label className="block space-y-1.5">
                 <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
                   {t('oauthContribute.egressConfigEditorLabel')}
@@ -1154,7 +1178,11 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                   className="w-full min-h-[240px] max-h-[55vh] resize-y rounded p-3 text-[11px] font-mono leading-relaxed"
                   style={{ color: 'var(--foreground)', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}
                   value={egressModalDraft}
-                  onChange={(e) => setEgressModalDraft(e.target.value)}
+                  onChange={(e) => {
+                    setEgressModalDraft(e.target.value);
+                    setEgressModalDirty(true);
+                  }}
+                  disabled={!egressView || egressMut.isPending}
                   spellCheck={false}
                   aria-label={t('oauthContribute.egressConfigEditorLabel')}
                 />
@@ -1181,7 +1209,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                     type="button"
                     className="row-use-btn"
                     onClick={() => egressMut.mutate(egressModalDraft.trim())}
-                    disabled={egressMut.isPending || egressModalDraft.trim() === effectiveEgress}
+                    disabled={!egressView || egressMut.isPending || egressModalDraft.trim() === effectiveEgress}
                   >
                     {egressMut.isPending
                       ? t('oauthContribute.submitting')

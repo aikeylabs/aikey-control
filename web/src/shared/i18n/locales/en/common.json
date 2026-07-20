@@ -2582,6 +2582,8 @@
     "egressConfigInheritedHint": "Inherited from the group default. Saving changes creates an override for this account without changing the group default.",
     "egressConfigOverriddenHint": "This account's override is currently effective and can be edited here.",
     "egressConfigEditorLabel": "Config content",
+    "egressConfigLoading": "Loading config from the team service…",
+    "egressConfigLoadFailed": "Failed to load the config. Close and retry, or check the team service.",
     "egressConfigFormatHint": "Preserves the server's original format (YAML or a single-line URL); it is never converted to JSON. Re-test the exit IP after saving.",
     "copyEgressConfig": "Copy config",
     "saveEgressOverride": "Save account override",

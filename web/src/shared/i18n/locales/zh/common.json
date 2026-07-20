@@ -2582,6 +2582,8 @@
     "egressConfigInheritedHint": "当前继承组默认配置；保存修改会创建本账号覆盖，不会改动组默认。",
     "egressConfigOverriddenHint": "当前生效的是该账号自己的覆盖配置，可直接修改。",
     "egressConfigEditorLabel": "配置内容",
+    "egressConfigLoading": "正在从团队服务加载配置…",
+    "egressConfigLoadFailed": "配置加载失败，请关闭后重试或检查团队服务。",
     "egressConfigFormatHint": "保留服务端原始格式（YAML 或单行 URL），不会转换为 JSON。保存后需重新测试出口 IP。",
     "copyEgressConfig": "复制配置",
     "saveEgressOverride": "保存为账号覆盖",
