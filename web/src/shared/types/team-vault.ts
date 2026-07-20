@@ -17,6 +17,20 @@
  * A's parser.
  */
 
+/**
+ * BindingAxis (P1f / design D-12/D-13): one (protocol, provider) binding of a
+ * virtual key, as two SEPARATE axes. Protocol is the wire protocol the upstream
+ * endpoint speaks (from the route row — endpoint truth, NOT derived from the
+ * provider). Provider is the brand code (e.g. 'zhipu'); `provider_display_alias`
+ * is the brand alias (e.g. 'GLM'). The web renders — it never computes protocol
+ * from provider (前端 §7).
+ */
+export interface BindingAxis {
+  protocol: string;
+  provider: string;
+  provider_display_alias: string;
+}
+
 export interface TeamVaultRecord {
   /** Discriminator for the VaultRecord union — `'team'` matches the
    * `target` field convention from `阶段3-增强版KEY管理/个人vault-Web页
@@ -32,11 +46,20 @@ export interface TeamVaultRecord {
    * to this user; A renders it as-is. */
   alias: string;
 
-  /** Lower-case provider family for grouping (e.g. 'anthropic',
-   * 'openai', 'kimi'). Mirrors the same field on
-   * PersonalVaultRecord — vault page groups across both shapes by
-   * this single key. */
+  /** @deprecated (P1f / D-12): MISNAMED — holds the PROVIDER family, not the
+   * protocol. Kept for backward compat with older CLIs that don't emit
+   * `bindings`. New code groups by `bindings[].protocol`. */
   protocol_family: string;
+
+  /** P1f / design D-12/D-13: the two-axis binding read model — protocol and
+   * provider are SEPARATE axes. Protocol comes from the route row (endpoint
+   * truth), provider is the brand code, `provider_display_alias` is the brand
+   * alias (e.g. 'GLM' for zhipu). ARRAY from the start (length 1 today;
+   * multi-binding when the per-binding cache lands) so the contract never
+   * migrates scalar→array. Emitted by the CLI `_internal query`; the web must
+   * NOT derive protocol from provider itself (前端 §7). Optional so an older
+   * CLI without it falls back to `protocol_family`. */
+  bindings?: BindingAxis[];
 
   /** All providers this key can route to. Used by the vault page's
    * "supports" column when one virtual key covers multiple providers

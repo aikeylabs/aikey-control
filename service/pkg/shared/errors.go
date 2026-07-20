@@ -182,7 +182,8 @@ var zhMessages = map[string]string{
 	CodeBizCredHasActiveRefs: "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、席位组 {{group_count}} 个），请先迁移通道或将账号移出席位组，再移入回收站",
 
 	// BIZ — Provider
-	CodeBizProvNotFound: "供应商 {{id}} 不存在",
+	CodeBizProvNotFound:                "供应商 {{id}} 不存在",
+	CodeBizProviderProtocolUnsupported: "供应商 {{provider}} 不支持协议 {{protocol}}（该组合不在兼容矩阵中）",
 
 	// DATA — client input validation
 	CodeDataInvalidBody:  "请求体不是有效的 JSON 或结构不符合预期",
@@ -309,6 +310,13 @@ const (
 
 	// BIZ — Provider
 	CodeBizProvNotFound = "BIZ_PROV_NOT_FOUND"
+	// CodeBizProviderProtocolUnsupported (P1i / design D-14/D-15): the
+	// (provider, protocol) pair is not in the compatibility matrix (the
+	// provider_routes table). Wire code matches the frozen central enum
+	// (tasks 0.5) rather than the BIZ_ house style so master and proxy speak
+	// the same string. 422 (a validation the admin fixes by choosing a
+	// supported combination).
+	CodeBizProviderProtocolUnsupported = "PROVIDER_PROTOCOL_UNSUPPORTED"
 
 	// BIZ — Seat Group (通用凭证共享组 / oauth_group)
 	CodeBizOauthGroupNotFound         = "BIZ_OAUTH_GROUP_NOT_FOUND"
@@ -611,6 +619,15 @@ func BizProvNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizProvNotFound,
 		Message: fmt.Sprintf("provider %q not found", id),
 		Meta:    map[string]any{"id": id}}
+}
+
+// BizProviderProtocolUnsupported (P1i / design D-14): the (provider, protocol)
+// combination isn't in the compatibility matrix (provider_routes). Meta keys
+// {{provider}}/{{protocol}} interpolate the zh template.
+func BizProviderProtocolUnsupported(provider, protocol string) *DomainError {
+	return &DomainError{Code: CodeBizProviderProtocolUnsupported,
+		Message: fmt.Sprintf("provider %q does not support protocol %q (combination not in the compatibility matrix)", provider, protocol),
+		Meta:    map[string]any{"provider": provider, "protocol": protocol}}
 }
 
 func BizLoginSessionNotFound(id string) *DomainError {

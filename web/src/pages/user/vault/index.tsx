@@ -44,6 +44,7 @@ import {
 } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
+import { ModelMappingBanner } from '../_shared/ModelMappingBanner';
 import {
   HookWireRcModal,
   useHookWireRcModal,
@@ -54,6 +55,7 @@ import {
 } from '@/shared/components/DesktopConsentModal';
 import { friendlyTestError } from './friendlyTestError';
 import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
+import type { BindingAxis } from '@/shared/types/team-vault';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
 import { ENTRY_BY_FAMILY } from '@/shared/generated/provider-registry';
@@ -139,6 +141,13 @@ interface TeamRowRecord {
   virtual_key_id: string;
   alias: string;
   protocol_family: string;
+  // P1f (design D-12/D-13): two-axis binding read model from the CLI `_internal
+  // query`. protocol = wire protocol (route-row truth), provider = brand code,
+  // provider_display_alias = brand alias (e.g. 'GLM'). ARRAY from the start
+  // (length 1 today; multi-binding when P1e's per-binding cache lands). Optional:
+  // an older CLI without it falls back to protocol_family/supported_providers.
+  // The grouping useMemo already reads this at runtime (前端 §7: render, don't derive).
+  bindings?: BindingAxis[];
   supported_providers: string[];
   share_status: 'pending' | 'claimed' | 'revoked';
   // 'needs_login' (2026-07-03, 防呆): a claimed+active OAUTH-GROUP VK whose CURRENT
@@ -1454,6 +1463,26 @@ export default function UserVaultPage() {
       // 多平台 family (Kimi: kimi_code/moonshot/kimi) 收敛到同一 group;
       // 单平台 family (anthropic/openai/...) family==code,行为不变。
       const families: string[] = (() => {
+        // P1f / design D-12: group by PROTOCOL, not provider. When the CLI
+        // emits the two-axis `bindings` read model, the group header is the
+        // wire protocol (anthropic / openai_compatible / ...) and the provider
+        // shows as an in-row chip. This is the fix for "组头把 provider 当协议".
+        // Falls back to the legacy provider-family grouping below for older
+        // CLIs that don't emit `bindings`. 🚫 web does NOT derive protocol from
+        // provider — it renders the backend-provided binding.protocol (前端 §7).
+        const bindings = (r as { bindings?: Array<{ protocol?: string }> }).bindings;
+        if (Array.isArray(bindings) && bindings.length > 0) {
+          const seen = new Set<string>();
+          const protos: string[] = [];
+          for (const b of bindings) {
+            const proto = (b.protocol ?? '').toString().trim();
+            if (proto && !seen.has(proto)) {
+              seen.add(proto);
+              protos.push(proto);
+            }
+          }
+          if (protos.length > 0) return protos;
+        }
         // rc.3 fix (2026-05-12): team rows also need supported_providers
         // expansion. CLI emits the field for team records (commands_internal/
         // query.rs::team_records_for_emit), so aggregator-style team keys
@@ -1720,6 +1749,7 @@ export default function UserVaultPage() {
               auto-pops on first rc-unwired mutation; banner is the
               session-persistent fallback / re-opener). */}
           <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
+          <ModelMappingBanner />
           <HookWireRcModal open={wireRcModal.open} onClose={wireRcModal.close} />
           <DesktopConsentModal
             open={desktopModal.open}
@@ -2961,6 +2991,34 @@ const Row = React.memo(function Row(props: {
   const groupProto = routedGroupAccount(groupAccts)?.provider_code;
   const providerName =
     groupProto || teamProviderForGroup(r, props.groupProvider) || providerDisplayName(r);
+  // P1f.4 (design D-12): inline PROVIDER chip label `brand(alias)` (e.g.
+  // `zhipu(GLM)`) for a team key with the two-axis read model — the group header
+  // carries the PROTOCOL, this cell carries the provider. Uses the binding(s)
+  // under THIS protocol group; falls back to `providerName` for older CLIs. Kept
+  // separate from `providerName` (which drives the brand color) so the alias never
+  // leaks into `providerBrandColor`. 🚫 web renders binding.provider, never derives.
+  const providerLabel = (() => {
+    const bindings = r.target === 'team' ? (r as TeamRowRecord).bindings : undefined;
+    if (Array.isArray(bindings) && bindings.length > 0) {
+      const inGroup = bindings.filter(
+        (b) => displayProtocolFamily(b.protocol) === props.groupProvider,
+      );
+      const pick = inGroup.length > 0 ? inGroup : bindings;
+      const labels = pick.map((b) =>
+        b.provider_display_alias ? `${b.provider}(${b.provider_display_alias})` : b.provider,
+      );
+      return [...new Set(labels)].join(', ');
+    }
+    return providerName;
+  })();
+  // P1f (design D-12): the PROTOCOLS column shows the PROTOCOL axis (not the
+  // provider). For a two-axis team key: distinct binding protocols; else the
+  // pre-P1f behavior (providerName). The provider goes in a chip next to the name.
+  const teamBindings = r.target === 'team' ? (r as TeamRowRecord).bindings : undefined;
+  const hasTwoAxis = Array.isArray(teamBindings) && teamBindings.length > 0;
+  const protocolLabel = hasTwoAxis
+    ? [...new Set(teamBindings!.map((b) => displayProtocolFamily(b.protocol)).filter(Boolean))].join(', ')
+    : providerName;
   // Kind chip. Fully i18n'd (2026-07-07, user request): in Chinese the four
   // kinds render 密钥 / OAuth / 团队 / 团队 OAuth; English keeps KEY / OAUTH /
   // TEAM / TEAM-OAUTH. Values live in the vault namespace of the locale files.
@@ -3133,6 +3191,18 @@ const Row = React.memo(function Row(props: {
                 />
               )}
               {r.alias || t('vault.unnamed')}
+              {/* P1f (design D-12): inline PROVIDER chip next to the key name —
+                  `zhipu(GLM)` — the provider axis. The PROTOCOLS column carries the
+                  protocol; this keeps the two axes visually distinct on the row. */}
+              {hasTwoAxis && (
+                <span
+                  className="kind-pill"
+                  style={{ marginLeft: 6, fontWeight: 400 }}
+                  title={t('vault.provider')}
+                >
+                  {providerLabel}
+                </span>
+              )}
               {/* IN USE chip moved to the Actions column (2026-04-25)
                   so every row's rightmost cell has the same routing
                   affordance — a "Use" button when the key is idle,
@@ -3153,7 +3223,8 @@ const Row = React.memo(function Row(props: {
             style={{ background: providerBrandColor(providerName) }}
             aria-hidden="true"
           />
-          <span className="name">{providerName}</span>
+          {/* P1f: PROTOCOLS column shows the PROTOCOL axis (anthropic), not the provider. */}
+          <span className="name">{protocolLabel}</span>
           <span className={`kind-pill${kindClass}`}>{kindLabel}</span>
         </span>
       </td>
@@ -3723,6 +3794,16 @@ function DetailDrawer(props: {
     : undefined;
   const providerName =
     groupProto || teamProviderForGroup(r, props.groupProvider) || providerDisplayName(r);
+  // P1f (design D-12): the two axes for the META section — PROTOCOL (wire
+  // protocol, route-row truth) and PROVIDER (brand + alias), as SEPARATE values.
+  // From the binding read model when present; the protocol is NEVER the provider.
+  const detailBindings = team?.bindings;
+  const detailProtocols = Array.isArray(detailBindings) && detailBindings.length > 0
+    ? [...new Set(detailBindings.map((b) => displayProtocolFamily(b.protocol)).filter(Boolean))]
+    : [];
+  const detailProviders = Array.isArray(detailBindings) && detailBindings.length > 0
+    ? [...new Set(detailBindings.map((b) => (b.provider_display_alias ? `${b.provider}(${b.provider_display_alias})` : b.provider)))]
+    : [];
   // Full protocol surface of the key (multi-protocol direct-bind keys carry
   // several supported_providers). The drawer shows ALL of them: the current
   // group's provider bold/highlighted, the rest muted — so a user opening the
@@ -4003,18 +4084,8 @@ function DetailDrawer(props: {
                   </button>
                 </span>
               </div>
-              {team.supported_providers.length > 0 && (
-                <div className="drawer-field">
-                  <span className="k">{t('vault.supports')}</span>
-                  <span className="v">
-                    {team.supported_providers.map((p) => (
-                      <span key={p} className="kind-pill" style={{ marginRight: 4 }}>
-                        {p}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-              )}
+              {/* P1f: protocol + provider now live ONLY in the META section below
+                  (two separate axes) — not duplicated in this VIRTUAL KEY block. */}
               <div className="drawer-field">
                 <span className="k">{t('vault.share')}</span>
                 <span className="v">
@@ -4794,28 +4865,31 @@ function DetailDrawer(props: {
               <InfoIcon className="w-3 h-3" />
               {t('vault.meta')}
             </div>
+            {/* P1f (design D-12): two SEPARATE axes in META — PROTOCOL (wire
+                protocol, route-row truth) and PROVIDER (brand + alias). 🚫 the
+                provider is never shown under the protocol label. */}
             <div className="drawer-field">
               <span className="k">{t('vault.protocol')}</span>
               <span className="v">
-                {/* One protocol per line (2026-07-13 user spec) — current group
-                    bold, others muted. */}
-                <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
-                  {allProviders.map((p) => (
-                    <span
-                      key={p}
-                      style={
-                        p === providerName
-                          ? { fontWeight: 700 }
-                          : { color: 'var(--muted-foreground)', opacity: 0.55 }
-                      }
-                    >
-                      {p}
-                    </span>
-                  ))}
-                </span>
+                {detailProtocols.length > 0
+                  ? detailProtocols.join(', ')
+                  : (displayProtocolFamily(r.protocol_family) || 'unknown')}
                 <span className="ro-pill">RO</span>
               </span>
             </div>
+            {(detailProviders.length > 0 || allProviders.length > 0) && (
+              <div className="drawer-field">
+                <span className="k">{t('vault.provider')}</span>
+                <span className="v">
+                  {(detailProviders.length > 0 ? detailProviders : allProviders).map((p) => (
+                    <span key={p} className="kind-pill" style={{ marginRight: 4 }}>
+                      {p}
+                    </span>
+                  ))}
+                  <span className="ro-pill">RO</span>
+                </span>
+              </div>
+            )}
             <div className="drawer-field">
               <span className="k">{t('vault.type')}</span>
               <span className="v">

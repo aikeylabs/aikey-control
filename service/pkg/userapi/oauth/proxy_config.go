@@ -29,6 +29,15 @@ func UpstreamProxyProbeHandler(w http.ResponseWriter, r *http.Request) {
 	forward(w, r, http.MethodPost, proxyBase()+"/admin/upstream-proxy/probe", true)
 }
 
+// MappingDiagnosticsHandler relays GET /api/user/diagnostics/mapping →
+// GET /v1/diagnostics/pipeline (task 7.9). Read-only; backs the model-mapping
+// visibility banner (3.5, four surfaces). The browser can't reach aikey-proxy
+// directly (CORS / different origin), so the local-server relays — same pattern
+// as the upstream-proxy config forwards. Response: {registry, model_mapping}.
+func MappingDiagnosticsHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodGet, proxyBase()+"/v1/diagnostics/pipeline", false)
+}
+
 // EgressSelfCheckHandler relays GET /api/user/system/egress-selfcheck →
 // GET /admin/egress/selfcheck (presence mode — NO ?dial, so no network probe).
 // Response: {"dialed":false,"paths":[{"label":"<account identity>"}]} — which pool

@@ -20,7 +20,7 @@
  * §4 + §5 for the wire contract and data flow.
  */
 
-import type { TeamVaultRecord } from '@/shared/types/team-vault';
+import type { TeamVaultRecord, BindingAxis } from '@/shared/types/team-vault';
 
 const TEAM_URL_ENDPOINT = '/system/team-url';
 const TEAM_JWT_ENDPOINT = '/system/team-jwt';
@@ -109,6 +109,11 @@ interface RawTeamKey {
   effective_status?: string;
   key_status?: string;
   expires_at?: string;
+  // P1f (design D-12/D-13): the two-axis binding read model. Passed through
+  // verbatim when B emits it (the vault page renders protocol/provider as
+  // separate axes off this); absent on older servers → the page falls back to
+  // supported_providers. Without this passthrough the two-axis UI is dormant.
+  bindings?: BindingAxis[];
 }
 
 function rawToTeamRecord(raw: RawTeamKey): TeamVaultRecord {
@@ -139,6 +144,10 @@ function rawToTeamRecord(raw: RawTeamKey): TeamVaultRecord {
     share_status: share,
     effective_status: effective,
     expires_at: raw.expires_at,
+    // P1f: carry the two-axis binding read model through to the vault page so the
+    // inline provider chip (zhipu(GLM)) + the detail's protocol/provider axes
+    // render off backend truth. Only present when B emits it.
+    ...(Array.isArray(raw.bindings) && raw.bindings.length > 0 ? { bindings: raw.bindings } : {}),
   };
 }
 

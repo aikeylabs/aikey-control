@@ -31,7 +31,9 @@ import { deliveryApi, routedGroupAccount, type GroupAccountRef, type UserKeyDTO,
 import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
+import { ModelMappingBanner } from '../_shared/ModelMappingBanner';
 import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
+import { ENTRY_BY_CODE } from '@/shared/generated/provider-registry';
 import {
   HookWireRcModal,
   useHookWireRcModal,
@@ -74,6 +76,17 @@ function providerFamily(code: string | null | undefined): string {
  * binding-derived protocol_type survives member removal, so it's the stable last
  * resort (mirrors the CLI vault path's team_protocol_source).
  */
+/** P1f.4/8 (design D-12): the PROVIDER-axis brand label `code(alias)` for a row's
+ *  provider cell — e.g. `zhipu(GLM)` — matching the vault page's inline chip. The
+ *  group header now carries the PROTOCOL (1f.8), so the row must show the provider.
+ *  Group VKs resolve the brand via the routed account's provider. */
+function providerDisplay(k: UserKeyDTO): string {
+  const code = (k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || '').toLowerCase();
+  const brand = code ? familyOfProviderCode(code) : keyProviderFamily(k);
+  const alias = code ? ENTRY_BY_CODE.get(code)?.displayAlias : undefined;
+  return alias ? `${brand}(${alias})` : brand;
+}
+
 function keyProviderFamily(k: { provider_code?: string | null; protocol_type?: string | null; group_accounts?: GroupAccountRef[] | null }): string {
   // displayProtocolFamily folds an empty OAuth group VK's raw protocol_type
   // ("openai_compatible") to the pool's provider ("openai") so it labels the same
@@ -446,27 +459,28 @@ export default function UserVirtualKeysPage() {
     return { total, issued, pending, revoked };
   }, [allKeys]);
 
-  // Group by provider family (preserves filter order)
+  // P1f.8 (design D-12): group by PROTOCOL (the wire protocol axis), mirroring the
+  // vault page (1f.3) — the group header is the protocol, the provider shows as a
+  // per-row chip. Fixes "组头把 provider 当协议" on this second surface too. The
+  // all-keys DTO carries the primary `protocol_type` (STABLE, binding-derived); a
+  // VK spanning multiple protocols (multi-binding, L3/P1e) collapses under its
+  // primary protocol until per-binding data reaches this API. Falls back to the
+  // provider family label only when no protocol is resolvable (orphan group VK).
   const grouped = useMemo(() => {
     const order: string[] = [];
     const map = new Map<string, UserKeyDTO[]>();
     for (const k of filtered) {
-      // Multi-protocol expansion (2026-07-13): a VK bound to anthropic+openai
-      // must appear under BOTH groups — same contract the vault page and the CLI
-      // `aikey use` picker already honour. Grouping by the single primary family
-      // hid every channel but the first.
-      for (const fam of keyProviderFamilies(k)) {
-        if (!map.has(fam)) {
-          map.set(fam, []);
-          order.push(fam);
-        }
-        map.get(fam)!.push(k);
+      const proto = displayProtocolFamily(k.protocol_type) || keyProviderFamily(k);
+      if (!map.has(proto)) {
+        map.set(proto, []);
+        order.push(proto);
       }
+      map.get(proto)!.push(k);
     }
-    return order.map((provider) => ({
-      provider,
-      color: providerBrandColor(provider),
-      records: map.get(provider)!,
+    return order.map((protocol) => ({
+      provider: protocol, // group value now carries the PROTOCOL (header + wiring key)
+      color: providerBrandColor(protocol),
+      records: map.get(protocol)!,
     }));
   }, [filtered]);
 
@@ -584,6 +598,7 @@ export default function UserVirtualKeysPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="px-6 py-5 space-y-5">
           <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
+          <ModelMappingBanner />
           <HookWireRcModal open={wireRcModal.open} onClose={wireRcModal.close} />
 
           <IdentityStrip counts={counts} />
@@ -863,7 +878,6 @@ const Row = React.memo(function Row(props: {
   const { t } = useTranslation();
   const r = props.record;
   const status = statusMeta(r.key_status, t);
-  const fam = props.groupFamily ?? keyProviderFamily(r);
   const expiresStr = formatExpiresAt(r.expires_at, t);
   const trClasses = [
     'group-child',
@@ -903,9 +917,11 @@ const Row = React.memo(function Row(props: {
       </td>
 
       <td>
+        {/* P1f.4/8: provider AXIS (brand + alias); the protocol axis is the group
+            header. prov-dot colored by provider brand, not the group protocol. */}
         <span className="provider-cell">
-          <span className="prov-dot" style={{ background: providerBrandColor(fam) }} aria-hidden="true" />
-          <span className="name">{fam}</span>
+          <span className="prov-dot" style={{ background: providerBrandColor(keyProviderFamily(r)) }} aria-hidden="true" />
+          <span className="name">{providerDisplay(r)}</span>
           <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
         </span>
       </td>

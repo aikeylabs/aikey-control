@@ -144,3 +144,51 @@ export const ENTRY_BY_FAMILY: ReadonlyMap<string, ProviderRegistryEntry> = (() =
 export function displayLabelFull(e: ProviderRegistryEntry): string {
   return e.displayAlias ? `${e.display} (${e.displayAlias})` : e.display;
 }
+
+/** P1i.5 (design D-14/D-15): the (provider → supported protocols) compatibility
+ *  matrix, derived from provider_fingerprint.yaml `provider_routes` — the same
+ *  source master + proxy read. A (provider, protocol) pair is legal iff listed
+ *  here. Forms filter their option lists off this; the backend still rejects an
+ *  illegal combo with PROVIDER_PROTOCOL_UNSUPPORTED (defence in depth). */
+export const PROVIDER_PROTOCOL_MATRIX: ReadonlyMap<string, readonly string[]> = new Map([
+  ["anthropic", ["anthropic"]],
+  ["deepseek", ["openai_compatible"]],
+  ["doubao", ["openai_compatible"]],
+  ["google_gemini", ["gemini"]],
+  ["groq", ["openai_compatible"]],
+  ["huggingface", ["openai_compatible"]],
+  ["kimi_code", ["openai_compatible"]],
+  ["moonshot", ["openai_compatible"]],
+  ["openai", ["openai_compatible"]],
+  ["openrouter", ["openai_compatible"]],
+  ["perplexity", ["openai_compatible"]],
+  ["qwen", ["openai_compatible"]],
+  ["siliconflow", ["openai_compatible"]],
+  ["xai_grok", ["openai_compatible"]],
+  ["yunwu", ["openai_compatible"]],
+  ["zeroeleven", ["openai_compatible"]],
+  ["zhipu", ["anthropic","openai_compatible"]],
+]);
+
+/** Protocols a provider can speak. Empty for an unknown/custom provider — the
+ *  caller should then allow any protocol (custom providers aren't in the matrix)
+ *  and lean on the backend guard. */
+export function protocolsForProvider(providerCode: string): readonly string[] {
+  return PROVIDER_PROTOCOL_MATRIX.get(providerCode.toLowerCase()) ?? [];
+}
+
+/** Providers that support a protocol (inverse lookup). */
+export function providersForProtocol(protocol: string): readonly string[] {
+  const out: string[] = [];
+  for (const [p, protos] of PROVIDER_PROTOCOL_MATRIX) {
+    if (protos.includes(protocol)) out.push(p);
+  }
+  return out;
+}
+
+/** Whether a (provider, protocol) combo is in the matrix. Unknown provider =>
+ *  true (custom providers are not constrained here; backend is authoritative). */
+export function isProviderProtocolSupported(providerCode: string, protocol: string): boolean {
+  const protos = PROVIDER_PROTOCOL_MATRIX.get(providerCode.toLowerCase());
+  return protos ? protos.includes(protocol) : true;
+}
