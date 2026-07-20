@@ -720,43 +720,41 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   const pollFlow = profile.flow === 'auth_code';
 
   // ── egress management + exit-IP self-check (2026-07-19, P3/P4/P5) ──
-  // egressView: account-own editor state + resolved effective config + baseline.
-  // The latest M1 decision lets both pool types view/copy the effective config;
-  // only owner pools receive the account-own value as editor prefill.
+  // egressView: resolved effective config + baseline. Editing lives entirely in
+  // the modal so the compact step summary has a single, unambiguous entry point.
   const egressQ = useQuery({
     queryKey: ['account-egress', account.credential_id],
     queryFn: () => fetchAccountEgress(account.credential_id),
   });
   const egressView: MemberEgressView | undefined =
     egressQ.data && !isTeamFetchError(egressQ.data) ? (egressQ.data as MemberEgressView) : undefined;
-  const [egressInput, setEgressInput] = useState('');
-  const [egressDirty, setEgressDirty] = useState(false);
   const [egressChangedSinceTest, setEgressChangedSinceTest] = useState(false);
   const [egressConfigOpen, setEgressConfigOpen] = useState(false);
+  const [egressModalDraft, setEgressModalDraft] = useState('');
   const effectiveEgress = (egressView?.effective_egress_url ?? '').trim();
-  // Seed the editor with the owner's own value once loaded. Company members view
-  // the effective config separately and type/paste an explicit account override.
-  const ownEgress = egressView?.egress_proxy_url ?? '';
-  const [lastSeededOwn, setLastSeededOwn] = useState<string | null>(null);
-  if (egressView && !egressDirty && lastSeededOwn !== ownEgress) {
-    setLastSeededOwn(ownEgress);
-    setEgressInput(ownEgress);
-  }
   const egressMut = useMutation({
     mutationFn: (url: string) => setAccountEgress(account.credential_id, url),
-    onSuccess: (res) => {
+    onSuccess: (res, url) => {
       if (isTeamFetchError(res) || (res && typeof res === 'object' && 'kind' in res)) {
         setErr(t('oauthContribute.egressSaveFailed'));
         return;
       }
       setErr('');
-      setEgressDirty(false);
+      setEgressModalDraft(url);
+      setEgressConfigOpen(false);
       // Config changed → the old baseline is stale; force a re-test before login (req 5).
       setEgressChangedSinceTest(true);
       setIpTested(false);
       egressQ.refetch();
     },
   });
+
+  function openEgressConfig() {
+    // Preserve the server's verbatim YAML / URL text. The UI never parses or
+    // serializes the config, so comments, indentation and key order survive.
+    setEgressModalDraft(effectiveEgress);
+    setEgressConfigOpen(true);
+  }
 
   // Exit-IP self-check state. ipTested gates login (req 4); currentIP vs baseline
   // (egressView.last_exit_ip) drives the mismatch warning.
@@ -930,34 +928,8 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
               ? t('oauthContribute.egressOverridden')
               : t('oauthContribute.egressInherited')}
           </span>
-          {effectiveEgress && (
-            <button type="button" className="row-use-btn" onClick={() => setEgressConfigOpen(true)}>
-              {t('oauthContribute.viewEgressConfig')}
-            </button>
-          )}
-          <input
-            type="text"
-            className="px-2 py-1 text-[11px] font-mono flex-1"
-            style={{ minWidth: 260 }}
-            value={egressInput}
-            onChange={(e) => {
-              setEgressInput(e.target.value);
-              setEgressDirty(true);
-            }}
-            placeholder={
-              egressView?.is_owner
-                ? t('oauthContribute.egressPlaceholderOwner')
-                : t('oauthContribute.egressPlaceholderCompany')
-            }
-            spellCheck={false}
-          />
-          <button
-            type="button"
-            className="row-use-btn"
-            onClick={() => egressMut.mutate(egressInput.trim())}
-            disabled={egressMut.isPending || !egressDirty}
-          >
-            {egressMut.isPending ? t('oauthContribute.submitting') : t('oauthContribute.egressSave')}
+          <button type="button" className="row-use-btn" onClick={openEgressConfig}>
+            {t('oauthContribute.viewEgressConfig')}
           </button>
         </div>
         {/* baseline + test */}
@@ -1174,15 +1146,50 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                   <XIcon className="w-4 h-4" />
                 </button>
               </div>
-              <pre
-                className="text-[11px] font-mono whitespace-pre-wrap break-all max-h-[55vh] overflow-auto rounded p-3"
-                style={{ color: 'var(--foreground)', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}
-              >
-                {effectiveEgress}
-              </pre>
-              <div className="flex items-center justify-end gap-2">
-                <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{t('oauthContribute.copyEgressConfig')}</span>
-                <CopyBtn value={effectiveEgress} label={t('oauthContribute.copyEgressConfig')} />
+              <label className="block space-y-1.5">
+                <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+                  {t('oauthContribute.egressConfigEditorLabel')}
+                </span>
+                <textarea
+                  className="w-full min-h-[240px] max-h-[55vh] resize-y rounded p-3 text-[11px] font-mono leading-relaxed"
+                  style={{ color: 'var(--foreground)', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}
+                  value={egressModalDraft}
+                  onChange={(e) => setEgressModalDraft(e.target.value)}
+                  spellCheck={false}
+                  aria-label={t('oauthContribute.egressConfigEditorLabel')}
+                />
+              </label>
+              <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                {t('oauthContribute.egressConfigFormatHint')}
+              </p>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px]" style={{ color: 'var(--muted-foreground)' }}>{t('oauthContribute.copyEgressConfig')}</span>
+                  <CopyBtn value={egressModalDraft} label={t('oauthContribute.copyEgressConfig')} />
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    className="text-[11px]"
+                    style={{ color: 'var(--muted-foreground)' }}
+                    onClick={() => setEgressConfigOpen(false)}
+                    disabled={egressMut.isPending}
+                  >
+                    {t('oauthContribute.cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="row-use-btn"
+                    onClick={() => egressMut.mutate(egressModalDraft.trim())}
+                    disabled={egressMut.isPending || egressModalDraft.trim() === effectiveEgress}
+                  >
+                    {egressMut.isPending
+                      ? t('oauthContribute.submitting')
+                      : egressView?.scope === 'overridden'
+                        ? t('oauthContribute.updateEgressOverride')
+                        : t('oauthContribute.saveEgressOverride')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
