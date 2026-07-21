@@ -31,6 +31,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { userAccountsApi } from '@/shared/api/user/accounts';
+import { isSyntheticIdentityEmail } from '@/shared/utils/member-identity';
 
 import { appsApi } from '../../../shared/api/user/apps';
 import { importApi } from '../../../shared/api/user/import';
@@ -189,8 +191,22 @@ export default function SettingsPage() {
         // `local@aikey.local` when no JWT is attached; that's a Personal-
         // edition sentinel, not a real user — don't expose it as if it
         // were the user's account.
-        if (email && email !== 'local@aikey.local') {
+        if (!email || email === 'local@aikey.local') return;
+        // 🚫 A synthetic SSO handle is the same kind of thing: an internal
+        // sentinel, not an address. Show the member's name (the seat alias)
+        // instead; if we can't get one, show nothing rather than a string the
+        // member has never seen and cannot act on. Caught on a real Production
+        // run 2026-07-21 where this card rendered the raw handle.
+        if (!isSyntheticIdentityEmail(email)) {
           setCurrentEmail(email);
+          return;
+        }
+        try {
+          const seats = await userAccountsApi.mySeats();
+          const alias = (seats ?? []).find((s) => s.alias)?.alias;
+          if (!cancelled && alias) setCurrentEmail(alias);
+        } catch {
+          /* leave empty — better blank than a handle */
         }
       } catch {
         /* network blip — leave empty; UI shows "not logged in" */

@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { userAccountsApi, type SeatSummaryDTO } from '@/shared/api/user/accounts';
 import { deliveryApi } from '@/shared/api/user/delivery';
 import { formatRelativeTime } from '@/shared/utils/datetime-intl';
+import { memberDisplayLabel } from '@/shared/utils/member-identity';
 
 // Phase 3B R22 (2026-05-11) superseded R20: the cross-server "other
 // side account" card was removed. R22's `crossAppPreferred` flag on
@@ -106,7 +107,16 @@ export default function MyAccountPage() {
 
           <div className="p-5 pl-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-5">
-              <Field label={t('account.fieldEmail')} value={me?.email} mono={false} />
+              {/* 🚫 Never me.email raw: an SSO account carries a synthetic handle
+                  (sso+<provider>.<digest>@sso.local) — an internal key, not an
+                  address the member has ever seen or could use. The name is the
+                  seat alias. Caught on a real Production run 2026-07-21, where
+                  this field rendered the handle in full. */}
+              <Field
+                label={t('account.fieldEmail')}
+                value={memberDisplayLabel(me?.email, seats.find((s) => s.alias)?.alias, '—')}
+                mono={false}
+              />
               <Field
                 label={t('account.fieldAccountId')}
                 value={me?.account_id ? truncateId(me.account_id) : undefined}
