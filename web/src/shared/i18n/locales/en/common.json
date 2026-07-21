@@ -2244,9 +2244,13 @@
       "title": "Current account",
       "description": "The account this console is signed in with. Confirm it's the right one before changing anything below.",
       "emailLabel": "Login email",
+      "memberLabel": "Signed in as",
       "loginCmdLabel": "Login command",
       "loginCmdHint": "Not signed in yet. Copy this command and run it in your terminal to sign in to the configured server.",
       "notLoggedIn": "(not logged in — run `aikey login` in your terminal)",
+      "signedInNoName": "Signed in — your identity provider has not sent a display name yet",
+      "signedInNoSeat": "Signed in — no seat assigned yet, ask an administrator to assign one",
+      "readFailed": "Couldn't reach the server — account not shown (you are still signed in)",
       "copy": "Copy",
       "copied": "Copied",
       "copyTooltip": "Copy to clipboard"
@@ -2636,6 +2640,12 @@
     "ioErrorBody": "The Web bridge could not write ~/.aikey/{{hookFile}}. Check ~/.aikey/ permissions, then run the command below.",
     "dismiss": "Dismiss",
     "dismissAria": "Dismiss banner"
+  },
+  "seatPendingBanner": {
+    "title": "Your account is ready — a seat has not been assigned yet",
+    "body": "You are signed in, but no seat is assigned to your account, so keys and quota are not available yet. An administrator can assign one from Users & Seats in the admin console — you are already listed there as awaiting a seat.",
+    "dismiss": "Dismiss",
+    "dismissAria": "Dismiss the seat notice"
   },
   "hookModal": {
     "title": "Enable terminal auto-sync?",

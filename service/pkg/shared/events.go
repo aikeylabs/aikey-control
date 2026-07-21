@@ -16,4 +16,18 @@ const (
 	// EventControlSSOIdentityWriteBlocked fires when the write-once guard stops a
 	// second pending identity from replacing the first on one login session.
 	EventControlSSOIdentityWriteBlocked = "control.sso.identity_write_blocked"
+	// EventControlSSOAccountCreated fires on an SSO first login, when the provider
+	// subject had no mapping and a new account was created for it.
+	// 🚫 Carries account_id / request correlation only — never the subject
+	// (a union_id identifies a real person) and never a plaintext address.
+	EventControlSSOAccountCreated = "control.sso.account_created"
+	// EventControlSSOSeatAutoProvisioned fires on every SSO first login that
+	// reaches the seat branch — including the outcomes where NO seat was opened
+	// (switch off, quota reached, no resolvable org). A zero is the observation
+	// that matters: it is the difference between "the admin left it off" and
+	// "auto-provisioning is broken", and only an emitted event can tell them
+	// apart. The tech scheme wrote these two names as `auth.sso.*`; the central
+	// registry's format is <service>.<area>.<state> and this service is control,
+	// so they join their siblings above.
+	EventControlSSOSeatAutoProvisioned = "control.sso.seat_auto_provisioned"
 )

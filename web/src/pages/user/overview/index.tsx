@@ -17,6 +17,8 @@
  */
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import { memberDisplayLabel } from '@/shared/utils/member-identity';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -254,6 +256,29 @@ export default function UserOverviewPage() {
   // so the identity, role and seat numbers below are all unknown — say so
   // rather than dressing the placeholders up as a healthy session.
   const teamSessionExpired = isTeamTokenRejected(meError);
+  // 🔴 WHO THE USER IS is a different question from WHOSE DATA this page shows.
+  //
+  // `me` above is deliberately cross-fetched from the local machine (R23
+  // directionality) so the page can render THIS BOX's vault + usage. Its own
+  // comment says the account_id is always the local-bypass stub and "tells us
+  // nothing about whether the user has authenticated to B" — so it must not be
+  // used to say who is signed in. On the team console it is the local machine's
+  // account, which for an SSO member is somebody else entirely (or
+  // local@aikey.local once the CLI logs out).
+  //
+  // This query is same-origin and carries the session: on the team console it
+  // returns the signed-in member, on Personal it returns the local identity.
+  // Correct in both, and the same source the shell's sidebar uses, so the
+  // greeting and the sidebar can no longer disagree.
+  const { data: identity } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
+  // Name source, same as the shell's — see mySeatsForIdentity for why the
+  // bridge path cannot answer this.
+  const { data: identitySeatsRaw } = useQuery({
+    queryKey: ['my-seats', 'identity'],
+    queryFn: userAccountsApi.mySeatsForIdentity,
+    retry: 1,
+  });
+  const identitySeats = identitySeatsRaw ?? [];
   // R23 (revised 2026-05-11): Seats is a B-side concept — Personal A
   // has no team/seat domain (A's `/accounts/me/seats` is an empty stub
   // for FE-compat). On A side this query returns []; on B side it
@@ -534,7 +559,11 @@ export default function UserOverviewPage() {
   };
 
   const recentKeys = allKeys.slice(0, 5);
-  const emailDisplay = me?.email ?? '—';
+  // 🚫 Never `me.email` on its own: a member who signed in through an identity
+  // provider carries a synthetic handle there (sso+<provider>.<digest>@sso.local),
+  // which is an internal key, not an address they have ever seen. The name is the
+  // seat alias — the single source of truth for a person's name on the web.
+  const emailDisplay = memberDisplayLabel(identity?.email, identitySeats.find((s) => s.alias)?.alias, '—');
   const initial = emailDisplay.slice(0, 1).toUpperCase();
   // On a rejected token there is no identity to greet — `Hi, —` next to a
   // green ACTIVE badge reads as "signed in, name still loading", which is
