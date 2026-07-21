@@ -18,7 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { userAccountsApi, type SeatSummaryDTO } from '@/shared/api/user/accounts';
 import { deliveryApi } from '@/shared/api/user/delivery';
 import { formatRelativeTime } from '@/shared/utils/datetime-intl';
-import { memberDisplayLabel } from '@/shared/utils/member-identity';
+import { memberIdentityLine } from '@/shared/utils/member-identity';
 
 // Phase 3B R22 (2026-05-11) superseded R20: the cross-server "other
 // side account" card was removed. R22's `crossAppPreferred` flag on
@@ -117,7 +117,7 @@ export default function MyAccountPage() {
                   this field rendered the handle in full. */}
               <Field
                 label={t('account.fieldEmail')}
-                value={memberDisplayLabel(me?.email, identitySeats.find((s) => s.alias)?.alias, '—')}
+                value={memberIdentityLine(me?.email, identitySeats.find((s) => s.alias)?.alias, '—')}
                 mono={false}
               />
               <Field

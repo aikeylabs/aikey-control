@@ -70,3 +70,53 @@ export function memberDisplayLabel(
   }
   return fallback;
 }
+
+/**
+ * The short, stable discriminator for an SSO member — e.g. `feishu:6ad2973d`.
+ *
+ * 🔴 Why a name alone is not an identity: `org_seats.alias` is the Feishu
+ * display name, and display names collide. Two 李承熙 in one organization render
+ * identically in the seat list, the group pickers and the account card, and an
+ * administrator assigning a seat or revoking access cannot tell which person
+ * they are acting on. That is a correctness problem, not a cosmetic one.
+ *
+ * The fragment comes from the account's synthetic handle, which is a digest of
+ * (provider, subject) — so it is derived from the Feishu union_id, identical on
+ * every login, and different for every member.
+ *
+ * 🚫 Deliberately NOT the raw union_id: that is a stable cross-application
+ * identifier for a real person, and the whole point of hashing it into the
+ * handle was to keep it out of the columns and screens an operator reads. Eight
+ * hex characters disambiguate ~4 billion members — far more than any one
+ * organization — without putting a personal identifier on screen.
+ *
+ * Returns '' for anything that is not one of our synthetic handles.
+ */
+export function memberDiscriminator(email: string | null | undefined): string {
+  if (!isSyntheticIdentityEmail(email)) return '';
+  const local = (email ?? '').trim().toLowerCase().split('@')[0]; // sso+<provider>.<digest>
+  const [prefix, digest] = local.split('.');
+  const provider = prefix?.replace(/^sso\+/, '') ?? '';
+  if (!provider || !digest) return '';
+  return `${provider}:${digest.slice(0, 8)}`;
+}
+
+/**
+ * A one-line identity for slots that must be UNAMBIGUOUS — the account card,
+ * seat lists, member pickers. Name plus discriminator for an SSO member, the
+ * plain address for everyone else.
+ *
+ * Distinct from memberDisplayLabel on purpose: a greeting wants "Hi, 李承熙",
+ * whereas "which 李承熙 am I revoking?" wants the discriminator too.
+ */
+export function memberIdentityLine(
+  email: string | null | undefined,
+  alias: string | null | undefined,
+  fallback: string,
+): string {
+  const label = memberDisplayLabel(email, alias, '');
+  const discriminator = memberDiscriminator(email);
+  if (label && discriminator) return `${label} · ${discriminator}`;
+  if (label) return label;
+  return discriminator || fallback;
+}

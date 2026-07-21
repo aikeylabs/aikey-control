@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { isSyntheticIdentityEmail, memberDisplayLabel } from './member-identity';
+import {
+  isSyntheticIdentityEmail,
+  memberDisplayLabel,
+  memberDiscriminator,
+  memberIdentityLine,
+} from './member-identity';
 
 /**
  * 🔴 The fence for "the console never renders the synthetic handle".
@@ -73,5 +78,46 @@ describe('memberDisplayLabel — local-bypass sentinels are not people', () => {
 
   it('still returns an ordinary corporate address untouched', () => {
     expect(memberDisplayLabel('member@example.com', undefined, 'Member')).toBe('member@example.com');
+  });
+});
+
+/**
+ * 🔴 A display name is not an identity. Two members called 李承熙 in one
+ * organization must not render identically in a seat list — an administrator
+ * revoking access has to know which person they are acting on.
+ */
+describe('memberDiscriminator / memberIdentityLine', () => {
+  const a = 'sso+feishu.6ad2973deea1fda6356a024a01de13dc@sso.local';
+  const b = 'sso+feishu.9f3c1a04bb27ee5510cc44de77aa9012@sso.local';
+
+  it('derives a short, stable discriminator from the handle', () => {
+    expect(memberDiscriminator(a)).toBe('feishu:6ad2973d');
+    expect(memberDiscriminator(a)).toBe(memberDiscriminator(a)); // stable
+  });
+
+  it('🔴 separates two members who share a display name', () => {
+    expect(memberDiscriminator(a)).not.toBe(memberDiscriminator(b));
+    const lineA = memberIdentityLine(a, '李承熙', '—');
+    const lineB = memberIdentityLine(b, '李承熙', '—');
+    expect(lineA).not.toBe(lineB);
+    expect(lineA).toBe('李承熙 · feishu:6ad2973d');
+  });
+
+  it('🚫 never exposes the raw union_id or the full handle', () => {
+    const line = memberIdentityLine(a, '李承熙', '—');
+    expect(line).not.toContain('@sso.local');
+    expect(line).not.toContain('sso+');
+    // Only a truncated digest, not the whole thing.
+    expect(line).not.toContain('6ad2973deea1fda6356a024a01de13dc');
+  });
+
+  it('leaves ordinary accounts as a plain address', () => {
+    expect(memberDiscriminator('member@example.com')).toBe('');
+    expect(memberIdentityLine('member@example.com', undefined, '—')).toBe('member@example.com');
+    expect(memberIdentityLine('member@example.com', 'Ada', '—')).toBe('Ada');
+  });
+
+  it('falls back when there is nothing to show', () => {
+    expect(memberIdentityLine(undefined, undefined, '—')).toBe('—');
   });
 });
