@@ -11,6 +11,7 @@ import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
 import { SeatPendingBanner } from '@/shared/components/SeatPendingBanner';
 import { memberDisplayLabel } from '@/shared/utils/member-identity';
+import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import {
   OWN_MENU,
   OWN_PERSONAL_MENU,
@@ -591,7 +592,14 @@ export function UserShell() {
   // rendered — the name to show is the seat alias, which is the single source of
   // truth for a person's name on the web. The seats query is the same one the
   // seat banner uses, so React Query serves both from one request.
-  const seatsQuery = useQuery({ queryKey: ['my-seats'], queryFn: userAccountsApi.mySeats, retry: 1 });
+  // Same gate as SeatPendingBanner: on Personal (and a standalone Trial) there
+  // are no seats and /accounts/me/seats is a stub, so this asks nothing at all.
+  const seatsQuery = useQuery({
+    queryKey: ['my-seats'],
+    queryFn: userAccountsApi.mySeats,
+    enabled: !isLocalUsageScope(runtimeConfig),
+    retry: 1,
+  });
   const seatAlias = seatsQuery.data?.find((s) => s.alias)?.alias;
   const identityLabel = teamSessionExpired
     ? undefined

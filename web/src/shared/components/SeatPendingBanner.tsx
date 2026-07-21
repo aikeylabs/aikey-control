@@ -25,6 +25,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
 import { userAccountsApi } from '@/shared/api/user/accounts';
+import { runtimeConfig } from '@/app/config/runtime';
+import { isLocalUsageScope } from '@/shared/usage/local-identity';
 
 const SESSION_DISMISS_KEY = 'aikey:seatPendingBannerDismissed';
 
@@ -38,11 +40,24 @@ export function SeatPendingBanner() {
     return window.sessionStorage.getItem(SESSION_DISMISS_KEY) === '1';
   });
 
+  // 🔴 A seat is a TEAM concept. On a box with no team behind it — Personal, and
+  // a standalone Trial — `/accounts/me/seats` is a compatibility stub that
+  // answers `200 null`. That is indistinguishable from "the team server says you
+  // have no seat", so without this gate the banner tells a Personal user to go
+  // ask an administrator for a seat, in an edition that has no administrators,
+  // no organizations and no seats at all.
+  //
+  // 🚫 Do not key this off authMode alone: the composing gateway serves the TEAM
+  // page as local_bypass, and a raw authMode check would hide the banner from
+  // exactly the members who need it. isLocalUsageScope is the single predicate
+  // that already distinguishes the four deployment quadrants.
+  const teamContext = !isLocalUsageScope(runtimeConfig);
+
   const seatsQuery = useQuery({
     queryKey: ['my-seats'],
     queryFn: userAccountsApi.mySeats,
-    // A read-only observability probe. It must not retry-storm on a Personal
-    // edition where the endpoint is a compatibility stub.
+    enabled: teamContext,
+    // A read-only observability probe — never a retry storm.
     retry: 1,
   });
 
@@ -50,7 +65,7 @@ export function SeatPendingBanner() {
   // While it is loading, or when it failed, we do not know — and telling a
   // member with a perfectly good seat that they have none is worse than saying
   // nothing. Errors degrade to silence, not to a warning.
-  if (dismissed || seatsQuery.isPending || seatsQuery.isError) return null;
+  if (!teamContext || dismissed || seatsQuery.isPending || seatsQuery.isError) return null;
   const usable = (seatsQuery.data ?? []).filter((s) => !UNUSABLE_SEAT_STATUSES.has(s.seat_status));
   if (usable.length > 0) return null;
 
