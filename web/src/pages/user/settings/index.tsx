@@ -31,6 +31,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { isSyntheticIdentityEmail, memberIdentityLine } from '@/shared/utils/member-identity';
 
 import { appsApi } from '../../../shared/api/user/apps';
 import { importApi } from '../../../shared/api/user/import';
@@ -171,6 +172,15 @@ export default function SettingsPage() {
   // placeholder string, which would confuse a real Trial / Production
   // user who saw the local-only stub leak in.
   const [currentEmail, setCurrentEmail] = useState<string>('');
+  // 🔴 Whether someone is SIGNED IN is a fact from /accounts/me; whether we have
+  // a NAME to show them is a separate question. Deriving the first from the
+  // second told a signed-in SSO member "Not signed in yet" and handed them a
+  // login command they did not need — the exact "no seat / no name folded into
+  // not-logged-in" failure the spec forbids (R7).
+  const [signedIn, setSignedIn] = useState(false);
+  // An SSO account has no address of its own, so "LOGIN EMAIL" would be a false
+  // label over a name. Track it so the field can say what it is actually showing.
+  const [isProviderIdentity, setIsProviderIdentity] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -189,8 +199,38 @@ export default function SettingsPage() {
         // `local@aikey.local` when no JWT is attached; that's a Personal-
         // edition sentinel, not a real user — don't expose it as if it
         // were the user's account.
-        if (email && email !== 'local@aikey.local') {
+        if (!email || email === 'local@aikey.local') return;
+        // There IS an account behind this console, whatever we end up displaying.
+        if (!cancelled) setSignedIn(true);
+        // 🚫 A synthetic SSO handle is an internal sentinel, not an address —
+        // never render it. The member's name is the seat alias.
+        if (!isSyntheticIdentityEmail(email)) {
           setCurrentEmail(email);
+          return;
+        }
+        setIsProviderIdentity(true);
+        try {
+          // 🔴 /accounts/me/seats, NOT userAccountsApi.mySeats(): that one goes
+          // through the vault-bridge base, which on this box is a local stub
+          // answering `[]`. The plain path is forwarded to the team server and
+          // is where the alias actually lives. Using the stub is what left this
+          // card with no name and therefore claiming "not signed in".
+          const seatRes = await fetch('/accounts/me/seats', {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            credentials: 'omit',
+          });
+          if (!seatRes.ok) return;
+          const seats = (await seatRes.json()) as Array<{ alias?: string }> | null;
+          const alias = (seats ?? []).find((x) => x.alias)?.alias;
+          // 🔴 The identity LINE, not the bare name: this card exists so the
+          // reader can "confirm it's the right one before changing anything
+          // below", and two members can share a Feishu display name. The
+          // discriminator is what makes that confirmation possible.
+          const line = memberIdentityLine(email, alias, '');
+          if (!cancelled && line) setCurrentEmail(line);
+        } catch {
+          /* no name available — the signedIn flag still keeps the card honest */
         }
       } catch {
         /* network blip — leave empty; UI shows "not logged in" */
@@ -263,11 +303,20 @@ export default function SettingsPage() {
   // committed `currentURL` (not the live input) so the command always points
   // at a saved URL rather than a half-typed / unverified one.
   const loginCmd = currentURL.trim() ? `aikey login --control-url=${currentURL.trim()}` : '';
-  const showLoginCmd = !currentEmail && loginCmd !== '';
+  // Offer the login command only to someone who is actually signed OUT.
+  const showLoginCmd = !signedIn && !currentEmail && loginCmd !== '';
   const accountLabel = showLoginCmd
     ? t('settings.account.loginCmdLabel')
-    : t('settings.account.emailLabel');
-  const accountValue = currentEmail || (showLoginCmd ? loginCmd : t('settings.account.notLoggedIn'));
+    : isProviderIdentity
+      ? t('settings.account.memberLabel')
+      : t('settings.account.emailLabel');
+  const accountValue =
+    currentEmail ||
+    (showLoginCmd
+      ? loginCmd
+      : signedIn
+        ? t('settings.account.signedInNoName')
+        : t('settings.account.notLoggedIn'));
   const accountCopyText = currentEmail || (showLoginCmd ? loginCmd : '');
   async function onCopyAccount() {
     if (!accountCopyText) return;
