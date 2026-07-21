@@ -51,3 +51,27 @@ describe('memberDisplayLabel', () => {
     expect(memberDisplayLabel(undefined, undefined, 'Member')).toBe('Member');
   });
 });
+
+/**
+ * 🔴 The console has MORE THAN ONE source of "me": the team session, and a
+ * deliberate cross-fetch of the local machine used to scope vault/usage data.
+ * The second answers with a local-bypass sentinel. A member on the team console
+ * saw `local@aikey.local` as their own identity because a display slot read the
+ * wrong one (Production, 2026-07-21).
+ *
+ * Fixing the source is the real fix; this is the backstop that survives the next
+ * rewiring. 能红: drop IDENTITY_SENTINELS and these return the sentinel.
+ */
+describe('memberDisplayLabel — local-bypass sentinels are not people', () => {
+  for (const sentinel of ['local@aikey.local', 'local@localhost', 'personal-local', 'local-owner', 'LOCAL@AIKEY.LOCAL']) {
+    it(`never renders ${sentinel} as the member`, () => {
+      expect(memberDisplayLabel(sentinel, undefined, 'Member')).toBe('Member');
+      // With a real name available, the name wins — as it does for any source.
+      expect(memberDisplayLabel(sentinel, 'Feishu Member', 'Member')).toBe('Feishu Member');
+    });
+  }
+
+  it('still returns an ordinary corporate address untouched', () => {
+    expect(memberDisplayLabel('member@example.com', undefined, 'Member')).toBe('member@example.com');
+  });
+});

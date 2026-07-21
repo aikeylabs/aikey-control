@@ -23,6 +23,22 @@
 const SYNTHETIC_IDENTITY_DOMAIN = '@sso.local';
 
 /**
+ * The local-bypass sentinels a box returns when nobody is authenticated to it.
+ *
+ * 🔴 These are not people. The console has more than one source of "me" — the
+ * team session (same-origin, authenticated) and a deliberate cross-fetch of the
+ * LOCAL machine used to scope vault/usage data — and the second one answers with
+ * these. Rendering one as the signed-in member is how a Feishu member came to
+ * see `local@aikey.local`, and before that a colleague's address, on their own
+ * console (found on Production, 2026-07-21).
+ *
+ * Listing them here means the guarantee holds at the DISPLAY boundary: whatever
+ * source a future edit plugs in, a sentinel can never come out the other side
+ * looking like a person.
+ */
+const IDENTITY_SENTINELS = new Set(['local@aikey.local', 'local@localhost', 'personal-local', 'local-owner']);
+
+/**
  * True when the address is one of our own internal placeholders rather than
  * something the member could receive mail at.
  *
@@ -49,6 +65,8 @@ export function memberDisplayLabel(
   const name = alias?.trim();
   if (name) return name;
   const address = email?.trim();
-  if (address && !isSyntheticIdentityEmail(address)) return address;
+  if (address && !isSyntheticIdentityEmail(address) && !IDENTITY_SENTINELS.has(address.toLowerCase())) {
+    return address;
+  }
   return fallback;
 }
