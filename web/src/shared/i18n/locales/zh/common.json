@@ -2241,6 +2241,7 @@
       "title": "当前账号",
       "description": "本控制台正在使用的登录账号。改动下方任何设置前可先确认账号无误。",
       "emailLabel": "登录邮箱",
+      "memberLabel": "当前登录",
       "loginCmdLabel": "登录命令",
       "loginCmdHint": "尚未登录。复制此命令并在终端运行，即可登录到已配置的服务端。",
       "notLoggedIn": "（未登录 —— 在终端运行 aikey login 登录）",

@@ -2241,6 +2241,7 @@
       "title": "Current account",
       "description": "The account this console is signed in with. Confirm it's the right one before changing anything below.",
       "emailLabel": "Login email",
+      "memberLabel": "SIGNED IN AS",
       "loginCmdLabel": "Login command",
       "loginCmdHint": "Not signed in yet. Copy this command and run it in your terminal to sign in to the configured server.",
       "notLoggedIn": "(not logged in — run `aikey login` in your terminal)",

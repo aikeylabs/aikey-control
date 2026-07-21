@@ -31,7 +31,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { isSyntheticIdentityEmail } from '@/shared/utils/member-identity';
+import { isSyntheticIdentityEmail, memberIdentityLine } from '@/shared/utils/member-identity';
 
 import { appsApi } from '../../../shared/api/user/apps';
 import { importApi } from '../../../shared/api/user/import';
@@ -178,6 +178,9 @@ export default function SettingsPage() {
   // login command they did not need — the exact "no seat / no name folded into
   // not-logged-in" failure the spec forbids (R7).
   const [signedIn, setSignedIn] = useState(false);
+  // An SSO account has no address of its own, so "LOGIN EMAIL" would be a false
+  // label over a name. Track it so the field can say what it is actually showing.
+  const [isProviderIdentity, setIsProviderIdentity] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -205,6 +208,7 @@ export default function SettingsPage() {
           setCurrentEmail(email);
           return;
         }
+        setIsProviderIdentity(true);
         try {
           // 🔴 /accounts/me/seats, NOT userAccountsApi.mySeats(): that one goes
           // through the vault-bridge base, which on this box is a local stub
@@ -219,7 +223,12 @@ export default function SettingsPage() {
           if (!seatRes.ok) return;
           const seats = (await seatRes.json()) as Array<{ alias?: string }> | null;
           const alias = (seats ?? []).find((x) => x.alias)?.alias;
-          if (!cancelled && alias) setCurrentEmail(alias);
+          // 🔴 The identity LINE, not the bare name: this card exists so the
+          // reader can "confirm it's the right one before changing anything
+          // below", and two members can share a Feishu display name. The
+          // discriminator is what makes that confirmation possible.
+          const line = memberIdentityLine(email, alias, '');
+          if (!cancelled && line) setCurrentEmail(line);
         } catch {
           /* no name available — the signedIn flag still keeps the card honest */
         }
@@ -298,7 +307,9 @@ export default function SettingsPage() {
   const showLoginCmd = !signedIn && !currentEmail && loginCmd !== '';
   const accountLabel = showLoginCmd
     ? t('settings.account.loginCmdLabel')
-    : t('settings.account.emailLabel');
+    : isProviderIdentity
+      ? t('settings.account.memberLabel')
+      : t('settings.account.emailLabel');
   const accountValue =
     currentEmail ||
     (showLoginCmd
