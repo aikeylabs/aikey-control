@@ -17,6 +17,8 @@
  */
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import { memberDisplayLabel } from '@/shared/utils/member-identity';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -534,7 +536,11 @@ export default function UserOverviewPage() {
   };
 
   const recentKeys = allKeys.slice(0, 5);
-  const emailDisplay = me?.email ?? '—';
+  // 🚫 Never `me.email` on its own: a member who signed in through an identity
+  // provider carries a synthetic handle there (sso+<provider>.<digest>@sso.local),
+  // which is an internal key, not an address they have ever seen. The name is the
+  // seat alias — the single source of truth for a person's name on the web.
+  const emailDisplay = memberDisplayLabel(me?.email, seats.find((s) => s.alias)?.alias, '—');
   const initial = emailDisplay.slice(0, 1).toUpperCase();
   // On a rejected token there is no identity to greet — `Hi, —` next to a
   // green ACTIVE badge reads as "signed in, name still loading", which is

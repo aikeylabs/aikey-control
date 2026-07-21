@@ -2634,6 +2634,12 @@
     "dismiss": "Dismiss",
     "dismissAria": "Dismiss banner"
   },
+  "seatPendingBanner": {
+    "title": "Your account is ready — a seat has not been assigned yet",
+    "body": "You are signed in, but no seat is assigned to your account, so keys and quota are not available yet. An administrator can assign one from the member list.",
+    "dismiss": "Dismiss",
+    "dismissAria": "Dismiss the seat notice"
+  },
   "hookModal": {
     "title": "Enable terminal auto-sync?",
     "body": "Adding a small managed block to your shell profile lets every new terminal pick up key changes (Add / Use / Delete) automatically — no manual reload needed.",

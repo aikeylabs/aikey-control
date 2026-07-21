@@ -76,6 +76,11 @@ export interface SeatSummaryDTO {
   org_id: string;
   invited_email: string;
   seat_status: string;
+  /** Renamable display name — the single source of truth for a person's name on
+   * the web (requirements 2026-07-10-member-sso-login R19). Filled from the
+   * provider's display name on every SSO login. It is what the console shows
+   * instead of `invited_email` when that address is a synthetic handle. */
+  alias?: string;
   claimed_at?: string;
   created_at: string;
 }

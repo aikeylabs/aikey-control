@@ -9,6 +9,8 @@ import { BrandWordmark, BrandMark } from '@/shared/ui/BrandWordmark';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
+import { SeatPendingBanner } from '@/shared/components/SeatPendingBanner';
+import { memberDisplayLabel } from '@/shared/utils/member-identity';
 import {
   OWN_MENU,
   OWN_PERSONAL_MENU,
@@ -584,6 +586,16 @@ export function UserShell() {
   // session, so this has to win over it.
   const teamSessionExpired = isTeamTokenRejected(meQuery.error);
   const identityEmail = teamSessionExpired ? undefined : (meQuery.data?.email ?? user?.email);
+  // A member who signed in through an identity provider has no address of their
+  // own: global_accounts.email carries a synthetic handle. 🚫 It must never be
+  // rendered — the name to show is the seat alias, which is the single source of
+  // truth for a person's name on the web. The seats query is the same one the
+  // seat banner uses, so React Query serves both from one request.
+  const seatsQuery = useQuery({ queryKey: ['my-seats'], queryFn: userAccountsApi.mySeats, retry: 1 });
+  const seatAlias = seatsQuery.data?.find((s) => s.alias)?.alias;
+  const identityLabel = teamSessionExpired
+    ? undefined
+    : memberDisplayLabel(identityEmail, seatAlias, t('userShell.roleMember'));
   const identityRole = teamSessionExpired ? undefined : (meQuery.data?.role ?? user?.role);
   // Phase 4G (2026-06-01): the sidebar bottom button no longer calls
   // `clearAuth` directly — it navigates to /user/settings where the
@@ -1400,7 +1412,7 @@ export function UserShell() {
           aria-label={t('settings.title')}
         >
           <div className="nav-user-avatar">
-            {identityEmail ? initials(identityEmail) : 'U'}
+            {identityLabel ? initials(identityLabel) : 'U'}
           </div>
           <div className="nav-user-who flex-1 min-w-0">
             {/* Email + role — mirrors the Profile page's Identity &
@@ -1410,7 +1422,7 @@ export function UserShell() {
                 upper-case it at the display boundary (same as the
                 Profile page's .role-badge rendering). */}
             <div className="nav-user-name truncate">
-              {identityEmail ?? (teamSessionExpired ? t('userShell.sessionExpired') : '…')}
+              {identityLabel ?? (teamSessionExpired ? t('userShell.sessionExpired') : '…')}
             </div>
             <div className="nav-user-role truncate">
               {teamSessionExpired
@@ -1484,6 +1496,10 @@ export function UserShell() {
           </div>
         </header>
         <div className="flex-1 overflow-y-auto">
+          {/* Account without a seat: shown at the top of every console view
+              because the member can reach any of them and none of them work.
+              Dismissible — only an administrator can resolve it. */}
+          <SeatPendingBanner />
           <Outlet />
         </div>
       </main>
