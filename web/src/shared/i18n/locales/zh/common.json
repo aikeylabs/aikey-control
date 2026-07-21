@@ -2245,7 +2245,9 @@
       "loginCmdLabel": "登录命令",
       "loginCmdHint": "尚未登录。复制此命令并在终端运行，即可登录到已配置的服务端。",
       "notLoggedIn": "（未登录 —— 在终端运行 aikey login 登录）",
-      "signedInNoName": "已登录 —— 尚未设置显示名",
+      "signedInNoName": "已登录 —— 身份提供方尚未提供显示名",
+      "signedInNoSeat": "已登录 —— 尚未分配席位，请联系管理员分配",
+      "readFailed": "无法连接服务端 —— 暂时取不到账号信息（你仍处于登录状态）",
       "copy": "复制",
       "copied": "已复制",
       "copyTooltip": "复制到剪贴板"
@@ -2638,8 +2640,8 @@
   },
   "seatPendingBanner": {
     "title": "账号已就绪 —— 尚未分配席位",
-    "body": "你已登录，但账号还没有席位，因此暂时无法使用密钥与配额。管理员可在成员列表中为你分配。",
-    "dismiss": "关闭",
+    "body": "你已登录，但账号还没有席位，因此暂时无法使用密钥与配额。管理员可在管理台的「用户与席位」页为你分配 —— 你已经出现在那里的「待分配席位」名单中。",
+    "dismiss": "忽略",
     "dismissAria": "关闭席位提示"
   },
   "hookModal": {

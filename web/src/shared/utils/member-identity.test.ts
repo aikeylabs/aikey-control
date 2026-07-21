@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   isSyntheticIdentityEmail,
+  memberAliasSlug,
   memberDisplayLabel,
   memberDiscriminator,
+  memberIdentity,
   memberIdentityLine,
 } from './member-identity';
 
@@ -119,5 +121,112 @@ describe('memberDiscriminator / memberIdentityLine', () => {
 
   it('falls back when there is nothing to show', () => {
     expect(memberIdentityLine(undefined, undefined, '—')).toBe('—');
+  });
+});
+
+/**
+ * 🔴 `memberIdentity` is the single point every display slot must go through.
+ *
+ * 能红: return `{ primary: email }` from it (i.e. reinstate the `alias || email`
+ * each page used to write inline) and the "never the handle" assertions fail.
+ */
+describe('memberIdentity — the one display point', () => {
+  const handle = 'sso+feishu.6ad2973deea1fda6356a024a01de13dc@sso.local';
+  const other = 'sso+feishu.9f3c1a04bb27ee5510cc44de77aa9012@sso.local';
+
+  it('renders an SSO member as {name} · {discriminator}', () => {
+    const id = memberIdentity(handle, '李承熙', '—');
+    expect(id.primary).toBe('李承熙');
+    expect(id.secondary).toBe('feishu:6ad2973d');
+    expect(id.unambiguous).toBe('李承熙 · feishu:6ad2973d');
+  });
+
+  it('🚫 never emits the synthetic handle in any visible field', () => {
+    for (const id of [memberIdentity(handle, '李承熙', '—'), memberIdentity(handle, undefined, '—')]) {
+      for (const shown of [id.primary, id.secondary ?? '', id.unambiguous]) {
+        expect(shown).not.toContain('@sso.local');
+        expect(shown).not.toContain('sso+');
+      }
+    }
+  });
+
+  it('🔴 keeps two members with the same display name apart', () => {
+    expect(memberIdentity(handle, '李承熙', '—').unambiguous).not.toBe(
+      memberIdentity(other, '李承熙', '—').unambiguous,
+    );
+  });
+
+  it('falls back to the discriminator — not the fallback — for an unnamed SSO member', () => {
+    expect(memberIdentity(handle, undefined, '—').primary).toBe('feishu:6ad2973d');
+  });
+
+  it('pairs a named ordinary member with their real address', () => {
+    const id = memberIdentity('member@acme.corp', 'Ada', '—');
+    expect(id.primary).toBe('Ada');
+    expect(id.secondary).toBe('member@acme.corp');
+    expect(id.unambiguous).toBe('Ada · member@acme.corp');
+  });
+
+  it('shows an unnamed ordinary member as the address alone, with no empty second line', () => {
+    const id = memberIdentity('member@acme.corp', undefined, '—');
+    expect(id.primary).toBe('member@acme.corp');
+    expect(id.secondary).toBeUndefined();
+  });
+
+  it('never renders a local-bypass sentinel as a person', () => {
+    expect(memberIdentity('local@aikey.local', undefined, '—').primary).toBe('—');
+  });
+
+  it('uses the fallback only when there is nothing at all', () => {
+    expect(memberIdentity(undefined, undefined, '—').primary).toBe('—');
+    expect(memberIdentity('', '  ', '—').primary).toBe('—');
+  });
+
+  it('🔴 makes the discriminator an admin just read on screen searchable', () => {
+    // The regression: searchText carried the full handle only, so pasting the
+    // `feishu:6ad2973d` shown in a confirmation dialog returned zero rows.
+    const id = memberIdentity(handle, '李承熙', '—');
+    expect(id.searchText).toContain('feishu:6ad2973d');
+    expect(id.searchText).toContain('李承熙');
+    // The raw handle stays searchable for whoever has it from a server log.
+    expect(id.searchText).toContain('sso+feishu');
+  });
+
+  it('lowercases the haystack so a mixed-case box still matches', () => {
+    expect(memberIdentity('Ada@Acme.Corp', 'Ada Lovelace', '—').searchText).toContain('ada lovelace');
+  });
+});
+
+/**
+ * 🔴 The only identity helper whose output gets WRITTEN DOWN. A generated VK
+ * alias lands in the database, billing views and CSV exports; unlike a rendering
+ * bug it cannot be taken back.
+ *
+ * 能红: slug the local part of the handle instead (the pre-fix behaviour) and
+ * the "no handle" assertion fails with `sso-feishu-6ad2973dee…`.
+ */
+describe('memberAliasSlug — persisted, so it must never carry the handle', () => {
+  const handle = 'sso+feishu.6ad2973deea1fda6356a024a01de13dc@sso.local';
+
+  it('uses the short discriminator for an SSO member', () => {
+    expect(memberAliasSlug(handle)).toBe('feishu-6ad2973d');
+  });
+
+  it('🚫 never bakes the handle into a name that gets persisted', () => {
+    const slug = memberAliasSlug(handle);
+    expect(slug).not.toContain('sso');
+    expect(slug).not.toContain('6ad2973deea1fda6356a024a01de13dc');
+    expect(`key-${slug}-claude`).not.toContain('@');
+  });
+
+  it('keeps the familiar address prefix for an ordinary member', () => {
+    expect(memberAliasSlug('wang.nan@acme.corp')).toBe('wang-nan');
+  });
+
+  it('is always a usable ASCII token', () => {
+    expect(memberAliasSlug(undefined)).toBe('seat');
+    expect(memberAliasSlug('@acme.corp')).toBe('seat');
+    expect(memberAliasSlug('...@acme.corp')).toBe('seat');
+    expect(/^[a-zA-Z0-9-]+$/.test(memberAliasSlug(handle))).toBe(true);
   });
 });

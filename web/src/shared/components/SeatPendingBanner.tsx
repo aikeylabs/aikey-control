@@ -27,11 +27,9 @@ import { useTranslation } from 'react-i18next';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { runtimeConfig } from '@/app/config/runtime';
 import { isLocalUsageScope } from '@/shared/usage/local-identity';
+import { seatBannerDecision } from '@/shared/utils/seat-banner-decision';
 
 const SESSION_DISMISS_KEY = 'aikey:seatPendingBannerDismissed';
-
-/** Seat states that give the member nothing to work with. */
-const UNUSABLE_SEAT_STATUSES = new Set(['suspended', 'revoked']);
 
 export function SeatPendingBanner() {
   const { t } = useTranslation();
@@ -61,13 +59,17 @@ export function SeatPendingBanner() {
     retry: 1,
   });
 
-  // 🔴 Only an ANSWERED query saying "zero usable seats" may raise the banner.
-  // While it is loading, or when it failed, we do not know — and telling a
-  // member with a perfectly good seat that they have none is worse than saying
-  // nothing. Errors degrade to silence, not to a warning.
-  if (!teamContext || dismissed || seatsQuery.isPending || seatsQuery.isError) return null;
-  const usable = (seatsQuery.data ?? []).filter((s) => !UNUSABLE_SEAT_STATUSES.has(s.seat_status));
-  if (usable.length > 0) return null;
+  // 🔴 Only an ANSWERED query saying "zero usable seats" may raise the banner —
+  // see seatBannerDecision, which owns that rule and is fenced by
+  // SeatPendingBanner.test.ts.
+  const decision = seatBannerDecision({
+    teamContext,
+    dismissed,
+    pending: seatsQuery.isPending,
+    errored: seatsQuery.isError,
+    seats: seatsQuery.data,
+  });
+  if (!decision.show) return null;
 
   const handleDismiss = () => {
     if (typeof window !== 'undefined') {
