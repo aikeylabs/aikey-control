@@ -181,6 +181,22 @@ export default function SettingsPage() {
   // An SSO account has no address of its own, so "LOGIN EMAIL" would be a false
   // label over a name. Track it so the field can say what it is actually showing.
   const [isProviderIdentity, setIsProviderIdentity] = useState(false);
+  // 🔴 "We could not ask" is its own state — 🚫 not a value of "signed in".
+  // `if (!res.ok) return` plus a swallowing catch made a 500, a 502 and a
+  // pulled network cable indistinguishable from "nobody is logged in", so a
+  // perfectly signed-in member was told to go and run `aikey login` in a
+  // terminal. That is the transport-misclassified-as-not-logged-in failure
+  // (CI/bugfix/2026-07-12): a transport error is a FAILURE, never a business
+  // fact. The card degrades to "can't reach the server" and, crucially,
+  // withholds the login command rather than pointing the wrong way.
+  const [readFailed, setReadFailed] = useState(false);
+  // Whether the member HAS a seat. Distinct from "has a name": no seat is a
+  // real, explainable state with a real next step (ask an administrator);
+  // a seat with no alias yet is a different one. 🚫 Collapsing them, as
+  // "display name not set yet" did, produces a sentence that is simply untrue —
+  // an SSO member never sets their own display name, and there is no control
+  // anywhere in the member console that would let them.
+  const [hasSeat, setHasSeat] = useState<boolean | undefined>(undefined);
   const [emailCopied, setEmailCopied] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -191,17 +207,23 @@ export default function SettingsPage() {
           headers: { Accept: 'application/json' },
           credentials: 'omit',
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          // 5xx / 4xx alike: the endpoint answered something we cannot read as
+          // an identity. We do not know who is signed in — say exactly that.
+          if (!cancelled) setReadFailed(true);
+          return;
+        }
         const data = (await res.json()) as { email?: string };
         const email = (data.email ?? '').trim();
         if (cancelled) return;
         // Filter the local-bypass placeholder. The local-server returns
         // `local@aikey.local` when no JWT is attached; that's a Personal-
         // edition sentinel, not a real user — don't expose it as if it
-        // were the user's account.
+        // were the user's account. This one IS a business fact (a successful
+        // answer meaning "nobody"), so it stays a business state.
         if (!email || email === 'local@aikey.local') return;
         // There IS an account behind this console, whatever we end up displaying.
-        if (!cancelled) setSignedIn(true);
+        setSignedIn(true);
         // 🚫 A synthetic SSO handle is an internal sentinel, not an address —
         // never render it. The member's name is the seat alias.
         if (!isSyntheticIdentityEmail(email)) {
@@ -222,18 +244,23 @@ export default function SettingsPage() {
           });
           if (!seatRes.ok) return;
           const seats = (await seatRes.json()) as Array<{ alias?: string }> | null;
+          if (cancelled) return;
+          setHasSeat((seats ?? []).length > 0);
           const alias = (seats ?? []).find((x) => x.alias)?.alias;
           // 🔴 The identity LINE, not the bare name: this card exists so the
           // reader can "confirm it's the right one before changing anything
           // below", and two members can share a Feishu display name. The
           // discriminator is what makes that confirmation possible.
           const line = memberIdentityLine(email, alias, '');
-          if (!cancelled && line) setCurrentEmail(line);
+          if (line) setCurrentEmail(line);
         } catch {
-          /* no name available — the signedIn flag still keeps the card honest */
+          // Seats unreachable. `signedIn` is already true from a successful
+          // /accounts/me, so the card stays honest; `hasSeat` stays undefined,
+          // which the label below reads as "we don't know" rather than "none".
         }
       } catch {
-        /* network blip — leave empty; UI shows "not logged in" */
+        // Network-level failure: fetch rejected, so nothing was learned.
+        if (!cancelled) setReadFailed(true);
       }
     })();
     return () => {
@@ -303,20 +330,32 @@ export default function SettingsPage() {
   // committed `currentURL` (not the live input) so the command always points
   // at a saved URL rather than a half-typed / unverified one.
   const loginCmd = currentURL.trim() ? `aikey login --control-url=${currentURL.trim()}` : '';
-  // Offer the login command only to someone who is actually signed OUT.
-  const showLoginCmd = !signedIn && !currentEmail && loginCmd !== '';
+  // Offer the login command only to someone we KNOW is signed out. 🚫 Not when
+  // the read failed: "go run aikey login" is an instruction, and handing it to a
+  // signed-in member whose server just 502'd sends them down a path that cannot
+  // help and may log them out of a session that was fine.
+  const showLoginCmd = !signedIn && !readFailed && !currentEmail && loginCmd !== '';
   const accountLabel = showLoginCmd
     ? t('settings.account.loginCmdLabel')
     : isProviderIdentity
       ? t('settings.account.memberLabel')
       : t('settings.account.emailLabel');
+  // Four outcomes, four sentences — 🚫 never one sentence for all of them:
+  //   a name/address we read     → show it
+  //   known signed out + a URL   → the login command
+  //   could not read             → say so (a failure, not an empty account)
+  //   signed in but nameless     → why: no seat yet, or a seat with no name yet
   const accountValue =
     currentEmail ||
     (showLoginCmd
       ? loginCmd
-      : signedIn
-        ? t('settings.account.signedInNoName')
-        : t('settings.account.notLoggedIn'));
+      : readFailed
+        ? t('settings.account.readFailed')
+        : signedIn
+          ? hasSeat === false
+            ? t('settings.account.signedInNoSeat')
+            : t('settings.account.signedInNoName')
+          : t('settings.account.notLoggedIn'));
   const accountCopyText = currentEmail || (showLoginCmd ? loginCmd : '');
   async function onCopyAccount() {
     if (!accountCopyText) return;

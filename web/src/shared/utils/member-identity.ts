@@ -120,3 +120,95 @@ export function memberIdentityLine(
   if (label) return label;
   return discriminator || fallback;
 }
+
+/**
+ * The parts of one person's on-screen identity.
+ *
+ * 🔴 THE single point every display slot goes through. Before this existed each
+ * page wrote its own `alias || email`, and the day `email` became a synthetic
+ * handle every one of those slots started rendering
+ * `sso+feishu.<32hex>@sso.local` — in seat lists, in the pickers an admin uses
+ * to hand out keys, in audit rows, and (worst) baked into a generated virtual-key
+ * alias that then persisted into billing and CSV exports.
+ *
+ * 🚫 `alias || email` is banned in pages. Call `memberIdentity` instead: adding a
+ * new placeholder shape then costs one edit here rather than a repo-wide sweep.
+ */
+export interface MemberIdentity {
+  /** The name to show. Never empty, never a synthetic handle. */
+  primary: string;
+  /**
+   * What distinguishes this person from someone with the same name — the short
+   * provider discriminator for an SSO member, the real address for everyone
+   * else. `undefined` when it would only repeat `primary`.
+   */
+  secondary?: string;
+  /**
+   * `{name} · {discriminator}` — for DESTRUCTIVE confirmations, pickers, and
+   * anywhere the reader must not have to ask "which 李承熙?".
+   *
+   * 🔴 A suspend dialog that says "Suspend 李承熙?" is unanswerable in an org
+   * with two of them, and the cost of guessing wrong is someone losing access.
+   */
+  unambiguous: string;
+  /**
+   * Lowercased haystack for search boxes. Deliberately WIDER than what is on
+   * screen: it carries the raw handle (so an operator with a server log line can
+   * still find the row) AND the discriminator (so the string an admin just read
+   * off a confirmation dialog can be pasted back into the box — it used to
+   * return zero results, which is how a visible token becomes useless).
+   */
+  searchText: string;
+}
+
+/**
+ * Build the display identity for a person from whatever the caller has.
+ *
+ * `fallback` is used only when there is no name and nothing showable at all —
+ * an unnamed SSO seat still gets its discriminator rather than the fallback,
+ * because "feishu:6ad2973d" at least identifies someone.
+ */
+export function memberIdentity(
+  email: string | null | undefined,
+  alias: string | null | undefined,
+  fallback: string,
+): MemberIdentity {
+  const address = email?.trim() ?? '';
+  const searchText = `${alias?.trim() ?? ''} ${address} ${memberDiscriminator(address)}`.toLowerCase();
+  const name = memberDisplayLabel(address, alias, '');
+  const discriminator = memberDiscriminator(address);
+
+  if (name && discriminator) {
+    return { primary: name, secondary: discriminator, unambiguous: `${name} · ${discriminator}`, searchText };
+  }
+  if (name && name !== address && address && !isSyntheticIdentityEmail(address)) {
+    // A named member with a real address: the address is the discriminator.
+    return { primary: name, secondary: address, unambiguous: `${name} · ${address}`, searchText };
+  }
+  const only = name || discriminator || fallback;
+  return { primary: only, unambiguous: only, searchText };
+}
+
+/**
+ * An ASCII slug for a person, safe to bake into a GENERATED, PERSISTED name
+ * (virtual-key aliases, binding aliases).
+ *
+ * 🔴 This one is not cosmetic. The seat wizards used to build
+ * `key-{email.split('@')[0]}-{cred}`, which for an SSO member produced
+ * `key-sso-feishu-6ad2973deea1fda6356a024a01de13dc-claude` and wrote it to the
+ * database — from where it reached the VK list, the member's own console, usage
+ * billing and exported CSVs, and could not be taken back. Display bugs are
+ * reversible; this one was not.
+ *
+ * Order: the discriminator for an SSO member (`feishu-6ad2973d` — stable, ASCII,
+ * short, and not the handle) → the local part of a real address → `seat`.
+ * 🚫 The alias is NOT used: Feishu display names are usually CJK and sanitize
+ * down to a row of dashes.
+ */
+export function memberAliasSlug(email: string | null | undefined, fallback = 'seat'): string {
+  const address = email?.trim() ?? '';
+  const discriminator = memberDiscriminator(address);
+  const raw = discriminator || (isSyntheticIdentityEmail(address) ? '' : address.split('@')[0]);
+  const slug = raw.replace(/[^a-zA-Z0-9]/g, '-').replace(/^-+|-+$/g, '');
+  return slug || fallback;
+}
