@@ -164,15 +164,41 @@ export async function teamGetJSON<T>(path: string): Promise<T | TeamFetchError> 
 export async function teamPostJSON<T>(
   path: string,
   body: unknown,
+  timeoutMs = FETCH_TIMEOUT_MS,
+): Promise<T | TeamFetchError | TeamWriteError> {
+  return teamWriteJSON<T>('POST', path, body, timeoutMs);
+}
+
+/**
+ * teamPutJSON PUTs `body` to a team-scoped path on the remote master (member JWT).
+ * Same handshake + error classification as teamPostJSON — for idempotent
+ * "set/replace" writes (member per-account egress override, exit-IP baseline;
+ * 2026-07-19). `path` must start with '/'.
+ */
+export async function teamPutJSON<T>(
+  path: string,
+  body: unknown,
+  timeoutMs = FETCH_TIMEOUT_MS,
+): Promise<T | TeamFetchError | TeamWriteError> {
+  return teamWriteJSON<T>('PUT', path, body, timeoutMs);
+}
+
+// teamWriteJSON is the shared POST/PUT body-write core (extracted 2026-07-19 so
+// teamPostJSON and teamPutJSON share one handshake + error-classification path).
+async function teamWriteJSON<T>(
+  method: 'POST' | 'PUT',
+  path: string,
+  body: unknown,
+  timeoutMs: number,
 ): Promise<T | TeamFetchError | TeamWriteError> {
   const handshake = await resolveTeamHandshake();
   if (!handshake.ok) return handshake.err;
   const { teamUrl, jwt } = handshake;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(`${teamUrl}${path}`, {
-      method: 'POST',
+      method,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',

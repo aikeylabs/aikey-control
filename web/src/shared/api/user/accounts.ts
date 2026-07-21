@@ -55,6 +55,13 @@ export interface MyAgentDTO {
   /** 2026-07-18 (additive): VK exists but the pool has ZERO enabled accounts —
    * calls would 503; the reveal warns alongside the token. */
   pool_empty?: boolean;
+  /** Availability is independent from seat status. `ready` requires every
+   * enabled pool account to have usable runtime material for the parent seat;
+   * `no_login` means none do; `degraded` means partial/unknown/disabled. */
+  pool_readiness: 'ready' | 'no_login' | 'degraded';
+  pool_accounts_total: number;
+  pool_accounts_ready: number;
+  pool_readiness_reason?: string;
   /** 2026-07-19 (additive, reuse-first): MASKED head+tail of the agent's active
    * VK (e.g. "aikey_team_oauth_1a2b3c••••7f8g"). Carried on the LIST so a member
    * can IDENTIFY which VK an agent holds WITHOUT rotating it. Empty when no VK
@@ -104,9 +111,9 @@ export const userAccountsApi = {
   myAgents: async (): Promise<MyAgentDTO[]> => {
     const res = await teamGetJSON<{ agents: MyAgentDTO[] }>('/accounts/me/agents');
     if (isTeamFetchError(res)) {
-      // No team session yet → no agents (empty, not an error). Real transport /
-      // auth failures throw so the page shows its error state.
-      if (res.kind === 'not-logged-in') return [];
+      // Missing team auth is not a truthful empty list: the server has not said
+      // there are zero agents. Throw every failure class so the page renders its
+      // explicit retry/error state instead of hiding agents behind "empty".
       throw new Error(`agents unavailable: ${res.kind}`);
     }
     return res.agents ?? [];

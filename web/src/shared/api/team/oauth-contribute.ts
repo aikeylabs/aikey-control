@@ -9,6 +9,7 @@
 import {
   teamGetJSON,
   teamPostJSON,
+  teamPutJSON,
   type TeamFetchError,
   type TeamWriteError,
 } from './team-fetch';
@@ -96,9 +97,8 @@ export interface MyPoolAccount {
    * group_alias. */
   oauth_group_id?: string;
   group_alias?: string;
-  /** provider code (anthropic | openai | …) — picks the sign-in flow (R34 codex
-   * pools): claude = paste-code, codex = local-callback polling. Omitted by older
-   * servers → the page falls back to the claude flow. */
+  /** provider code (anthropic | openai | …), used only for row labels/branding.
+   * Sign-in provider + flow come from the strict server login context. */
   provider_code?: string;
   /** whether this account exits through a configured egress line (own override
    * OR inherited group default, R46). Presence only — the raw URL never reaches
@@ -117,6 +117,61 @@ export async function fetchMyPoolAccounts(): Promise<MyPoolAccount[] | TeamFetch
   if (Array.isArray(res)) return res;
   if ('kind' in res) return res;
   return [];
+}
+
+/** Member per-account egress view (2026-07-19). Both pool types receive the
+ * resolved effective config for the confirmed view/copy flow. egress_proxy_url
+ * remains the account-own editor prefill and is returned only for owner pools. */
+export interface MemberEgressView {
+  is_owner: boolean;
+  scope: 'inherited' | 'overridden';
+  egress_proxy_url?: string; // owner pool only
+  effective_egress_url?: string; // resolved own override ?? group default; both pool types
+  has_effective_egress: boolean;
+  last_exit_ip?: string;
+}
+
+export interface MemberEgressTestResult {
+  ok: boolean;
+  exit_ip?: string;
+  latency_ms?: number;
+  engine?: string;
+  error?: string;
+}
+
+/** fetchAccountEgress reads one pool account's egress status + exit-IP baseline
+ * (GET /accounts/me/oauth-accounts/{id}/egress). */
+export function fetchAccountEgress(credentialID: string): Promise<MemberEgressView | TeamFetchError> {
+  return teamGetJSON<MemberEgressView>(`/accounts/me/oauth-accounts/${encodeURIComponent(credentialID)}/egress`);
+}
+
+/** setAccountEgress sets (or clears with "") the account-level egress OVERRIDE —
+ * never the group default (R46). Reaches the master's member-authz endpoint. */
+export function setAccountEgress(credentialID: string, egressProxyURL: string) {
+  return teamPutJSON<{ credential_id: string; scope: string; last_exit_ip?: string }>(
+    `/accounts/me/oauth-accounts/${encodeURIComponent(credentialID)}/egress`,
+    { egress_proxy_url: egressProxyURL },
+    20_000,
+  );
+}
+
+/** Test the exact unsaved modal draft through the control plane's production
+ * egress engine. The save endpoint independently repeats this probe. */
+export function testAccountEgress(credentialID: string, egressProxyURL: string) {
+  return teamPostJSON<MemberEgressTestResult>(
+    `/accounts/me/oauth-accounts/${encodeURIComponent(credentialID)}/egress/test`,
+    { egress_proxy_url: egressProxyURL },
+    20_000,
+  );
+}
+
+/** saveAccountExitIP overwrites the exit-IP baseline for the login-IP self-check
+ * (req 5: member first test after changing egress). */
+export function saveAccountExitIP(credentialID: string, exitIP: string) {
+  return teamPutJSON<{ credential_id: string; last_exit_ip: string }>(
+    `/accounts/me/oauth-accounts/${encodeURIComponent(credentialID)}/exit-ip`,
+    { exit_ip: exitIP },
+  );
 }
 
 /**

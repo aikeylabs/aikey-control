@@ -14,6 +14,13 @@ export interface ApiError {
   provider?: string;
   upstream_status?: number;
   upstream_message?: string;
+  expected_provider?: string;
+  actual_provider?: string;
+  expected_group_id?: string;
+  actual_group_id?: string;
+  expected_account_id?: string;
+  actual_account_id?: string;
+  routed_count?: number;
 }
 
 // ── Suggestions map (kept in sync with service/internal/shared/errors.go) ─────
@@ -64,6 +71,11 @@ const SUGGESTIONS: Record<string, string> = {
   BIZ_CRED_NAME_TAKEN:        'A credential with this name already exists. Use a different display name.',
   BIZ_PROV_CODE_TAKEN:        'A provider with this code already exists. Use a different provider code.',
 
+  // BIZ — OAuth login binding / routing
+  BIZ_OAUTH_LOGIN_BINDING_CHANGED: 'Refresh the account list and restart sign-in so the session uses the current provider and pool binding.',
+  BIZ_OAUTH_LOGIN_CONTEXT_UNAVAILABLE: 'Refresh the account list. If the account is still unavailable, ask an administrator to repair its pool/provider binding.',
+  BIZ_OAUTH_ROUTED_ACCOUNT_AMBIGUOUS: 'Refresh this page or upgrade the client so it sends the exact credential selected for this pool.',
+
   // BIZ — Credential
   BIZ_CRED_NOT_FOUND: 'The credential was not found. It may have been deleted from Provider Accounts.',
   BIZ_CRED_INACTIVE:  'This credential is not active. Go to Provider Accounts and rotate or replace it.',
@@ -109,6 +121,13 @@ export function parseApiError(err: unknown): ApiError {
       if (typeof data.provider === 'string')         apiErr.provider = data.provider;
       if (typeof data.upstream_status === 'number')  apiErr.upstream_status = data.upstream_status;
       if (typeof data.upstream_message === 'string') apiErr.upstream_message = data.upstream_message;
+      if (typeof data.expected_provider === 'string')   apiErr.expected_provider = data.expected_provider;
+      if (typeof data.actual_provider === 'string')     apiErr.actual_provider = data.actual_provider;
+      if (typeof data.expected_group_id === 'string')   apiErr.expected_group_id = data.expected_group_id;
+      if (typeof data.actual_group_id === 'string')     apiErr.actual_group_id = data.actual_group_id;
+      if (typeof data.expected_account_id === 'string') apiErr.expected_account_id = data.expected_account_id;
+      if (typeof data.actual_account_id === 'string')   apiErr.actual_account_id = data.actual_account_id;
+      if (typeof data.routed_count === 'number')        apiErr.routed_count = data.routed_count;
       return apiErr;
     }
     const status = err.response?.status;
@@ -175,6 +194,11 @@ const LABELS: Record<string, string> = {
   BIZ_BIND_NOT_DELIVERED:     'Delivery Failed',
   BIZ_BIND_ALIAS_TAKEN:       'Alias Taken',
   BIZ_BIND_DUPLICATE_TARGET:  'Already Issued',
+
+  // BIZ — OAuth login binding / routing
+  BIZ_OAUTH_LOGIN_BINDING_CHANGED:     'Binding Changed',
+  BIZ_OAUTH_LOGIN_CONTEXT_UNAVAILABLE: 'Login Unavailable',
+  BIZ_OAUTH_ROUTED_ACCOUNT_AMBIGUOUS:   'Pick Required',
 
   // BIZ — Credential / Provider
   BIZ_CRED_NAME_TAKEN: 'Name Taken',

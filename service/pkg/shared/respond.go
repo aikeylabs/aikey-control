@@ -99,6 +99,9 @@ func DomainErrorHTTPStatus(code string) int {
 	case CodeBizAuthEmailTaken, CodeBizSeatEmailTaken,
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
 		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
+		CodeBizOauthLoginBindingChanged,
+		CodeBizOauthLoginContextUnavailable,
+		CodeBizOauthRoutedAccountAmbiguous,
 		// R39 recycle-bin guard: live references block deletion — a resource-state
 		// conflict the admin resolves (migrate channels / detach from group).
 		CodeBizCredHasActiveRefs,
