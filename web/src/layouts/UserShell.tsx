@@ -594,10 +594,12 @@ export function UserShell() {
   // seat banner uses, so React Query serves both from one request.
   // Same gate as SeatPendingBanner: on Personal (and a standalone Trial) there
   // are no seats and /accounts/me/seats is a stub, so this asks nothing at all.
+  // The alias is the member's NAME, so it must come from the path that carries
+  // it on every edition — the bridge base is a local stub on a personal box.
+  // Runs on both sides: a personal box with a team session still has a name.
   const seatsQuery = useQuery({
-    queryKey: ['my-seats'],
-    queryFn: userAccountsApi.mySeats,
-    enabled: !isLocalUsageScope(runtimeConfig),
+    queryKey: ['my-seats', 'identity'],
+    queryFn: userAccountsApi.mySeatsForIdentity,
     retry: 1,
   });
   const seatAlias = seatsQuery.data?.find((s) => s.alias)?.alias;

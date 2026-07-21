@@ -39,10 +39,13 @@ export default function MyAccountPage() {
 
   const meQuery = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   const seatsQuery = useQuery({ queryKey: ['my-seats'], queryFn: userAccountsApi.mySeats });
+  // Name source — the bridge path is a local stub on a personal box.
+  const identitySeatsQuery = useQuery({ queryKey: ['my-seats', 'identity'], queryFn: userAccountsApi.mySeatsForIdentity, retry: 1 });
   const keysQuery = useQuery({ queryKey: ['my-all-keys'], queryFn: deliveryApi.allKeys });
 
   const me = meQuery.data;
   const seats = seatsQuery.data ?? [];
+  const identitySeats = identitySeatsQuery.data ?? [];
   const allKeys = keysQuery.data ?? [];
 
   const lastRefreshed = useMemo(() => {
@@ -114,7 +117,7 @@ export default function MyAccountPage() {
                   this field rendered the handle in full. */}
               <Field
                 label={t('account.fieldEmail')}
-                value={memberDisplayLabel(me?.email, seats.find((s) => s.alias)?.alias, '—')}
+                value={memberDisplayLabel(me?.email, identitySeats.find((s) => s.alias)?.alias, '—')}
                 mono={false}
               />
               <Field

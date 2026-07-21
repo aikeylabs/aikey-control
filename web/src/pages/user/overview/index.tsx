@@ -271,6 +271,14 @@ export default function UserOverviewPage() {
   // Correct in both, and the same source the shell's sidebar uses, so the
   // greeting and the sidebar can no longer disagree.
   const { data: identity } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
+  // Name source, same as the shell's — see mySeatsForIdentity for why the
+  // bridge path cannot answer this.
+  const { data: identitySeatsRaw } = useQuery({
+    queryKey: ['my-seats', 'identity'],
+    queryFn: userAccountsApi.mySeatsForIdentity,
+    retry: 1,
+  });
+  const identitySeats = identitySeatsRaw ?? [];
   // R23 (revised 2026-05-11): Seats is a B-side concept — Personal A
   // has no team/seat domain (A's `/accounts/me/seats` is an empty stub
   // for FE-compat). On A side this query returns []; on B side it
@@ -555,7 +563,7 @@ export default function UserOverviewPage() {
   // provider carries a synthetic handle there (sso+<provider>.<digest>@sso.local),
   // which is an internal key, not an address they have ever seen. The name is the
   // seat alias — the single source of truth for a person's name on the web.
-  const emailDisplay = memberDisplayLabel(identity?.email, seats.find((s) => s.alias)?.alias, '—');
+  const emailDisplay = memberDisplayLabel(identity?.email, identitySeats.find((s) => s.alias)?.alias, '—');
   const initial = emailDisplay.slice(0, 1).toUpperCase();
   // On a rejected token there is no identity to greet — `Hi, —` next to a
   // green ACTIVE badge reads as "signed in, name still loading", which is

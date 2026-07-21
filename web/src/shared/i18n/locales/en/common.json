@@ -2244,6 +2244,7 @@
       "loginCmdLabel": "Login command",
       "loginCmdHint": "Not signed in yet. Copy this command and run it in your terminal to sign in to the configured server.",
       "notLoggedIn": "(not logged in — run `aikey login` in your terminal)",
+      "signedInNoName": "Signed in — display name not set yet",
       "copy": "Copy",
       "copied": "Copied",
       "copyTooltip": "Copy to clipboard"

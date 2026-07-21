@@ -101,6 +101,21 @@ export const userAccountsApi = {
     return res.data;
   },
 
+  /**
+   * Seats via the PLAIN path, for resolving the member's display name.
+   *
+   * 🔴 Why not mySeats(): that one goes through ME_BRIDGE_BASE, which on a
+   * personal box is the local vault-bridge and answers `[]` — so the alias, and
+   * with it the member's name, is invisible there. `/accounts/me/seats` is
+   * forwarded to the team server on that box and is same-origin on the team
+   * console, so it carries the alias on every edition. Using the bridge for
+   * identity is what left the console calling a signed-in member "member".
+   */
+  mySeatsForIdentity: async (): Promise<SeatSummaryDTO[]> => {
+    const res = await httpClient.get<SeatSummaryDTO[]>('/accounts/me/seats');
+    return res.data ?? [];
+  },
+
   mySeats: async (): Promise<SeatSummaryDTO[]> => {
     const res = await httpClient.get<SeatSummaryDTO[]>(`${ME_BRIDGE_BASE}/seats`);
     return res.data;

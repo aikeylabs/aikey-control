@@ -2244,6 +2244,7 @@
       "loginCmdLabel": "登录命令",
       "loginCmdHint": "尚未登录。复制此命令并在终端运行，即可登录到已配置的服务端。",
       "notLoggedIn": "（未登录 —— 在终端运行 aikey login 登录）",
+      "signedInNoName": "已登录 —— 尚未设置显示名",
       "copy": "复制",
       "copied": "已复制",
       "copyTooltip": "复制到剪贴板"
