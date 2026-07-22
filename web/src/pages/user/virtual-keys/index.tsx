@@ -32,7 +32,8 @@ import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
 import { ModelMappingBanner } from '../_shared/ModelMappingBanner';
-import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
+import { displayProtocolFamily } from '@/shared/api/user/protocolFamily';
+import { normalizeProtocol, protocolsOf } from '../_shared/protocol-axis';
 import { providerAxisLabel } from '../_shared/provider-axis-label';
 import { providerEmphasis } from '../_shared/provider-emphasis';
 import {
@@ -88,7 +89,7 @@ function providerFamily(code: string | null | undefined): string {
 function rowProviders(k: UserKeyDTO, groupProtocol?: string): string[] {
   const bindings = Array.isArray(k.bindings) ? k.bindings : [];
   const scoped = groupProtocol
-    ? bindings.filter((b) => displayProtocolFamily(b.protocol) === groupProtocol)
+    ? bindings.filter((b) => normalizeProtocol(b.protocol) === groupProtocol)
     : bindings;
   const src = (scoped.length > 0 ? scoped.map((b) => b.provider) : null)
     ?? (k.supported_providers ?? []);
@@ -105,9 +106,8 @@ function rowProviders(k: UserKeyDTO, groupProtocol?: string): string[] {
  *  when the VK also speaks others (it appears under those groups too). Mirrors
  *  `aikey list`, which collapses the same way. */
 function rowProtocolLabel(k: UserKeyDTO, groupProtocol: string | undefined, t: TFunction): string {
-  const bindings = Array.isArray(k.bindings) ? k.bindings : [];
-  const all = [...new Set(bindings.map((b) => displayProtocolFamily(b.protocol)).filter(Boolean))];
-  const here = groupProtocol || displayProtocolFamily(k.protocol_type) || all[0] || '';
+  const all = keyProtocols(k);
+  const here = groupProtocol || all[0] || '';
   const others = all.filter((p) => p !== here).length;
   return others > 0 ? t('teamKeys.protocolPlusMore', { protocol: here, count: others }) : here;
 }
@@ -129,39 +129,10 @@ function keyProviderFamily(k: { provider_code?: string | null; protocol_type?: s
   );
 }
 
-/** EVERY display family this VK can route (2026-07-13).
- *
- *  Why: a VK carries N protocol channels by design (baseline ER —
- *  uq_mpb_vk_protocol_provider is per (vk, protocol, provider)), but
- *  `provider_code` / `protocol_type` only ever hold the FIRST binding's values
- *  (the master snapshot projects them as a primary hint for legacy readers).
- *  Grouping / labelling off them alone renders a multi-protocol VK as
- *  single-protocol — the openai channel of a VK bound to anthropic+openai simply
- *  vanished from this page. `supported_providers` carries the full set and the CLI
- *  has always emitted it; we just never read it here.
- *
- *  This mirrors the vault page's expansion (2026-04-30 / 2026-05-12) — same
- *  familyOfProviderCode口径, now via the shared helper. Falls back to the single
- *  family when supported_providers is absent (older server) or empty (e.g. an
- *  orphaned group VK, whose protocol still resolves through keyProviderFamily).
- */
-function keyProviderFamilies(k: UserKeyDTO): string[] {
-  const sp = k.supported_providers;
-  if (Array.isArray(sp) && sp.length > 0) {
-    const seen = new Set<string>();
-    const fams: string[] = [];
-    for (const code of sp) {
-      const raw = (code ?? '').toString().trim();
-      if (!raw) continue;
-      const fam = familyOfProviderCode(raw);
-      if (!seen.has(fam)) {
-        seen.add(fam);
-        fams.push(fam);
-      }
-    }
-    if (fams.length > 0) return fams;
-  }
-  return [keyProviderFamily(k)];
+/** Every protocol this VK speaks, in binding order — see `_shared/protocol-axis`.
+ *  Local wrapper only to supply this page's legacy fallback chain. */
+function keyProtocols(k: UserKeyDTO): string[] {
+  return protocolsOf(k.bindings, k.protocol_type, keyProviderFamily(k));
 }
 
 
@@ -494,12 +465,19 @@ export default function UserVirtualKeysPage() {
     const order: string[] = [];
     const map = new Map<string, UserKeyDTO[]>();
     for (const k of filtered) {
-      const proto = displayProtocolFamily(k.protocol_type) || keyProviderFamily(k);
-      if (!map.has(proto)) {
-        map.set(proto, []);
-        order.push(proto);
+      // One row per protocol the VK actually speaks. Grouping on the single
+      // VK-level `protocol_type` rendered a two-protocol VK exactly once, under
+      // whichever protocol that scalar happened to carry — so a zhipu key bound
+      // to anthropic AND openai_compatible appeared only under `openai`, and its
+      // anthropic channel was invisible on this page. `Row` is already keyed by
+      // (group, vk) for precisely this fan-out.
+      for (const proto of keyProtocols(k)) {
+        if (!map.has(proto)) {
+          map.set(proto, []);
+          order.push(proto);
+        }
+        map.get(proto)!.push(k);
       }
-      map.get(proto)!.push(k);
     }
     return order.map((protocol) => ({
       provider: protocol, // group value now carries the PROTOCOL (header + wiring key)
@@ -1087,20 +1065,13 @@ function DetailDrawer(props: {
   // Current-group family drives the dot color + the highlighted entry; the
   // full family list is shown with the others muted (multi-protocol VKs).
   const fam = props.groupFamily;
-  const famList = (() => {
-    const all = keyProviderFamilies(r);
-    return all.includes(fam) ? [fam, ...all.filter((f) => f !== fam)] : all;
-  })();
 
   // META two axes (P1f / design D-12/D-13). Both come from the server's
   // `bindings` read model — 🚫 web does NOT derive protocol from provider
   // (前端 §7). Servers/CLIs that predate `bindings` fall back to the legacy
   // single-axis fields, which is why this is a fallback and not a hard require.
   const metaBindings = Array.isArray(r.bindings) ? r.bindings : [];
-  const metaProtocols: string[] =
-    metaBindings.length > 0
-      ? [...new Set(metaBindings.map((b) => displayProtocolFamily(b.protocol)).filter(Boolean))]
-      : [displayProtocolFamily(r.protocol_type) || fam].filter(Boolean);
+  const metaProtocols: string[] = keyProtocols(r);
   // `provider_display_alias` is always empty on the wire (master has no brand
   // registry), so this fell through to the bare code — a drawer saying `zhipu`
   // next to a row saying `zhipu(GLM)`. Same label function as the row cell now.
@@ -1528,7 +1499,7 @@ function DetailDrawer(props: {
                     <span
                       key={p}
                       style={
-                        p === displayProtocolFamily(fam)
+                        p === normalizeProtocol(fam)
                           ? { fontWeight: 700 }
                           : { color: 'var(--muted-foreground)', opacity: 0.55 }
                       }
