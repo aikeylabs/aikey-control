@@ -33,7 +33,8 @@ import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
 import { ModelMappingBanner } from '../_shared/ModelMappingBanner';
 import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
-import { ENTRY_BY_CODE } from '@/shared/generated/provider-registry';
+import { providerAxisLabel } from '../_shared/provider-axis-label';
+import { providerEmphasis } from '../_shared/provider-emphasis';
 import {
   HookWireRcModal,
   useHookWireRcModal,
@@ -77,15 +78,46 @@ function providerFamily(code: string | null | undefined): string {
  * binding-derived protocol_type survives member removal, so it's the stable last
  * resort (mirrors the CLI vault path's team_protocol_source).
  */
-/** P1f.4/8 (design D-12): the PROVIDER-axis brand label `code(alias)` for a row's
- *  provider cell — e.g. `zhipu(GLM)` — matching the vault page's inline chip. The
- *  group header now carries the PROTOCOL (1f.8), so the row must show the provider.
- *  Group VKs resolve the brand via the routed account's provider. */
+/** The PROVIDER-axis labels this row routes, scoped to the row's protocol group.
+ *
+ *  A VK renders once per protocol group, so the chips must show the providers
+ *  reachable *under that protocol* — a VK bound (anthropic→anthropic) and
+ *  (anthropic→zhipu) shows both chips on its anthropic row. Falls back to the
+ *  VK-wide supported_providers when `bindings` is absent (older server).
+ *  🚫 Provider only — never derive the protocol from these (前端 §7). */
+function rowProviders(k: UserKeyDTO, groupProtocol?: string): string[] {
+  const bindings = Array.isArray(k.bindings) ? k.bindings : [];
+  const scoped = groupProtocol
+    ? bindings.filter((b) => displayProtocolFamily(b.protocol) === groupProtocol)
+    : bindings;
+  const src = (scoped.length > 0 ? scoped.map((b) => b.provider) : null)
+    ?? (k.supported_providers ?? []);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const code of src) {
+    const label = providerAxisLabel(code);
+    if (label && !seen.has(label)) { seen.add(label); out.push(label); }
+  }
+  return out.length > 0 ? out : [providerDisplay(k)].filter(Boolean);
+}
+
+/** The PROTOCOL-axis label for this row: the group's protocol, plus a "+N more"
+ *  when the VK also speaks others (it appears under those groups too). Mirrors
+ *  `aikey list`, which collapses the same way. */
+function rowProtocolLabel(k: UserKeyDTO, groupProtocol: string | undefined, t: TFunction): string {
+  const bindings = Array.isArray(k.bindings) ? k.bindings : [];
+  const all = [...new Set(bindings.map((b) => displayProtocolFamily(b.protocol)).filter(Boolean))];
+  const here = groupProtocol || displayProtocolFamily(k.protocol_type) || all[0] || '';
+  const others = all.filter((p) => p !== here).length;
+  return others > 0 ? t('teamKeys.protocolPlusMore', { protocol: here, count: others }) : here;
+}
+
+/** Row-cell flavor: resolves the VK's provider code (group VKs go through the
+ *  routed account) and hands it to the shared label. The group header carries the
+ *  PROTOCOL axis (1f.8), so the row must show the provider. */
 function providerDisplay(k: UserKeyDTO): string {
   const code = (k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || '').toLowerCase();
-  const brand = code ? familyOfProviderCode(code) : keyProviderFamily(k);
-  const alias = code ? ENTRY_BY_CODE.get(code)?.displayAlias : undefined;
-  return alias ? `${brand}(${alias})` : brand;
+  return code ? providerAxisLabel(code) : keyProviderFamily(k);
 }
 
 function keyProviderFamily(k: { provider_code?: string | null; protocol_type?: string | null; group_accounts?: GroupAccountRef[] | null }): string {
@@ -626,6 +658,11 @@ export default function UserVirtualKeysPage() {
                         {t('teamKeys.colAlias')} <span className="th-hint">{t('teamKeys.colAliasHint')}</span>
                         {sortKey === 'alias' && <span className="th-sort-arrow">↓</span>}
                       </th>
+                      {/* PROTOCOL axis. Renaming this header to "Provider" (2026-07-22)
+                          was the wrong fix for the same-name-different-axis bug: it
+                          relabelled the column instead of moving the data. damon's call —
+                          the provider belongs beside the key name as a chip, and this
+                          column goes back to carrying the axis its header claims. */}
                       <th style={{ width: '20%' }}>{t('teamKeys.colProtocol')}</th>
                       <th
                         style={{ width: '14%' }}
@@ -886,7 +923,27 @@ const Row = React.memo(function Row(props: {
   return (
     <tr className={trClasses} onClick={onRowClick}>
       <td>
-        <div className="alias-main">{r.alias || t('teamKeys.unnamed')}</div>
+        <div className="alias-main">
+          <span className="alias-name">{r.alias || t('teamKeys.unnamed')}</span>
+          {/* PROVIDER axis lives here (2026-07-22, damon): beside the thing it
+              qualifies, not in a column of its own. One chip per provider this
+              row routes — a VK bound to anthropic+zhipu shows both.
+              The TEAM pill moved here too: "team-managed" is an ownership fact
+              about the KEY, so it belongs with the key's name — it spent a while
+              sitting in the protocol column, which is the same put-it-under-the-
+              wrong-label habit this whole change is undoing.
+              Wrapping is deliberate (see .alias-main in keys-page-css): a long
+              alias pushes the chips onto their own line rather than truncating
+              the alias, because the alias is the identifier the user types into
+              `aikey activate` — losing its tail is worse than a taller row. */}
+          <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
+          {rowProviders(r, props.groupFamily).map((p) => (
+            <span key={p} className="prov-chip" title={t('teamKeys.fieldProvider')}>
+              <span className="prov-dot" style={{ background: providerBrandColor(p.replace(/\(.*\)$/, '')) }} aria-hidden="true" />
+              {p}
+            </span>
+          ))}
+        </div>
         <div className="alias-sub">
           <span className="font-mono" title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
           {/* oauth_group (Stage A): shared-group marker + master-assigned default account. */}
@@ -909,12 +966,11 @@ const Row = React.memo(function Row(props: {
       </td>
 
       <td>
-        {/* P1f.4/8: provider AXIS (brand + alias); the protocol axis is the group
-            header. prov-dot colored by provider brand, not the group protocol. */}
+        {/* PROTOCOL axis — the wire protocol each binding speaks, straight from the
+            binding (前端 §7: never derived from the provider). Collapses to
+            "anthropic (+1 more)" when one VK spans several, mirroring `aikey list`. */}
         <span className="provider-cell">
-          <span className="prov-dot" style={{ background: providerBrandColor(keyProviderFamily(r)) }} aria-hidden="true" />
-          <span className="name">{providerDisplay(r)}</span>
-          <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
+          <span className="name">{rowProtocolLabel(r, props.groupFamily, t)}</span>
         </span>
       </td>
 
@@ -1045,16 +1101,23 @@ function DetailDrawer(props: {
     metaBindings.length > 0
       ? [...new Set(metaBindings.map((b) => displayProtocolFamily(b.protocol)).filter(Boolean))]
       : [displayProtocolFamily(r.protocol_type) || fam].filter(Boolean);
-  const metaProviders: string[] =
-    metaBindings.length > 0
-      ? [
-          ...new Set(
-            metaBindings.map((b) =>
-              b.provider_display_alias ? `${b.provider}(${b.provider_display_alias})` : b.provider
-            )
-          ),
-        ]
-      : (r.supported_providers ?? []).filter(Boolean);
+  // `provider_display_alias` is always empty on the wire (master has no brand
+  // registry), so this fell through to the bare code — a drawer saying `zhipu`
+  // next to a row saying `zhipu(GLM)`. Same label function as the row cell now.
+  // Carries the raw provider CODE beside the label: the label is cosmetic
+  // (`zhipu(GLM)`) but the emphasis join keys on the code.
+  const metaProviders: { code: string; label: string }[] = (() => {
+    const src = metaBindings.length > 0
+      ? metaBindings.map((b) => ({
+          code: b.provider,
+          label: b.provider_display_alias
+            ? `${b.provider}(${b.provider_display_alias})`
+            : providerAxisLabel(b.provider),
+        }))
+      : (r.supported_providers ?? []).filter(Boolean).map((c) => ({ code: c, label: providerAxisLabel(c) }));
+    const seen = new Set<string>();
+    return src.filter((x) => x.label && !seen.has(x.label) && seen.add(x.label));
+  })();
 
   const expiresStr = formatExpiresAt(r.expires_at, t);
 
@@ -1482,21 +1545,40 @@ function DetailDrawer(props: {
                 <span className="k">{t('teamKeys.fieldProvider')}</span>
                 <span className="v">
                   {/* PROVIDER axis — brand code + display alias, e.g. zhipu(GLM).
-                      Current group's provider bold, the rest muted (same
-                      emphasis rule as the vault drawer, 2026-07-13 spec). */}
+                      Every provider renders at the SAME weight and color: the two
+                      bindings are peers, and the routing role is stated explicitly
+                      by a P/F chip rather than implied by typography (damon,
+                      2026-07-22 — a greyed-out entry read as "lesser" when it was
+                      simply the fallback).
+                      Role comes from the protocol's summary.fallback_role. 🔴 It used
+                      to come from comparing this provider against `fam`, which since
+                      1f.8 carries the PROTOCOL — so it could only ever match on a
+                      homonym (anthropic/anthropic) and greyed every other provider
+                      unconditionally. No summary yet → NO chip, rather than a guess. */}
                   <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
-                    {metaProviders.map((p) => (
-                      <span
-                        key={p}
-                        style={
-                          p.replace(/\s*\(.*\)$/, '').toLowerCase() === fam.toLowerCase()
-                            ? { fontWeight: 700 }
-                            : { color: 'var(--muted-foreground)', opacity: 0.55 }
-                        }
-                      >
-                        {p}
-                      </span>
-                    ))}
+                    {metaProviders.map((p) => {
+                      const em = providerEmphasis(p.code, fam, props.summary);
+                      // Static keys on purpose. Building the key by interpolating
+                      // `em` into a template literal would be invisible to the i18n
+                      // key-coverage scanner; that fence (budget: 19 dynamic call
+                      // sites) failed on the first draft. Its detector is a regex over
+                      // source TEXT, so even naming the bad form in a comment counts.
+                      return (
+                        <span key={p.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                          {p.label}
+                          {em === 'primary' && (
+                            <span className="role-pill primary" title={t('teamKeys.role_primary')}>
+                              {t('teamKeys.roleShortPrimary')}
+                            </span>
+                          )}
+                          {em === 'fallback' && (
+                            <span className="role-pill" title={t('teamKeys.role_fallback')}>
+                              {t('teamKeys.roleShortFallback')}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
                   </span>
                   <span className="ro-pill">RO</span>
                 </span>
