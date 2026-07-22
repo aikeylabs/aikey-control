@@ -2141,6 +2141,7 @@
     "cannotActivate": "此密钥处于 {{status}} 状态，无法激活。",
     "sectionMeta": "元信息",
     "fieldProtocol": "协议",
+    "fieldProvider": "供应商",
     "fieldType": "类型",
     "typeTeamKey": "团队密钥",
     "fieldStatus": "状态",

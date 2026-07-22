@@ -18,6 +18,13 @@ export interface CredentialDTO {
   provider_id: string;
   display_name: string;
   base_url_override?: string;
+  /**
+   * Per-credential wire protocol (P1g / design D-13). Optional: omitted =
+   * inherits the provider's default — that's the sentinel, not missing data.
+   * Lets one provider brand carry several protocols; prefer it over
+   * `ProviderDTO.protocol_type` when rendering.
+   */
+  protocol_type?: string;
   current_revision: string;
   status: string;
   created_at: string;

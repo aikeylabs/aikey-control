@@ -1035,6 +1035,27 @@ function DetailDrawer(props: {
     const all = keyProviderFamilies(r);
     return all.includes(fam) ? [fam, ...all.filter((f) => f !== fam)] : all;
   })();
+
+  // META two axes (P1f / design D-12/D-13). Both come from the server's
+  // `bindings` read model — 🚫 web does NOT derive protocol from provider
+  // (前端 §7). Servers/CLIs that predate `bindings` fall back to the legacy
+  // single-axis fields, which is why this is a fallback and not a hard require.
+  const metaBindings = Array.isArray(r.bindings) ? r.bindings : [];
+  const metaProtocols: string[] =
+    metaBindings.length > 0
+      ? [...new Set(metaBindings.map((b) => displayProtocolFamily(b.protocol)).filter(Boolean))]
+      : [displayProtocolFamily(r.protocol_type) || fam].filter(Boolean);
+  const metaProviders: string[] =
+    metaBindings.length > 0
+      ? [
+          ...new Set(
+            metaBindings.map((b) =>
+              b.provider_display_alias ? `${b.provider}(${b.provider_display_alias})` : b.provider
+            )
+          ),
+        ]
+      : (r.supported_providers ?? []).filter(Boolean);
+
   const expiresStr = formatExpiresAt(r.expires_at, t);
 
   React.useEffect(() => {
@@ -1431,25 +1452,56 @@ function DetailDrawer(props: {
             <div className="drawer-field">
               <span className="k">{t('teamKeys.fieldProtocol')}</span>
               <span className="v">
-                {/* One protocol per line (2026-07-13 user spec) — current group
-                    bold, others muted. */}
+                {/* PROTOCOL axis only (P1f / design D-12). This field used to
+                    render `famList` — provider FAMILIES — under a label that
+                    says "Protocol", so a zhipu+anthropic key showed
+                    "anthropic / zhipu" as if zhipu were a protocol. That is the
+                    "字段名在撒谎" bug the two-axis work exists to kill; the vault
+                    page was fixed in 1f.5 and this second surface was missed.
+                    🚫 Never put a provider in here — protocol comes from the
+                    binding's own protocol (route-row truth), never derived. */}
                 <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
-                  {famList.map((f) => (
+                  {metaProtocols.map((p) => (
                     <span
-                      key={f}
+                      key={p}
                       style={
-                        f === fam
+                        p === displayProtocolFamily(fam)
                           ? { fontWeight: 700 }
                           : { color: 'var(--muted-foreground)', opacity: 0.55 }
                       }
                     >
-                      {f}
+                      {p}
                     </span>
                   ))}
                 </span>
                 <span className="ro-pill">RO</span>
               </span>
             </div>
+            {metaProviders.length > 0 && (
+              <div className="drawer-field">
+                <span className="k">{t('teamKeys.fieldProvider')}</span>
+                <span className="v">
+                  {/* PROVIDER axis — brand code + display alias, e.g. zhipu(GLM).
+                      Current group's provider bold, the rest muted (same
+                      emphasis rule as the vault drawer, 2026-07-13 spec). */}
+                  <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+                    {metaProviders.map((p) => (
+                      <span
+                        key={p}
+                        style={
+                          p.replace(/\s*\(.*\)$/, '').toLowerCase() === fam.toLowerCase()
+                            ? { fontWeight: 700 }
+                            : { color: 'var(--muted-foreground)', opacity: 0.55 }
+                        }
+                      >
+                        {p}
+                      </span>
+                    ))}
+                  </span>
+                  <span className="ro-pill">RO</span>
+                </span>
+              </div>
+            )}
             <div className="drawer-field">
               <span className="k">{t('teamKeys.fieldType')}</span>
               <span className="v">{t('teamKeys.typeTeamKey')}<span className="ro-pill">RO</span></span>
