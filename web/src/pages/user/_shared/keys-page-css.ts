@@ -168,6 +168,41 @@ export const KEYS_PAGE_CSS = `
 .vault-page .status-dot.stale { background: var(--warning); box-shadow: 0 0 6px rgba(249,115,22,0.6); }
 .vault-page .status-dot.error { background: var(--destructive); box-shadow: 0 0 6px rgba(239,68,68,0.7); }
 
+/* Provider chip rendered inline beside the key name (2026-07-22). The provider
+   axis sits next to the thing it qualifies rather than owning a column; one chip
+   per provider the row routes. Neutral by design — the brand dot carries the
+   color, so several chips in a row don't turn the table into a rainbow. */
+/* Routing-role chip in the drawer's PROVIDER field: P = primary target for
+   that protocol, F = fallback. States the role in words instead of implying it
+   with bold/grey — a muted entry read as "less important" when it was just the
+   fallback (damon, 2026-07-22). No chip at all while the role is unknown. */
+.vault-page .role-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 14px; height: 14px; padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 9px; font-weight: 700; line-height: 1;
+  border-radius: 3px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+.vault-page .role-pill.primary {
+  color: #5eead4;
+  border-color: rgba(45,212,191,0.35);
+  background: rgba(45,212,191,0.06);
+}
+
+.vault-page .prov-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 500;
+  border-radius: 3px; vertical-align: middle;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+
 .vault-page .prov-dot {
   width: 6px; height: 6px; border-radius: 2px;
   display: inline-block; flex-shrink: 0;
@@ -723,6 +758,19 @@ export const KEYS_PAGE_CSS = `
   font-family: var(--font-sans);
   font-weight: 500; font-size: 14px;
   color: var(--foreground);
+  /* Name + kind pill + provider chips share this line and wrap together when
+     the alias is long (2026-07-22). Wrapping beats truncating: the alias is
+     what the user types into the aikey activate command, so a clipped tail
+     costs more than a taller row. row-gap keeps a wrapped line from touching
+     the one above, so the wrap reads as intentional, not as a layout bug.
+     (No backticks in here — this whole sheet is a TS template literal.) */
+  display: flex; flex-wrap: wrap;
+  align-items: center; gap: 4px 6px;
+}
+.vault-page .alias-main .alias-name {
+  /* The name itself never wraps mid-token; it takes the line and pushes the
+     chips down instead. */
+  white-space: nowrap;
 }
 /* Green "active" dot rendered before the alias on routing rows —
    visual parity with the CLI's ● indicator in aikey route. */

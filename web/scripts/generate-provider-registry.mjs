@@ -70,6 +70,36 @@ if (entries.length === 0) {
   process.exit(1);
 }
 
+// P1i.5 / D-14/D-15: the (provider × protocol) compatibility matrix. Single
+// source of truth = provider_fingerprint.yaml `provider_routes` rows (the SAME
+// table master↔proxy read via pkg/providerroutes). A (provider, protocol) pair is
+// legal iff a route row declares it — so `zhipu` yields BOTH openai_compatible and
+// anthropic. The authoritative guard is the backend, which rejects an illegal
+// combo with PROVIDER_PROTOCOL_UNSUPPORTED. This generated matrix has NO web
+// consumer today; it is kept as data for a possible future form-side pre-filter
+// (there is no "greyed out before submit" UI yet). Data-driven: adding a route
+// row makes the combo legal with zero frontend change (only a codegen re-run,
+// which the build already does).
+const FINGERPRINT_PATH = path.join(REPO_ROOT, 'aikey-cli/data/provider_fingerprint.yaml');
+const fpParsed = YAML.parse(fs.readFileSync(FINGERPRINT_PATH, 'utf8'));
+if (!fpParsed || !Array.isArray(fpParsed.provider_routes)) {
+  console.error(`✗ ${FINGERPRINT_PATH}: "provider_routes" array missing`);
+  process.exit(1);
+}
+const matrix = {}; // provider_code → Set<protocol>
+for (const row of fpParsed.provider_routes) {
+  if (!row || !row.provider || !row.protocol) continue;
+  const p = String(row.provider);
+  (matrix[p] ??= new Set()).add(String(row.protocol));
+}
+const matrixEntries = Object.keys(matrix)
+  .sort()
+  .map((p) => [p, [...matrix[p]].sort()]);
+if (matrixEntries.length === 0) {
+  console.error(`✗ no provider_routes rows found in ${FINGERPRINT_PATH}`);
+  process.exit(1);
+}
+
 const banner = `// AUTO-GENERATED FROM aikey-cli/data/provider_registry.yaml.
 // DO NOT EDIT BY HAND. Run \`npm run gen:provider-registry\` or
 // \`npm run prebuild\` to regenerate after changing the YAML.
@@ -139,13 +169,52 @@ export function displayLabelFull(e: ProviderRegistryEntry): string {
 }
 `;
 
+const matrixBody = matrixEntries
+  .map(([p, protos]) => `  [${JSON.stringify(p)}, ${JSON.stringify(protos)}],`)
+  .join('\n');
+
+const matrixSection = `
+/** P1i.5 (design D-14/D-15): the (provider → supported protocols) compatibility
+ *  matrix, derived from provider_fingerprint.yaml \`provider_routes\` — the same
+ *  source master + proxy read. A (provider, protocol) pair is legal iff listed
+ *  here. The backend is authoritative — it rejects an illegal combo with
+ *  PROVIDER_PROTOCOL_UNSUPPORTED. This matrix has no web consumer today; it is
+ *  kept as data for a possible future form-side pre-filter. */
+export const PROVIDER_PROTOCOL_MATRIX: ReadonlyMap<string, readonly string[]> = new Map([
+${matrixBody}
+]);
+
+/** Protocols a provider can speak. Empty for an unknown/custom provider — the
+ *  caller should then allow any protocol (custom providers aren't in the matrix)
+ *  and lean on the backend guard. */
+export function protocolsForProvider(providerCode: string): readonly string[] {
+  return PROVIDER_PROTOCOL_MATRIX.get(providerCode.toLowerCase()) ?? [];
+}
+
+/** Providers that support a protocol (inverse lookup). */
+export function providersForProtocol(protocol: string): readonly string[] {
+  const out: string[] = [];
+  for (const [p, protos] of PROVIDER_PROTOCOL_MATRIX) {
+    if (protos.includes(protocol)) out.push(p);
+  }
+  return out;
+}
+
+/** Whether a (provider, protocol) combo is in the matrix. Unknown provider =>
+ *  true (custom providers are not constrained here; backend is authoritative). */
+export function isProviderProtocolSupported(providerCode: string, protocol: string): boolean {
+  const protos = PROVIDER_PROTOCOL_MATRIX.get(providerCode.toLowerCase());
+  return protos ? protos.includes(protocol) : true;
+}
+`;
+
 const out = `${banner}
 ${entryType}
 
 export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
 ${body}
 ];
-${helpers}`;
+${helpers}${matrixSection}`;
 
 for (const outPath of OUT_PATHS) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });

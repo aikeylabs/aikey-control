@@ -31,7 +31,11 @@ import { deliveryApi, routedGroupAccount, type GroupAccountRef, type UserKeyDTO,
 import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
-import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
+import { ModelMappingBanner } from '../_shared/ModelMappingBanner';
+import { displayProtocolFamily } from '@/shared/api/user/protocolFamily';
+import { normalizeProtocol, protocolsOf } from '../_shared/protocol-axis';
+import { providerAxisLabel } from '../_shared/provider-axis-label';
+import { providerEmphasis } from '../_shared/provider-emphasis';
 import {
   HookWireRcModal,
   useHookWireRcModal,
@@ -75,6 +79,47 @@ function providerFamily(code: string | null | undefined): string {
  * binding-derived protocol_type survives member removal, so it's the stable last
  * resort (mirrors the CLI vault path's team_protocol_source).
  */
+/** The PROVIDER-axis labels this row routes, scoped to the row's protocol group.
+ *
+ *  A VK renders once per protocol group, so the chips must show the providers
+ *  reachable *under that protocol* — a VK bound (anthropic→anthropic) and
+ *  (anthropic→zhipu) shows both chips on its anthropic row. Falls back to the
+ *  VK-wide supported_providers when `bindings` is absent (older server).
+ *  🚫 Provider only — never derive the protocol from these (前端 §7). */
+function rowProviders(k: UserKeyDTO, groupProtocol?: string): string[] {
+  const bindings = Array.isArray(k.bindings) ? k.bindings : [];
+  const scoped = groupProtocol
+    ? bindings.filter((b) => normalizeProtocol(b.protocol) === groupProtocol)
+    : bindings;
+  const src = (scoped.length > 0 ? scoped.map((b) => b.provider) : null)
+    ?? (k.supported_providers ?? []);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const code of src) {
+    const label = providerAxisLabel(code);
+    if (label && !seen.has(label)) { seen.add(label); out.push(label); }
+  }
+  return out.length > 0 ? out : [providerDisplay(k)].filter(Boolean);
+}
+
+/** The PROTOCOL-axis label for this row: the group's protocol, plus a "+N more"
+ *  when the VK also speaks others (it appears under those groups too). Mirrors
+ *  `aikey list`, which collapses the same way. */
+function rowProtocolLabel(k: UserKeyDTO, groupProtocol: string | undefined, t: TFunction): string {
+  const all = keyProtocols(k);
+  const here = groupProtocol || all[0] || '';
+  const others = all.filter((p) => p !== here).length;
+  return others > 0 ? t('teamKeys.protocolPlusMore', { protocol: here, count: others }) : here;
+}
+
+/** Row-cell flavor: resolves the VK's provider code (group VKs go through the
+ *  routed account) and hands it to the shared label. The group header carries the
+ *  PROTOCOL axis (1f.8), so the row must show the provider. */
+function providerDisplay(k: UserKeyDTO): string {
+  const code = (k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || '').toLowerCase();
+  return code ? providerAxisLabel(code) : keyProviderFamily(k);
+}
+
 function keyProviderFamily(k: { provider_code?: string | null; protocol_type?: string | null; group_accounts?: GroupAccountRef[] | null }): string {
   // displayProtocolFamily folds an empty OAuth group VK's raw protocol_type
   // ("openai_compatible") to the pool's provider ("openai") so it labels the same
@@ -84,39 +129,10 @@ function keyProviderFamily(k: { provider_code?: string | null; protocol_type?: s
   );
 }
 
-/** EVERY display family this VK can route (2026-07-13).
- *
- *  Why: a VK carries N protocol channels by design (baseline ER —
- *  uq_mpb_vk_protocol_provider is per (vk, protocol, provider)), but
- *  `provider_code` / `protocol_type` only ever hold the FIRST binding's values
- *  (the master snapshot projects them as a primary hint for legacy readers).
- *  Grouping / labelling off them alone renders a multi-protocol VK as
- *  single-protocol — the openai channel of a VK bound to anthropic+openai simply
- *  vanished from this page. `supported_providers` carries the full set and the CLI
- *  has always emitted it; we just never read it here.
- *
- *  This mirrors the vault page's expansion (2026-04-30 / 2026-05-12) — same
- *  familyOfProviderCode口径, now via the shared helper. Falls back to the single
- *  family when supported_providers is absent (older server) or empty (e.g. an
- *  orphaned group VK, whose protocol still resolves through keyProviderFamily).
- */
-function keyProviderFamilies(k: UserKeyDTO): string[] {
-  const sp = k.supported_providers;
-  if (Array.isArray(sp) && sp.length > 0) {
-    const seen = new Set<string>();
-    const fams: string[] = [];
-    for (const code of sp) {
-      const raw = (code ?? '').toString().trim();
-      if (!raw) continue;
-      const fam = familyOfProviderCode(raw);
-      if (!seen.has(fam)) {
-        seen.add(fam);
-        fams.push(fam);
-      }
-    }
-    if (fams.length > 0) return fams;
-  }
-  return [keyProviderFamily(k)];
+/** Every protocol this VK speaks, in binding order — see `_shared/protocol-axis`.
+ *  Local wrapper only to supply this page's legacy fallback chain. */
+function keyProtocols(k: UserKeyDTO): string[] {
+  return protocolsOf(k.bindings, k.protocol_type, keyProviderFamily(k));
 }
 
 
@@ -438,27 +454,35 @@ export default function UserVirtualKeysPage() {
     return { total, issued, pending, revoked };
   }, [allKeys]);
 
-  // Group by provider family (preserves filter order)
+  // P1f.8 (design D-12): group by PROTOCOL (the wire protocol axis), mirroring the
+  // vault page (1f.3) — the group header is the protocol, the provider shows as a
+  // per-row chip. Fixes "组头把 provider 当协议" on this second surface too. The
+  // all-keys DTO carries the primary `protocol_type` (STABLE, binding-derived); a
+  // VK spanning multiple protocols (multi-binding, L3/P1e) collapses under its
+  // primary protocol until per-binding data reaches this API. Falls back to the
+  // provider family label only when no protocol is resolvable (orphan group VK).
   const grouped = useMemo(() => {
     const order: string[] = [];
     const map = new Map<string, UserKeyDTO[]>();
     for (const k of filtered) {
-      // Multi-protocol expansion (2026-07-13): a VK bound to anthropic+openai
-      // must appear under BOTH groups — same contract the vault page and the CLI
-      // `aikey use` picker already honour. Grouping by the single primary family
-      // hid every channel but the first.
-      for (const fam of keyProviderFamilies(k)) {
-        if (!map.has(fam)) {
-          map.set(fam, []);
-          order.push(fam);
+      // One row per protocol the VK actually speaks. Grouping on the single
+      // VK-level `protocol_type` rendered a two-protocol VK exactly once, under
+      // whichever protocol that scalar happened to carry — so a zhipu key bound
+      // to anthropic AND openai_compatible appeared only under `openai`, and its
+      // anthropic channel was invisible on this page. `Row` is already keyed by
+      // (group, vk) for precisely this fan-out.
+      for (const proto of keyProtocols(k)) {
+        if (!map.has(proto)) {
+          map.set(proto, []);
+          order.push(proto);
         }
-        map.get(fam)!.push(k);
+        map.get(proto)!.push(k);
       }
     }
-    return order.map((provider) => ({
-      provider,
-      color: providerBrandColor(provider),
-      records: map.get(provider)!,
+    return order.map((protocol) => ({
+      provider: protocol, // group value now carries the PROTOCOL (header + wiring key)
+      color: providerBrandColor(protocol),
+      records: map.get(protocol)!,
     }));
   }, [filtered]);
 
@@ -576,6 +600,7 @@ export default function UserVirtualKeysPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="px-6 py-5 space-y-5">
           <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
+          <ModelMappingBanner />
           <HookWireRcModal open={wireRcModal.open} onClose={wireRcModal.close} />
 
           <IdentityStrip counts={counts} />
@@ -611,6 +636,11 @@ export default function UserVirtualKeysPage() {
                         {t('teamKeys.colAlias')} <span className="th-hint">{t('teamKeys.colAliasHint')}</span>
                         {sortKey === 'alias' && <span className="th-sort-arrow">↓</span>}
                       </th>
+                      {/* PROTOCOL axis. Renaming this header to "Provider" (2026-07-22)
+                          was the wrong fix for the same-name-different-axis bug: it
+                          relabelled the column instead of moving the data. damon's call —
+                          the provider belongs beside the key name as a chip, and this
+                          column goes back to carrying the axis its header claims. */}
                       <th style={{ width: '20%' }}>{t('teamKeys.colProtocol')}</th>
                       <th
                         style={{ width: '14%' }}
@@ -855,7 +885,6 @@ const Row = React.memo(function Row(props: {
   const { t } = useTranslation();
   const r = props.record;
   const status = statusMeta(r.key_status, t);
-  const fam = props.groupFamily ?? keyProviderFamily(r);
   const expiresStr = formatExpiresAt(r.expires_at, t);
   const trClasses = [
     'group-child',
@@ -872,7 +901,27 @@ const Row = React.memo(function Row(props: {
   return (
     <tr className={trClasses} onClick={onRowClick}>
       <td>
-        <div className="alias-main">{r.alias || t('teamKeys.unnamed')}</div>
+        <div className="alias-main">
+          <span className="alias-name">{r.alias || t('teamKeys.unnamed')}</span>
+          {/* PROVIDER axis lives here (2026-07-22, damon): beside the thing it
+              qualifies, not in a column of its own. One chip per provider this
+              row routes — a VK bound to anthropic+zhipu shows both.
+              The TEAM pill moved here too: "team-managed" is an ownership fact
+              about the KEY, so it belongs with the key's name — it spent a while
+              sitting in the protocol column, which is the same put-it-under-the-
+              wrong-label habit this whole change is undoing.
+              Wrapping is deliberate (see .alias-main in keys-page-css): a long
+              alias pushes the chips onto their own line rather than truncating
+              the alias, because the alias is the identifier the user types into
+              `aikey activate` — losing its tail is worse than a taller row. */}
+          <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
+          {rowProviders(r, props.groupFamily).map((p) => (
+            <span key={p} className="prov-chip" title={t('teamKeys.fieldProvider')}>
+              <span className="prov-dot" style={{ background: providerBrandColor(p.replace(/\(.*\)$/, '')) }} aria-hidden="true" />
+              {p}
+            </span>
+          ))}
+        </div>
         <div className="alias-sub">
           <span className="font-mono" title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
           {/* oauth_group (Stage A): shared-group marker + master-assigned default account. */}
@@ -895,10 +944,11 @@ const Row = React.memo(function Row(props: {
       </td>
 
       <td>
+        {/* PROTOCOL axis — the wire protocol each binding speaks, straight from the
+            binding (前端 §7: never derived from the provider). Collapses to
+            "anthropic (+1 more)" when one VK spans several, mirroring `aikey list`. */}
         <span className="provider-cell">
-          <span className="prov-dot" style={{ background: providerBrandColor(fam) }} aria-hidden="true" />
-          <span className="name">{fam}</span>
-          <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
+          <span className="name">{rowProtocolLabel(r, props.groupFamily, t)}</span>
         </span>
       </td>
 
@@ -1015,10 +1065,31 @@ function DetailDrawer(props: {
   // Current-group family drives the dot color + the highlighted entry; the
   // full family list is shown with the others muted (multi-protocol VKs).
   const fam = props.groupFamily;
-  const famList = (() => {
-    const all = keyProviderFamilies(r);
-    return all.includes(fam) ? [fam, ...all.filter((f) => f !== fam)] : all;
+
+  // META two axes (P1f / design D-12/D-13). Both come from the server's
+  // `bindings` read model — 🚫 web does NOT derive protocol from provider
+  // (前端 §7). Servers/CLIs that predate `bindings` fall back to the legacy
+  // single-axis fields, which is why this is a fallback and not a hard require.
+  const metaBindings = Array.isArray(r.bindings) ? r.bindings : [];
+  const metaProtocols: string[] = keyProtocols(r);
+  // `provider_display_alias` is always empty on the wire (master has no brand
+  // registry), so this fell through to the bare code — a drawer saying `zhipu`
+  // next to a row saying `zhipu(GLM)`. Same label function as the row cell now.
+  // Carries the raw provider CODE beside the label: the label is cosmetic
+  // (`zhipu(GLM)`) but the emphasis join keys on the code.
+  const metaProviders: { code: string; label: string }[] = (() => {
+    const src = metaBindings.length > 0
+      ? metaBindings.map((b) => ({
+          code: b.provider,
+          label: b.provider_display_alias
+            ? `${b.provider}(${b.provider_display_alias})`
+            : providerAxisLabel(b.provider),
+        }))
+      : (r.supported_providers ?? []).filter(Boolean).map((c) => ({ code: c, label: providerAxisLabel(c) }));
+    const seen = new Set<string>();
+    return src.filter((x) => x.label && !seen.has(x.label) && seen.add(x.label));
   })();
+
   const expiresStr = formatExpiresAt(r.expires_at, t);
 
   React.useEffect(() => {
@@ -1415,25 +1486,75 @@ function DetailDrawer(props: {
             <div className="drawer-field">
               <span className="k">{t('teamKeys.fieldProtocol')}</span>
               <span className="v">
-                {/* One protocol per line (2026-07-13 user spec) — current group
-                    bold, others muted. */}
+                {/* PROTOCOL axis only (P1f / design D-12). This field used to
+                    render `famList` — provider FAMILIES — under a label that
+                    says "Protocol", so a zhipu+anthropic key showed
+                    "anthropic / zhipu" as if zhipu were a protocol. That is the
+                    "字段名在撒谎" bug the two-axis work exists to kill; the vault
+                    page was fixed in 1f.5 and this second surface was missed.
+                    🚫 Never put a provider in here — protocol comes from the
+                    binding's own protocol (route-row truth), never derived. */}
                 <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
-                  {famList.map((f) => (
+                  {metaProtocols.map((p) => (
                     <span
-                      key={f}
+                      key={p}
                       style={
-                        f === fam
+                        p === normalizeProtocol(fam)
                           ? { fontWeight: 700 }
                           : { color: 'var(--muted-foreground)', opacity: 0.55 }
                       }
                     >
-                      {f}
+                      {p}
                     </span>
                   ))}
                 </span>
                 <span className="ro-pill">RO</span>
               </span>
             </div>
+            {metaProviders.length > 0 && (
+              <div className="drawer-field">
+                <span className="k">{t('teamKeys.fieldProvider')}</span>
+                <span className="v">
+                  {/* PROVIDER axis — brand code + display alias, e.g. zhipu(GLM).
+                      Every provider renders at the SAME weight and color: the two
+                      bindings are peers, and the routing role is stated explicitly
+                      by a P/F chip rather than implied by typography (damon,
+                      2026-07-22 — a greyed-out entry read as "lesser" when it was
+                      simply the fallback).
+                      Role comes from the protocol's summary.fallback_role. 🔴 It used
+                      to come from comparing this provider against `fam`, which since
+                      1f.8 carries the PROTOCOL — so it could only ever match on a
+                      homonym (anthropic/anthropic) and greyed every other provider
+                      unconditionally. No summary yet → NO chip, rather than a guess. */}
+                  <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+                    {metaProviders.map((p) => {
+                      const em = providerEmphasis(p.code, fam, props.summary);
+                      // Static keys on purpose. Building the key by interpolating
+                      // `em` into a template literal would be invisible to the i18n
+                      // key-coverage scanner; that fence (budget: 19 dynamic call
+                      // sites) failed on the first draft. Its detector is a regex over
+                      // source TEXT, so even naming the bad form in a comment counts.
+                      return (
+                        <span key={p.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                          {p.label}
+                          {em === 'primary' && (
+                            <span className="role-pill primary" title={t('teamKeys.role_primary')}>
+                              {t('teamKeys.roleShortPrimary')}
+                            </span>
+                          )}
+                          {em === 'fallback' && (
+                            <span className="role-pill" title={t('teamKeys.role_fallback')}>
+                              {t('teamKeys.roleShortFallback')}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </span>
+                  <span className="ro-pill">RO</span>
+                </span>
+              </div>
+            )}
             <div className="drawer-field">
               <span className="k">{t('teamKeys.fieldType')}</span>
               <span className="v">{t('teamKeys.typeTeamKey')}<span className="ro-pill">RO</span></span>

@@ -120,7 +120,8 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizKeyDuplicateProtocol, CodeBizBindProtocolMismatch,
 		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
 		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,
-		CodeBizVKGroupExclusive, CodeBizSSOProviderDisabled:
+		CodeBizVKGroupExclusive, CodeBizSSOProviderDisabled,
+		CodeBizProviderProtocolUnsupported:
 		return http.StatusUnprocessableEntity
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────

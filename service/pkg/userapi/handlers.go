@@ -290,6 +290,12 @@ func (h *Handlers) Register(
 		// for the whole story. Presence-only — no network probe, no spec echoed.
 		mux.Handle("GET /api/user/system/egress-selfcheck",
 			authMW(http.HandlerFunc(oauth.EgressSelfCheckHandler)))
+
+		// Model-mapping diagnostics relay (→ proxy /v1/diagnostics/pipeline, task
+		// 7.9). Read-only; backs the model-mapping visibility banner (3.5). Same
+		// same-origin relay pattern as the upstream-proxy config above.
+		mux.Handle("GET /api/user/diagnostics/mapping",
+			authMW(http.HandlerFunc(oauth.MappingDiagnosticsHandler)))
 	}
 
 	// Import endpoints. ConfirmHandler needs an unlocked session.

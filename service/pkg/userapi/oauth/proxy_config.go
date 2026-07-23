@@ -29,6 +29,15 @@ func UpstreamProxyProbeHandler(w http.ResponseWriter, r *http.Request) {
 	forward(w, r, http.MethodPost, proxyBase()+"/admin/upstream-proxy/probe", true)
 }
 
+// MappingDiagnosticsHandler relays GET /api/user/diagnostics/mapping →
+// GET /v1/diagnostics/pipeline (task 7.9). Read-only; backs the model-mapping
+// visibility banner (3.5, four surfaces). The browser can't reach aikey-proxy
+// directly (CORS / different origin), so the local-server relays — same pattern
+// as the upstream-proxy config forwards. Response: {registry, model_mapping}.
+func MappingDiagnosticsHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodGet, proxyBase()+"/v1/diagnostics/pipeline", false)
+}
+
 // OAuthEgressOverrideGetHandler relays GET /api/user/system/oauth-egress-override →
 // GET /admin/oauth-egress-override. Response: {"enabled": bool} — the opt-in
 // escape-hatch state the Settings card renders as a checkbox (2026-07-19).

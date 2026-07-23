@@ -66,6 +66,8 @@ export function routedGroupAccount<T extends { assigned: boolean; current_routed
   return accounts.find((a) => a.current_routed) ?? accounts.find((a) => a.assigned) ?? accounts[0];
 }
 
+import type { BindingAxis } from '@/shared/types/team-vault';
+
 export interface UserKeyDTO {
   virtual_key_id: string;
   org_id: string;
@@ -88,6 +90,13 @@ export interface UserKeyDTO {
   // nobody consumed it. The vault page fixed the same class of bug on 2026-05-12 by
   // expanding on supported_providers; this page never followed.
   supported_providers?: string[];
+  // bindings (P1f / design D-12/D-13): the two-axis read model — one entry per
+  // active binding, protocol and provider as SEPARATE fields. Prefer it over
+  // protocol_type/supported_providers, which each collapse one axis: reading
+  // them alone is what let a provider be rendered under a "Protocol" label.
+  // Optional because CLIs/servers older than the two-axis emit don't send it —
+  // consumers fall back to the legacy single-axis fields.
+  bindings?: BindingAxis[];
   key_status: string;
   share_status: string;
   expires_at?: string;

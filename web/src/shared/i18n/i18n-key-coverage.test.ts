@@ -279,3 +279,53 @@ describe('i18n dynamic t(`...`) call sites', () => {
     expect(total).toBeLessThanOrEqual(19);
   });
 });
+
+// ── R4: orphan keys — the reverse direction R1/R2 never look at ───────────
+
+/**
+ * R1/R2 walk code → catalog: "every key a page asks for exists". Nothing walked
+ * catalog → code, so a key that no longer has a caller just sits there.
+ *
+ * Caught by hand on 2026-07-22: `teamKeys.colProvider` was added when the Team
+ * Keys column header was renamed to "Provider", the rename was reverted the same
+ * day, and the key stayed in both catalogs with zero callers. Every test passed.
+ * Dead keys are not merely untidy — they are the debris a reverted approach
+ * leaves behind, and a reviewer reads them as "this is still wired up".
+ *
+ * Snapshot rather than a count budget: a bare number can only say "one more than
+ * before", which sends the next person hunting through 250 pre-existing names.
+ * The baseline lists them, so a failure names exactly the key you just orphaned.
+ * Deleting a listed orphan never fails (subset check) — prune the file when you
+ * do. ~250 predate this fence; many are reached through the dynamic call sites
+ * budgeted above, which no static scan can see, so zero is not the target.
+ */
+import baseline from './orphan-keys.baseline.json';
+
+describe('i18n orphan keys (R4)', () => {
+  // Union of BOTH trees: the catalogs merge at runtime (R2), so a user-tree key
+  // whose only caller lives in master/web is legitimately used, not an orphan.
+  const usedAnywhere = new Set<string>([
+    ...keysIn(path.join(USER_WEB, 'src')).keys(),
+    ...keysIn(path.join(MASTER_WEB, 'src')).keys(),
+  ]);
+  const reached = (k: string) =>
+    usedAnywhere.has(k) || [...usedAnywhere].some((u) => k.startsWith(`${u}.`));
+
+  for (const [name, root] of [
+    ['user/web', USER_WEB],
+    ['master/web', MASTER_WEB],
+  ] as const) {
+    it(`${name}: no NEW key without a caller`, () => {
+      const known = new Set<string>(baseline[name] ?? []);
+      const fresh = [...catalog(root, 'en')].filter((k) => !reached(k) && !known.has(k));
+      expect(fresh.sort(), 'catalog keys with no t() call site in either tree — delete them, or wire them up').toEqual([]);
+    });
+  }
+
+  it('the baseline itself stays honest (no entry that is used again)', () => {
+    // Keeps the snapshot from silently masking a key that came back into use.
+    const stale = [...new Set([...(baseline['user/web'] ?? []), ...(baseline['master/web'] ?? [])])]
+      .filter((k) => reached(k));
+    expect(stale.sort(), 'listed as orphans but now have callers — drop them from the baseline').toEqual([]);
+  });
+});

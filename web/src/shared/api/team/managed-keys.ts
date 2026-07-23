@@ -20,7 +20,9 @@
  * §4 + §5 for the wire contract and data flow.
  */
 
-import type { TeamVaultRecord } from '@/shared/types/team-vault';
+import type { TeamVaultRecord, BindingAxis } from '@/shared/types/team-vault';
+import { ENTRY_BY_FAMILY } from '@/shared/generated/provider-registry';
+import { familyOfProviderCode } from '@/shared/api/user/protocolFamily';
 
 const TEAM_URL_ENDPOINT = '/system/team-url';
 const TEAM_JWT_ENDPOINT = '/system/team-jwt';
@@ -109,6 +111,25 @@ interface RawTeamKey {
   effective_status?: string;
   key_status?: string;
   expires_at?: string;
+  // P1f (design D-12/D-13): the two-axis binding read model. Passed through
+  // verbatim when B emits it (the vault page renders protocol/provider as
+  // separate axes off this); absent on older servers → the page falls back to
+  // supported_providers. Without this passthrough the two-axis UI is dormant.
+  bindings?: BindingAxis[];
+}
+
+/**
+ * Fill a binding's cosmetic `provider_display_alias` from the web's generated
+ * provider registry when the server left it empty. B (the team master) has no
+ * brand-alias registry, so it emits provider + protocol only; the web owns the
+ * alias mapping (zhipu → GLM) — the SAME source that already powers the group
+ * header — and the protocol axis is left untouched (前端 §7: the web renders the
+ * binding's protocol, it never derives it from the provider).
+ */
+function fillBindingAlias(b: BindingAxis): BindingAxis {
+  if (b.provider_display_alias) return b;
+  const alias = ENTRY_BY_FAMILY.get(familyOfProviderCode(b.provider))?.displayAlias ?? '';
+  return alias ? { ...b, provider_display_alias: alias } : b;
 }
 
 function rawToTeamRecord(raw: RawTeamKey): TeamVaultRecord {
@@ -139,6 +160,12 @@ function rawToTeamRecord(raw: RawTeamKey): TeamVaultRecord {
     share_status: share,
     effective_status: effective,
     expires_at: raw.expires_at,
+    // P1f: carry the two-axis binding read model through to the vault page so the
+    // inline provider chip (zhipu(GLM)) + the detail's protocol/provider axes
+    // render off backend truth. Only present when B emits it.
+    ...(Array.isArray(raw.bindings) && raw.bindings.length > 0
+      ? { bindings: raw.bindings.map(fillBindingAlias) }
+      : {}),
   };
 }
 
