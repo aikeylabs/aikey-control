@@ -8,6 +8,8 @@
  */
 import { httpClient } from '../http-client';
 import { runtimeConfig } from '@/app/config/runtime';
+import type { BindingAxis } from '@/shared/types/team-vault';
+export { routedGroupAccount } from './routed-group-account';
 
 // 2026-07-03 composing gateway: vault-bridge base resolution — see
 // RuntimeConfig.vaultBridgeApiBase for the four-quadrant table.
@@ -50,23 +52,24 @@ export interface GroupAccountRef {
   // Absent on the master-snapshot shape (no proxy rail there) → fall back to assigned.
   current_routed?: boolean;
   credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
+  credential_id?: string;
+  login_status?: 'logged_in' | 'needs_login' | 'auth_failed' | 'revoked' | string;
+  // Local proxy cooldown projection. These fields explain the same skip-set
+  // that determines current_routed; they never drive routing in the browser.
+  route_status?: 'window_exhausted' | 'window_protected' | 'rate_limited' | 'auth_failed' | 'upstream_unavailable' | string;
+  route_retry_at?: number; // unix seconds
+  // Provider quota observations delivered through the existing group-runtime
+  // rail. Fractions are 0..1. Absent means unknown — never treat it as 0%.
+  util_5h?: number;
+  util_7d?: number;
+  util_observed_at?: number; // unix seconds
+  window_max_util_pct?: number;
+  window_status?: string;
+  window_reset_at?: number;
+  window_7d_max_util_pct?: number;
+  window_7d_status?: string;
+  window_7d_reset_at?: number;
 }
-
-/**
- * routedGroupAccount is the SINGLE display rule for "which pool account is selected"
- * across the vault + team-keys pages: prefer the proxy's live routed account
- * (current_routed, fresh + engine-first), fall back to the static default (assigned),
- * then the first candidate. Keeps every page showing the SAME selected account instead
- * of some reading the stale `assigned` snapshot (2026-07-01, source-of-truth unification).
- */
-export function routedGroupAccount<T extends { assigned: boolean; current_routed?: boolean }>(
-  accounts: T[] | null | undefined,
-): T | undefined {
-  if (!accounts || accounts.length === 0) return undefined;
-  return accounts.find((a) => a.current_routed) ?? accounts.find((a) => a.assigned) ?? accounts[0];
-}
-
-import type { BindingAxis } from '@/shared/types/team-vault';
 
 export interface UserKeyDTO {
   virtual_key_id: string;
@@ -79,24 +82,12 @@ export interface UserKeyDTO {
   // fallback so an orphaned group VK (seat unbound from group → group_accounts empty)
   // still shows its protocol instead of "unknown". Absent on older servers.
   protocol_type?: string;
-  // supported_providers (2026-07-13): EVERY provider this VK can route — one entry
-  // per active binding. `provider_code` / `protocol_type` above are only the FIRST
-  // binding's values (the master snapshot projects them as a primary hint for
-  // legacy readers, see snapshot/service.go), so a multi-protocol VK — the whole
-  // point of "one VK, N protocol channels" per the baseline ER — collapses to a
-  // single protocol if you read them alone. That's exactly what hid the openai
-  // channel of key-335923591-openai-official. The CLI has always emitted this field
-  // (commands_internal/query.rs team records); the DTO just never declared it, so
-  // nobody consumed it. The vault page fixed the same class of bug on 2026-05-12 by
-  // expanding on supported_providers; this page never followed.
-  supported_providers?: string[];
-  // bindings (P1f / design D-12/D-13): the two-axis read model — one entry per
-  // active binding, protocol and provider as SEPARATE fields. Prefer it over
-  // protocol_type/supported_providers, which each collapse one axis: reading
-  // them alone is what let a provider be rendered under a "Protocol" label.
-  // Optional because CLIs/servers older than the two-axis emit don't send it —
-  // consumers fall back to the legacy single-axis fields.
+  // Canonical two-axis read model. `protocol` and `provider` are independent;
+  // user pages render them directly and never infer one from the other.
   bindings?: BindingAxis[];
+  // Provider-axis compatibility list. It does NOT describe protocol lanes;
+  // bindings[].protocol is the only multi-protocol display source.
+  supported_providers?: string[];
   key_status: string;
   share_status: string;
   expires_at?: string;

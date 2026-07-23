@@ -197,7 +197,19 @@ export default function MyAccountPage() {
             </span>
           </div>
 
-          {seats.length === 0 ? (
+          {seatsQuery.isLoading ? (
+            // 2a (2026-07-22): render a fixed-height skeleton WHILE loading
+            // instead of falling through to the empty state. Previously
+            // `seats = data ?? []` made the empty "尚未分配席位" card flash on
+            // every (re)load, then collapse to the populated rows when data
+            // arrived — a large CLS jump (esp. on the forwarded team page).
+            // The skeleton reserves ~1 seat-row of height so load→data no
+            // longer reflows. See bugfix 2026-07-22-scrollbar-gutter-content-reflow.md.
+            <div className="seat-skeleton" aria-hidden="true">
+              <div className="seat-skeleton-row" />
+              <div className="seat-skeleton-row" />
+            </div>
+          ) : seats.length === 0 ? (
             <div className="empty">
               {/* Avoid the class name `ring` — Tailwind ships a utility of the same
                   name that attaches a blue box-shadow, which overrides our styling. */}
@@ -534,6 +546,34 @@ const ACCOUNT_CSS = `
   width: 6px; height: 6px; border-radius: 999px;
   background: #4ade80;
   box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+}
+
+/* 2a: seat-card loading skeleton — reserves ~1 seat-row of height so the
+   load→data transition doesn't reflow (was: empty-state flash → collapse). */
+.account-page .seat-skeleton {
+  padding: 0.75rem 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.account-page .seat-skeleton-row {
+  height: 44px;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.035) 25%,
+    rgba(255, 255, 255, 0.07) 37%,
+    rgba(255, 255, 255, 0.035) 63%
+  );
+  background-size: 400% 100%;
+  animation: seat-skeleton-shimmer 1.4s ease infinite;
+}
+@keyframes seat-skeleton-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .account-page .seat-skeleton-row { animation: none; }
 }
 
 .account-page .empty {

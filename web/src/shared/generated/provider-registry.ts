@@ -18,15 +18,19 @@ export interface ProviderRegistryEntry {
   displayAlias?: string;
   /** Aliases recognized for OAuth-broker normalization and search. */
   oauthAliases: readonly string[];
+  /** Whether the provider appears in normal API-key pickers. */
+  picker: boolean;
 }
 
-export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
+/** Full display catalog, including providers hidden from normal API-key pickers. */
+export const PROVIDER_CATALOG: readonly ProviderRegistryEntry[] = [
   {
     code: "anthropic",
     family: "anthropic",
     display: "anthropic",
     displayAlias: "claude",
     oauthAliases: ["claude"],
+    picker: true,
   },
   {
     code: "openai",
@@ -34,6 +38,14 @@ export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
     display: "openai",
     displayAlias: "codex",
     oauthAliases: ["gpt","chatgpt","codex"],
+    picker: true,
+  },
+  {
+    code: "mock",
+    family: "mock",
+    display: "Mock Provider",
+    oauthAliases: [],
+    picker: false,
   },
   {
     code: "google",
@@ -41,30 +53,35 @@ export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
     display: "google",
     displayAlias: "gemini",
     oauthAliases: ["gemini"],
+    picker: true,
   },
   {
     code: "deepseek",
     family: "deepseek",
     display: "deepseek",
     oauthAliases: [],
+    picker: true,
   },
   {
     code: "kimi_code",
     family: "kimi",
     display: "kimi(kimi-code)",
     oauthAliases: ["kimi"],
+    picker: true,
   },
   {
     code: "moonshot",
     family: "kimi",
     display: "kimi(moonshot)",
     oauthAliases: [],
+    picker: true,
   },
   {
     code: "groq",
     family: "groq",
     display: "groq",
     oauthAliases: [],
+    picker: true,
   },
   {
     code: "xai",
@@ -72,18 +89,21 @@ export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
     display: "xai",
     displayAlias: "grok",
     oauthAliases: ["grok","xai_grok"],
+    picker: true,
   },
   {
     code: "openrouter",
     family: "openrouter",
     display: "openrouter",
     oauthAliases: [],
+    picker: true,
   },
   {
     code: "perplexity",
     family: "perplexity",
     display: "perplexity",
     oauthAliases: ["pplx"],
+    picker: true,
   },
   {
     code: "zhipu",
@@ -91,6 +111,7 @@ export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
     display: "zhipu",
     displayAlias: "GLM",
     oauthAliases: ["glm","zhipuai"],
+    picker: true,
   },
   {
     code: "qwen",
@@ -98,6 +119,7 @@ export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
     display: "qwen",
     displayAlias: "DashScope",
     oauthAliases: ["dashscope","tongyi"],
+    picker: true,
   },
   {
     code: "doubao",
@@ -105,19 +127,130 @@ export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
     display: "doubao",
     displayAlias: "ARK",
     oauthAliases: ["ark","volcengine"],
+    picker: true,
   },
   {
     code: "siliconflow",
     family: "siliconflow",
     display: "siliconflow",
     oauthAliases: [],
+    picker: true,
+  },
+];
+
+/** Providers visible in normal API-key pickers. */
+export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
+  {
+    code: "anthropic",
+    family: "anthropic",
+    display: "anthropic",
+    displayAlias: "claude",
+    oauthAliases: ["claude"],
+    picker: true,
+  },
+  {
+    code: "openai",
+    family: "openai",
+    display: "openai",
+    displayAlias: "codex",
+    oauthAliases: ["gpt","chatgpt","codex"],
+    picker: true,
+  },
+  {
+    code: "google",
+    family: "google",
+    display: "google",
+    displayAlias: "gemini",
+    oauthAliases: ["gemini"],
+    picker: true,
+  },
+  {
+    code: "deepseek",
+    family: "deepseek",
+    display: "deepseek",
+    oauthAliases: [],
+    picker: true,
+  },
+  {
+    code: "kimi_code",
+    family: "kimi",
+    display: "kimi(kimi-code)",
+    oauthAliases: ["kimi"],
+    picker: true,
+  },
+  {
+    code: "moonshot",
+    family: "kimi",
+    display: "kimi(moonshot)",
+    oauthAliases: [],
+    picker: true,
+  },
+  {
+    code: "groq",
+    family: "groq",
+    display: "groq",
+    oauthAliases: [],
+    picker: true,
+  },
+  {
+    code: "xai",
+    family: "xai",
+    display: "xai",
+    displayAlias: "grok",
+    oauthAliases: ["grok","xai_grok"],
+    picker: true,
+  },
+  {
+    code: "openrouter",
+    family: "openrouter",
+    display: "openrouter",
+    oauthAliases: [],
+    picker: true,
+  },
+  {
+    code: "perplexity",
+    family: "perplexity",
+    display: "perplexity",
+    oauthAliases: ["pplx"],
+    picker: true,
+  },
+  {
+    code: "zhipu",
+    family: "zhipu",
+    display: "zhipu",
+    displayAlias: "GLM",
+    oauthAliases: ["glm","zhipuai"],
+    picker: true,
+  },
+  {
+    code: "qwen",
+    family: "qwen",
+    display: "qwen",
+    displayAlias: "DashScope",
+    oauthAliases: ["dashscope","tongyi"],
+    picker: true,
+  },
+  {
+    code: "doubao",
+    family: "doubao",
+    display: "doubao",
+    displayAlias: "ARK",
+    oauthAliases: ["ark","volcengine"],
+    picker: true,
+  },
+  {
+    code: "siliconflow",
+    family: "siliconflow",
+    display: "siliconflow",
+    oauthAliases: [],
+    picker: true,
   },
 ];
 
 /** Lookup table: code → entry. Includes oauth aliases mapped to the canonical entry. */
 export const ENTRY_BY_CODE: ReadonlyMap<string, ProviderRegistryEntry> = (() => {
   const m = new Map<string, ProviderRegistryEntry>();
-  for (const e of PROVIDER_REGISTRY) {
+  for (const e of PROVIDER_CATALOG) {
     m.set(e.code.toLowerCase(), e);
     for (const alias of e.oauthAliases) m.set(alias.toLowerCase(), e);
   }
@@ -131,7 +264,7 @@ export const ENTRY_BY_CODE: ReadonlyMap<string, ProviderRegistryEntry> = (() => 
  *  is undefined by design so the group chip stays plain "kimi". */
 export const ENTRY_BY_FAMILY: ReadonlyMap<string, ProviderRegistryEntry> = (() => {
   const m = new Map<string, ProviderRegistryEntry>();
-  for (const e of PROVIDER_REGISTRY) {
+  for (const e of PROVIDER_CATALOG) {
     if (!m.has(e.family)) m.set(e.family, e);
   }
   return m;
@@ -155,17 +288,18 @@ export const PROVIDER_PROTOCOL_MATRIX: ReadonlyMap<string, readonly string[]> = 
   ["anthropic", ["anthropic"]],
   ["deepseek", ["openai_compatible"]],
   ["doubao", ["openai_compatible"]],
-  ["google_gemini", ["gemini"]],
+  ["google", ["gemini"]],
   ["groq", ["openai_compatible"]],
   ["huggingface", ["openai_compatible"]],
   ["kimi_code", ["openai_compatible"]],
+  ["mock", ["anthropic","openai_compatible"]],
   ["moonshot", ["openai_compatible"]],
   ["openai", ["openai_compatible"]],
   ["openrouter", ["openai_compatible"]],
   ["perplexity", ["openai_compatible"]],
   ["qwen", ["openai_compatible"]],
   ["siliconflow", ["openai_compatible"]],
-  ["xai_grok", ["openai_compatible"]],
+  ["xai", ["openai_compatible"]],
   ["yunwu", ["openai_compatible"]],
   ["zeroeleven", ["openai_compatible"]],
   ["zhipu", ["anthropic","openai_compatible"]],

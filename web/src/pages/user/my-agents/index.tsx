@@ -61,21 +61,40 @@ function readinessLabel(status: 'ready' | 'no_login' | 'degraded', t: (key: stri
   return t('myAgents.readiness.degraded');
 }
 
-function PoolReadinessBadge({ agent }: { agent: MyAgentDTO }) {
+function PoolReadinessBadge({ agent, linkToOauth }: { agent: MyAgentDTO; linkToOauth?: boolean }) {
   const { t } = useTranslation();
   const status = readinessStatus(agent);
   const color = status === 'ready' ? '#4ade80' : status === 'no_login' ? '#f59e0b' : '#fb923c';
   const bg = status === 'ready' ? 'rgba(74,222,128,0.07)' : status === 'no_login' ? 'rgba(245,158,11,0.08)' : 'rgba(251,146,60,0.08)';
   const symbol = status === 'ready' ? '✓' : status === 'no_login' ? '!' : '△';
+  const chip = (
+    <span
+      className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold"
+      style={{ color, background: bg, border: `1px solid ${color}55` }}
+    >
+      <span aria-hidden="true">{symbol}</span>
+      {readinessLabel(status, t)}
+    </span>
+  );
   return (
     <div className="space-y-1" title={t(readinessMessageKey(agent), { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}>
-      <span
-        className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold"
-        style={{ color, background: bg, border: `1px solid ${color}55` }}
-      >
-        <span aria-hidden="true">{symbol}</span>
-        {readinessLabel(status, t)}
-      </span>
+      {/* 2026-07-22 (user): the "待登录" (no_login) chip is a shortcut to Team OAuth
+          login. Only linkified in the list (linkToOauth); the create-modal reuse
+          stays a plain badge. */}
+      {linkToOauth && status === 'no_login' ? (
+        // Deep-link with the agent's pool id so Team OAuth lands filtered to
+        // THIS agent-pool's accounts (removable chip there). Falls back to the
+        // plain page when the source carries no group id. (2026-07-22)
+        <Link
+          to={agent.source?.oauth_group_id
+            ? `/user/team-oauth?group=${encodeURIComponent(agent.source.oauth_group_id)}`
+            : '/user/team-oauth'}
+          className="inline-block"
+          style={{ textDecoration: 'none' }}
+        >{chip}</Link>
+      ) : (
+        chip
+      )}
       <div className="text-[9px]" style={{ color: 'var(--muted-foreground)' }}>
         {t('myAgents.readiness.count', { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}
       </div>
@@ -591,7 +610,7 @@ export default function MyAgentsPage() {
           <h1 className="text-lg font-mono font-bold tracking-widest" style={{ color: 'var(--foreground)' }}>{t('myAgents.title')}</h1>
           <p className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.subtitle')}</p>
         </div>
-        <button onClick={() => setCreateOpen(true)} className="btn btn-primary text-xs px-4 py-2">{t('myAgents.newAgent')}</button>
+        <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-primary-dim text-xs px-4 py-2">{t('myAgents.newAgent')}</button>
       </div>
 
       <section className="card overflow-hidden">
@@ -637,18 +656,17 @@ export default function MyAgentsPage() {
                 <th>{t('myAgents.col.source')}</th>
                 <th>{t('myAgents.col.status')}</th>
                 <th>{t('myAgents.col.availability')}</th>
-                <th>{t('myAgents.col.vk')}</th>
                 <th>{t('myAgents.col.created')}</th>
                 <th style={{ textAlign: 'right' }}>{t('myAgents.col.actions')}</th>
               </tr>
             </thead>
             <tbody className="font-mono text-xs">
               {isLoading && (
-                <tr><td colSpan={7} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.loading')}</td></tr>
+                <tr><td colSpan={6} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.loading')}</td></tr>
               )}
               {isError && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center">
+                  <td colSpan={6} className="px-5 py-8 text-center">
                     <div role="alert" aria-live="assertive" className="inline-flex items-center gap-3 rounded px-3 py-2" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.38)' }}>
                       <span>{t('myAgents.loadError')}</span>
                       <button type="button" className="row-use-btn" onClick={() => void refetch()}>{t('myAgents.retry')}</button>
@@ -657,7 +675,7 @@ export default function MyAgentsPage() {
                 </tr>
               )}
               {agents && agents.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.empty')}</td></tr>
+                <tr><td colSpan={6} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.empty')}</td></tr>
               )}
               {agents?.map(agent => (
                 <tr key={agent.seat_id}>
@@ -666,13 +684,10 @@ export default function MyAgentsPage() {
                   <td className="px-5 py-4">
                     <span className={`badge ${agent.status === 'active' ? 'badge-active' : 'badge-neutral'}`}>{agent.status}</span>
                   </td>
-                  <td className="px-5 py-4"><PoolReadinessBadge agent={agent} /></td>
-                  {/* Masked VK hint (2026-07-19 reuse-first): head+tail so the member
-                      can identify which VK this agent holds WITHOUT rotating it. "—"
-                      when no VK yet or the VK predates hints (rotate to populate). */}
-                  <td className="px-5 py-4" style={{ color: agent.vk_hint ? 'var(--soft-foreground)' : 'var(--muted-foreground)' }}>
-                    {agent.vk_hint || t('myAgents.vkHintNone')}
-                  </td>
+                  <td className="px-5 py-4"><PoolReadinessBadge agent={agent} linkToOauth /></td>
+                  {/* VK value column removed 2026-07-22 (user): the masked VK hint
+                      no longer shows inline; members still mint/rotate/reveal via the
+                      row's "获取 VK" / "轮换" actions (AgentRowActions). */}
                   <td className="px-5 py-4" style={{ color: 'var(--muted-foreground)' }}>
                     {agent.created_at ? formatDate(agent.created_at) : '—'}
                   </td>

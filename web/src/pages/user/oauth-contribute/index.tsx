@@ -207,6 +207,20 @@ export default function OAuthContributePage() {
     const gs = Array.isArray(ownerGroupsQ.data) ? ownerGroupsQ.data : [];
     return gs.filter((g) => g.is_owner);
   }, [ownerGroupsQ.data]);
+  // Pool filter (2026-07-22): deep-linked from my-agents' 待登录 chip
+  // (?group=<oauth_group_id>) so Team OAuth lands scoped to that agent-pool.
+  // State-only (the URL is just the initial value); the removable toolbar chip
+  // clears it back to "all pools". Name resolves from the owned-pool alias (the
+  // sign-in-able 待登录 pools live in ownerPools); falls back to the id.
+  const [poolFilter, setPoolFilter] = useState<string | null>(() => searchParams.get('group'));
+  const visibleOwnerPools = useMemo(
+    () => (poolFilter ? ownerPools.filter((g) => g.oauth_group_id === poolFilter) : ownerPools),
+    [ownerPools, poolFilter],
+  );
+  const poolFilterName = useMemo(
+    () => (poolFilter ? ownerPools.find((g) => g.oauth_group_id === poolFilter)?.alias ?? poolFilter : null),
+    [poolFilter, ownerPools],
+  );
   // The deep-linked id, frozen at mount (a plain ref, NOT re-read from the URL):
   // used only for the one-time scroll-into-view of the auto-expanded row.
   const deepLinkCred = useRef(searchParams.get('expand')).current;
@@ -248,6 +262,7 @@ export default function OAuthContributePage() {
   const filtered = useMemo(
     () =>
       accounts.filter((a) => {
+        if (poolFilter && a.oauth_group_id !== poolFilter) return false;
         if (statusFilter !== 'all') {
           const ok = statusFilter === 'inactive'
             ? isInactiveStatus(a.status)
@@ -256,7 +271,7 @@ export default function OAuthContributePage() {
         }
         return a.identity.toLowerCase().includes(search.trim().toLowerCase());
       }),
-    [accounts, search, statusFilter],
+    [accounts, search, statusFilter, poolFilter],
   );
   // Pill counts — off the UNfiltered list so each pill shows its own total
   // regardless of the active filter (mirrors the vault FilterStrip).
@@ -400,13 +415,31 @@ export default function OAuthContributePage() {
                   count={statusCounts.inactive}
                 />
               </div>
+              {/* Pool filter chip (2026-07-22) — deep-linked from my-agents'
+                  待登录 chip; removable (×) to return to all pools. */}
+              {poolFilter && (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-mono"
+                  style={{ color: '#5eead4', background: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.35)' }}
+                  title={`${t('oauthContribute.colPoolGroup')}: ${poolFilterName}`}
+                >
+                  <span style={{ opacity: 0.7 }}>{t('oauthContribute.colPoolGroup')}:</span>
+                  {poolFilterName}
+                  <button
+                    type="button"
+                    onClick={() => setPoolFilter(null)}
+                    aria-label={t('oauthContribute.clearPoolFilter')}
+                    style={{ marginLeft: '2px', color: 'inherit', opacity: 0.7, cursor: 'pointer', background: 'none', border: 'none', padding: 0, fontSize: '13px', lineHeight: 1 }}
+                  >×</button>
+                </span>
+              )}
             </div>
           )}
 
           {/* Owner agent pools — FULL composition, every account sign-in-able
               (2026-07-18): one card per owned pool, provider-partitioned by
               construction (R34 one-provider-per-group). */}
-          {ownerPools.map((g) => (
+          {visibleOwnerPools.map((g) => (
             <section key={g.oauth_group_id} className="card overflow-hidden">
               <div className="card-header flex items-center gap-2 px-4 py-3">
                 <span
@@ -462,6 +495,10 @@ export default function OAuthContributePage() {
             </section>
           ))}
 
+          {/* Company/history accounts. With a pool filter active, only render
+              this if it has matching accounts — an owned-pool filter renders its
+              section above and leaves this empty, so we hide it. (2026-07-22) */}
+          {(!poolFilter || filtered.length > 0) && (
           <section className="card overflow-hidden">
             <div className="card-header flex items-center gap-2 px-4 py-3">
               <span
@@ -521,6 +558,7 @@ export default function OAuthContributePage() {
               )}
             </div>
           </section>
+          )}
         </div>
       </div>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />

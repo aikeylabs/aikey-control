@@ -28,7 +28,7 @@ import type { TFunction } from 'i18next';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { importApi, type ProviderRoute } from '@/shared/api/user/import';
-import { routedGroupAccount } from '@/shared/api/user/delivery';
+import { routedGroupAccount, type GroupAccountRef } from '@/shared/api/user/delivery';
 import { formatDate, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import {
   vaultApi,
@@ -45,6 +45,7 @@ import {
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
 import { ModelMappingBanner } from '../_shared/ModelMappingBanner';
+import { PoolAccountList } from '../_shared/PoolAccountList';
 import {
   HookWireRcModal,
   useHookWireRcModal,
@@ -89,50 +90,20 @@ type SortKey = 'created' | 'last_test' | 'alias';
 //   - in_use_for: future Phase 3B work (Active state for team rows
 //     was deferred per design decision 8).
 /**
- * A candidate pool account behind a oauth-group VK (N6 projection, Stage A).
- * Two DISTINCT concepts, deliberately not conflated (R22): `assigned` = master's
- * static rank-0 default pick (stable); `current_routed` = the account the proxy is
- * ACTUALLY routing this seat to right now (override ?? rank-0), stamped by the proxy's
- * 60s rail and folded in by the CLI so the drawer shows the live pick without a manual
- * key sync (C2, 2026-06-30). login_status is likewise refreshed from the live rail (C1).
+ * teamOauthLoginHref: deep-link for the 登录 CTA — /user/team-oauth targeted at
+ * the key's pool. 2026-07-22 (user): mirror the my-agents 待登录 chip — carry the
+ * pool as ?group=<oauth_group_id> so the landing page FILTERS to that agent-pool
+ * (removable chip there), AND keep ?expand=<credential_id> so the specific routed
+ * account's sign-in card auto-expands + scrolls into view. Both are independent on
+ * the team-oauth side, so any subset works; either absent → that half is omitted;
+ * neither → plain un-targeted link (older snapshots / rail-only accounts).
  */
-interface OauthGroupAccountRef {
-  account_id: string;
-  identity: string; // email / alias for display
-  provider_code: string;
-  priority: number;
-  assigned: boolean; // master-assigned default (static rank-0)
-  // current_routed (C2): the account this seat's traffic is currently routed to in
-  // steady state (proxy override ?? rank-0). Distinct from `assigned` — an engine
-  // redirect moves current_routed off the default. false/absent when the proxy hasn't
-  // polled yet (unknown → no indicator, never wrongly claimed).
-  current_routed?: boolean;
-  credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
-  // login_status (RW8 per-member, C1 live): the viewer's own per-member token state for
-  // this pool account — 'logged_in' | 'needs_login' | 'auth_failed' | 'revoked'.
-  // Refreshed from the proxy's group_runtime rail (≤60s) so it reflects a completed
-  // login without a manual key sync. Absent on api_key candidates / older snapshots.
-  login_status?: string;
-  // credential_id (2026-07-12): the account's real credential id — the SAME id the
-  // team-oauth page keys its rows by (MyPoolAccount.credential_id), threaded from the
-  // master snapshot (snapshot/group.go). The login CTA appends it as ?expand= so the
-  // team-oauth page auto-expands this account's sign-in card instead of making the
-  // user hunt for it. Absent on older snapshots / rail-only accounts → CTA falls
-  // back to the plain (un-targeted) link.
-  credential_id?: string;
-}
-
-/**
- * teamOauthLoginHref: deep-link for the 登录 CTA — /user/team-oauth with the target
- * account's credential_id as ?expand= so the landing page auto-expands that account's
- * sign-in card (2026-07-12). credential_id may be absent (older master snapshots
- * predate it; rail-only accounts don't carry it) → plain un-targeted link, same
- * behavior as before this change.
- */
-function teamOauthLoginHref(credentialId?: string): string {
-  return credentialId
-    ? `/user/team-oauth?expand=${encodeURIComponent(credentialId)}`
-    : '/user/team-oauth';
+function teamOauthLoginHref(credentialId?: string, oauthGroupId?: string | null): string {
+  const params = new URLSearchParams();
+  if (oauthGroupId) params.set('group', oauthGroupId);
+  if (credentialId) params.set('expand', credentialId);
+  const qs = params.toString();
+  return qs ? `/user/team-oauth?${qs}` : '/user/team-oauth';
 }
 
 interface TeamRowRecord {
@@ -199,7 +170,7 @@ interface TeamRowRecord {
    * an unnamed group (then the generic "OAuth group" label shows).
    */
   group_alias?: string | null;
-  group_accounts?: OauthGroupAccountRef[] | null;
+  group_accounts?: GroupAccountRef[] | null;
   /**
    * owner_email (RW8): the owning account's email, stamped by `aikey key sync`
    * and emitted by the CLI's `_internal query`. Surfaced in the drawer Meta as
@@ -3391,6 +3362,7 @@ const Row = React.memo(function Row(props: {
               <Link
                 to={teamOauthLoginHref(
                   routedGroupAccount((r as TeamRowRecord).group_accounts)?.credential_id,
+                  (r as TeamRowRecord).oauth_group_id,
                 )}
                 className="row-use-btn"
                 title={t('vault.needsLoginCtaTitle')}
@@ -3911,97 +3883,12 @@ function DetailDrawer(props: {
                   </span>
                 </div>
               ) : (
-                (team.group_accounts ?? [])
-                  .slice()
-                  .sort((a, b) => a.priority - b.priority)
-                  .map((a) => (
-                    // Custom stacked layout (NOT drawer-field): identity is a
-                    // value, not a field label — drawer-field's .k uppercases +
-                    // letter-spaces it (reads as garbled) and the .k/.v side-by-side
-                    // collides two long strings. Identity on its own line, the
-                    // type/provider/priority meta below it.
-                    <div
-                      key={a.account_id}
-                      style={{
-                        padding: '9px 11px',
-                        marginTop: 6,
-                        borderRadius: 8,
-                        border: `1px solid ${a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
-                        background: a.account_id === routedGroupAccount(team.group_accounts)?.account_id ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: 'var(--foreground)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
-                        {a.assigned && <span className="chip success">{t('vault.oauthGroupDefault')}</span>}
-                        {/* C2 (2026-06-30): the account the proxy is ACTUALLY routing this
-                            seat to now (override ?? rank-0) — distinct from the static
-                            default above. Only shown once the proxy's live rail reports it. */}
-                        {a.current_routed && (
-                          <span className="chip info">{t('vault.oauthGroupCurrentRouted')}</span>
-                        )}
-                        {/* RW8 per-member: which pool account the viewer has signed into (team OAuth). */}
-                        {a.credential_type === 'oauth_account' && a.login_status && (
-                          <span
-                            className={`chip ${a.login_status === 'logged_in' ? 'success' : a.login_status === 'needs_login' ? 'warning' : 'danger'}`}
-                          >
-                            {t(`vault.oauthLoginStatus.${a.login_status}`, a.login_status)}
-                          </span>
-                        )}
-                        {/* 登录 CTA (2026-07-03, 防呆): a needs_login pool account is one
-                            web sign-in away from making this VK usable — link straight to
-                            the team-oauth page (the routed account is auto-highlighted there
-                            with the sign-in control). 2026-07-12: carries THIS account's
-                            ?expand=<credential_id> so its sign-in card auto-expands there. */}
-                        {a.credential_type === 'oauth_account' && a.login_status === 'needs_login' && (
-                          <Link
-                            to={teamOauthLoginHref(a.credential_id)}
-                            className="chip warning"
-                            style={{ textDecoration: 'none', cursor: 'pointer' }}
-                            title={t('vault.needsLoginCtaTitle')}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {t('vault.loginCta')} →
-                          </Link>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--muted-foreground)',
-                          marginTop: 5,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <span
-                            className="prov-dot"
-                            style={{ background: providerBrandColor(a.provider_code), width: 6, height: 6 }}
-                          />
-                          {a.provider_code}
-                        </span>
-                        <span style={{ opacity: 0.35 }}>·</span>
-                        <span>
-                          {a.credential_type === 'oauth_account'
-                            ? t('vault.oauthGroupTypeOauth')
-                            : t('vault.oauthGroupTypeKey')}
-                        </span>
-                        <span style={{ opacity: 0.35 }}>·</span>
-                        <span>{t('vault.oauthGroupPriority', { priority: a.priority })}</span>
-                      </div>
-                    </div>
-                  ))
+                <PoolAccountList
+                  accounts={team.group_accounts}
+                  loginHref={(cid) => teamOauthLoginHref(cid, team.oauth_group_id)}
+                  loginTitle={t('vault.needsLoginCtaTitle')}
+                  loginLabel={t('vault.loginCta')}
+                />
               )}
               <div
                 style={{

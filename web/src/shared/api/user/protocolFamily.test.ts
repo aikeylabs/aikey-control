@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
-import { displayProtocolFamily } from './protocolFamily';
+import {
+  bindingProtocolFamilies,
+  bindingProviderCodes,
+  bindingProviderLabels,
+  displayProtocolFamily,
+} from './protocolFamily';
 
 /**
  * Fence test for the shared protocol-family display normalization used by BOTH the
@@ -34,5 +39,25 @@ describe('displayProtocolFamily', () => {
     expect(displayProtocolFamily('')).toBe('');
     expect(displayProtocolFamily(null)).toBe('');
     expect(displayProtocolFamily(undefined)).toBe('');
+  });
+});
+
+describe('two-axis binding presentation', () => {
+  const bindings = [
+    { protocol: 'anthropic', provider: 'mock', provider_display_alias: '' },
+    { protocol: 'openai_compatible', provider: 'zhipu', provider_display_alias: 'GLM' },
+    { protocol: 'openai_compatible', provider: 'mock', provider_display_alias: '' },
+  ];
+
+  it('derives protocol groups only from binding.protocol', () => {
+    expect(bindingProtocolFamilies(bindings, 'legacy-provider')).toEqual(['anthropic', 'openai']);
+    expect(bindingProtocolFamilies([], 'openai_compatible')).toEqual(['openai']);
+    expect(bindingProtocolFamilies([{ provider: 'mock' }])).toEqual([]);
+  });
+
+  it('keeps provider codes and aliases on the provider axis', () => {
+    expect(bindingProviderCodes(bindings, 'anthropic')).toEqual(['mock']);
+    expect(bindingProviderCodes(bindings, 'openai')).toEqual(['zhipu', 'mock']);
+    expect(bindingProviderLabels(bindings, 'openai')).toEqual(['zhipu(GLM)', 'mock']);
   });
 });

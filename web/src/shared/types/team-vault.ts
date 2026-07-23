@@ -29,6 +29,10 @@ export interface BindingAxis {
   protocol: string;
   provider: string;
   provider_display_alias: string;
+  /** Local CLI selection slot (Claude/Anthropic, Codex/OpenAI, Kimi, ...). */
+  client_route?: string;
+  /** Exact proxy endpoint for this binding. */
+  route_url?: string | null;
 }
 
 export interface TeamVaultRecord {

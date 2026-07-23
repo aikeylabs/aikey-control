@@ -735,3 +735,41 @@ textarea:focus {
 input::placeholder {
   color: var(--muted-foreground) !important;
 }
+
+/* ── Cross-document View Transitions (2026-07-22, Route-3 spike) ──
+   Smooth the cross-app full-page reload: Account / Compliance / Overview are a
+   DIFFERENT SPA bundle forwarded by the composing gateway, so navigating to
+   them from the Personal side is a full document load (not client-side routing)
+   — measured as a ~400ms blank flash. Opting BOTH the Personal and the
+   forwarded Team bundle into `@view-transition` turns that abrupt reload into
+   an animated transition; naming the sidebar keeps the menu visually continuous
+   (no flicker), complementing the sidebar scrollTop preservation in UserShell.
+   Same-origin only (gateway ✓), Chrome 126+; unsupported browsers gracefully
+   fall back to the current instant reload (progressive enhancement). BOTH
+   aikey-control/web and aikey-control-master/web index.css must carry this for
+   the cross-bundle transition to fire. Client-side (NavLink) navigations are
+   unaffected — cross-document VT only triggers on real document navigations.
+   See bugfix 2026-07-22-scrollbar-gutter-content-reflow.md. */
+@view-transition {
+  navigation: auto;
+}
+/* Instant clean swap — zero ALL transition animations so there is NO
+   fade/gradient at all (per user 2026-07-22: least-obvious). @view-transition
+   still holds the old frame until the new page is ready, so the ~400ms reload
+   blank flash is gone — but the swap itself is instant (no menu fade, no content
+   fade). The sidebar's scroll position stays put via the UserShell scrollTop
+   restore. Removing the animation is what makes it "not obvious"; keeping the
+   @view-transition opt-in is what removes the blank flash. */
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 0s !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}

@@ -10,6 +10,35 @@
     "processing": "Processing...",
     "typeToConfirm": "Type <v>{{value}}</v> to confirm"
   },
+  "poolAccount": {
+    "default": "Default",
+    "currentRouted": "Current route",
+    "oauth": "OAuth",
+    "apiKey": "API KEY",
+    "priority": "Priority {{priority}}",
+    "login": "Log in",
+    "util5h": "5h used",
+    "util7d": "7d used",
+    "noObservation": "No quota observation yet. Send a request to update it.",
+    "observed": "Observed {{time}}",
+    "protectionLine": "Protection line {{percent}}%",
+    "windowRefresh": "Window refresh: {{time}}",
+    "expectedRecovery": "Expected recovery: {{time}}",
+    "windowElapsed": "Window ended; waiting for the next request probe",
+    "routeStatus": {
+      "window_exhausted": "Quota window exhausted",
+      "window_protected": "Quota protection switched",
+      "rate_limited": "Temporarily rate limited",
+      "auth_failed": "Authentication failed",
+      "upstream_unavailable": "Upstream unavailable"
+    },
+    "loginStatus": {
+      "logged_in": "Signed in",
+      "needs_login": "Sign-in needed",
+      "auth_failed": "Auth failed",
+      "revoked": "Revoked"
+    }
+  },
   "errorDisplay": {
     "field": "Field",
     "rule": "Rule",
@@ -2072,6 +2101,7 @@
     "colAliasHint": "team-managed",
     "colProtocol": "Protocol",
     "protocolPlusMore": "{{protocol}} (+{{count}} more)",
+    "colProvider": "Provider",
     "colStatus": "Status",
     "colShare": "Share",
     "colUsage": "Usage / Limit",
@@ -2517,6 +2547,7 @@
     "filterInactive": "Inactive",
     "colEmail": "Email",
     "colPoolGroup": "Pool group",
+    "clearPoolFilter": "Clear pool filter",
     "colLastLogin": "Last login",
     "colStatus": "Status",
     "empty": "No accounts yet.",
