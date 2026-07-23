@@ -642,21 +642,10 @@ export function UserShell() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  // Reveal the active nav item on a full-document load.
-  //
-  // WHY: cross-app entries (Overview / Account / Compliance) navigate via a
-  // full-page load, and a direct refresh / deep link also reloads the whole
-  // document. Either way the sidebar mounts at scrollTop=0, so when the
-  // current page's entry sits lower in the list it lands scrolled out of
-  // view — the user clicked a bottom item and it "disappeared". Scroll it
-  // back into view on mount. `block: 'nearest'` is a no-op when the item is
-  // already visible (default instant behavior = no animation), so this only
-  // acts on fresh loads; client-side SPA navigations keep their scroll and
-  // never remount this shell, so their scroll position is untouched.
-  React.useLayoutEffect(() => {
-    const active = document.querySelector('.user-sidebar .nav-item.active');
-    active?.scrollIntoView({ block: 'nearest' });
-  }, []);
+  // Active-nav reveal-on-load (React.useLayoutEffect + scrollIntoView) removed
+  // 2026-07-22 by request. Trade-off accepted: a deep-link / refresh / cross-app
+  // full load onto a nav item low in the list may leave it scrolled out of view
+  // in the sidebar. See bugfix 2026-07-22-scrollbar-gutter-content-reflow.
 
   function isActive(path: string) {
     return pathname === path || pathname.startsWith(path + '/');
@@ -741,6 +730,78 @@ export function UserShell() {
       return false;
     }
   }, [otherBaseUrl]);
+
+  // 1a (2026-07-22): pre-warm the forwarded team-page bundle.
+  //
+  // WHY: cross-app entries (Account / Compliance / Overview) are served by a
+  // DIFFERENT SPA bundle (the team server, via the composing gateway), so
+  // navigating to them from the Personal side is a full-document load that must
+  // fetch+parse the team bundle — measured ~700ms cold vs ~73ms warm. All team
+  // pages share one bundle, so we fetch one team page's HTML on idle to discover
+  // its current hashed asset URLs and <link rel=prefetch> them, turning the
+  // first cross-app click warm. Personal side + real team gateway only; once per
+  // session; best-effort (swallows errors, never blocks the main flow).
+  // See bugfix 2026-07-22-scrollbar-gutter-content-reflow.md (§cross-app reload).
+  React.useEffect(() => {
+    if (!IS_PERSONAL_SIDE || isSingleBinaryComposed || !otherBaseUrl) return;
+    if (sessionStorage.getItem('aikey:team-bundle-warmed') === '1') return;
+    const base = (crossAppLinkBase ?? '').replace(/\/$/, '');
+    const handle = window.setTimeout(() => {
+      fetch(`${base}/user/account`, { credentials: 'same-origin' })
+        .then((r) => (r.ok ? r.text() : ''))
+        .then((html) => {
+          const assets = new Set(
+            [...html.matchAll(/\/assets\/index-[A-Za-z0-9_-]+\.(?:js|css)/g)].map((m) => m[0]),
+          );
+          if (assets.size === 0) return;
+          assets.forEach((a) => {
+            const link = document.createElement('link');
+            link.rel = 'prefetch';
+            link.as = a.endsWith('.css') ? 'style' : 'script';
+            link.href = `${base}${a}`;
+            document.head.appendChild(link);
+          });
+          sessionStorage.setItem('aikey:team-bundle-warmed', '1');
+        })
+        .catch(() => {});
+    }, 1200);
+    return () => window.clearTimeout(handle);
+  }, [isSingleBinaryComposed, otherBaseUrl, crossAppLinkBase]);
+
+  // Preserve the sidebar's vertical scroll position across navigations.
+  //
+  // WHY: cross-app nav (Account / Compliance / Overview) is a full-document
+  // reload, so the sidebar <nav> remounts at scrollTop=0. When the user has
+  // scrolled the overflowing menu down to reach a lower item and clicks it, the
+  // menu visibly snaps back to the top ("菜单滚动条跳跃"). We persist the nav
+  // scrollTop to sessionStorage on scroll and restore it in a LAYOUT effect
+  // (runs before paint → zero visible jump), keeping the menu's vertical
+  // position stable across page switches. Same-origin (composing gateway) means
+  // sessionStorage is shared between local and forwarded pages, so the position
+  // carries across the local↔team boundary too. Supersedes the old
+  // active-item scrollIntoView (removed 2026-07-22) with a no-jump approach.
+  // See bugfix 2026-07-22-scrollbar-gutter-content-reflow.md.
+  const sidebarNavRef = React.useRef<HTMLElement>(null);
+  React.useLayoutEffect(() => {
+    const nav = sidebarNavRef.current;
+    if (!nav) return;
+    const KEY = 'aikey:sidebar-scroll';
+    const saved = sessionStorage.getItem(KEY);
+    if (saved) nav.scrollTop = parseInt(saved, 10) || 0;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        try { sessionStorage.setItem(KEY, String(nav.scrollTop)); } catch { /* quota/full — non-fatal */ }
+      });
+    };
+    nav.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      nav.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // Two-stage discovery (run together):
   //   1. Refresh other-base-url from local-server endpoint (A side only —
@@ -1114,20 +1175,23 @@ export function UserShell() {
                 vector (no web font → no FOUT flash); `nav-brand-mark` keeps
                 the collapsed-sidebar hook, size 28 = the prior in-shell chip
                 ("登录后的 logo 稍微小一些"). */}
-            <BrandMark className="nav-brand-mark" size={28} />
+            {/* 2026-07-23 (user): brand banner enlarged ~107% (modest; 32 felt a
+                touch big, 30 chosen) — mark 28→30 + wordmark scale 1→1.07, in
+                proportion. */}
+            <BrandMark className="nav-brand-mark" size={30} />
             {/* SVG wordmark: i-dot in brand yellow (2026-07-18); logoText
                 here is the fixed 'AiKey' constant (see comment above).
                 tagline={false} (2026-07-18 user request): the "AI RUNTIME
                 GOVERNANCE" line shows only on login screens, not inside
                 the logged-in shells. */}
-            <BrandWordmark className="nav-brand-text" tagline={false} scale={1} />
+            <BrandWordmark className="nav-brand-text" tagline={false} scale={1.07} />
           </div>
         </div>
 
         {/* Nav — grouped items separated by spacing + uppercase mono
             headers, no divider rules. Groups without a `title` (the
             Overview bucket) render as plain items. */}
-        <nav className="flex-1 overflow-y-auto">
+        <nav ref={sidebarNavRef} className="flex-1 overflow-y-auto">
           {sidedNavGroups.map((group, gi) => {
             // Cross-app entries belonging to this group, visibility-
             // filtered. Only rendered when otherBaseUrl is configured —
@@ -1483,7 +1547,11 @@ export function UserShell() {
             </button>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto">
+        {/* scrollbar-gutter: stable — reserve the scrollbar gutter permanently
+            so routes that overflow vs fit don't reflow the content ~6px sideways
+            on nav. Dual-edit mirror: keep identical in control/web + master/web.
+            bugfix 2026-07-22-scrollbar-gutter-content-reflow. */}
+        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
           <Outlet />
         </div>
       </main>

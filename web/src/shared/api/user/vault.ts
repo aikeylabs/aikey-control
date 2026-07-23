@@ -137,6 +137,8 @@ export interface OAuthVaultRecord {
   id: string;                       // == provider_account_id
   provider_account_id: string;
   provider: string;                 // e.g. claude / codex / kimi (broker vocabulary)
+  protocol?: string;                // exact wire protocol stored on the account
+  client_route?: string;            // local CLI route selected by `aikey use`
   /**
    * Canonical API-protocol family. Broker-vocabulary `provider` values
    * (claude / codex) map to their API families (anthropic / openai) via

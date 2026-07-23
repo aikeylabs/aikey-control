@@ -131,8 +131,87 @@ export const KEYS_PAGE_CSS = `
 .vault-page .chip.danger  { color: #fca5a5;       background: rgba(239,68,68,0.1);     border-color: rgba(239,68,68,0.35); }
 .vault-page .chip.info    { color: var(--info);   background: rgba(96,165,250,0.08);   border-color: rgba(96,165,250,0.3); }
 
+/* Pool account cards — shared by Vault + Team Keys drawers. Route state wins
+   over selection color so an exhausted static-default account is unmistakable. */
+.vault-page .pool-account-card {
+  padding: 9px 11px;
+  margin-top: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+}
+.vault-page .pool-account-card.current {
+  border-color: rgba(74,222,128,0.28);
+  background: rgba(74,222,128,0.06);
+}
+.vault-page .pool-account-card.exhausted {
+  border-color: rgba(248,113,113,0.4);
+  background: rgba(248,113,113,0.06);
+}
+.vault-page .pool-account-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--foreground);
+}
+.vault-page .pool-account-identity { word-break: break-all; font-weight: 600; }
+.vault-page .pool-account-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.vault-page .pool-account-provider { display: inline-flex; align-items: center; gap: 4px; }
+.vault-page .pool-account-separator { opacity: 0.35; }
+.vault-page .pool-account-usage { margin-top: 9px; }
+.vault-page .pool-account-usage-row + .pool-account-usage-row { margin-top: 7px; }
+.vault-page .pool-account-usage-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+  color: var(--muted-foreground);
+  font-size: 10.5px;
+}
+.vault-page .pool-account-usage-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.06);
+}
+.vault-page .pool-account-usage-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--info);
+}
+.vault-page .pool-account-usage-fill.danger { background: var(--destructive); }
+.vault-page .pool-account-usage-empty {
+  color: var(--muted-foreground);
+  font-size: 10.5px;
+}
+.vault-page .pool-account-observation {
+  display: flex;
+  gap: 5px 10px;
+  flex-wrap: wrap;
+  margin-top: 7px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .vault-page .kind-pill {
   display: inline-flex; align-items: center;
+  /* 2026-07-22 (user): with a multi-protocol key the .name ("openai, anthropic")
+     wraps to 2 lines and squeezed this scope chip until 团队 broke to 团/队.
+     Squeeze-guard (same family as .icon-btn / .row-use-btn): the chip never
+     shrinks or wraps — .name absorbs the width instead. */
+  flex-shrink: 0; white-space: nowrap;
   padding: 2px 6px;
   font-family: var(--font-mono);
   font-size: 9.5px; font-weight: 600;

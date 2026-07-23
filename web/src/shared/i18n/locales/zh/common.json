@@ -10,6 +10,35 @@
     "processing": "处理中…",
     "typeToConfirm": "请输入 <v>{{value}}</v> 以确认"
   },
+  "poolAccount": {
+    "default": "默认",
+    "currentRouted": "当前路由",
+    "oauth": "OAuth",
+    "apiKey": "API KEY",
+    "priority": "优先级 {{priority}}",
+    "login": "登录",
+    "util5h": "5h 已用",
+    "util7d": "7d 已用",
+    "noObservation": "暂无额度观测，发起请求后更新",
+    "observed": "最近观测：{{time}}",
+    "protectionLine": "保护线 {{percent}}%",
+    "windowRefresh": "窗口刷新：{{time}}",
+    "expectedRecovery": "预计恢复：{{time}}",
+    "windowElapsed": "窗口已到期，等待下一次请求探测",
+    "routeStatus": {
+      "window_exhausted": "额度窗口已耗尽",
+      "window_protected": "额度保护切换",
+      "rate_limited": "临时限流",
+      "auth_failed": "认证失败",
+      "upstream_unavailable": "上游暂不可用"
+    },
+    "loginStatus": {
+      "logged_in": "已登录",
+      "needs_login": "待登录",
+      "auth_failed": "认证失败",
+      "revoked": "已吊销"
+    }
+  },
   "errorDisplay": {
     "field": "字段",
     "rule": "规则",
@@ -2507,6 +2536,7 @@
     "filterInactive": "已失效",
     "colEmail": "邮箱",
     "colPoolGroup": "池组",
+    "clearPoolFilter": "清除池组筛选",
     "colLastLogin": "最后登录",
     "colStatus": "状态",
     "empty": "暂无账号。",

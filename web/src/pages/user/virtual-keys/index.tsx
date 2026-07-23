@@ -32,6 +32,7 @@ import { vaultApi, pickHookReadiness } from '@/shared/api/user/vault';
 import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
 import { ModelMappingBanner } from '../_shared/ModelMappingBanner';
+import { PoolAccountList } from '../_shared/PoolAccountList';
 import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
 import { ENTRY_BY_CODE } from '@/shared/generated/provider-registry';
 import {
@@ -362,19 +363,28 @@ export default function UserVirtualKeysPage() {
     });
   }, [otherBaseUrl]);
 
-  // Team record lookup: { virtual_key_id → { route_url, route_token } }.
+  // Team record lookup: { virtual_key_id → local runtime projection }. The
+  // Personal vault endpoint is also the existing source for live pool routing,
+  // cooldown and utilization fields, so the Team Keys drawer must not keep a
+  // second, master-snapshot-only account-card implementation.
   // Empty map when cross-fetch is unavailable or returns no records;
   // drawer falls back to "—" hints for those fields.
+  type LocalTeamRecord = {
+    route_url?: string;
+    route_token?: string | null;
+    group_accounts?: GroupAccountRef[] | null;
+  };
   const teamVaultQuery = useQuery({
     queryKey: ['team-vault-records-cross', otherBaseUrl ?? ''],
     queryFn: async () => {
-      if (!vaultCrossClient) return {} as Record<string, { route_url?: string; route_token?: string | null }>;
+      if (!vaultCrossClient) return {} as Record<string, LocalTeamRecord>;
       try {
         const r = await vaultCrossClient.get<{ status: string; data?: { records?: Array<{
           target?: string; virtual_key_id?: string; route_url?: string; route_token?: string | null;
+          group_accounts?: GroupAccountRef[] | null;
         }> } }>('/api/user/vault/list');
         const records = r.data?.data?.records ?? [];
-        const map: Record<string, { route_url?: string; route_token?: string | null }> = {};
+        const map: Record<string, LocalTeamRecord> = {};
         for (const rec of records) {
           if (rec.target === 'team' && rec.virtual_key_id) {
             // rc.3 fix (2026-05-12): team route_token = `aikey_team_<vk_id>`
@@ -391,16 +401,20 @@ export default function UserVirtualKeysPage() {
             map[rec.virtual_key_id] = {
               route_url: rec.route_url,
               route_token: rec.route_token ?? `aikey_team_${rec.virtual_key_id}`,
+              group_accounts: rec.group_accounts,
             };
           }
         }
         return map;
       } catch {
-        return {} as Record<string, { route_url?: string; route_token?: string | null }>;
+        return {} as Record<string, LocalTeamRecord>;
       }
     },
     enabled: !!vaultCrossClient,
     staleTime: 30_000,
+    // Same cadence as /user/vault: an open drawer follows a reactive A→B
+    // cooldown switch without a page reload or a slow key sync.
+    refetchInterval: 15_000,
   });
   const teamVaultByVk = teamVaultQuery.data ?? {};
 
@@ -1018,7 +1032,11 @@ function DetailDrawer(props: {
    *  rendered without a reachable Personal local-server (cross-app
    *  base URL absent / unreachable / CORS denied / locked vault).
    *  Drawer renders graceful empty hints in those cases. */
-  localRoute?: { route_url?: string; route_token?: string | null };
+  localRoute?: {
+    route_url?: string;
+    route_token?: string | null;
+    group_accounts?: GroupAccountRef[] | null;
+  };
   /** Phase 3B R12 (2026-05-11): drawer no longer hosts a direct
    *  vaultApi.use button — primary CTA is now copy-CLI
    *  ("Activate in terminal"), matching vault page's drawer pattern.
@@ -1027,6 +1045,7 @@ function DetailDrawer(props: {
 }) {
   const { t } = useTranslation();
   const r = props.record;
+  const groupAccounts = props.localRoute?.group_accounts ?? r.group_accounts;
   const status = statusMeta(r.key_status, t);
   // Current-group family drives the dot color + the highlighted entry; the
   // full family list is shown with the others muted (multi-protocol VKs).
@@ -1121,76 +1140,14 @@ function DetailDrawer(props: {
                 <KeyRoundIcon className="w-3 h-3" />
                 {t('teamKeys.oauthGroupGroupAccounts')}
               </div>
-              {(r.group_accounts ?? []).length === 0 ? (
+              {(groupAccounts ?? []).length === 0 ? (
                 <div className="drawer-field">
                   <span className="v" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>
                     {t('teamKeys.oauthGroupNoAccounts')}
                   </span>
                 </div>
               ) : (
-                (r.group_accounts ?? [])
-                  .slice()
-                  .sort((a, b) => a.priority - b.priority)
-                  .map((a) => (
-                    // Custom stacked layout (NOT drawer-field): identity is a value,
-                    // not a field label — drawer-field's .k uppercases + letter-spaces
-                    // it (reads as garbled). Identity on its own line, the
-                    // provider/type/priority meta below it.
-                    <div
-                      key={a.account_id}
-                      style={{
-                        padding: '9px 11px',
-                        marginTop: 6,
-                        borderRadius: 8,
-                        border: `1px solid ${a.account_id === routedGroupAccount(r.group_accounts)?.account_id ? 'rgba(74,222,128,0.28)' : 'var(--border)'}`,
-                        background: a.account_id === routedGroupAccount(r.group_accounts)?.account_id ? 'rgba(74,222,128,0.06)' : 'rgba(255,255,255,0.02)',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: 'var(--foreground)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <span style={{ wordBreak: 'break-all', fontWeight: 600 }}>{a.identity}</span>
-                        {a.assigned && <span className="chip success">{t('teamKeys.oauthGroupDefault')}</span>}
-                        {/* C2: the account the proxy is ACTUALLY routing to now (engine-first,
-                            live 60s rail) — distinct from the static default above. */}
-                        {a.current_routed && <span className="chip info">{t('teamKeys.oauthGroupCurrentRouted')}</span>}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--muted-foreground)',
-                          marginTop: 5,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <span
-                            className="prov-dot"
-                            style={{ background: providerBrandColor(a.provider_code), width: 6, height: 6 }}
-                          />
-                          {a.provider_code}
-                        </span>
-                        <span style={{ opacity: 0.35 }}>·</span>
-                        <span>
-                          {a.credential_type === 'oauth_account'
-                            ? t('teamKeys.oauthGroupTypeOauth')
-                            : t('teamKeys.oauthGroupTypeKey')}
-                        </span>
-                        <span style={{ opacity: 0.35 }}>·</span>
-                        <span>{t('teamKeys.oauthGroupPriority', { priority: a.priority })}</span>
-                      </div>
-                    </div>
-                  ))
+                <PoolAccountList accounts={groupAccounts} />
               )}
               <div
                 style={{

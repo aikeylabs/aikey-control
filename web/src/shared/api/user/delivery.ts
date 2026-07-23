@@ -8,6 +8,7 @@
  */
 import { httpClient } from '../http-client';
 import { runtimeConfig } from '@/app/config/runtime';
+export { routedGroupAccount } from './routed-group-account';
 
 // 2026-07-03 composing gateway: vault-bridge base resolution — see
 // RuntimeConfig.vaultBridgeApiBase for the four-quadrant table.
@@ -50,20 +51,23 @@ export interface GroupAccountRef {
   // Absent on the master-snapshot shape (no proxy rail there) → fall back to assigned.
   current_routed?: boolean;
   credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
-}
-
-/**
- * routedGroupAccount is the SINGLE display rule for "which pool account is selected"
- * across the vault + team-keys pages: prefer the proxy's live routed account
- * (current_routed, fresh + engine-first), fall back to the static default (assigned),
- * then the first candidate. Keeps every page showing the SAME selected account instead
- * of some reading the stale `assigned` snapshot (2026-07-01, source-of-truth unification).
- */
-export function routedGroupAccount<T extends { assigned: boolean; current_routed?: boolean }>(
-  accounts: T[] | null | undefined,
-): T | undefined {
-  if (!accounts || accounts.length === 0) return undefined;
-  return accounts.find((a) => a.current_routed) ?? accounts.find((a) => a.assigned) ?? accounts[0];
+  credential_id?: string;
+  login_status?: 'logged_in' | 'needs_login' | 'auth_failed' | 'revoked' | string;
+  // Local proxy cooldown projection. These fields explain the same skip-set
+  // that determines current_routed; they never drive routing in the browser.
+  route_status?: 'window_exhausted' | 'window_protected' | 'rate_limited' | 'auth_failed' | 'upstream_unavailable' | string;
+  route_retry_at?: number; // unix seconds
+  // Provider quota observations delivered through the existing group-runtime
+  // rail. Fractions are 0..1. Absent means unknown — never treat it as 0%.
+  util_5h?: number;
+  util_7d?: number;
+  util_observed_at?: number; // unix seconds
+  window_max_util_pct?: number;
+  window_status?: string;
+  window_reset_at?: number;
+  window_7d_max_util_pct?: number;
+  window_7d_status?: string;
+  window_7d_reset_at?: number;
 }
 
 export interface UserKeyDTO {

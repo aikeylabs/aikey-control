@@ -20,10 +20,10 @@
  *   - Manual invocation: `npm run gen:provider-registry`.
  *
  * Scope of what's mirrored:
- *   Only entries with `picker: true` and only the fields the web side
- *   needs for display + grouping. Internals like proxy_path / env_api_key
- *   stay CLI-only — bringing them over would couple web to CLI internals
- *   it has no business knowing.
+ *   All provider identities and only the fields the web side needs for display
+ *   + grouping. `PROVIDER_REGISTRY` remains the normal picker-visible subset;
+ *   `PROVIDER_CATALOG` also includes feature-gated identities such as Mock
+ *   Provider. Internals like proxy_path / env_api_key stay CLI-only.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -53,17 +53,20 @@ if (!parsed || !Array.isArray(parsed.providers)) {
   process.exit(1);
 }
 
-const entries = parsed.providers
-  .filter((p) => p && p.picker === true)
-  .map((p) => ({
+const catalogEntries = parsed.providers
+  .filter((p) => p && p.code)
+	.map((p) => ({
     code: String(p.code),
     family: p.family ? String(p.family) : String(p.code),
     display: p.display ? String(p.display) : String(p.code),
     displayAlias: p.display_alias ? String(p.display_alias) : undefined,
-    oauthAliases: Array.isArray(p.oauth_aliases)
-      ? p.oauth_aliases.map((a) => String(a))
-      : [],
-  }));
+		oauthAliases: Array.isArray(p.oauth_aliases)
+			? p.oauth_aliases.map((a) => String(a))
+			: [],
+    picker: p.picker === true,
+	}));
+
+const entries = catalogEntries.filter((p) => p.picker);
 
 if (entries.length === 0) {
   console.error(`✗ no picker-enabled providers found in ${YAML_PATH}`);
@@ -121,9 +124,11 @@ const entryType = `export interface ProviderRegistryEntry {
   displayAlias?: string;
   /** Aliases recognized for OAuth-broker normalization and search. */
   oauthAliases: readonly string[];
+  /** Whether the provider appears in normal API-key pickers. */
+  picker: boolean;
 }`;
 
-const body = entries
+const renderEntries = (source) => source
   .map((e) => {
     const aliasField =
       e.displayAlias !== undefined ? `\n    displayAlias: ${JSON.stringify(e.displayAlias)},` : '';
@@ -132,15 +137,19 @@ const body = entries
     family: ${JSON.stringify(e.family)},
     display: ${JSON.stringify(e.display)},${aliasField}
     oauthAliases: ${JSON.stringify(e.oauthAliases)},
+    picker: ${JSON.stringify(e.picker)},
   },`;
   })
   .join('\n');
+
+const catalogBody = renderEntries(catalogEntries);
+const body = renderEntries(entries);
 
 const helpers = `
 /** Lookup table: code → entry. Includes oauth aliases mapped to the canonical entry. */
 export const ENTRY_BY_CODE: ReadonlyMap<string, ProviderRegistryEntry> = (() => {
   const m = new Map<string, ProviderRegistryEntry>();
-  for (const e of PROVIDER_REGISTRY) {
+  for (const e of PROVIDER_CATALOG) {
     m.set(e.code.toLowerCase(), e);
     for (const alias of e.oauthAliases) m.set(alias.toLowerCase(), e);
   }
@@ -154,7 +163,7 @@ export const ENTRY_BY_CODE: ReadonlyMap<string, ProviderRegistryEntry> = (() => 
  *  is undefined by design so the group chip stays plain "kimi". */
 export const ENTRY_BY_FAMILY: ReadonlyMap<string, ProviderRegistryEntry> = (() => {
   const m = new Map<string, ProviderRegistryEntry>();
-  for (const e of PROVIDER_REGISTRY) {
+  for (const e of PROVIDER_CATALOG) {
     if (!m.has(e.family)) m.set(e.family, e);
   }
   return m;
@@ -211,6 +220,12 @@ export function isProviderProtocolSupported(providerCode: string, protocol: stri
 const out = `${banner}
 ${entryType}
 
+/** Full display catalog, including providers hidden from normal API-key pickers. */
+export const PROVIDER_CATALOG: readonly ProviderRegistryEntry[] = [
+${catalogBody}
+];
+
+/** Providers visible in normal API-key pickers. */
 export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
 ${body}
 ];
@@ -219,5 +234,5 @@ ${helpers}${matrixSection}`;
 for (const outPath of OUT_PATHS) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, out, 'utf8');
-  console.log(`✓ generated ${path.relative(REPO_ROOT, outPath)} (${entries.length} entries)`);
+  console.log(`✓ generated ${path.relative(REPO_ROOT, outPath)} (${entries.length} picker / ${catalogEntries.length} catalog entries)`);
 }
