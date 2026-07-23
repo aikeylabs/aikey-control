@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { poolAccountTone, quotaPercent, retryTimeState } from './pool-account-state';
+import { poolAccountTone, quotaPercent, retryTimeState, showRetryTime } from './pool-account-state';
 
 describe('PoolAccountList display derivations', () => {
   it('uses danger only for exhausted and authentication-failed accounts', () => {
@@ -27,5 +27,12 @@ describe('PoolAccountList display derivations', () => {
     expect(retryTimeState(2_001, nowMs)).toBe('future');
     expect(retryTimeState(2_000, nowMs)).toBe('elapsed');
     expect(retryTimeState(1_999, nowMs)).toBe('elapsed');
+  });
+
+  it('does not render a stale retry time after the account is routable again', () => {
+    expect(showRetryTime(undefined, 'future')).toBe(false);
+    expect(showRetryTime('', 'elapsed')).toBe(false);
+    expect(showRetryTime('window_exhausted', 'future')).toBe(true);
+    expect(showRetryTime('window_protected', 'elapsed')).toBe(true);
   });
 });

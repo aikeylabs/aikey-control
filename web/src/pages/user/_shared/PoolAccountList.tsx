@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { routedGroupAccount, type GroupAccountRef } from '@/shared/api/user/delivery';
 import { formatDateTime, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import { providerBrandColor } from './provider-brand';
-import { poolAccountTone, quotaPercent, retryTimeState } from './pool-account-state';
+import { poolAccountTone, quotaPercent, retryTimeState, showRetryTime } from './pool-account-state';
 
 interface PoolAccountListProps {
   accounts?: GroupAccountRef[] | null;
@@ -78,6 +78,7 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel }:
         const hasUsage = util5h != null || util7d != null;
         const retryAt = account.route_retry_at ?? account.window_reset_at;
         const retryState = retryTimeState(retryAt);
+        const retryVisible = showRetryTime(account.route_status, retryState);
 
         return (
           <div
@@ -147,14 +148,14 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel }:
                 {account.window_7d_max_util_pct != null && (
                   <span>{t('poolAccount.util7d')} {t('poolAccount.protectionLine', { percent: account.window_7d_max_util_pct })}</span>
                 )}
-                {retryState === 'future' && retryAt != null && (
+                {retryVisible && retryState === 'future' && retryAt != null && (
                   <span>
                     {exhausted
                       ? t('poolAccount.windowRefresh', { time: formatDateTime(retryAt * 1000) })
                       : t('poolAccount.expectedRecovery', { time: formatDateTime(retryAt * 1000) })}
                   </span>
                 )}
-                {retryState === 'elapsed' && account.route_status && (
+                {retryVisible && retryState === 'elapsed' && (
                   <span>{t('poolAccount.windowElapsed')}</span>
                 )}
               </div>

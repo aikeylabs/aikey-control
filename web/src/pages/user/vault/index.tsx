@@ -193,6 +193,14 @@ function rowKey(r: VaultRowRecord): string {
   return `${r.target}:${r.id}`;
 }
 
+// One successful vault-list refresh can briefly omit a server-managed Team VK
+// while the CLI replaces its managed-key snapshot. Closing the drawer on that
+// single empty beat makes a live OAuth-pool A -> B -> A switch look like the
+// selected key disappeared. Keep the drawer snapshot for slightly longer than
+// one 15s list-poll interval; a genuinely removed record still closes after the
+// grace period, while the next complete snapshot cancels the pending close.
+const DRAWER_MISSING_GRACE_MS = 20_000;
+
 // ── Hidden-keys view preference (2026-07-15 user request) ───────────────
 //
 // Two pieces of state, both PURE VIEW-LAYER (no vault write, no API):
@@ -1528,7 +1536,8 @@ export default function UserVaultPage() {
   }
 
   // Keep the open drawer in sync with the live records list. Two cases:
-  //   - record removed (delete / sync churn) → close the drawer.
+  //   - record absent for longer than one poll → close the drawer. A single
+  //     transient omission during managed-key snapshot replacement is ignored.
   //   - record updated (unlock revealed `route_token`, key renamed, etc.)
   //     → swap in the latest version so the drawer shows live values
   //     without forcing the user to close + reopen. The previous version
@@ -1540,7 +1549,14 @@ export default function UserVaultPage() {
     if (!drawerRecord) return;
     const live = records.find((r) => rowKey(r) === rowKey(drawerRecord));
     if (!live) {
-      setDrawerRecord(null);
+      const missingKey = rowKey(drawerRecord);
+      const timer = window.setTimeout(() => {
+        setDrawerRecord((current) => {
+          if (!current || rowKey(current) !== missingKey) return current;
+          return null;
+        });
+      }, DRAWER_MISSING_GRACE_MS);
+      return () => window.clearTimeout(timer);
     } else if (live !== drawerRecord) {
       setDrawerRecord(live);
     }

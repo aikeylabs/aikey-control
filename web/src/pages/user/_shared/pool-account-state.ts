@@ -15,3 +15,7 @@ export function retryTimeState(retryAt?: number, nowMs = Date.now()): 'none' | '
   if (!retryAt || !Number.isFinite(retryAt)) return 'none';
   return retryAt * 1000 > nowMs ? 'future' : 'elapsed';
 }
+
+export function showRetryTime(routeStatus: string | undefined, retryState: 'none' | 'future' | 'elapsed'): boolean {
+  return Boolean(routeStatus) && retryState !== 'none';
+}
