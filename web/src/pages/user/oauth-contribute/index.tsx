@@ -182,9 +182,10 @@ export default function OAuthContributePage() {
   // lands directly on that account's sign-in panel instead of hunting for it.
   // Initial-state-only (lazy initializer): after that the user's own toggles own
   // the state; the param is not re-applied on re-render. The existing render gate
-  // (`is_routed && expandedCred === credential_id`) still applies, so a deep link
-  // to a non-routed account degrades to today's behavior (row visible, no panel —
-  // only routed accounts have sign-in controls).
+  // (`is_routed && expandedCred === credential_id`) still applies. The list query
+  // sends the same target to Master, which authorizes it and marks it current for
+  // this pool; an unauthorized/stale id therefore fails closed instead of opening
+  // controls for an arbitrary account.
   const [searchParams] = useSearchParams();
   const [expandedCred, setExpandedCred] = useState<string | null>(
     () => searchParams.get('expand'),
@@ -245,8 +246,8 @@ export default function OAuthContributePage() {
   }, []);
 
   const listQ = useQuery({
-    queryKey: ['my-pool-accounts'],
-    queryFn: fetchMyPoolAccounts,
+    queryKey: ['my-pool-accounts', deepLinkCred],
+    queryFn: () => fetchMyPoolAccounts(deepLinkCred ?? undefined),
     // Routing is live control-plane state. Refresh while the page stays open so
     // a reassignment or recovered resolver does not leave stale login controls.
     refetchInterval: 30_000,

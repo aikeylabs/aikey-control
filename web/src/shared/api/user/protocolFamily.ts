@@ -1,5 +1,5 @@
 /** displayProtocolFamily normalizes a TEAM record's wire protocol into the
- *  user-facing client-route lane used by the key pages (Vault, Team Keys).
+ *  user-facing Client Route used by the key pages (Vault, Team Keys).
  *
  *  `openai_compatible` is the endpoint protocol; `openai` is the Codex/OpenAI
  *  client-route label. This normalization never reads or returns provider data:
@@ -9,8 +9,8 @@
  *  Display-only — routing wire values and provider identity are untouched.
  *
  *  Single source for BOTH key pages so the two never drift. */
-export function displayProtocolFamily(protocolFamily: string | null | undefined): string {
-  const lc = (protocolFamily ?? '').trim().toLowerCase();
+export function displayProtocolFamily(protocol: string | null | undefined): string {
+  const lc = (protocol ?? '').trim().toLowerCase();
   if (lc === 'openai_compatible') return 'openai';
   return lc;
 }
@@ -44,13 +44,14 @@ export interface ProtocolProviderBinding {
 }
 
 /**
- * Distinct protocol display families from the binding read model.
+ * Distinct Client Routes from the binding read model.
  *
- * `bindings[].protocol` is endpoint truth. The legacy scalar is accepted only
- * when an older server/CLI has not delivered bindings yet. Provider values are
- * deliberately never consulted here.
+ * `bindings[].protocol` is endpoint truth, then displayProtocolFamily maps that
+ * canonical wire value to the client selection slot. The legacy scalar is
+ * accepted only when an older server/CLI has not delivered bindings yet.
+ * Provider values are deliberately never consulted here.
  */
-export function bindingProtocolFamilies(
+export function bindingClientRoutes(
   bindings: ProtocolProviderBinding[] | null | undefined,
   legacyProtocol?: string | null,
 ): string[] {
@@ -69,12 +70,12 @@ export function bindingProtocolFamilies(
   return fallback ? [fallback] : [];
 }
 
-/** Provider codes behind one protocol lane, preserving binding order. */
+/** Provider codes behind one Client Route, preserving binding order. */
 export function bindingProviderCodes(
   bindings: ProtocolProviderBinding[] | null | undefined,
-  protocolFamily?: string | null,
+  clientRoute?: string | null,
 ): string[] {
-  const wanted = displayProtocolFamily(protocolFamily);
+  const wanted = displayProtocolFamily(clientRoute);
   const out: string[] = [];
   const seen = new Set<string>();
   for (const binding of bindings ?? []) {
@@ -88,12 +89,12 @@ export function bindingProviderCodes(
   return out;
 }
 
-/** Provider display labels behind one protocol lane (`code(alias)`). */
+/** Provider display labels behind one Client Route (`code(alias)`). */
 export function bindingProviderLabels(
   bindings: ProtocolProviderBinding[] | null | undefined,
-  protocolFamily?: string | null,
+  clientRoute?: string | null,
 ): string[] {
-  const wanted = displayProtocolFamily(protocolFamily);
+  const wanted = displayProtocolFamily(clientRoute);
   const out: string[] = [];
   const seen = new Set<string>();
   for (const binding of bindings ?? []) {

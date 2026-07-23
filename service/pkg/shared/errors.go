@@ -331,6 +331,23 @@ const (
 	// CodeBizOauthGroupDisabled: a group binding target was requested but the
 	// oauth_group feature is off (OAUTH_GROUP_ENABLED). 422.
 	CodeBizOauthGroupDisabled = "BIZ_OAUTH_GROUP_DISABLED"
+	// Pool admission and protocol validation errors are request-semantic
+	// failures: callers can correct the selected provider/account/seat. Keep
+	// them in the shared registry so every transport returns 422 instead of the
+	// unknown-code 500 fallback.
+	CodeBizOauthGroupProviderUnsupported = "BIZ_OAUTH_GROUP_PROVIDER_UNSUPPORTED"
+	CodeBizOauthGroupProviderMixed       = "BIZ_OAUTH_GROUP_PROVIDER_MIXED"
+	CodeBizOauthGroupProtocolMixed       = "BIZ_OAUTH_GROUP_PROTOCOL_MIXED"
+	CodeBizOauthGroupProtocolInvalid     = "BIZ_OAUTH_GROUP_PROTOCOL_INVALID"
+	CodeBizOauthGroupBotSeat             = "BIZ_OAUTH_GROUP_BOT_SEAT"
+
+	// BIZ — Online Agent. Authorization failures are 403; deployment/quota/
+	// ownership-state prerequisites are 409. See DomainErrorHTTPStatus.
+	CodeBizAgentLimitReached       = "BIZ_AGENT_LIMIT_REACHED"
+	CodeBizAgentNonClusterOrg      = "BIZ_AGENT_NON_CLUSTER_ORG"
+	CodeBizAgentGroupNotMember     = "BIZ_AGENT_GROUP_NOT_MEMBER"
+	CodeBizAgentPoolNotOwner       = "BIZ_AGENT_POOL_NOT_OWNER"
+	CodeBizAgentParentSeatRequired = "BIZ_AGENT_PARENT_SEAT_REQUIRED"
 	// CodeBizBindTargetInvalid: a binding must target exactly one of credential /
 	// oauth_group, and an issuance can't mix credential + group (or two groups). 422.
 	CodeBizBindTargetInvalid = "BIZ_BIND_TARGET_INVALID"

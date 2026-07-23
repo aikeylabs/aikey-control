@@ -8,13 +8,10 @@
 /** A protocol code as the PROTOCOL axis should render it: trimmed, lower-cased,
  *  and otherwise untouched.
  *
- *  🚫 Deliberately NOT `displayProtocolFamily`. That helper folds
- *  `openai_compatible` → `openai`, which is right for an OAuth POOL (whose
- *  family genuinely is the openai provider) and wrong for everything else — it
- *  is a protocol→PROVIDER map, as its own doc says. Applied to real binding
- *  protocols it printed the provider name `openai` under a column headed
- *  PROTOCOL and disagreed with `aikey list`, which says `openai_compatible` for
- *  the same key. Same axis, two surfaces, two answers.
+ *  🚫 Deliberately NOT `displayProtocolFamily`. That helper maps
+ *  `openai_compatible` → the `openai` Client Route. Applying it to metadata
+ *  printed a selection slot under a field headed PROTOCOL and disagreed with
+ *  `aikey list`, which correctly says `openai_compatible` for the same key.
  */
 export function normalizeProtocol(protocol: string | null | undefined): string {
   return (protocol ?? '').trim().toLowerCase();

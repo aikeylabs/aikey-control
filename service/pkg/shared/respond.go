@@ -83,6 +83,7 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied,
 		CodeBizSSOTenantMismatch,
 		CodeBizOauthMemberTokenForbidden,
+		CodeBizAgentGroupNotMember, CodeBizAgentPoolNotOwner,
 		// Refused BY DESIGN (form-①): still a 403, but the code tells the client
 		// it's policy, not a permission fault (2026-07-13).
 		CodeBizDeliveryCentralOnly:
@@ -99,6 +100,8 @@ func DomainErrorHTTPStatus(code string) int {
 	case CodeBizAuthEmailTaken, CodeBizSeatEmailTaken,
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
 		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
+		CodeBizAgentLimitReached, CodeBizAgentNonClusterOrg,
+		CodeBizAgentParentSeatRequired,
 		CodeBizOauthLoginBindingChanged,
 		CodeBizOauthLoginContextUnavailable,
 		CodeBizOauthRoutedAccountAmbiguous,
@@ -121,7 +124,10 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
 		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,
 		CodeBizVKGroupExclusive, CodeBizSSOProviderDisabled,
-		CodeBizProviderProtocolUnsupported:
+		CodeBizProviderProtocolUnsupported,
+		CodeBizOauthGroupProviderUnsupported, CodeBizOauthGroupProviderMixed,
+		CodeBizOauthGroupProtocolMixed, CodeBizOauthGroupProtocolInvalid,
+		CodeBizOauthGroupBotSeat:
 		return http.StatusUnprocessableEntity
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────

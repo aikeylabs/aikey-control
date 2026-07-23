@@ -9,10 +9,10 @@ describe('normalizeProtocol', () => {
   });
 
   // The regression this module exists for: the Team Keys page ran binding
-  // protocols through displayProtocolFamily, which folds openai_compatible to
-  // the PROVIDER name `openai` — so the PROTOCOL column said `openai` while
+  // protocols through displayProtocolFamily, which maps openai_compatible to
+  // the CLIENT ROUTE `openai` — so the PROTOCOL field said `openai` while
   // `aikey list` said `openai_compatible` for the very same key.
-  it('does NOT fold openai_compatible to the openai provider', () => {
+  it('does NOT fold openai_compatible to the openai client route', () => {
     expect(normalizeProtocol('openai_compatible')).toBe('openai_compatible');
     expect(normalizeProtocol('openai_compatible')).not.toBe('openai');
   });

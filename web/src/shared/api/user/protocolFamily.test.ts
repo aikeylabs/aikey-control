@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  bindingProtocolFamilies,
+  bindingClientRoutes,
   bindingProviderCodes,
   bindingProviderLabels,
   displayProtocolFamily,
@@ -15,16 +15,12 @@ import {
  * two different "协议" labels. A codex pool WITH a routed account resolved to the
  * account's provider_code → "openai"; the SAME kind of pool with NO routed account
  * fell back to the group VK's raw binding protocol_type → "openai_compatible".
- * displayProtocolFamily folds the protocol name to the provider so both render as
- * "openai" — a pool looks identical regardless of routed-account state, and the two
- * key pages stay consistent (single source).
- *
- * Constraint baked in: OAuth pools are anthropic / openai only (R34), so an
- * openai_compatible POOL is unambiguously openai. If a non-openai openai_compatible
- * provider ever becomes poolable, this mapping (and the test) must be revisited.
+ * displayProtocolFamily maps the protocol to the `openai` Client Route so both
+ * render in the Codex/OpenAI selection lane. Provider remains independent: Mock,
+ * OpenAI and Zhipu can all speak openai_compatible without becoming each other.
  */
 describe('displayProtocolFamily', () => {
-  it('folds the openai_compatible protocol to the openai provider family', () => {
+  it('maps openai_compatible to the openai client route', () => {
     expect(displayProtocolFamily('openai_compatible')).toBe('openai');
     expect(displayProtocolFamily('  OpenAI_Compatible ')).toBe('openai');
   });
@@ -49,10 +45,10 @@ describe('two-axis binding presentation', () => {
     { protocol: 'openai_compatible', provider: 'mock', provider_display_alias: '' },
   ];
 
-  it('derives protocol groups only from binding.protocol', () => {
-    expect(bindingProtocolFamilies(bindings, 'legacy-provider')).toEqual(['anthropic', 'openai']);
-    expect(bindingProtocolFamilies([], 'openai_compatible')).toEqual(['openai']);
-    expect(bindingProtocolFamilies([{ provider: 'mock' }])).toEqual([]);
+  it('derives client routes only from binding.protocol', () => {
+    expect(bindingClientRoutes(bindings, 'legacy-provider')).toEqual(['anthropic', 'openai']);
+    expect(bindingClientRoutes([], 'openai_compatible')).toEqual(['openai']);
+    expect(bindingClientRoutes([{ provider: 'mock' }])).toEqual([]);
   });
 
   it('keeps provider codes and aliases on the provider axis', () => {

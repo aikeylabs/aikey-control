@@ -148,7 +148,11 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel }:
                   <span>{t('poolAccount.util7d')} {t('poolAccount.protectionLine', { percent: account.window_7d_max_util_pct })}</span>
                 )}
                 {retryState === 'future' && retryAt != null && (
-                  <span>{t(exhausted ? 'poolAccount.windowRefresh' : 'poolAccount.expectedRecovery', { time: formatDateTime(retryAt * 1000) })}</span>
+                  <span>
+                    {exhausted
+                      ? t('poolAccount.windowRefresh', { time: formatDateTime(retryAt * 1000) })
+                      : t('poolAccount.expectedRecovery', { time: formatDateTime(retryAt * 1000) })}
+                  </span>
                 )}
                 {retryState === 'elapsed' && account.route_status && (
                   <span>{t('poolAccount.windowElapsed')}</span>

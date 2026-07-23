@@ -58,6 +58,23 @@ describe('fetchMyPoolAccounts', () => {
     expect(list[1].is_routed).toBe(false);
   });
 
+  it('passes the Proxy-selected login target to the member-token projection', async () => {
+    let calledPath = '';
+    routeFetch({
+      '/system/team-url': { json: { team_url: 'https://m' } },
+      '/system/team-jwt': { json: { jwt: 'JWT' } },
+      '/accounts/me/oauth-member-tokens': { json: [] },
+    });
+    const orig = globalThis.fetch as any;
+    globalThis.fetch = ((url: string, init?: any) => {
+      if (url.includes('oauth-member-tokens')) calledPath = url;
+      return orig(url, init);
+    }) as any;
+
+    await fetchMyPoolAccounts('cred/next');
+    expect(calledPath).toContain('credential_id=cred%2Fnext');
+  });
+
   it('not-logged-in propagates', async () => {
     routeFetch({ '/system/team-url': { json: {} }, '/system/team-jwt': { json: {} } });
     expect(await fetchMyPoolAccounts()).toEqual({ kind: 'not-logged-in' });

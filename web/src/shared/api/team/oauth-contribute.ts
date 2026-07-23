@@ -110,10 +110,13 @@ export interface MyPoolAccount {
  * fetchMyPoolAccounts lists the accounts the member has logged into (their pool
  * history, retained even after routing moves on), with the currently-routed one
  * flagged. The contribute page renders this list (with search/filter) and only
- * lets the routed account reveal its password / re-log-in.
+ * lets the routed account reveal its password / re-log-in. credentialID is the
+ * optional Proxy-selected LOGIN_REQUIRED target; Master authorizes it and applies
+ * it only to that target's pool projection.
  */
-export async function fetchMyPoolAccounts(): Promise<MyPoolAccount[] | TeamFetchError> {
-  const res = await teamGetJSON<MyPoolAccount[]>('/accounts/me/oauth-member-tokens');
+export async function fetchMyPoolAccounts(credentialID?: string): Promise<MyPoolAccount[] | TeamFetchError> {
+  const q = credentialID ? `?credential_id=${encodeURIComponent(credentialID)}` : '';
+  const res = await teamGetJSON<MyPoolAccount[]>(`/accounts/me/oauth-member-tokens${q}`);
   if (Array.isArray(res)) return res;
   if ('kind' in res) return res;
   return [];

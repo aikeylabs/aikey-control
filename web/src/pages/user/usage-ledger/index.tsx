@@ -213,6 +213,11 @@ function deriveAppSubtitle(
     case 'cline':       return 'Cline';
     case 'continue':    return 'Continue';
     case 'codex':       return 'Codex';
+    // Codex desktop app is a separate surface from the CLI (own UA, own
+    // binary); the title-case fallback below would already render it as
+    // "Codex Desktop", but curating it keeps the mapping explicit so a
+    // future rename of the slug can't silently change the label.
+    case 'codex-desktop': return 'Codex Desktop';
   }
   // Title-case fallback for slugs we haven't curated yet.
   return s
