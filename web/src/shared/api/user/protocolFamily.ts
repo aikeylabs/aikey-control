@@ -1,18 +1,12 @@
-/** displayProtocolFamily normalizes a TEAM record's `protocol_family` /
- *  `protocol_type` for display + grouping on the key pages (Vault, Team-keys).
+/** displayProtocolFamily normalizes a TEAM record's wire protocol into the
+ *  user-facing client-route lane used by the key pages (Vault, Team Keys).
  *
- *  Why: an OAuth group VK whose seat has no routed account carries the raw binding
- *  `protocol_type` ("openai_compatible") instead of a provider family. The same pool
- *  WITH a routed account resolves to the account's provider_code ("openai"). So two
- *  codex pools rendered under two different labels ("openai_compatible" vs "openai")
- *  purely by routed-account state. OAuth pools are constrained to anthropic / openai
- *  (R34 one-pool-one-provider), so an `openai_compatible` POOL is unambiguously the
- *  openai provider — fold it to "openai" so a pool renders identically either way.
+ *  `openai_compatible` is the endpoint protocol; `openai` is the Codex/OpenAI
+ *  client-route label. This normalization never reads or returns provider data:
+ *  Mock, OpenAI, Zhipu, and other providers can all sit behind that same protocol
+ *  while remaining distinct on the provider axis.
  *
- *  NOT a general protocol→provider map: `openai_compatible` is shared by
- *  deepseek / groq / kimi / … (see provider_fingerprint.yaml), but those cannot be
- *  OAuth pools today. Revisit if a non-openai openai_compatible provider becomes
- *  poolable. Display-only — routing wire values (route_token) are untouched.
+ *  Display-only — routing wire values and provider identity are untouched.
  *
  *  Single source for BOTH key pages so the two never drift. */
 export function displayProtocolFamily(protocolFamily: string | null | undefined): string {
@@ -40,4 +34,78 @@ export function familyOfProviderCode(code: string): string {
   if (lc === 'kimi_code' || lc === 'moonshot' || lc === 'kimi') return 'kimi';
   // Add other multi-platform families here when they appear in the registry.
   return lc;
+}
+
+/** Minimal two-axis binding shape shared by the key pages. */
+export interface ProtocolProviderBinding {
+  protocol?: string | null;
+  provider?: string | null;
+  provider_display_alias?: string | null;
+}
+
+/**
+ * Distinct protocol display families from the binding read model.
+ *
+ * `bindings[].protocol` is endpoint truth. The legacy scalar is accepted only
+ * when an older server/CLI has not delivered bindings yet. Provider values are
+ * deliberately never consulted here.
+ */
+export function bindingProtocolFamilies(
+  bindings: ProtocolProviderBinding[] | null | undefined,
+  legacyProtocol?: string | null,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const binding of bindings ?? []) {
+    const family = displayProtocolFamily(binding.protocol);
+    if (family && !seen.has(family)) {
+      seen.add(family);
+      out.push(family);
+    }
+  }
+  if (out.length > 0) return out;
+
+  const fallback = displayProtocolFamily(legacyProtocol);
+  return fallback ? [fallback] : [];
+}
+
+/** Provider codes behind one protocol lane, preserving binding order. */
+export function bindingProviderCodes(
+  bindings: ProtocolProviderBinding[] | null | undefined,
+  protocolFamily?: string | null,
+): string[] {
+  const wanted = displayProtocolFamily(protocolFamily);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const binding of bindings ?? []) {
+    if (wanted && displayProtocolFamily(binding.protocol) !== wanted) continue;
+    const provider = (binding.provider ?? '').trim().toLowerCase();
+    if (provider && !seen.has(provider)) {
+      seen.add(provider);
+      out.push(provider);
+    }
+  }
+  return out;
+}
+
+/** Provider display labels behind one protocol lane (`code(alias)`). */
+export function bindingProviderLabels(
+  bindings: ProtocolProviderBinding[] | null | undefined,
+  protocolFamily?: string | null,
+): string[] {
+  const wanted = displayProtocolFamily(protocolFamily);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const binding of bindings ?? []) {
+    if (wanted && displayProtocolFamily(binding.protocol) !== wanted) continue;
+    const provider = (binding.provider ?? '').trim().toLowerCase();
+    if (!provider) continue;
+    const alias = (binding.provider_display_alias ?? '').trim();
+    const label = alias ? `${provider}(${alias})` : provider;
+    if (!seen.has(label)) {
+      seen.add(label);
+      out.push(label);
+    }
+  }
+  return out;
 }

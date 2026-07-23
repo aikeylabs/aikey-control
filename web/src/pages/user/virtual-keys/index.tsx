@@ -33,7 +33,12 @@ import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
 import { ModelMappingBanner } from '../_shared/ModelMappingBanner';
 import { PoolAccountList } from '../_shared/PoolAccountList';
-import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
+import {
+  bindingProtocolFamilies,
+  bindingProviderCodes,
+  bindingProviderLabels,
+  familyOfProviderCode,
+} from '@/shared/api/user/protocolFamily';
 import { ENTRY_BY_CODE } from '@/shared/generated/provider-registry';
 import {
   HookWireRcModal,
@@ -58,9 +63,15 @@ const IS_PERSONAL_SIDE = OWN_MENU === OWN_PERSONAL_MENU;
 type TypeFilter = 'all' | 'issued' | 'pending' | 'revoked';
 type SortKey = 'alias' | 'expires' | 'status';
 
+type LocalTeamRecord = {
+  route_url?: string;
+  route_token?: string | null;
+  group_accounts?: GroupAccountRef[] | null;
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-/** Lower-case provider family for grouping. Strips _api / _oauth tails. */
+/** Lower-case provider brand family. Strips legacy _api / _oauth tails. */
 function providerFamily(code: string | null | undefined): string {
   return (code ?? 'unknown').toLowerCase().replace(/_oauth$|_api$/, '');
 }
@@ -81,56 +92,33 @@ function providerFamily(code: string | null | undefined): string {
 /** P1f.4/8 (design D-12): the PROVIDER-axis brand label `code(alias)` for a row's
  *  provider cell — e.g. `zhipu(GLM)` — matching the vault page's inline chip. The
  *  group header now carries the PROTOCOL (1f.8), so the row must show the provider.
- *  Group VKs resolve the brand via the routed account's provider. */
-function providerDisplay(k: UserKeyDTO): string {
-  const code = (k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || '').toLowerCase();
+ *  Binding.provider is authoritative; legacy payloads fall back to the row/account. */
+function providerDisplay(k: UserKeyDTO, protocolFamily?: string): string {
+  const bindingLabels = bindingProviderLabels(k.bindings, protocolFamily);
+  if (bindingLabels.length > 0) return bindingLabels.join(', ');
+
+  const code = (
+    k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || ''
+  ).toLowerCase();
   const brand = code ? familyOfProviderCode(code) : keyProviderFamily(k);
   const alias = code ? ENTRY_BY_CODE.get(code)?.displayAlias : undefined;
   return alias ? `${brand}(${alias})` : brand;
 }
 
-function keyProviderFamily(k: { provider_code?: string | null; protocol_type?: string | null; group_accounts?: GroupAccountRef[] | null }): string {
-  // displayProtocolFamily folds an empty OAuth group VK's raw protocol_type
-  // ("openai_compatible") to the pool's provider ("openai") so it labels the same
-  // as its routed-account siblings — identical to the Vault page (shared helper).
+function keyProviderFamily(k: UserKeyDTO, protocolFamily?: string): string {
+  const bindingProvider = bindingProviderCodes(k.bindings, protocolFamily)[0];
   return providerFamily(
-    k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code || displayProtocolFamily(k.protocol_type),
+    bindingProvider || k.provider_code || routedGroupAccount(k.group_accounts)?.provider_code,
   );
 }
 
-/** EVERY display family this VK can route (2026-07-13).
- *
- *  Why: a VK carries N protocol channels by design (baseline ER —
- *  uq_mpb_vk_protocol_provider is per (vk, protocol, provider)), but
- *  `provider_code` / `protocol_type` only ever hold the FIRST binding's values
- *  (the master snapshot projects them as a primary hint for legacy readers).
- *  Grouping / labelling off them alone renders a multi-protocol VK as
- *  single-protocol — the openai channel of a VK bound to anthropic+openai simply
- *  vanished from this page. `supported_providers` carries the full set and the CLI
- *  has always emitted it; we just never read it here.
- *
- *  This mirrors the vault page's expansion (2026-04-30 / 2026-05-12) — same
- *  familyOfProviderCode口径, now via the shared helper. Falls back to the single
- *  family when supported_providers is absent (older server) or empty (e.g. an
- *  orphaned group VK, whose protocol still resolves through keyProviderFamily).
- */
-function keyProviderFamilies(k: UserKeyDTO): string[] {
-  const sp = k.supported_providers;
-  if (Array.isArray(sp) && sp.length > 0) {
-    const seen = new Set<string>();
-    const fams: string[] = [];
-    for (const code of sp) {
-      const raw = (code ?? '').toString().trim();
-      if (!raw) continue;
-      const fam = familyOfProviderCode(raw);
-      if (!seen.has(fam)) {
-        seen.add(fam);
-        fams.push(fam);
-      }
-    }
-    if (fams.length > 0) return fams;
-  }
-  return [keyProviderFamily(k)];
+/** Every protocol lane rendered by this VK. Binding protocol is endpoint truth. */
+function keyProtocolFamilies(k: UserKeyDTO): string[] {
+  const protocols = bindingProtocolFamilies(k.bindings, k.protocol_type);
+  // A missing protocol is incomplete metadata, not permission to infer the
+  // endpoint contract from the provider brand. Keep the axes separate even
+  // on the legacy/error path so a Mock provider can never become a protocol.
+  return protocols.length > 0 ? protocols : ['unknown'];
 }
 
 
@@ -369,11 +357,6 @@ export default function UserVirtualKeysPage() {
   // second, master-snapshot-only account-card implementation.
   // Empty map when cross-fetch is unavailable or returns no records;
   // drawer falls back to "—" hints for those fields.
-  type LocalTeamRecord = {
-    route_url?: string;
-    route_token?: string | null;
-    group_accounts?: GroupAccountRef[] | null;
-  };
   const teamVaultQuery = useQuery({
     queryKey: ['team-vault-records-cross', otherBaseUrl ?? ''],
     queryFn: async () => {
@@ -433,7 +416,10 @@ export default function UserVirtualKeysPage() {
         if (q) {
           const a = k.alias.toLowerCase();
           const id = k.virtual_key_id.toLowerCase();
-          const p = (k.provider_code ?? '').toLowerCase();
+          const p = [
+            k.provider_code ?? '',
+            ...(k.bindings ?? []).map((binding) => binding.provider),
+          ].join(' ').toLowerCase();
           if (!a.includes(q) && !id.includes(q) && !p.includes(q)) return false;
         }
         return true;
@@ -465,26 +451,23 @@ export default function UserVirtualKeysPage() {
     return { total, issued, pending, revoked };
   }, [allKeys]);
 
-  // P1f.8 (design D-12): group by PROTOCOL (the wire protocol axis), mirroring the
-  // vault page (1f.3) — the group header is the protocol, the provider shows as a
-  // per-row chip. Fixes "组头把 provider 当协议" on this second surface too. The
-  // all-keys DTO carries the primary `protocol_type` (STABLE, binding-derived); a
-  // VK spanning multiple protocols (multi-binding, L3/P1e) collapses under its
-  // primary protocol until per-binding data reaches this API. Falls back to the
-  // provider family label only when no protocol is resolvable (orphan group VK).
+  // Group by the binding's PROTOCOL axis. A multi-binding VK appears once in each
+  // protocol lane; provider remains a separate per-row value. Older payloads fall
+  // back to protocol_type, never to supported_providers (that field is provider-axis).
   const grouped = useMemo(() => {
     const order: string[] = [];
     const map = new Map<string, UserKeyDTO[]>();
     for (const k of filtered) {
-      const proto = displayProtocolFamily(k.protocol_type) || keyProviderFamily(k);
-      if (!map.has(proto)) {
-        map.set(proto, []);
-        order.push(proto);
+      for (const proto of keyProtocolFamilies(k)) {
+        if (!map.has(proto)) {
+          map.set(proto, []);
+          order.push(proto);
+        }
+        map.get(proto)!.push(k);
       }
-      map.get(proto)!.push(k);
     }
     return order.map((protocol) => ({
-      provider: protocol, // group value now carries the PROTOCOL (header + wiring key)
+      protocol,
       color: providerBrandColor(protocol),
       records: map.get(protocol)!,
     }));
@@ -494,7 +477,7 @@ export default function UserVirtualKeysPage() {
   const [drawerKey, setDrawerKey] = useState<UserKeyDTO | null>(null);
   // Family group the drawer was opened from (multi-protocol VKs render one
   // row per group — the drawer highlights THIS group's family, mutes others).
-  const [drawerGroup, setDrawerGroup] = useState<string | null>(null);
+  const [drawerProtocol, setDrawerProtocol] = useState<string | null>(null);
   const [summary, setSummary] = useState<KeySummaryDTO | null>(null);
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
@@ -578,12 +561,12 @@ export default function UserVirtualKeysPage() {
     },
   });
 
-  function openDrawer(k: UserKeyDTO, groupFamily: string) {
+  function openDrawer(k: UserKeyDTO, protocolFamily: string) {
     setDrawerKey(k);
     // A multi-protocol VK renders one row per family group; the drawer must
     // know WHICH group it was opened from to highlight that family
     // (2026-07-13 user spec, mirrors the vault-page drawer).
-    setDrawerGroup(groupFamily);
+    setDrawerProtocol(protocolFamily);
     setDrawerError(null);
     setSummary(null);
     if (k.key_status === 'active') {
@@ -640,7 +623,7 @@ export default function UserVirtualKeysPage() {
                         {t('teamKeys.colAlias')} <span className="th-hint">{t('teamKeys.colAliasHint')}</span>
                         {sortKey === 'alias' && <span className="th-sort-arrow">↓</span>}
                       </th>
-                      <th style={{ width: '20%' }}>{t('teamKeys.colProtocol')}</th>
+                      <th style={{ width: '20%' }}>{t('teamKeys.colProvider')}</th>
                       <th
                         style={{ width: '14%' }}
                         className={`th-sortable ${sortKey === 'status' ? 'active' : ''}`}
@@ -663,9 +646,9 @@ export default function UserVirtualKeysPage() {
                   </thead>
                   <tbody>
                     {grouped.map((g) => (
-                      <React.Fragment key={g.provider}>
+                      <React.Fragment key={g.protocol}>
                         <GroupHeaderRow
-                          provider={g.provider}
+                          protocol={g.protocol}
                           color={g.color}
                           totalCount={g.records.length}
                         />
@@ -673,11 +656,11 @@ export default function UserVirtualKeysPage() {
                           <Row
                             // Keyed by (group, vk): a multi-protocol VK renders
                             // once per family group, so vk id alone collides.
-                            key={`${g.provider}:${k.virtual_key_id}`}
+                            key={`${g.protocol}:${k.virtual_key_id}`}
                             record={k}
-                            groupFamily={g.provider}
+                            protocolFamily={g.protocol}
                             isLastInGroup={idx === g.records.length - 1}
-                            onOpenDrawer={() => openDrawer(k, g.provider)}
+                            onOpenDrawer={() => openDrawer(k, g.protocol)}
                             onClaim={() => claimMut.mutate(k.virtual_key_id)}
                             onUse={() => useMutTeam.mutate(k.virtual_key_id)}
                             claimPending={claimMut.isPending && claimMut.variables === k.virtual_key_id}
@@ -690,6 +673,7 @@ export default function UserVirtualKeysPage() {
                                 ? buildCrossAppUrl(getCrossAppLinkBase() ?? otherBaseUrl, `/user/vault?focus=${encodeURIComponent(k.virtual_key_id)}`)
                                 : undefined
                             }
+                            localRoute={teamVaultByVk[k.virtual_key_id]}
                           />
                         ))}
                       </React.Fragment>
@@ -707,7 +691,7 @@ export default function UserVirtualKeysPage() {
       {drawerKey && (
         <DetailDrawer
           record={drawerKey}
-          groupFamily={drawerGroup ?? keyProviderFamily(drawerKey)}
+          protocolFamily={drawerProtocol ?? keyProtocolFamilies(drawerKey)[0] ?? 'unknown'}
           summary={summary}
           summaryPending={viewMut.isPending}
           summaryError={drawerError}
@@ -799,6 +783,8 @@ function FilterStrip(props: {
             style={{ color: 'var(--muted-foreground)' }}
           />
           <input
+            id="team-key-search"
+            name="team-key-search"
             type="text"
             className="pl-10 pr-3 py-2 text-sm w-96"
             placeholder={t('teamKeys.searchPlaceholder')}
@@ -830,13 +816,13 @@ function FilterPill({ active, onClick, label, count }: {
 }
 
 // ── Group header row ─────────────────────────────────────────────────────
-function GroupHeaderRow({ provider, color, totalCount }: {
-  provider: string; color: string; totalCount: number;
+function GroupHeaderRow({ protocol, color, totalCount }: {
+  protocol: string; color: string; totalCount: number;
 }) {
   const { t } = useTranslation();
   const entryWord = totalCount === 1 ? t('teamKeys.entryOne') : t('teamKeys.entryOther');
   return (
-    <tr className="group-row" data-group-provider={provider}>
+    <tr className="group-row" data-group-protocol={protocol}>
       <td colSpan={6}>
         <div className="gr-inner">
           <span
@@ -844,7 +830,7 @@ function GroupHeaderRow({ provider, color, totalCount }: {
             style={{ background: color }}
             aria-hidden="false"
           >
-            {provider}
+            {protocol}
           </span>
           <span className="gr-meta">
             · {totalCount} {entryWord}
@@ -875,11 +861,14 @@ const Row = React.memo(function Row(props: {
    *  single tab so back-button returns them to the team listing).
    *  Undefined on A side. */
   useHref?: string;
+  /** Local proxy projection. The same live bridge feeds the drawer and row
+   *  summary so both surfaces identify the account actually routing now. */
+  localRoute?: LocalTeamRecord;
   /** The family of the GROUP this row is rendered under (2026-07-13). A
    *  multi-protocol VK appears under every family it supports, so the row's
    *  provider chip must show THAT group's family — not the VK's primary one,
    *  which would label the openai row "anthropic". */
-  groupFamily?: string;
+  protocolFamily?: string;
 }) {
   const { t } = useTranslation();
   const r = props.record;
@@ -903,17 +892,24 @@ const Row = React.memo(function Row(props: {
         <div className="alias-main">{r.alias || t('teamKeys.unnamed')}</div>
         <div className="alias-sub">
           <span className="font-mono" title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
-          {/* oauth_group (Stage A): shared-group marker + master-assigned default account. */}
+          {/* OAuth group marker + current local proxy route. Legacy snapshots
+              without current_routed fall back to the administrator default. */}
           {r.oauth_group_id && (
             <>
               <span className="mx-1 opacity-50">·</span>
               <span style={{ color: 'var(--primary-dim)' }}>{t('teamKeys.oauthGroupShared')}</span>
               {(() => {
-                const def = routedGroupAccount(r.group_accounts);
-                return def ? (
+                const accounts = props.localRoute?.group_accounts ?? r.group_accounts;
+                const routed = routedGroupAccount(accounts);
+                const hasLiveProjection = (accounts ?? []).some(
+                  (account) => typeof account.current_routed === 'boolean',
+                );
+                return routed ? (
                   <>
                     <span className="mx-1 opacity-50">·</span>
-                    <span title={t('teamKeys.oauthGroupDefaultAccount')}>{def.identity}</span>
+                    <span title={t(hasLiveProjection ? 'teamKeys.oauthGroupCurrentRouted' : 'teamKeys.oauthGroupDefaultAccount')}>
+                      {routed.identity}
+                    </span>
                   </>
                 ) : null;
               })()}
@@ -926,8 +922,8 @@ const Row = React.memo(function Row(props: {
         {/* P1f.4/8: provider AXIS (brand + alias); the protocol axis is the group
             header. prov-dot colored by provider brand, not the group protocol. */}
         <span className="provider-cell">
-          <span className="prov-dot" style={{ background: providerBrandColor(keyProviderFamily(r)) }} aria-hidden="true" />
-          <span className="name">{providerDisplay(r)}</span>
+          <span className="prov-dot" style={{ background: providerBrandColor(keyProviderFamily(r, props.protocolFamily)) }} aria-hidden="true" />
+          <span className="name">{providerDisplay(r, props.protocolFamily)}</span>
           <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
         </span>
       </td>
@@ -1021,7 +1017,7 @@ function DetailDrawer(props: {
   /** Family group this drawer was opened from. Multi-protocol VKs render one
    *  row per group; the drawer shows ALL families with THIS one highlighted
    *  bold and the rest muted (2026-07-13 user spec, mirrors vault drawer). */
-  groupFamily: string;
+  protocolFamily: string;
   summary: KeySummaryDTO | null;
   summaryPending: boolean;
   summaryError: string | null;
@@ -1049,10 +1045,18 @@ function DetailDrawer(props: {
   const status = statusMeta(r.key_status, t);
   // Current-group family drives the dot color + the highlighted entry; the
   // full family list is shown with the others muted (multi-protocol VKs).
-  const fam = props.groupFamily;
-  const famList = (() => {
-    const all = keyProviderFamilies(r);
-    return all.includes(fam) ? [fam, ...all.filter((f) => f !== fam)] : all;
+  const fam = props.protocolFamily;
+  const protocolList = (() => {
+    const all = keyProtocolFamilies(r);
+    return all.includes(fam) ? [fam, ...all.filter((f) => f !== fam)] : [fam, ...all];
+  })();
+  const providerLabels = (() => {
+    const fromBindings = bindingProviderLabels(r.bindings);
+    return fromBindings.length > 0 ? fromBindings : [providerDisplay(r, fam)];
+  })();
+  const currentProviderCodes = (() => {
+    const fromBindings = bindingProviderCodes(r.bindings, fam);
+    return fromBindings.length > 0 ? fromBindings : [keyProviderFamily(r, fam)];
   })();
   const expiresStr = formatExpiresAt(r.expires_at, t);
 
@@ -1391,7 +1395,7 @@ function DetailDrawer(props: {
                 {/* One protocol per line (2026-07-13 user spec) — current group
                     bold, others muted. */}
                 <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
-                  {famList.map((f) => (
+                  {protocolList.map((f) => (
                     <span
                       key={f}
                       style={
@@ -1404,6 +1408,29 @@ function DetailDrawer(props: {
                     </span>
                   ))}
                 </span>
+                <span className="ro-pill">RO</span>
+              </span>
+            </div>
+            <div className="drawer-field">
+              <span className="k">{t('teamKeys.fieldProvider')}</span>
+              <span className="v">
+                {providerLabels.map((provider) => {
+                  const providerCode = provider.replace(/\s*\(.*\)$/, '').toLowerCase();
+                  const isCurrent = currentProviderCodes.includes(providerCode);
+                  return (
+                    <span
+                      key={provider}
+                      className="kind-pill"
+                      style={
+                        isCurrent
+                          ? { marginRight: 4, fontWeight: 700 }
+                          : { marginRight: 4, color: 'var(--muted-foreground)', opacity: 0.55 }
+                      }
+                    >
+                      {provider}
+                    </span>
+                  );
+                })}
                 <span className="ro-pill">RO</span>
               </span>
             </div>
