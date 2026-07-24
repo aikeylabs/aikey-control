@@ -56,6 +56,7 @@ import {
 } from '@/shared/components/DesktopConsentModal';
 import { friendlyTestError } from './friendlyTestError';
 import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
+import { protocolColumn } from '../_shared/protocol-column';
 import type { BindingAxis } from '@/shared/types/team-vault';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
@@ -3002,9 +3003,16 @@ const Row = React.memo(function Row(props: {
   // pre-P1f behavior (providerName). The provider goes in a chip next to the name.
   const teamBindings = r.target === 'team' ? (r as TeamRowRecord).bindings : undefined;
   const hasTwoAxis = Array.isArray(teamBindings) && teamBindings.length > 0;
-  const protocolLabel = hasTwoAxis
-    ? [...new Set(teamBindings!.map((b) => displayProtocolFamily(b.protocol)).filter(Boolean))].join(', ')
-    : providerName;
+  // Distinct protocol families this key speaks. The row is rendered under one
+  // protocol group, so surface THAT group's protocol first and collapse the
+  // rest into a "(+N more)" hint (2026-07-23 user request): the full comma list
+  // overflowed this 22% column and just re-stated the group header on every
+  // multi-protocol key. Full list stays reachable via the cell title + drawer.
+  const protocolList = hasTwoAxis
+    ? [...new Set(teamBindings!.map((b) => displayProtocolFamily(b.protocol)).filter(Boolean))]
+    : [providerName];
+  const { primary: primaryProtocol, extraCount: extraProtocolCount } =
+    protocolColumn(protocolList, props.groupProvider, providerName);
   // Kind chip. Fully i18n'd (2026-07-07, user request): in Chinese the four
   // kinds render 密钥 / OAuth / 团队 / 团队 OAuth; English keeps KEY / OAUTH /
   // TEAM / TEAM-OAUTH. Values live in the vault namespace of the locale files.
@@ -3210,7 +3218,14 @@ const Row = React.memo(function Row(props: {
             aria-hidden="true"
           />
           {/* P1f: PROTOCOLS column shows the PROTOCOL axis (anthropic), not the provider. */}
-          <span className="name">{protocolLabel}</span>
+          <span className="name" title={protocolList.join(', ')}>
+            {primaryProtocol}
+            {extraProtocolCount > 0 && (
+              <span style={{ marginLeft: 4, opacity: 0.6 }}>
+                {t('vault.protocolMore', { count: extraProtocolCount })}
+              </span>
+            )}
+          </span>
           <span className={`kind-pill${kindClass}`}>{kindLabel}</span>
         </span>
       </td>

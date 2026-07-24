@@ -267,6 +267,7 @@
     "aliasLabel": "Alias ",
     "aliasEditableHint": "editable",
     "colProtocols": "Protocols",
+    "protocolMore": "(+{{count}} more)",
     "colStatus": "Status",
     "colCreated": "Created",
     "colLastTest": "Last test",

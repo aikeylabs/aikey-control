@@ -267,6 +267,7 @@
     "aliasLabel": "别名 ",
     "aliasEditableHint": "可编辑",
     "colProtocols": "协议",
+    "protocolMore": "（+{{count}}）",
     "colStatus": "状态",
     "colCreated": "创建时间",
     "colLastTest": "最近检测",
