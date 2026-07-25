@@ -226,6 +226,40 @@ func handleProbeTeamURL(logger *slog.Logger) http.HandlerFunc {
 	}
 }
 
+func handleDisplayTimeZone(invoke func(context.Context, *string) (string, error), logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var requested *string
+		if r.Method == http.MethodPut {
+			var body struct {
+				Value string `json:"value"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 8*1024)).Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json"})
+				return
+			}
+			clean := strings.TrimSpace(body.Value)
+			if clean == "" {
+				clean = "auto"
+			}
+			requested = &clean
+		} else if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		value, err := invoke(ctx, requested)
+		if err != nil {
+			if logger != nil {
+				logger.Warn("system.display-time-zone cli invocation failed", slog.Any("err", err))
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "display time zone could not be saved; run `aikey config time-zone <IANA zone>`"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"value": value})
+	}
+}
+
 // classifyProbeError turns a low-level transport error into a short,
 // user-facing string for the SPA's red X tooltip. Keeps the SPA from
 // having to parse Go-style "Get http://...: dial tcp ...: connect:

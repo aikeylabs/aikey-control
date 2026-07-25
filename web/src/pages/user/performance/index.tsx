@@ -20,6 +20,8 @@ import { userAccountsApi } from '@/shared/api/user/accounts';
 import { usageApi, type TimelinePoint, type SessionTotal } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
 import { isLocalUsageScope } from '@/shared/usage/local-identity';
+import { formatTime } from '@/shared/utils/datetime-intl';
+import { usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
 
 function fmtTok(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -43,15 +45,6 @@ function formatHitRate(ratio: number): string {
 
 /** YYYY-MM-DD in user's local timezone — see overview/index.tsx for the
  *  rationale (UTC slice would desync near midnight in non-UTC tz). */
-function daysAgoStr(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 /** Mirror of overview's deriveKeyLabel — keep call sites in sync if you edit. */
 function deriveKeyLabel(
   k: { alias?: string; identity?: string; virtual_key_id: string },
@@ -88,13 +81,13 @@ export default function UserPerformancePage() {
     : accountId ? { account_id: accountId } : null;
   const usageIdentityKey = isLocalMode ? 'personal' : (accountId ?? '');
 
-  const todayDate = daysAgoStr(0);
+  const todayDate = usageCalendarDateDaysAgo(0);
 
   // 7-day timeline only as fallback driver for activeDate (today / latest active day);
   // not displayed as a chart on this page.
   const usageTimeline = useQuery({
     queryKey: ['user-performance-timeline', usageIdentityKey],
-    queryFn: () => usageApi.personalTimeline(usageIdentity!, daysAgoStr(6), todayDate),
+    queryFn: () => usageApi.personalTimeline(usageIdentity!, usageCalendarDateDaysAgo(6), todayDate),
     enabled: !!usageIdentity,
     refetchInterval: 60_000,
   });
@@ -297,7 +290,7 @@ export default function UserPerformancePage() {
   }, [byModelRecent.data]);
 
   const updatedAt = byKeyRecent.dataUpdatedAt
-    ? new Date(byKeyRecent.dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    ? formatTime(byKeyRecent.dataUpdatedAt)
     : null;
 
   // 7-day trend rows — read from the existing usageTimeline query (no new
@@ -319,7 +312,7 @@ export default function UserPerformancePage() {
     // Build the canonical 7-day window from today back, oldest first.
     const allSeven: TimelinePoint[] = [];
     for (let i = 6; i >= 0; i--) {
-      const d = daysAgoStr(i);
+      const d = usageCalendarDateDaysAgo(i);
       const found = byDate.get(d);
       allSeven.push(found ?? { date: d, total_tokens: 0, request_count: 0 });
     }

@@ -21,6 +21,7 @@
  */
 
 import i18next from 'i18next';
+import { calendarDateAsUTCDate, getEffectiveUsageTimeZone } from '@/shared/usage/usage-time-zone';
 
 /** UI display locale.
  *
@@ -75,18 +76,24 @@ function rtf(options: Intl.RelativeTimeFormatOptions = { numeric: 'auto' }): Int
 /** Short date for chart x-axis ticks: "4/11" (en-US) / "11/4" (en-GB)
  * / "11.4." (de) / "4月11日" (ja-JP). Month + day only; no year. */
 export function formatDateShort(d: Date | string | number): string {
+  const calendarDate = calendarDateAsUTCDate(d);
+  if (calendarDate) {
+    return dtf({ month: 'numeric', day: 'numeric', timeZone: 'UTC' }).format(calendarDate);
+  }
   const date = toDate(d);
   if (!date) return '';
-  return dtf({ month: 'numeric', day: 'numeric' }).format(date);
+  return dtf({ month: 'numeric', day: 'numeric', timeZone: getEffectiveUsageTimeZone() }).format(date);
 }
 
 /** Full date: "Apr 24, 2026" (en-US) / "24 Apr 2026" (en-GB) /
  * "24.04.2026" (de) / "2026/4/24" (ja-JP). Used for tooltips,
  * timestamps in tables, etc. */
 export function formatDate(d: Date | string | number): string {
+  const calendarDate = calendarDateAsUTCDate(d);
+  if (calendarDate) return dtf({ year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(calendarDate);
   const date = toDate(d);
   if (!date) return '';
-  return dtf({ year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+  return dtf({ year: 'numeric', month: 'short', day: 'numeric', timeZone: getEffectiveUsageTimeZone() }).format(date);
 }
 
 /** Numeric year-month-day for compact displays that want locale
@@ -94,9 +101,11 @@ export function formatDate(d: Date | string | number): string {
  * "24.04.2026" (de). Differs from `formatDate` in that months are
  * numeric, which packs tighter in tables. */
 export function formatDateNumeric(d: Date | string | number): string {
+  const calendarDate = calendarDateAsUTCDate(d);
+  if (calendarDate) return dtf({ year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' }).format(calendarDate);
   const date = toDate(d);
   if (!date) return '';
-  return dtf({ year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+  return dtf({ year: 'numeric', month: '2-digit', day: '2-digit', timeZone: getEffectiveUsageTimeZone() }).format(date);
 }
 
 /** ISO-style YYYY-MM-DD, locale-independent by design. Use for
@@ -105,12 +114,12 @@ export function formatDateNumeric(d: Date | string | number): string {
  * lowest-ambiguity option. Not to be confused with the API-side
  * dateParam (wire format). */
 export function formatDateISO(d: Date | string | number): string {
+  if (calendarDateAsUTCDate(d) && typeof d === 'string') return d;
   const date = toDate(d);
   if (!date) return '';
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: getEffectiveUsageTimeZone(), year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
 /** HH:MM in the user's locale. Note en-US picks 12-hour "3:45 PM",
@@ -119,7 +128,7 @@ export function formatDateISO(d: Date | string | number): string {
 export function formatTime(d: Date | string | number): string {
   const date = toDate(d);
   if (!date) return '';
-  return dtf({ hour: 'numeric', minute: '2-digit' }).format(date);
+  return dtf({ hour: 'numeric', minute: '2-digit', timeZone: getEffectiveUsageTimeZone() }).format(date);
 }
 
 /** Date + time combined. Used for "last used at" in tables and the
@@ -133,6 +142,7 @@ export function formatDateTime(d: Date | string | number): string {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZone: getEffectiveUsageTimeZone(),
   }).format(date);
 }
 

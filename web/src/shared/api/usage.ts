@@ -6,6 +6,7 @@
  */
 import { httpClient } from './http-client';
 import { runtimeConfig } from '@/app/config/runtime';
+import { getEffectiveUsageTimeZone, usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
 // 2026-07-03 unified-origin gateway (option 6): resolve where PERSONAL usage
 // data lives. See RuntimeConfig.usageApiBase for the four-quadrant table.
 const PERSONAL_USAGE_BASE: string = runtimeConfig.usageApiBase ?? '/v1/usage/personal';
@@ -244,31 +245,8 @@ export interface KeyTotal {
  * server interprets `?start_date` / `?end_date` / `?date` as the
  * caller's local calendar day (paired with `?tz=<IANA>`), so the client
  * must send the *local* date to match. */
-function dateParam(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 function defaultRange(days = 30): { start_date: string; end_date: string } {
-  const end = new Date();
-  const start = new Date();
-  start.setDate(start.getDate() - days);
-  return { start_date: dateParam(start), end_date: dateParam(end) };
-}
-
-/** IANA tz (e.g. "Asia/Shanghai") detected from the browser. Sent on
- * every usage API call so the server can bucket events per the user's
- * local calendar day / hour. Safe fallback to "UTC" if Intl is
- * unavailable (very old browsers) — server treats empty / UTC the
- * same. */
-function browserTZ(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch {
-    return 'UTC';
-  }
+  return { start_date: usageCalendarDateDaysAgo(days), end_date: usageCalendarDateDaysAgo(0) };
 }
 
 // --- Personal identity ---
@@ -303,14 +281,14 @@ export const usageApi = {
    */
   personalTimeline: async (id: PersonalIdentity, startDate?: string, endDate?: string, appSlug?: string): Promise<TimelinePoint[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
+    const params: Record<string, string> = { ...personalParams(id), ...range, tz: getEffectiveUsageTimeZone() };
     if (appSlug) params.app_slug = appSlug;
     const res = await httpClient.get<TimelinePoint[]>(`${PERSONAL_USAGE_BASE}/timeline`, { params });
     return res.data;
   },
 
   personalHourly: async (id: PersonalIdentity, date?: string, appSlug?: string): Promise<HourlyPoint[]> => {
-    const params: Record<string, string> = { ...personalParams(id), tz: browserTZ() };
+    const params: Record<string, string> = { ...personalParams(id), tz: getEffectiveUsageTimeZone() };
     if (date) params.date = date;
     if (appSlug) params.app_slug = appSlug;
     const res = await httpClient.get<HourlyPoint[]>(`${PERSONAL_USAGE_BASE}/hourly`, { params });
@@ -320,7 +298,7 @@ export const usageApi = {
   personalByProtocolTimeline: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<ProtocolTimelinePoint[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const res = await httpClient.get<ProtocolTimelinePoint[]>(`${PERSONAL_USAGE_BASE}/by-protocol/timeline`, {
-      params: { ...personalParams(id), ...range, tz: browserTZ() },
+      params: { ...personalParams(id), ...range, tz: getEffectiveUsageTimeZone() },
     });
     return res.data;
   },
@@ -333,7 +311,7 @@ export const usageApi = {
    * extracting the day.
    */
   personalByProtocolHourly: async (id: PersonalIdentity, date?: string): Promise<ProtocolHourlyPoint[]> => {
-    const params: Record<string, string> = { ...personalParams(id), tz: browserTZ() };
+    const params: Record<string, string> = { ...personalParams(id), tz: getEffectiveUsageTimeZone() };
     if (date) params.date = date;
     const res = await httpClient.get<ProtocolHourlyPoint[]>(`${PERSONAL_USAGE_BASE}/by-protocol/hourly`, { params });
     return res.data;
@@ -342,14 +320,14 @@ export const usageApi = {
   personalByProtocolTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<ProtocolTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const res = await httpClient.get<ProtocolTotal[]>(`${PERSONAL_USAGE_BASE}/by-protocol/total`, {
-      params: { ...personalParams(id), ...range, tz: browserTZ() },
+      params: { ...personalParams(id), ...range, tz: getEffectiveUsageTimeZone() },
     });
     return res.data;
   },
 
   personalByKeyTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string, sessionId?: string): Promise<KeyTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
+    const params: Record<string, string> = { ...personalParams(id), ...range, tz: getEffectiveUsageTimeZone() };
     if (sessionId) params.session_id = sessionId;
     const res = await httpClient.get<KeyTotal[]>(`${PERSONAL_USAGE_BASE}/by-key/total`, { params });
     return res.data;
@@ -368,7 +346,7 @@ export const usageApi = {
     const range = opts.startDate && opts.endDate
       ? { start_date: opts.startDate, end_date: opts.endDate }
       : defaultRange();
-    const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
+    const params: Record<string, string> = { ...personalParams(id), ...range, tz: getEffectiveUsageTimeZone() };
     if (opts.filter) params.filter = opts.filter;
     if (opts.model) params.model = opts.model;
     if (opts.key) params.key = opts.key;
@@ -389,7 +367,7 @@ export const usageApi = {
   personalByAppTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<AppTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const res = await httpClient.get<AppTotal[]>(`${PERSONAL_USAGE_BASE}/by-app/total`, {
-      params: { ...personalParams(id), ...range, tz: browserTZ() },
+      params: { ...personalParams(id), ...range, tz: getEffectiveUsageTimeZone() },
     });
     return res.data;
   },
@@ -404,7 +382,7 @@ export const usageApi = {
   personalByAgentTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string): Promise<AgentTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
     const res = await httpClient.get<AgentTotal[]>(`${PERSONAL_USAGE_BASE}/by-agent/total`, {
-      params: { ...personalParams(id), ...range, tz: browserTZ() },
+      params: { ...personalParams(id), ...range, tz: getEffectiveUsageTimeZone() },
     });
     return res.data;
   },
@@ -418,7 +396,7 @@ export const usageApi = {
    */
   personalByModelTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string, appSlug?: string, sessionId?: string): Promise<ModelTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
+    const params: Record<string, string> = { ...personalParams(id), ...range, tz: getEffectiveUsageTimeZone() };
     if (appSlug) params.app_slug = appSlug;
     if (sessionId) params.session_id = sessionId;
     const res = await httpClient.get<ModelTotal[]>(`${PERSONAL_USAGE_BASE}/by-model/total`, { params });
@@ -436,7 +414,7 @@ export const usageApi = {
    */
   personalBySessionTotal: async (id: PersonalIdentity, startDate?: string, endDate?: string, limit?: number): Promise<SessionTotal[]> => {
     const range = startDate && endDate ? { start_date: startDate, end_date: endDate } : defaultRange();
-    const params: Record<string, string> = { ...personalParams(id), ...range, tz: browserTZ() };
+    const params: Record<string, string> = { ...personalParams(id), ...range, tz: getEffectiveUsageTimeZone() };
     if (limit) params.limit = String(limit);
     const res = await httpClient.get<SessionTotal[]>(`${PERSONAL_USAGE_BASE}/by-session/total`, { params });
     return res.data;

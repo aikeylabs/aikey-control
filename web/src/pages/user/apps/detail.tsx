@@ -59,6 +59,7 @@ import { importApi } from '@/shared/api/user/import';
 import { SwitchKeyModal } from './SwitchKeyModal';
 import { VaultStatusPill } from '../_shared/VaultStatusPill';
 import { APPS_DETAIL_CSS } from './apps-detail-css';
+import { usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
 
 // --- Per-app usage helpers --------------------------------------------
 
@@ -66,12 +67,6 @@ import { APPS_DETAIL_CSS } from './apps-detail-css';
  * switches to personalHourly(app_slug=slug) and densifies to 24 hour
  * buckets; by-model just narrows window to today. */
 type RangeKey = 1 | 7 | 14 | 30;
-
-function daysAgoISO(n: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - n);
-  return d.toISOString().slice(0, 10);
-}
 
 function relativeTime(unixSeconds: number | null): string {
   if (unixSeconds == null) return 'never';
@@ -115,7 +110,7 @@ function densifyTimeline(points: TimelinePoint[], range: RangeKey): TimelinePoin
     return out;
   }
   for (let i = range - 1; i >= 0; i--) {
-    const d = daysAgoISO(i);
+    const d = usageCalendarDateDaysAgo(i);
     out.push(map.get(d) ?? { date: d, total_tokens: 0, request_count: 0 });
   }
   return out;
@@ -217,8 +212,8 @@ export default function UserAppDetailPage() {
 
   // --- Per-app usage (Stage C) -----------------------------------------
   const [usageRange, setUsageRange] = useState<RangeKey>(30);
-  const usageStart = daysAgoISO(usageRange);
-  const usageEnd = daysAgoISO(0);
+  const usageStart = usageCalendarDateDaysAgo(usageRange);
+  const usageEnd = usageCalendarDateDaysAgo(0);
 
   const meQuery = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   const accountId = meQuery.data?.account_id;

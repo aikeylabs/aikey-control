@@ -11,6 +11,7 @@ import { userAccountsApi, type ReferralDTO } from '@/shared/api/user/accounts';
 import { PageHeader } from '@/shared/ui/PageHeader';
 import { Badge } from '@/shared/ui/Badge';
 import { copyText } from '@/shared/utils/clipboard';
+import { formatDate } from '@/shared/utils/datetime-intl';
 
 export default function UserReferralsPage() {
   const { t } = useTranslation();
@@ -136,10 +137,10 @@ export default function UserReferralsPage() {
                       </Badge>
                     </td>
                     <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                      {new Date(r.created_at).toLocaleDateString(navigator.language)}
+                      {formatDate(r.created_at)}
                     </td>
                     <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                      {r.completed_at ? new Date(r.completed_at).toLocaleDateString(navigator.language) : '—'}
+                      {r.completed_at ? formatDate(r.completed_at) : '—'}
                     </td>
                   </tr>
                 ))

@@ -20,6 +20,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ModalPortal } from '@/shared/ui/ModalShell';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { formatDate } from '@/shared/utils/datetime-intl';
 import {
   fetchMyPoolAccounts,
   fetchRoutedCredential,
@@ -153,7 +154,7 @@ function StatusFilterPill(props: {
 
 function fmtDate(unix: number): string {
   if (!unix) return '—';
-  return new Date(unix * 1000).toLocaleDateString('en-US');
+  return formatDate(unix * 1000);
 }
 
 function fetchErrKey(err: TeamFetchError): string {

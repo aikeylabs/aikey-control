@@ -27,14 +27,10 @@ import { userAccountsApi } from '@/shared/api/user/accounts';
 import { usageApi, type UsageDetailRow } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
 import { isLocalUsageScope } from '@/shared/usage/local-identity';
+import { formatUsageDateTimeCompact, usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
 
 const PAGE_SIZE = 30;
 
-function daysAgoStr(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 function fmtTok(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
@@ -43,11 +39,6 @@ function fmtTok(n: number): string {
 function fmtUSD(s: string | null): string {
   if (s == null) return '—';
   return '$' + Number(s).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-}
-function fmtTime(ms: number): string {
-  const d = new Date(ms);
-  const p = (x: number) => String(x).padStart(2, '0');
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 /** DWD carries only the HTTP code; map it to a standard reason phrase. */
 const HTTP_REASON: Record<number, string> = {
@@ -129,8 +120,8 @@ export default function UserUsageDetailPage() {
   const protocol = sp.get('protocol') ?? '';
   const identity = sp.get('identity') ?? '';
   const date = sp.get('date') ?? '';
-  const start = date || daysAgoStr(6);
-  const end = date || daysAgoStr(0);
+  const start = date || usageCalendarDateDaysAgo(6);
+  const end = date || usageCalendarDateDaysAgo(0);
 
   // Drill-down filters (model/key/session/app/protocol/identity/date) narrow
   // server-side; the scenario filter (all/success/failed/unpriced) is applied
@@ -294,7 +285,7 @@ export default function UserUsageDetailPage() {
               return (
                 <Fragment key={i}>
                   <tr className={`ud-row${isOpen ? ' open' : ''}`} onClick={() => setExpanded(isOpen ? null : i)}>
-                    <td className="ud-dim">{fmtTime(r.event_time_ms)}</td>
+                    <td className="ud-dim">{formatUsageDateTimeCompact(r.event_time_ms)}</td>
                     <td className="ud-model" title={r.model}>{r.model || '—'}</td>
                     <td>
                       {ok ? (

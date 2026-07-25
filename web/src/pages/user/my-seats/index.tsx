@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { userAccountsApi } from '@/shared/api/user/accounts';
+import { formatDate } from '@/shared/utils/datetime-intl';
 
 export default function MySeatsPage() {
   const { data: seats, isLoading, isError } = useQuery({
@@ -83,7 +84,7 @@ export default function MySeatsPage() {
                     </span>
                   </td>
                   <td className="px-5 py-4" style={{ color: 'var(--muted-foreground)' }}>
-                    {seat.claimed_at ? new Date(seat.claimed_at).toLocaleDateString(navigator.language) : '—'}
+                    {seat.claimed_at ? formatDate(seat.claimed_at) : '—'}
                   </td>
                 </tr>
               ))}

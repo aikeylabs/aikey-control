@@ -20,6 +20,7 @@ import { complianceApi, type ComplianceEventDTO } from '@/shared/api/user/compli
 import { appsApi } from '@/shared/api/user/apps';
 import { Badge } from '@/shared/ui/Badge';
 import { PageHeader } from '@/shared/ui/PageHeader';
+import { formatDateTime } from '@/shared/utils/datetime-intl';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterBar } from '@/shared/ui/FilterBar';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
@@ -531,7 +532,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
         {selected && (
           <div>
             <DrawerField label={t('compliancePage.fieldEventId')} value={<span className="break-all text-[11px]">{selected.event_id}</span>} />
-            <DrawerField label={t('compliancePage.columnTime')} value={new Date(selected.created_at).toLocaleString()} />
+            <DrawerField label={t('compliancePage.columnTime')} value={formatDateTime(selected.created_at)} />
             <DrawerField label={t('compliancePage.columnAction')} value={<Badge variant={actionVariant(selected.action_taken)}>{selected.action_taken.toUpperCase()}</Badge>} />
             <DrawerField label={t('compliancePage.columnModel')} value={selected.target_model || '—'} />
             <DrawerField label={t('compliancePage.fieldPromptLength')} value={selected.prompt_length} />

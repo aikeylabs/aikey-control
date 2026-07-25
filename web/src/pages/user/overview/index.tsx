@@ -34,7 +34,8 @@ import { vaultApi, type VaultListData } from '@/shared/api/user/vault';
 import { usageApi, type TimelinePoint, type ProtocolTotal, type HourlyPoint, type RecentRequest } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
 import { isLocalUsageScope } from '@/shared/usage/local-identity';
-import { formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
+import { formatDate, formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
+import { getEffectiveUsageTimeZone, usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
 import { formatCost } from '@/shared/utils/formatCost';
 import {
   OWN_MENU,
@@ -95,15 +96,6 @@ function fmtTok(n: number): string {
  * missing up to 8 hours of "today". See frontend `dateParam()` and
  * `daysAgo()` in usage-ledger/index.tsx for the matching convention
  * on sibling pages. */
-function daysAgoStr(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 function padTimeline(data: TimelinePoint[], days: number): TimelinePoint[] {
   // 1D mode (days=1): the upstream queryFn already reshaped hourly data
   // into TimelinePoint with date="HH:00". Pad to 24 buckets so the
@@ -121,7 +113,7 @@ function padTimeline(data: TimelinePoint[], days: number): TimelinePoint[] {
   const map = new Map(data.map((p) => [p.date, p]));
   const out: TimelinePoint[] = [];
   for (let i = days - 1; i >= 0; i--) {
-    const d = daysAgoStr(i);
+    const d = usageCalendarDateDaysAgo(i);
     out.push(map.get(d) ?? { date: d, total_tokens: 0, request_count: 0 });
   }
   return out;
@@ -367,8 +359,8 @@ export default function UserOverviewPage() {
   const usageIdentityKey = isLocalMode ? 'personal' : (accountId ?? '');
 
   const days = RANGE_DAYS[range];
-  const endDate = daysAgoStr(0);
-  const startDate = daysAgoStr(days - 1);
+  const endDate = usageCalendarDateDaysAgo(0);
+  const startDate = usageCalendarDateDaysAgo(days - 1);
 
   // R23: usage queries — cross-fetch on B, same-origin on A. The
   // identity tuple (seat_id / account_id / org_id=personal) is
@@ -383,9 +375,7 @@ export default function UserOverviewPage() {
       if ('account_id' in usageIdentity && usageIdentity.account_id) p.account_id = usageIdentity.account_id;
       else if ('org_id' in usageIdentity && usageIdentity.org_id === 'personal') p.org_id = 'personal';
     }
-    try {
-      p.tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    } catch { p.tz = 'UTC'; }
+    p.tz = getEffectiveUsageTimeZone();
     return p;
   }
 
@@ -435,7 +425,7 @@ export default function UserOverviewPage() {
       : () => usageApi.personalByProtocolTotal(usageIdentity!, startDate, endDate),
     enabled: !!usageIdentity,
   });
-  const todayDate = daysAgoStr(0);
+  const todayDate = usageCalendarDateDaysAgo(0);
   const usageToday = useQuery({
     queryKey: ['user-overview-today-hourly', dataScope, usageIdentityKey, todayDate],
     queryFn: crossClient
@@ -648,7 +638,7 @@ export default function UserOverviewPage() {
                 {!teamSessionExpired && me?.created_at && (
                   <>
                     <span style={{ opacity: 0.4 }}>·</span>
-                    <span>{t('overview.joinedOn', { date: new Date(me.created_at).toLocaleDateString(navigator.language) })}</span>
+                    <span>{t('overview.joinedOn', { date: formatDate(me.created_at) })}</span>
                   </>
                 )}
               </div>

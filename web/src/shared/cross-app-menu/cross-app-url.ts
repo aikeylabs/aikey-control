@@ -1,6 +1,7 @@
 /**
  * Builds a cross-app (cross-origin) navigation URL that carries the
- * current UI language as a one-shot `?lang=` handoff parameter.
+ * current UI language and personal usage time-zone preference as one-shot
+ * `?lang=` / `?usage_tz=` handoff parameters.
  *
  * Why: the Personal web (local-server) and the Team web (team server)
  * run on DIFFERENT origins, and localStorage — where i18next caches the
@@ -23,6 +24,7 @@
  * i18n init side effects.
  */
 import i18n from '../i18n/i18n';
+import { getUsageTimeZonePreference, USAGE_TIME_ZONE_HANDOFF_PARAM } from '@/shared/usage/usage-time-zone';
 
 /** Collapse the active language to the two supported buckets, matching
  * `nonExplicitSupportedLngs` in i18n.ts (zh-CN / zh-TW → 'zh'). */
@@ -47,9 +49,9 @@ function currentLangTag(): 'en' | 'zh' {
 export function buildCrossAppUrl(base: string | null, path: string): string {
   // Same-origin link (composing gateway: base '' → relative, or the
   // unreachable null degrade): the destination shares this origin's
-  // localStorage, so the one-shot ?lang handoff is redundant — skip it
+  // localStorage, so the one-shot handoff is redundant — skip it
   // for clean URLs (2026-07-03 user Q1). Cross-origin keeps the handoff.
   if (!base) return `${path}`;
   const joiner = path.includes('?') ? '&' : '?';
-  return `${base}${path}${joiner}lang=${currentLangTag()}`;
+  return `${base}${path}${joiner}lang=${currentLangTag()}&${USAGE_TIME_ZONE_HANDOFF_PARAM}=${encodeURIComponent(getUsageTimeZonePreference())}`;
 }

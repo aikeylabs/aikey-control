@@ -33,6 +33,15 @@ import { apiErrorMessage, isProxyUnavailable } from '@/shared/api/error-message'
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { isSyntheticIdentityEmail, memberIdentityLine } from '@/shared/utils/member-identity';
+import { SearchableSelect, type SelectOption } from '@/shared/ui/SearchableSelect';
+import {
+  getUsageTimeZonePreference,
+  isValidIanaTimeZone,
+  setUsageTimeZonePreference,
+  systemUsageTimeZone,
+  USAGE_TIME_ZONE_AUTO,
+  displayTimeZoneOptions,
+} from '@/shared/usage/usage-time-zone';
 
 import { appsApi } from '../../../shared/api/user/apps';
 import { importApi } from '../../../shared/api/user/import';
@@ -199,6 +208,71 @@ export default function SettingsPage() {
   // anywhere in the member console that would let them.
   const [hasSeat, setHasSeat] = useState<boolean | undefined>(undefined);
   const [emailCopied, setEmailCopied] = useState(false);
+
+  // ── Personal usage time zone ──────────────────────────────────────
+  // This is deliberately a device preference, not an organization reporting
+  // policy. It controls personal usage query boundaries and detail timestamps;
+  // finance/admin reports retain their existing browser-system semantics.
+  const usageSystemTimeZone = systemUsageTimeZone();
+  const [usageTimeZone, setUsageTimeZone] = useState(getUsageTimeZonePreference);
+  const [usageTimeZoneSave, setUsageTimeZoneSave] = useState<SaveStatus>({ kind: 'idle' });
+  const usageTimeZones = displayTimeZoneOptions(usageSystemTimeZone, usageTimeZone);
+  const usageTimeZoneSelectOptions: SelectOption[] = [
+    {
+      value: USAGE_TIME_ZONE_AUTO,
+      label: t('settings.usageTimeZone.autoOption', { zone: usageSystemTimeZone }),
+    },
+    ...usageTimeZones,
+    ...(usageTimeZone !== USAGE_TIME_ZONE_AUTO && !usageTimeZones.some((option) => option.value === usageTimeZone)
+      ? [{ value: usageTimeZone, label: usageTimeZone }]
+      : []),
+  ];
+
+  function onUsageTimeZoneChange(value: string) {
+    setUsageTimeZone(value.trim());
+    setUsageTimeZoneSave({ kind: 'idle' });
+  }
+
+  async function onSaveUsageTimeZone() {
+    if (usageTimeZone !== USAGE_TIME_ZONE_AUTO && !isValidIanaTimeZone(usageTimeZone)) {
+      setUsageTimeZoneSave({ kind: 'fail', message: t('settings.usageTimeZone.invalid') });
+      return;
+    }
+    setUsageTimeZoneSave({ kind: 'saving' });
+    try {
+      const response = await fetch('/system/display-time-zone', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: usageTimeZone }),
+      });
+      if (!response.ok && response.status !== 404) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || `HTTP ${response.status}`);
+      }
+      setUsageTimeZonePreference(usageTimeZone);
+      setUsageTimeZoneSave({ kind: 'ok' });
+      // Drop React Query caches created with the previous day boundary. A hard
+      // reload also guarantees every imported Personal/Team usage surface reads
+      // the new preference before issuing its first request.
+      window.setTimeout(() => window.location.reload(), 500);
+    } catch (error) {
+      setUsageTimeZoneSave({
+        kind: 'fail',
+        message: error instanceof Error ? error.message : t('settings.usageTimeZone.saveFailed'),
+      });
+    }
+  }
+  useEffect(() => {
+    fetch('/system/display-time-zone', { headers: { Accept: 'application/json' } })
+      .then(async (response) => response.ok ? response.json() as Promise<{ value?: string }> : null)
+      .then((body) => {
+        const value = body?.value?.trim();
+        if (!value || (value !== USAGE_TIME_ZONE_AUTO && !isValidIanaTimeZone(value))) return;
+        setUsageTimeZone(value);
+        setUsageTimeZonePreference(value);
+      })
+      .catch(() => { /* Browser cache remains the offline fallback. */ });
+  }, []);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -647,6 +721,81 @@ export default function SettingsPage() {
               {t('settings.account.loginCmdHint')}
             </p>
           )}
+        </section>
+
+        {/* Device display preference. No time-zone badge is repeated on chart pages:
+            Settings is the single place to inspect or change this preference. */}
+        <section
+          className="rounded-md"
+          style={{
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            padding: 24,
+            marginBottom: 24,
+          }}
+        >
+          <h2
+            className="mb-3"
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 18,
+              fontWeight: 600,
+              color: 'var(--display-foreground)',
+            }}
+          >
+            {t('settings.usageTimeZone.title')}
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--soft-foreground)', marginBottom: 14 }}>
+            {t('settings.usageTimeZone.description')}
+          </p>
+          <label
+            className="block mb-1"
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--muted-foreground)',
+            }}
+          >
+            {t('settings.usageTimeZone.label')}
+          </label>
+          <SearchableSelect
+            options={usageTimeZoneSelectOptions}
+            value={usageTimeZone}
+            onChange={onUsageTimeZoneChange}
+            allowCustom
+            placeholder={t('settings.usageTimeZone.placeholder')}
+          />
+          <div style={{ minHeight: 18, marginTop: 8, marginBottom: 14, fontSize: 12 }}>
+            {usageTimeZoneSave.kind === 'idle' && (
+              <span style={{ color: 'var(--muted-foreground)' }}>
+                {t('settings.usageTimeZone.effective', {
+                  zone: usageTimeZone === USAGE_TIME_ZONE_AUTO ? usageSystemTimeZone : usageTimeZone,
+                })}
+              </span>
+            )}
+            {usageTimeZoneSave.kind === 'saving' && (
+              <span style={{ color: 'var(--muted-foreground)' }}>
+                {t('settings.usageTimeZone.saving')}
+              </span>
+            )}
+            {usageTimeZoneSave.kind === 'ok' && (
+              <span style={{ color: '#4ade80' }}>{t('settings.usageTimeZone.saved')}</span>
+            )}
+            {usageTimeZoneSave.kind === 'fail' && (
+              <span role="alert" style={{ color: '#ef4444' }}>
+                {t('settings.usageTimeZone.saveError', { msg: usageTimeZoneSave.message })}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary text-xs px-4 py-1.5"
+            onClick={onSaveUsageTimeZone}
+            disabled={usageTimeZoneSave.kind === 'saving'}
+          >
+            {t('settings.usageTimeZone.saveButton')}
+          </button>
         </section>
 
         {/* ── Card 1: Control URL ───────────────────────────────────── */}

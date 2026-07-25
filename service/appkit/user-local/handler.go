@@ -166,6 +166,11 @@ type Config struct {
 	// events.collector_routes.team. Nil = endpoint absent (404).
 	SetControlURLCmd func(ctx context.Context, url string) error
 
+	// DisplayTimeZoneCmd reads or writes the same device preference used by
+	// `aikey config time-zone`. Nil keeps the endpoint absent in editions that
+	// do not host the local CLI vault.
+	DisplayTimeZoneCmd func(ctx context.Context, value *string) (string, error)
+
 	// CORSOrigins is the allowlist passed to shared.CORSMiddleware
 	// for the endpoints the **team server's web** is allowed to
 	// cross-fetch (Phase 3B R23, 2026-05-11). Surface kept narrow:
@@ -386,6 +391,11 @@ func NewHandler(cfg Config) http.Handler {
 	// verify a URL before committing it. No injector needed — the
 	// endpoint owns its http.Client.
 	mux.HandleFunc("POST /system/team-url/probe", handleProbeTeamURL(logger))
+
+	if cfg.DisplayTimeZoneCmd != nil {
+		mux.HandleFunc("GET /system/display-time-zone", handleDisplayTimeZone(cfg.DisplayTimeZoneCmd, logger))
+		mux.HandleFunc("PUT /system/display-time-zone", handleDisplayTimeZone(cfg.DisplayTimeZoneCmd, logger))
+	}
 
 	// /api/internal/services/<name>/<action> — service-control endpoint
 	// for the trust-check page's "Start service" button (M5 Day 5

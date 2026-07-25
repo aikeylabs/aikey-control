@@ -30,6 +30,7 @@ import { userAccountsApi } from '@/shared/api/user/accounts';
 import { runtimeConfig } from '@/app/config/runtime';
 import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import { formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
+import { usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
 import { formatCost } from '@/shared/utils/formatCost';
 import { CostCell } from '@/shared/ui/CostCell';
 
@@ -107,15 +108,6 @@ function formatTokens(n: number): string {
 
 /** YYYY-MM-DD in the user's local timezone — see usage.ts `dateParam`
  * for the tz-local refactor rationale (bugfix 20260424). */
-function daysAgo(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 function normProto(s: string) {
   return s || 'unknown';
 }
@@ -256,8 +248,8 @@ export default function UserUsageLedgerPage() {
   // ?date=, but we keep the variable consistent so existing prop
   // wiring (chart axis label, etc.) stays straightforward.
   const isHourly = range === 1;
-  const startDate = isHourly ? daysAgo(0) : daysAgo(range);
-  const endDate = daysAgo(0);
+  const startDate = isHourly ? usageCalendarDateDaysAgo(0) : usageCalendarDateDaysAgo(range);
+  const endDate = usageCalendarDateDaysAgo(0);
 
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   const seats = useQuery({
@@ -411,13 +403,13 @@ export default function UserUsageLedgerPage() {
     if (isHourly) {
       return [...data].sort((a, b) => a.date.localeCompare(b.date));
     }
-    const today = daysAgo(0);
+    const today = usageCalendarDateDaysAgo(0);
     const existing = new Set(data.map((d) => d.date));
     const result = [...data.filter((d) => d.date <= today)];
     const minDays = 3;
     if (result.length < minDays) {
       for (let i = 0; i < minDays; i++) {
-        const d = daysAgo(i);
+        const d = usageCalendarDateDaysAgo(i);
         if (!existing.has(d)) {
           result.push({ date: d, total_tokens: 0, request_count: 0, cost_usd: 0 });
         }

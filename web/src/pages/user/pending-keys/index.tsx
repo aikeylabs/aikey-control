@@ -9,6 +9,7 @@ import { Badge } from '@/shared/ui/Badge';
 import { copyText } from '@/shared/utils/clipboard';
 import { PageHeader } from '@/shared/ui/PageHeader';
 import { ModalPortal } from '@/shared/ui/ModalShell';
+import { formatDate, formatDateTime } from '@/shared/utils/datetime-intl';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -95,7 +96,7 @@ function DeliveryModal({ delivery, onClose }: { delivery: DeliveryDTO; onClose: 
 
           {delivery.expires_at && (
             <div className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              Expires: <span style={{ color: 'var(--foreground)' }}>{new Date(delivery.expires_at).toLocaleString()}</span>
+              Expires: <span style={{ color: 'var(--foreground)' }}>{formatDateTime(delivery.expires_at)}</span>
             </div>
           )}
         </div>
@@ -166,7 +167,7 @@ export default function PendingKeysPage() {
                     <td className="px-5 py-3 text-sm font-mono font-bold" style={{ color: 'var(--foreground)' }}>{k.alias}</td>
                     <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{k.provider_code || '—'}</td>
                     <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                      {k.expires_at ? new Date(k.expires_at).toLocaleDateString(navigator.language) : 'Never'}
+                      {k.expires_at ? formatDate(k.expires_at) : 'Never'}
                     </td>
                     <td className="px-5 py-3">
                       <button

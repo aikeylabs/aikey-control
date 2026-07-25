@@ -17,7 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { userAccountsApi, type SeatSummaryDTO } from '@/shared/api/user/accounts';
 import { deliveryApi } from '@/shared/api/user/delivery';
-import { formatRelativeTime } from '@/shared/utils/datetime-intl';
+import { formatDate, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import { memberIdentityLine } from '@/shared/utils/member-identity';
 
 // Phase 3B R22 (2026-05-11) superseded R20: the cross-server "other
@@ -137,7 +137,7 @@ export default function MyAccountPage() {
               </div>
               <Field
                 label={t('account.fieldCreated')}
-                value={me?.created_at ? new Date(me.created_at).toLocaleDateString(navigator.language) : undefined}
+                value={me?.created_at ? formatDate(me.created_at) : undefined}
                 mono
               />
             </div>
@@ -272,7 +272,7 @@ export default function MyAccountPage() {
                       <Meta label={t('account.seatId')} value={truncateId(s.seat_id)} />
                       <Meta
                         label={t('account.joined')}
-                        value={s.claimed_at ? new Date(s.claimed_at).toLocaleDateString(navigator.language) : '—'}
+                        value={s.claimed_at ? formatDate(s.claimed_at) : '—'}
                       />
                       <div>
                         <div className="field-label">{t('account.allocatedKeys')}</div>

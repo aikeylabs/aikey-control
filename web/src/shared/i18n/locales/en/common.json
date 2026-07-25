@@ -2281,6 +2281,20 @@
       "copied": "Copied",
       "copyTooltip": "Copy to clipboard"
     },
+    "usageTimeZone": {
+      "title": "Display time zone",
+      "description": "Controls visible dates and times across the Web Console and CLI, including personal usage boundaries. Organization reporting uses its separate policy.",
+      "label": "TIME ZONE",
+      "autoOption": "Auto (system: {{zone}})",
+      "placeholder": "Search IANA time zones",
+      "effective": "Currently effective: {{zone}}. This preference is stored on this device.",
+      "saving": "Saving…",
+      "saved": "✓ Saved. Reloading displayed times…",
+      "invalid": "Enter a valid IANA time zone, for example Asia/Shanghai.",
+      "saveFailed": "The preference could not be saved.",
+      "saveError": "✗ Save failed: {{msg}}",
+      "saveButton": "Save changes"
+    },
     "controlUrl": {
       "title": "Control URL",
       "description": "The team server your CLI and Web Console talk to. Changing this is equivalent to running aikey account set-url in your terminal.",
