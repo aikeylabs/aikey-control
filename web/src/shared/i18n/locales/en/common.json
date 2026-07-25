@@ -2336,7 +2336,8 @@
       "groupExitNote": "With fallback / url-test / load-balance, keep every member converging on the same exit node (members should differ only in how they reach it) so the exit IP stays constant; if members exit through different nodes, the exit IP changes when the group switches.",
       "overrideLabel": "Emergency: let this node’s upstream take over OAuth account traffic (override dedicated egress)",
       "overrideWarning": "Turn on only temporarily, when an admin-configured dedicated egress line is unstable and requests fail. While on, every OAuth pool account on this node routes through the node upstream above (or direct if none) and shares one exit IP — single-IP-per-account anti-ban is off on this node. Turn it back off once the line recovers.",
-      "multiNoteTeamCoexist": "It serves traffic WITHOUT a per-account egress (API KEY / VK); accounts that have their own account egress keep using it (they coexist)."
+      "multiNoteTeamCoexist": "It serves traffic WITHOUT a per-account egress (API KEY / VK); accounts that have their own account egress keep using it (they coexist).",
+      "proxyNotRunning": "The proxy service (aikey-proxy) is not running, so this cannot be tested or saved. Run `aikey proxy start` in a terminal, then retry."
     },
     "masterPassword": {
       "title": "Master Password",

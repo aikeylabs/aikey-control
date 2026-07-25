@@ -29,6 +29,7 @@
  * No horizontal dividers between cards — 24px vertical gap only.
  */
 import { useEffect, useState } from 'react';
+import { apiErrorMessage, isProxyUnavailable } from '@/shared/api/error-message';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { isSyntheticIdentityEmail, memberIdentityLine } from '@/shared/utils/member-identity';
@@ -114,10 +115,10 @@ async function probeTeamURL(url: string): Promise<ProbeStatus> {
       reachable?: boolean;
       status?: number;
       elapsed_ms?: number;
-      error?: string;
+      error?: unknown;
     };
     if (!res.ok) {
-      return { kind: 'fail', message: data.error ?? `HTTP ${res.status}` };
+      return { kind: 'fail', message: apiErrorMessage(data.error, `HTTP ${res.status}`) };
     }
     if (data.reachable) {
       return {
@@ -126,7 +127,7 @@ async function probeTeamURL(url: string): Promise<ProbeStatus> {
         elapsedMs: data.elapsed_ms ?? 0,
       };
     }
-    return { kind: 'fail', message: data.error ?? 'unreachable' };
+    return { kind: 'fail', message: apiErrorMessage(data.error, 'unreachable') };
   } catch (err) {
     return { kind: 'fail', message: String(err) };
   }
@@ -139,9 +140,9 @@ async function saveTeamURL(url: string): Promise<SaveStatus> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
     });
-    const data = (await res.json()) as { ok?: boolean; error?: string };
+    const data = (await res.json()) as { ok?: boolean; error?: unknown };
     if (res.ok && data.ok) return { kind: 'ok' };
-    return { kind: 'fail', message: data.error ?? `HTTP ${res.status}` };
+    return { kind: 'fail', message: apiErrorMessage(data.error, `HTTP ${res.status}`) };
   } catch (err) {
     return { kind: 'fail', message: String(err) };
   }
@@ -150,9 +151,9 @@ async function saveTeamURL(url: string): Promise<SaveStatus> {
 async function postLogout(): Promise<{ ok: boolean; message?: string }> {
   try {
     const res = await fetch('/system/logout', { method: 'POST' });
-    const data = (await res.json()) as { ok?: boolean; error?: string };
+    const data = (await res.json()) as { ok?: boolean; error?: unknown };
     if (res.ok && data.ok) return { ok: true };
-    return { ok: false, message: data.error ?? `HTTP ${res.status}` };
+    return { ok: false, message: apiErrorMessage(data.error, `HTTP ${res.status}`) };
   } catch (err) {
     return { ok: false, message: String(err) };
   }
@@ -1323,16 +1324,24 @@ function UpstreamProxyCard() {
         ok?: boolean;
         status?: number;
         elapsed_ms?: number;
-        error?: string;
+        error?: unknown;
       };
       if (!res.ok) {
-        setProbe({ kind: 'fail', message: data.error ?? `HTTP ${res.status}` });
+        // The relay answers 502 + PROXY_UNAVAILABLE when aikey-proxy isn't
+        // listening. That is not a bad input — it is "nothing is running" — so
+        // it gets its own actionable copy instead of a generic failure string.
+        setProbe({
+          kind: 'fail',
+          message: isProxyUnavailable(data.error)
+            ? t('settings.upstreamProxy.proxyNotRunning')
+            : apiErrorMessage(data.error, `HTTP ${res.status}`),
+        });
         return;
       }
       if (data.ok) {
         setProbe({ kind: 'ok', status: data.status ?? 0, ms: data.elapsed_ms ?? 0 });
       } else {
-        setProbe({ kind: 'fail', message: data.error ?? 'unreachable' });
+        setProbe({ kind: 'fail', message: apiErrorMessage(data.error, 'unreachable') });
       }
     } catch (e) {
       setProbe({ kind: 'fail', message: String(e) });
@@ -1348,9 +1357,14 @@ function UpstreamProxyCard() {
         credentials: 'same-origin',
         body: JSON.stringify({ url: trimmed }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: unknown };
       if (!res.ok) {
-        setSave({ kind: 'fail', message: data.error ?? `HTTP ${res.status}` });
+        setSave({
+          kind: 'fail',
+          message: isProxyUnavailable(data.error)
+            ? t('settings.upstreamProxy.proxyNotRunning')
+            : apiErrorMessage(data.error, `HTTP ${res.status}`),
+        });
         return;
       }
       setCurrentURL(trimmed);

@@ -2336,7 +2336,8 @@
       "groupExitNote": "用 fallback / url-test / load-balance 时，请让各成员收敛到同一个出口节点（成员之间只是到达方式不同），这样出口 IP 才恒定；若各成员出口不同，出口 IP 会随切换而变。",
       "overrideLabel": "应急：让本机上游接管 OAuth 账号流量（覆盖专属出口）",
       "overrideWarning": "仅在管理员配置的专属出口线路不稳定、导致请求失败时临时开启。开启后本机所有 OAuth 池账号将改走上方节点上游（无则直连），共用同一个出口 IP —— 一账号一 IP 的防封在本机临时失效；线路恢复后请关闭。",
-      "multiNoteTeamCoexist": "它作用于没有账号出口代理的流量（API KEY / VK）；有账号出口代理的账号仍走它自己的（两者共存）。"
+      "multiNoteTeamCoexist": "它作用于没有账号出口代理的流量（API KEY / VK）；有账号出口代理的账号仍走它自己的（两者共存）。",
+      "proxyNotRunning": "代理服务（aikey-proxy）未运行，所以无法测试或保存。请在终端运行 `aikey proxy start` 后重试。"
     },
     "masterPassword": {
       "title": "主密码",
