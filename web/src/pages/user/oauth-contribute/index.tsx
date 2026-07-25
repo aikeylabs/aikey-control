@@ -29,7 +29,6 @@ import {
   fetchAccountEgress,
   setAccountEgress,
   testAccountEgress,
-  saveAccountExitIP,
   type MyPoolAccount,
   type RoutedCredential,
   type MyOauthGroup,
@@ -806,7 +805,6 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   });
   const egressView: MemberEgressView | undefined =
     egressQ.data && !isTeamFetchError(egressQ.data) ? (egressQ.data as MemberEgressView) : undefined;
-  const [egressChangedSinceTest, setEgressChangedSinceTest] = useState(false);
   const [egressConfigOpen, setEgressConfigOpen] = useState(false);
   const [egressModalDraft, setEgressModalDraft] = useState('');
   const [egressModalDirty, setEgressModalDirty] = useState(false);
@@ -845,10 +843,9 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       setEgressTestedDraft('');
       setEgressDraftTest(null);
       setEgressConfigOpen(false);
-      // The authoritative save re-tested this exact spec and persisted its exit
-      // IP as the new baseline. The browser still has to run its own login-IP
-      // self-check before step 2 unlocks.
-      setEgressChangedSinceTest(false);
+      // The authoritative save re-tested this exact spec. Because the route
+      // changed, the server clears any stale account baseline; an administrator
+      // must test the new route before members receive a new trusted baseline.
       setIpTested(false);
       egressQ.refetch();
     },
@@ -892,14 +889,14 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   }
 
   // Exit-IP self-check state. ipTested gates login (req 4); currentIP vs baseline
-  // (egressView.last_exit_ip) drives the mismatch warning.
+  // (effective_exit_ip: account baseline or inherited group baseline) drives
+  // the mismatch warning. Baseline writes are administrator-only.
   const [ipTested, setIpTested] = useState(false);
   const [ipTesting, setIpTesting] = useState(false);
   const [currentIP, setCurrentIP] = useState('');
   const [ipErr, setIpErr] = useState('');
-  const baselineIP = (egressView?.last_exit_ip ?? '').trim();
+  const baselineIP = (egressView?.effective_exit_ip ?? egressView?.last_exit_ip ?? '').trim();
   const ipMismatch = ipTested && !!currentIP && !!baselineIP && currentIP !== baselineIP;
-  const noBaseline = ipTested && !!currentIP && !baselineIP;
 
   async function onTestExitIP() {
     setIpTesting(true);
@@ -915,18 +912,6 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       setIpTesting(false);
     }
   }
-
-  const saveBaselineMut = useMutation({
-    mutationFn: () => saveAccountExitIP(account.credential_id, currentIP),
-    onSuccess: (res) => {
-      if (isTeamFetchError(res) || (res && typeof res === 'object' && 'kind' in res)) {
-        setIpErr(t('oauthContribute.baselineSaveFailed'));
-        return;
-      }
-      setEgressChangedSinceTest(false);
-      egressQ.refetch(); // baseline now == currentIP → mismatch clears
-    },
-  });
 
   // Login gate confirm dialog (req 4): a mismatched exit IP turns the login button
   // red; clicking it opens this confirm instead of logging in directly.
@@ -1085,8 +1070,10 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
           </span>
           <span className="text-[11px] font-mono" style={{ color: 'var(--foreground)' }}>
             {baselineIP
-              ? t('oauthContribute.baselineIs', { ip: baselineIP })
-              : t('oauthContribute.baselineNone')}
+              ? egressView?.exit_ip_scope === 'group'
+                ? t('oauthContribute.baselineInherited', { ip: baselineIP })
+                : t('oauthContribute.baselineAccount', { ip: baselineIP })
+              : t('oauthContribute.baselineAdminPending')}
           </span>
           <button
             type="button"
@@ -1105,17 +1092,12 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
               {ipMismatch ? ` — ${t('oauthContribute.exitIpMismatch')}` : ''}
             </span>
           )}
-          {(noBaseline || egressChangedSinceTest) && ipTested && currentIP && (
-            <button
-              type="button"
-              className="row-use-btn"
-              onClick={() => saveBaselineMut.mutate()}
-              disabled={saveBaselineMut.isPending}
-            >
-              {t('oauthContribute.saveBaseline')}
-            </button>
-          )}
         </div>
+        {!baselineIP && (
+          <p className="text-[11px] font-mono" style={{ color: 'var(--warning, #f97316)' }}>
+            {t('oauthContribute.baselineAdminHint')}
+          </p>
+        )}
         {ipErr && <p className="text-[11px]" style={{ color: '#fca5a5' }}>{t('oauthContribute.exitIpTestFailed')}: {ipErr}</p>}
         <p className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>
           {t('oauthContribute.egressGuideNote')}

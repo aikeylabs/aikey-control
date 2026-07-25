@@ -131,7 +131,12 @@ export interface MemberEgressView {
   egress_proxy_url?: string; // owner pool only
   effective_egress_url?: string; // resolved own override ?? group default; both pool types
   has_effective_egress: boolean;
+  /** Raw account baseline retained for wire compatibility. */
   last_exit_ip?: string;
+  /** Baseline members should compare against: account override, inherited group,
+   * or absent. Written only by administrators. */
+  effective_exit_ip?: string;
+  exit_ip_scope?: 'account' | 'group' | 'none';
 }
 
 export interface MemberEgressTestResult {
@@ -165,15 +170,6 @@ export function testAccountEgress(credentialID: string, egressProxyURL: string) 
     `/accounts/me/oauth-accounts/${encodeURIComponent(credentialID)}/egress/test`,
     { egress_proxy_url: egressProxyURL },
     20_000,
-  );
-}
-
-/** saveAccountExitIP overwrites the exit-IP baseline for the login-IP self-check
- * (req 5: member first test after changing egress). */
-export function saveAccountExitIP(credentialID: string, exitIP: string) {
-  return teamPutJSON<{ credential_id: string; last_exit_ip: string }>(
-    `/accounts/me/oauth-accounts/${encodeURIComponent(credentialID)}/exit-ip`,
-    { exit_ip: exitIP },
   );
 }
 

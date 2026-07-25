@@ -83,6 +83,7 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizRefreshTokenRevoked, CodeBizLoginSessionDenied,
 		CodeBizSSOTenantMismatch,
 		CodeBizOauthMemberTokenForbidden,
+		CodeBizOauthExitIPAdminManaged,
 		CodeBizAgentGroupNotMember, CodeBizAgentPoolNotOwner,
 		// Refused BY DESIGN (form-①): still a 403, but the code tells the client
 		// it's policy, not a permission fault (2026-07-13).

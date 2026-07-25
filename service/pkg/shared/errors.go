@@ -385,6 +385,12 @@ const (
 	// is NOT in any group they are an active member of. Defense in depth on the
 	// write-back path (R14.1 membership gate, fail-closed). 403.
 	CodeBizOauthMemberTokenForbidden = "BIZ_OAUTH_MEMBER_TOKEN_FORBIDDEN"
+	// CodeBizOauthExitIPAdminManaged: a member attempted to write an OAuth
+	// account's egress exit-IP baseline. Baselines are administrator-managed so
+	// every member compares against one trusted control-plane measurement; the
+	// member may still test their browser IP and edit an allowed account egress.
+	// 403, and the route remains mounted for backward-compatible clients.
+	CodeBizOauthExitIPAdminManaged = "BIZ_OAUTH_EXIT_IP_ADMIN_MANAGED"
 	// CodeBizOauthLoginCredNotProvisioned: a member pulled the routed account's
 	// login credential (RW7 GET /accounts/me/group-routed-credential) but the admin
 	// has not stored a login email/password for that account yet. 404.
@@ -624,6 +630,13 @@ func BizOauthGroupDisabled() *DomainError {
 func BizOauthMemberTokenForbidden() *DomainError {
 	return &DomainError{Code: CodeBizOauthMemberTokenForbidden,
 		Message: "not an active member of a group containing this account"}
+}
+
+// BizOauthExitIPAdminManaged tells an older member client that the still-mounted
+// baseline write route is now intentionally read-only for members.
+func BizOauthExitIPAdminManaged() *DomainError {
+	return &DomainError{Code: CodeBizOauthExitIPAdminManaged,
+		Message: "OAuth account exit-IP baselines are managed by an administrator; ask an administrator to test this account's egress"}
 }
 
 // BizOauthLoginCredNotProvisioned — the routed account has no admin-stored login

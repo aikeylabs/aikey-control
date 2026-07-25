@@ -192,7 +192,7 @@ func handleProbeTeamURL(logger *slog.Logger) http.HandlerFunc {
 		// Dedicated http.Client per request — no connection pooling
 		// across probes since each user-typed URL is potentially a
 		// different host with different TLS state.
-		client := &http.Client{Timeout: 5 * time.Second}
+		client := newTeamProbeClient()
 		start := time.Now()
 		resp, err := client.Do(req)
 		elapsedMs := time.Since(start).Milliseconds()
@@ -224,6 +224,28 @@ func handleProbeTeamURL(logger *slog.Logger) http.HandlerFunc {
 			"elapsed_ms": elapsedMs,
 		})
 	}
+}
+
+// newTeamProbeClient builds the http.Client used by the "Test connectivity"
+// probe for the Control Service URL.
+//
+// Why Proxy=nil (must NOT honor HTTP_PROXY/HTTPS_PROXY): this probe is a
+// diagnostic that must mirror the REAL team-server client's network path. The
+// real client is the Rust CLI PlatformClient (ureq), which connects DIRECTLY to
+// the team URL and bypasses the system proxy (see aikey-cli
+// connectivity/runtime.rs + bugfix
+// 20260525-aikey-cli-install-bypasses-proxy-aware-agent.md). If this probe used
+// http.DefaultTransport (Proxy: ProxyFromEnvironment) it would route through the
+// user's system proxy (e.g. Clash) while the real CLI does not — making the test
+// lie: green-through-proxy while the CLI fails direct, or red-through-a-broken-
+// proxy while the CLI would connect fine. Clone DefaultTransport to keep its
+// sane dial/TLS timeouts, then strip the proxy only.
+//
+// Regression guard: TestNewTeamProbeClient_BypassesSystemProxy asserts Proxy==nil.
+func newTeamProbeClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	return &http.Client{Timeout: 5 * time.Second, Transport: transport}
 }
 
 func handleDisplayTimeZone(invoke func(context.Context, *string) (string, error), logger *slog.Logger) http.HandlerFunc {
