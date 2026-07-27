@@ -33,6 +33,7 @@ import { deliveryApi, routedGroupAccount, type UserKeyDTO } from '@/shared/api/u
 import { vaultApi, type VaultListData } from '@/shared/api/user/vault';
 import { usageApi, type TimelinePoint, type ProtocolTotal, type HourlyPoint, type RecentRequest } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import { formatDate, formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import { getEffectiveUsageTimeZone, usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
@@ -218,7 +219,7 @@ export default function UserOverviewPage() {
   // side via the `<control-panel-url>` sentinel-gated CORS on
   // /api/user/vault/status. Only the team URL `aikey login` wrote can
   // read; everything else is still 2026-04-24 same-origin only.
-  const { data: vaultStatus } = useQuery({
+  const { data: vaultStatus, error: vaultStatusError } = useQuery({
     queryKey: ['vault-status', dataScope],
     queryFn: crossClient
       ? async () => (await crossClient.get('/api/user/vault/status')).data
@@ -262,10 +263,10 @@ export default function UserOverviewPage() {
   // returns the signed-in member, on Personal it returns the local identity.
   // Correct in both, and the same source the shell's sidebar uses, so the
   // greeting and the sidebar can no longer disagree.
-  const { data: identity } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
+  const { data: identity, error: identityError } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   // Name source, same as the shell's — see mySeatsForIdentity for why the
   // bridge path cannot answer this.
-  const { data: identitySeatsRaw } = useQuery({
+  const { data: identitySeatsRaw, error: identitySeatsError } = useQuery({
     queryKey: ['my-seats', 'identity'],
     queryFn: userAccountsApi.mySeatsForIdentity,
     retry: 1,
@@ -276,7 +277,7 @@ export default function UserOverviewPage() {
   // for FE-compat). On A side this query returns []; on B side it
   // returns real org_seats rows. Cross-fetch to A is pointless (always
   // empty), so we explicitly stay same-origin.
-  const { data: rawSeats } = useQuery({
+  const { data: rawSeats, error: rawSeatsError } = useQuery({
     queryKey: ['my-seats', 'local'],
     queryFn: userAccountsApi.mySeats,
   });
@@ -307,12 +308,12 @@ export default function UserOverviewPage() {
       return false;
     }
   }, []);
-  const { data: rawKeys, isLoading: keysLoading } = useQuery({
+  const { data: rawKeys, isLoading: keysLoading, error: rawKeysError } = useQuery({
     queryKey: ['my-all-keys', 'local'],
     queryFn: deliveryApi.allKeys,
     enabled: teamKeysLoggedIn,
   });
-  const { data: rawPending } = useQuery({
+  const { data: rawPending, error: rawPendingError } = useQuery({
     queryKey: ['my-pending-keys', 'local'],
     queryFn: deliveryApi.pendingKeys,
     enabled: teamKeysLoggedIn,
@@ -329,7 +330,7 @@ export default function UserOverviewPage() {
   // unwrapped from the `{status:"ok", data:{...}}` envelope by
   // vaultApi.list). The cross-fetch path must do the same envelope
   // unwrap.
-  const { data: vaultList } = useQuery<VaultListData | null>({
+  const { data: vaultList, error: vaultListError } = useQuery<VaultListData | null>({
     queryKey: ['user-overview-vault', dataScope],
     queryFn: crossClient
       ? async (): Promise<VaultListData | null> => {
@@ -569,6 +570,17 @@ export default function UserOverviewPage() {
       {/* Full-width layout matches usage-ledger / my-keys / pending-keys.
           Only reading-focused pages (account, referrals) cap width. */}
       <div className="space-y-5">
+        {/* Aggregated read-failure block (2026-07-26 silent-failure project):
+            every query's error on this page, deduped by code, rendered with the
+            actionable ApiErrorDisplay. Keeps the cards below from passing off a
+            401/CORS/500 as "no data". meError is NOT included — it already
+            drives the dedicated team-session-expired banner above. */}
+        <PageQueryErrors sources={[
+          vaultStatusError, identityError, identitySeatsError, rawSeatsError,
+          rawKeysError, rawPendingError, vaultListError,
+          usageTimeline.error, usageProtocols.error, usageToday.error,
+          recentRequests.error,
+        ]} />
         {/* First-run banner: vault not yet initialised. Replaces the earlier
             unconditional redirect to /user/vault — most of this page (usage
             charts, seats, auto-claim) doesn't depend on the vault, so push

@@ -33,6 +33,7 @@ import { formatDateShort, formatRelativeTime } from '@/shared/utils/datetime-int
 import { usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
 import { formatCost } from '@/shared/utils/formatCost';
 import { CostCell } from '@/shared/ui/CostCell';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 // Keep in sync with pages/user/overview/index.tsx's PROVIDER_COLORS.
 const PROVIDER_COLORS: Record<string, string> = {
@@ -251,7 +252,7 @@ export default function UserUsageLedgerPage() {
   const startDate = isHourly ? usageCalendarDateDaysAgo(0) : usageCalendarDateDaysAgo(range);
   const endDate = usageCalendarDateDaysAgo(0);
 
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
+  const { data: me, error: meError } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   const seats = useQuery({
     queryKey: ['user-seats'],
     queryFn: () => userAccountsApi.mySeats(),
@@ -546,6 +547,13 @@ export default function UserUsageLedgerPage() {
   return (
     <div className="usage-page p-6">
       <style>{USAGE_CSS}</style>
+
+      {/* Aggregated read-failure block — see PageQueryErrors doc. Placed above
+          the title so a dead backend cannot hide behind eight zeroed charts. */}
+      <PageQueryErrors sources={[
+        meError, seats.error, timeline.error, protocolTimeline.error,
+        protocols.error, byKey.error, byApp.error, byAgent.error,
+      ]} />
 
       {/* Title row — mb-6 gap mirrors the shared PageHeader component
           used across master pages. */}

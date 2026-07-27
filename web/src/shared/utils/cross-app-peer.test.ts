@@ -90,6 +90,31 @@ describe('resolveCrossAppPeer — Personal side under a gateway (peer stays remo
   });
 });
 
+describe('resolveCrossAppPeer — gateway re-poison loop (2026-07-27)', () => {
+  it('keeps the discovery-backed peer and heals the OWN key instead', () => {
+    // The shipped loop: a browser-cached pre-fix bundle re-wrote the own key
+    // (personal-base-url=:3000); the first heal draft then deleted the CORRECT
+    // peer, discovery rewrote it, the next read deleted it again — the sidebar
+    // lost every team entry ("登录之后菜单少了").
+    const r = resolveCrossAppPeer({
+      gatewayActive: true, peerServedByThisOrigin: false, currentOrigin: ORIGIN,
+      storedPeer: TEAM, storedOwn: TEAM, fallback: null,
+    });
+    expect(r.url, 'the peer must survive — it is discovery-backed').toBe(TEAM);
+    expect(r.heal, 'must NOT delete the peer key').toBe(false);
+    expect(r.healOwn, 'must delete the stale own key (the other bundle never persists it under a gateway)').toBe(true);
+  });
+
+  it('without a gateway, peer===own still rejects the peer (original rule 2)', () => {
+    const r = resolveCrossAppPeer({
+      gatewayActive: false, peerServedByThisOrigin: false, currentOrigin: ORIGIN,
+      storedPeer: TEAM, storedOwn: TEAM, fallback: null,
+    });
+    expect(r.url).toBeNull();
+    expect(r.heal).toBe(true);
+  });
+});
+
 describe('resolveCrossAppPeer — no gateway', () => {
   it('uses a valid cached peer', () => {
     const r = resolveCrossAppPeer({

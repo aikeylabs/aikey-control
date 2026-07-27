@@ -22,6 +22,7 @@ import { runtimeConfig } from '@/app/config/runtime';
 import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import { formatTime } from '@/shared/utils/datetime-intl';
 import { usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 function fmtTok(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -71,7 +72,7 @@ export default function UserPerformancePage() {
   // these links). Carries the row's dimension as a filter param.
   const drillTo = (params: Record<string, string>) =>
     navigate(`/user/usage-detail?${new URLSearchParams(params).toString()}`);
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
+  const { data: me, error: meError } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
 
   // Same usage-identity logic as Overview (see overview/index.tsx for rationale).
   const accountId = me?.account_id;
@@ -373,6 +374,8 @@ export default function UserPerformancePage() {
   return (
     <div className="performance-page p-6">
       <style>{COST_CSS}</style>
+
+      <PageQueryErrors sources={[meError, usageTimeline.error, byKeyRecent.error, byModelRecent.error, bySessionRecent.error]} />
 
       {/* Title row — mirrors usage-ledger's PageHeader idiom: lg bold mono
           title + 11.5px muted subtitle. No range selector here; the page is

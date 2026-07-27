@@ -12,13 +12,14 @@ import { PageHeader } from '@/shared/ui/PageHeader';
 import { Badge } from '@/shared/ui/Badge';
 import { copyText } from '@/shared/utils/clipboard';
 import { formatDate } from '@/shared/utils/datetime-intl';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 export default function UserReferralsPage() {
   const { t } = useTranslation();
   const user = useUserAuthStore((s) => s.user);
   const [copied, setCopied] = useState(false);
 
-  const { data: referrals = [], isLoading } = useQuery({
+  const { data: referrals = [], isLoading, error: referralsError } = useQuery({
     queryKey: ['my-referrals'],
     queryFn: userAccountsApi.myReferrals,
   });
@@ -38,6 +39,7 @@ export default function UserReferralsPage() {
   return (
     <div className="p-6 space-y-6 max-w-3xl">
       <PageHeader title={t('referrals.pageTitle')} description={t('referrals.pageDescription')} />
+      <PageQueryErrors sources={[referralsError]} />
 
       {/* Invite link card */}
       <div

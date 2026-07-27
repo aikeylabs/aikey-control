@@ -49,6 +49,7 @@ import { copyText } from '@/shared/utils/clipboard';
 // virtual-keys / vault pages.
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { providerBrandColor } from '../_shared/provider-brand';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 // Provider display profile only. Login provider + flow are intentionally absent:
 // master resolves and binds those at session initialization. Keeping display
@@ -297,6 +298,9 @@ export default function OAuthContributePage() {
       <style>{KEYS_PAGE_CSS}</style>
       <div className="flex-1 overflow-y-auto">
         <div className="px-6 py-5 space-y-5">
+          {/* Sub-component queries (RoutedActionPanel / AddAccountModal) are
+              covered by the global DataFetchErrorBanner. */}
+          <PageQueryErrors sources={[ownerGroupsQ.error, listQ.error]} />
           {/* Header strip — icon + title + one-line description. */}
           <section className="flex items-center gap-3">
             <div

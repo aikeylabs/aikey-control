@@ -616,7 +616,7 @@ export default function UserVaultPage() {
   const qc = useQueryClient();
 
   // Vault session (shared with /user/import).
-  const { data: vault, refetch: refetchVault, dataUpdatedAt } = useQuery({
+  const { data: vault, refetch: refetchVault, dataUpdatedAt, error: vaultStatusError } = useQuery({
     queryKey: ['vault-status'],
     queryFn: importApi.vaultStatus,
     refetchInterval: 10_000,
@@ -806,7 +806,7 @@ export default function UserVaultPage() {
   // having to read the raw stored base_url and second-guess what the
   // proxy will do with it. Same logic as aikey-proxy applyBaseURL stitch
   // (via pkg/providerroutes.Stitch). Cached aggressively.
-  const { data: rules } = useQuery({
+  const { data: rules, error: rulesError } = useQuery({
     queryKey: ['import-rules'],
     queryFn: importApi.rules,
     refetchOnWindowFocus: false,
@@ -1719,6 +1719,8 @@ export default function UserVaultPage() {
 
   return (
     <div className="vault-page vault-skin-v1 h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
+      {/* listError renders inline at the records list; these two would otherwise be silent. */}
+      <PageQueryErrors sources={[vaultStatusError, rulesError]} />
       <style>{VAULT_CSS}</style>
       <style>{VAULT_PAGE_SKIN_V1}</style>
 
@@ -7565,4 +7567,5 @@ function PinIcon(p: { className?: string; style?: React.CSSProperties }) { retur
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { providerBrandColor } from '../_shared/provider-brand';
 import { VAULT_PAGE_SKIN_V1 } from '../_shared/vault-page-skin';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 const VAULT_CSS = KEYS_PAGE_CSS;

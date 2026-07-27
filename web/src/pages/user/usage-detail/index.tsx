@@ -29,6 +29,7 @@ import { runtimeConfig } from '@/app/config/runtime';
 import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import { formatUsageDateTimeCompact, usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
 import { Pagination } from '@/shared/ui/Pagination';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 const PAGE_SIZE = 30;
 
@@ -105,7 +106,7 @@ export default function UserUsageDetailPage() {
   // backend order (newest first). Clicking a header switches the key; clicking
   // the active header toggles asc/desc.
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'time', dir: 'desc' });
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
+  const { data: me, error: meError } = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
 
   const accountId = me?.account_id;
   const isLocalMode = isLocalUsageScope(runtimeConfig);
@@ -212,6 +213,7 @@ export default function UserUsageDetailPage() {
 
   return (
     <div className="ud-page p-6">
+      <PageQueryErrors sources={[meError, q.error]} />
       {/* Header: icon tile + title + meta row */}
       <header className="ud-head">
         <div className="ud-icon">

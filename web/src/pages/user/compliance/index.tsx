@@ -25,6 +25,7 @@ import { formatDateTime } from '@/shared/utils/datetime-intl';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterBar } from '@/shared/ui/FilterBar';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 const PAGE_SIZE = 15;
 
@@ -351,6 +352,8 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
           </div>
         }
       />
+      {/* events list error renders in-table (isError row); packsQuery would be silent */}
+      <PageQueryErrors sources={[packsQuery.error]} />
 
       {/* Toggle status line: surface a save error / vault-lock / not-installed
           hint. Quiet when the switch is ready + idle. */}

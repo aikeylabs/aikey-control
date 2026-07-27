@@ -10,6 +10,7 @@ import { userAccountsApi } from '@/shared/api/user/accounts';
 import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
 import { SeatPendingBanner } from '@/shared/components/SeatPendingBanner';
+import { DataFetchErrorBanner } from '@/shared/components/DataFetchErrorBanner';
 import { memberIdentity } from '@/shared/utils/member-identity';
 import {
   OWN_MENU,
@@ -764,6 +765,19 @@ export function UserShell() {
     // breaks click-through on unauth state. See bugfix
     // "20260603-trial-single-binary-detection-stale-cache.md".
     if (runtimeConfig.controlPlaneMode === 'trial') return true;
+    // 2026-07-27: a GATEWAY-FORWARDED team page must never read as composed.
+    // `teamGateway` is the explicit discriminator (injected only into forwarded
+    // B pages — see runtime.ts); the origin fallback below CANNOT distinguish
+    // this case, because under the gateway the peer legitimately IS this origin
+    // (resolveCrossAppPeer rule 1). Before the 2026-07-26 peer fix this was
+    // masked by the poisoned cache (:3000 ≠ :8090 → false by accident); healing
+    // the cache exposed it: the team bundle treated itself as the Trial single
+    // binary, rendered personal-side entries (team-oauth …) as SPA NavLinks,
+    // and clicking them hit the team router's error boundary — "Unexpected
+    // Application Error! 404". Forwarded pages must keep FULL-DOCUMENT links
+    // (relative, via getCrossAppLinkBase()==='') so the gateway routes them to
+    // the local bundle. 项目原则: 禁止从可推断信号判定网关伪装场景。
+    if (runtimeConfig.teamGateway) return false;
     if (!otherBaseUrl) return false;
     try {
       return new URL(otherBaseUrl).origin === window.location.origin;
@@ -1597,6 +1611,12 @@ export function UserShell() {
               because the member can reach any of them and none of them work.
               Dismissible — only an administrator can resolve it. */}
           <SeatPendingBanner />
+          {/* Global net for silently-failing reads (2026-07-26): any query in
+              error state surfaces here, so a 401/CORS/500 can never again
+              masquerade as "暂无数据". Per-page ApiErrorDisplay blocks give the
+              precise message; this layer is the one that doesn't depend on a
+              page author remembering. */}
+          <DataFetchErrorBanner />
           <Outlet />
         </div>
       </main>

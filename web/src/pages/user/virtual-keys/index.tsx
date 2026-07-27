@@ -54,6 +54,7 @@ import { formatDate } from '@/shared/utils/datetime-intl';
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { providerBrandColor } from '../_shared/provider-brand';
 import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl, buildCrossAppUrl, isTeamGatewayActive, getCrossAppLinkBase } from '@/shared/cross-app-menu';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 // Phase 3B R23 revised (2026-05-11): on B (team server) the Team Keys
 // drawer cross-fetches Personal A's vault.list to surface the
@@ -571,6 +572,8 @@ export default function UserVirtualKeysPage() {
 
   return (
     <div className="vault-page h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
+      {/* main list error renders inline below; teamVaultQuery would otherwise be silent */}
+      <PageQueryErrors sources={[teamVaultQuery.error]} />
       <style>{KEYS_PAGE_CSS}</style>
 
       <div className="flex-1 overflow-y-auto">

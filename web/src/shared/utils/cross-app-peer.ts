@@ -102,6 +102,17 @@ export interface PeerResolution {
   persist: boolean;
   /** True when the stored peer value was poison and must be DELETED. */
   heal: boolean;
+  /**
+   * True when THIS SIDE'S OWN key (storedOwn) is the poisoned one and must be
+   * deleted instead. Gateway case only: the other bundle never persists its
+   * peer key under a gateway (rule 1), so a stray own-key EQUAL to our peer is
+   * definitionally stale poison — e.g. a browser-cached PRE-FIX bundle re-ran
+   * the legacy migration. Deleting our PEER here (the first heal draft did)
+   * destroys the one discovery-backed correct value and loops forever:
+   * discovery rewrites it, the next read deletes it again — that loop shipped
+   * as "登录之后菜单少了" (2026-07-27).
+   */
+  healOwn: boolean;
   /** Human-readable reason when something was rejected; for a WARN log. */
   rejected?: string;
 }
@@ -163,15 +174,25 @@ export function resolveCrossAppPeer(input: PeerResolutionInput): PeerResolution 
       // Drop a poisoned leftover even though we no longer read it, so the bad
       // value cannot resurface through some other consumer.
       heal: !!(poisoned && isPoison(poisoned, storedOwn, currentOrigin, true)),
+      healOwn: false,
     };
   }
 
   const peer = usable(storedPeer);
   if (peer) {
+    // Gateway, peer-remote side (A): if the OTHER bundle's key equals our peer,
+    // THAT key is the poison — under a gateway the other bundle never persists
+    // it (rule 1), so it can only be a stale leftover (e.g. a browser-cached
+    // pre-fix bundle re-running the dead legacy migration). Our peer is
+    // discovery-backed (/system/team-url); keep it, delete the stray own-key.
+    if (gatewayActive && storedOwn && strip(storedOwn) === peer) {
+      return { url: peer, source: 'stored', persist: false, heal: false, healOwn: true,
+        rejected: `this side's own key duplicates the peer (${peer}) under a gateway — the other bundle never persists it, deleting the stale own-key` };
+    }
     const bad = isPoison(peer, storedOwn, currentOrigin, false);
-    if (!bad) return { url: peer, source: 'stored', persist: false, heal: false };
+    if (!bad) return { url: peer, source: 'stored', persist: false, heal: false, healOwn: false };
     // Poison: fall through to the fallback, and delete so we stop re-reading it.
-    return { url: fallback ? strip(fallback) : null, source: fallback ? 'fallback' : 'none', persist: false, heal: true, rejected: bad };
+    return { url: fallback ? strip(fallback) : null, source: fallback ? 'fallback' : 'none', persist: false, heal: true, healOwn: false, rejected: bad };
   }
 
   // Legacy migration — only valid without a gateway (premise: separate origins).
@@ -179,10 +200,10 @@ export function resolveCrossAppPeer(input: PeerResolutionInput): PeerResolution 
   const legacy = usable(storedLegacy);
   if (legacy) {
     const bad = isPoison(legacy, storedOwn, currentOrigin, false);
-    if (!bad) return { url: legacy, source: 'legacy-migrated', persist: true, heal: false };
-    return { url: fallback ? strip(fallback) : null, source: fallback ? 'fallback' : 'none', persist: false, heal: false, rejected: bad };
+    if (!bad) return { url: legacy, source: 'legacy-migrated', persist: true, heal: false, healOwn: false };
+    return { url: fallback ? strip(fallback) : null, source: fallback ? 'fallback' : 'none', persist: false, heal: false, healOwn: false, rejected: bad };
   }
 
-  if (fallback) return { url: strip(fallback), source: 'fallback', persist: false, heal: false };
-  return { url: null, source: 'none', persist: false, heal: false };
+  if (fallback) return { url: strip(fallback), source: 'fallback', persist: false, heal: false, healOwn: false };
+  return { url: null, source: 'none', persist: false, heal: false, healOwn: false };
 }

@@ -19,6 +19,7 @@ import { userAccountsApi, type SeatSummaryDTO } from '@/shared/api/user/accounts
 import { deliveryApi } from '@/shared/api/user/delivery';
 import { formatDate, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import { memberIdentityLine } from '@/shared/utils/member-identity';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 // Phase 3B R22 (2026-05-11) superseded R20: the cross-server "other
 // side account" card was removed. R22's `crossAppPreferred` flag on
@@ -70,6 +71,7 @@ export default function MyAccountPage() {
 
   return (
     <div className="account-page p-6">
+      <PageQueryErrors sources={[meQuery.error, seatsQuery.error, identitySeatsQuery.error, keysQuery.error]} />
       <style>{ACCOUNT_CSS}</style>
 
       {/* Full-width layout — was capped at max-w-[900px] mx-auto but on

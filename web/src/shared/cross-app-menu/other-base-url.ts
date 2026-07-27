@@ -70,6 +70,7 @@ export function getOtherBaseUrl(): string | null {
   }
   try {
     if (r.heal) localStorage.removeItem(STORAGE_KEY);
+    if (r.healOwn) localStorage.removeItem(OWN_SIDE_KEY);
   } catch {
     /* localStorage disabled — resolution above is still correct for this render. */
   }

@@ -2786,5 +2786,11 @@
         "cancel": "取消"
       }
     }
+  },
+  "dataFetchError": {
+    "title": "部分数据加载失败，页面显示可能不完整",
+    "titleAuth": "会话已失效，页面数据无法加载",
+    "more": "另有 {{count}} 类错误",
+    "dismiss": "关闭"
   }
 }

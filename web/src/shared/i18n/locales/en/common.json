@@ -2786,5 +2786,11 @@
         "cancel": "Cancel"
       }
     }
+  },
+  "dataFetchError": {
+    "title": "Some data failed to load — this page may be incomplete",
+    "titleAuth": "Session invalid — page data could not load",
+    "more": "{{count}} more error type(s)",
+    "dismiss": "Dismiss"
   }
 }

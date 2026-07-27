@@ -59,14 +59,23 @@ describe('A-side getOtherBaseUrl', () => {
     expect(await getOtherBaseUrl(), 'null is the cross-app menu VISIBILITY signal — a fallback here would show team entries to users with no team').toBeNull();
   });
 
-  it('heals the mirror poison: peer equal to this side own cached URL', async () => {
-    // The observed production state was BOTH keys holding the team URL. A sees
-    // peer === own and must drop its own (team) key so discovery can refill it.
+  it('under a gateway, keeps the peer and heals the stale OWN key (2026-07-27 loop fix)', async () => {
+    // Both keys = :3000. The own key can only be a stale leftover (a cached
+    // pre-fix bundle re-ran the dead legacy migration) — the peer is
+    // discovery-backed and must survive. The first heal draft deleted the peer
+    // instead, and the discovery→delete loop emptied the team menu.
+    const store = installStorage({ [GATEWAY_KEY]: '1', [PEER_KEY]: TEAM, [OWN_KEY]: TEAM }, LOCAL);
+    expect(await getOtherBaseUrl(), 'peer must survive').toBe(TEAM);
+    expect(store.get(PEER_KEY), 'peer key must NOT be deleted').toBe(TEAM);
+    expect(store.has(OWN_KEY), 'stale own key must be deleted').toBe(false);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('without a gateway, peer===own still rejects the peer (original rule 2)', async () => {
     const store = installStorage({ [PEER_KEY]: TEAM, [OWN_KEY]: TEAM }, LOCAL);
     expect(await getOtherBaseUrl()).toBeNull();
-    expect(store.has(PEER_KEY), 'poisoned peer key must be deleted so /system/team-url can repopulate it').toBe(false);
-    expect(store.get(OWN_KEY), 'healing must not touch the other side\'s key').toBe(TEAM);
-    expect(warn).toHaveBeenCalled();
+    expect(store.has(PEER_KEY)).toBe(false);
+    expect(store.get(OWN_KEY)).toBe(TEAM);
   });
 
   it('rejects a peer pointing at this very origin', async () => {

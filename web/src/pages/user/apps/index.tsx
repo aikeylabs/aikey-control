@@ -43,6 +43,7 @@ import { importApi } from '@/shared/api/user/import';
 import { VaultStatusPill } from '../_shared/VaultStatusPill';
 import { AddAppModal } from './AddAppModal';
 import { TokenRevealModal } from './TokenRevealModal';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -460,6 +461,7 @@ export default function UserAppsListPage() {
 
   return (
     <section className="p-6" aria-labelledby="apps-title">
+      <PageQueryErrors sources={[appsQuery.error, healthQuery.error, vaultQuery.error]} />
       {/* Header */}
       <header className="mb-6 flex items-start justify-between flex-wrap gap-3">
         <div>

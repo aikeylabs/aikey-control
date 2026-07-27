@@ -48,6 +48,7 @@ import {
   useHookWireRcModal,
 } from '@/shared/components/HookWireRcModal';
 import { ProviderMultiSelect, providerChipClassFromId } from '@/shared/ui/ProviderMultiSelect';
+import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 type PageState = 'empty' | 'working' | 'done';
 
@@ -1056,7 +1057,7 @@ export default function UserBulkImportPage() {
   }, []);
 
   // Vault status polled on mount + after unlock/lock mutations.
-  const { data: vault, dataUpdatedAt: vaultFetchedAt, refetch: refetchVault } = useQuery({
+  const { data: vault, dataUpdatedAt: vaultFetchedAt, refetch: refetchVault, error: vaultStatusError } = useQuery({
     queryKey: ['vault-status'],
     queryFn: importApi.vaultStatus,
     refetchOnWindowFocus: false,
@@ -1065,7 +1066,7 @@ export default function UserBulkImportPage() {
   // Static rules feed (layer versions + provider_routes table). Drives the
   // Use-Official auto-fill rules in parseMut.onSuccess and changeProtocols.
   // Cached aggressively — the YAML behind it does not change between refreshes.
-  const { data: rules } = useQuery({
+  const { data: rules, error: rulesError } = useQuery({
     queryKey: ['import-rules'],
     queryFn: importApi.rules,
     refetchOnWindowFocus: false,
@@ -1507,6 +1508,7 @@ export default function UserBulkImportPage() {
     // intrinsic content height. With h-full + min-h-0 the body can flex to
     // fill the viewport, which lets the Source pane respect its 80vh floor.
     <div className="import-page h-full flex flex-col min-w-0 min-h-0 overflow-hidden" data-state={state} data-vault={unlocked ? 'unlocked' : 'locked'}>
+      <PageQueryErrors sources={[vaultStatusError, rulesError]} />
       <style>{IMPORT_CSS}</style>
 
       {/* Top header slot is provided by UserShell; we render only banners + body. */}
