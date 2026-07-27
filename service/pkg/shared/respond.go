@@ -141,7 +141,7 @@ func DomainErrorHTTPStatus(code string) int {
 		return http.StatusBadGateway
 
 	// ── 503 Service Unavailable ───────────────────────────────────────────────
-	case CodeExtProviderUnavailable:
+	case CodeExtProviderUnavailable, CodeSysAllocationEngineUnavailable:
 		return http.StatusServiceUnavailable
 
 	// ── 500 Internal Server Error (default) ──────────────────────────────────

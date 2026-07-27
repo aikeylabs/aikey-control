@@ -47,6 +47,7 @@ func TestDomainErrorStatus_OAuthPoolAndOnlineAgentCodes(t *testing.T) {
 		{CodeBizOauthGroupProtocolMixed, http.StatusUnprocessableEntity},
 		{CodeBizOauthGroupProtocolInvalid, http.StatusUnprocessableEntity},
 		{CodeBizOauthGroupBotSeat, http.StatusUnprocessableEntity},
+		{CodeSysAllocationEngineUnavailable, http.StatusServiceUnavailable},
 		{CodeBizAgentGroupNotMember, http.StatusForbidden},
 		{CodeBizAgentPoolNotOwner, http.StatusForbidden},
 		{CodeBizAgentLimitReached, http.StatusConflict},
@@ -87,5 +88,26 @@ func TestDomainErrorResponse_RegisteredAndUnknownCodes(t *testing.T) {
 				t.Fatalf("response error = %v, want %s", got, tt.code)
 			}
 		})
+	}
+}
+
+func TestSysAllocationEngineUnavailable_ResponseContract(t *testing.T) {
+	rec := httptest.NewRecorder()
+	DomainErrorResponse(rec, SysAllocationEngineUnavailable("account-1", "database detail"))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("HTTP status = %d, want 503; body=%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["error"] != CodeSysAllocationEngineUnavailable {
+		t.Fatalf("error code = %v, want %s", body["error"], CodeSysAllocationEngineUnavailable)
+	}
+	if body["account_id"] != "account-1" {
+		t.Fatalf("safe account_id missing from response: %#v", body)
+	}
+	if _, leaked := body["db_detail"]; leaked {
+		t.Fatalf("internal db_detail leaked to client: %#v", body)
 	}
 }

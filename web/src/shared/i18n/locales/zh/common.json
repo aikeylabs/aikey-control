@@ -52,6 +52,7 @@
   },
   "pagination": {
     "range": "{{start}}–{{end}} / 共 {{total}}",
+    "pageN": "第 {{n}} 页",
     "prev": "← 上一页",
     "next": "下一页 →"
   },
@@ -877,9 +878,6 @@
     "exNoReason": "无错误详情",
     "exEndpoint": "端点",
     "exModel": "模型",
-    "pageRange": "第 {{from}}-{{to}} 条 / 共 {{total}} 条",
-    "prev": "上一页",
-    "next": "下一页",
     "tokUncached": "未缓存",
     "tokCreation": "缓存创建",
     "tokCached": "已缓存",
@@ -2515,10 +2513,6 @@
     "loading": "加载中…",
     "loadFailed": "加载失败。",
     "noEvents": "暂无合规事件。",
-    "pageRange": "第 {{from}}–{{to}} 条 / 共 {{total}} 条",
-    "pageOf": "{{page}} / {{pages}}",
-    "prev": "上一页",
-    "next": "下一页",
     "drawerTitle": "事件详情",
     "fieldEventId": "事件 ID",
     "fieldPromptLength": "Prompt 长度",

@@ -52,6 +52,7 @@
   },
   "pagination": {
     "range": "{{start}}–{{end}} of {{total}}",
+    "pageN": "Page {{n}}",
     "prev": "← Prev",
     "next": "Next →"
   },
@@ -877,9 +878,6 @@
     "exNoReason": "No error detail",
     "exEndpoint": "Endpoint",
     "exModel": "Model",
-    "pageRange": "{{from}}-{{to}} of {{total}}",
-    "prev": "Prev",
-    "next": "Next",
     "tokUncached": "uncached",
     "tokCreation": "cache write",
     "tokCached": "cached",
@@ -2515,10 +2513,6 @@
     "loading": "Loading…",
     "loadFailed": "Failed to load events.",
     "noEvents": "No compliance events yet.",
-    "pageRange": "{{from}}–{{to}} of {{total}}",
-    "pageOf": "{{page}} / {{pages}}",
-    "prev": "Prev",
-    "next": "Next",
     "drawerTitle": "Event details",
     "fieldEventId": "Event ID",
     "fieldPromptLength": "Prompt length",

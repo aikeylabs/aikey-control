@@ -165,6 +165,7 @@ var zhMessages = map[string]string{
 	CodeBizOauthLoginBindingChanged:     "登录期间账号与供应商绑定已变化，请刷新账号列表后重新登录",
 	CodeBizOauthLoginContextUnavailable: "该账号的登录上下文不完整，请刷新账号列表或联系管理员",
 	CodeBizOauthRoutedAccountAmbiguous:  "当前存在多个账号池路由，旧版未指定账号的请求无法安全选择；请刷新页面或升级客户端后重试",
+	CodeSysAllocationEngineUnavailable:  "动态分配引擎暂时无法完成账号删除对账；目标账号已停止接收新分配，请稍后重试删除",
 
 	// BIZ — Member SSO
 	CodeBizSSOProviderDisabled: "该 SSO 登录方式未启用",
@@ -340,6 +341,12 @@ const (
 	CodeBizOauthGroupProtocolMixed       = "BIZ_OAUTH_GROUP_PROTOCOL_MIXED"
 	CodeBizOauthGroupProtocolInvalid     = "BIZ_OAUTH_GROUP_PROTOCOL_INVALID"
 	CodeBizOauthGroupBotSeat             = "BIZ_OAUTH_GROUP_BOT_SEAT"
+	// CodeSysAllocationEngineUnavailable means an account-pool mutation could not
+	// safely acquire or complete the allocation engine's single-writer tick. The
+	// mutation remains recoverable (the target account stays attached but disabled)
+	// and the caller should retry. 503 is intentional: unlike a normal resource
+	// conflict, progress depends on the engine becoming available.
+	CodeSysAllocationEngineUnavailable = "SYS_ALLOCATION_ENGINE_UNAVAILABLE"
 
 	// BIZ — Online Agent. Authorization failures are 403; deployment/quota/
 	// ownership-state prerequisites are 409. See DomainErrorHTTPStatus.
@@ -622,6 +629,21 @@ func BizOauthGroupRatioRejected(seats, accounts int, limit float64) *DomainError
 func BizOauthGroupDisabled() *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupDisabled,
 		Message: "OAuth account pool binding targets are not enabled in this deployment"}
+}
+
+// SysAllocationEngineUnavailable is returned when an OAuth-pool account mutation
+// cannot safely reconcile the authoritative allocation ledger. The detailed
+// cause is internal-only; the account_id is safe and lets the UI keep the exact
+// row visible for a retry.
+func SysAllocationEngineUnavailable(accountID, detail string) *DomainError {
+	return &DomainError{
+		Code:    CodeSysAllocationEngineUnavailable,
+		Message: "the allocation engine could not safely reconcile this account removal; the account is disabled and the deletion can be retried",
+		Meta: map[string]any{
+			"account_id": accountID,
+			"db_detail":  detail,
+		},
+	}
 }
 
 // BizOauthMemberTokenForbidden — the caller tried to write back a per-member OAuth

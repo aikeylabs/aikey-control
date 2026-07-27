@@ -95,6 +95,7 @@ const SUGGESTIONS: Record<string, string> = {
   EXT_PROVIDER_UNAVAILABLE:   'The provider is unreachable. Check provider status, verify the base URL, or try again later.',
 
   // SYS
+  SYS_ALLOCATION_ENGINE_UNAVAILABLE: 'The account is already disabled. Wait a moment and retry the delete action; do not re-enable it while reconciliation is pending.',
   SYS_INTERNAL: 'An unexpected server error occurred. The details have been logged. Contact support if the issue persists.',
   SYS_DB:       'A database error occurred. The details have been logged. Contact support if the issue persists.',
   SYS_CONFIG:   'A service configuration error occurred. Contact your administrator.',
@@ -219,6 +220,7 @@ const LABELS: Record<string, string> = {
   EXT_PROVIDER_UNAVAILABLE:  'Provider Unreachable',
 
   // SYS
+  SYS_ALLOCATION_ENGINE_UNAVAILABLE: 'Retry Delete',
   SYS_INTERNAL: 'Server Error',
   SYS_DB:       'Database Error',
   SYS_CONFIG:   'Config Error',

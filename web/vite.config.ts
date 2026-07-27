@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { renderBlockingEntry } from './vite-plugin-render-blocking-entry';
 
 // User-edition Vite config.
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), renderBlockingEntry()],
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(__dirname, './src') },

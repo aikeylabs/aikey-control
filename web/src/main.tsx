@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { RouterProvider } from 'react-router-dom';
 import { AppProviders } from '@/app/providers';
 import { router } from '@/app/router';
@@ -87,10 +88,44 @@ import './shared/i18n/i18n';
   window.history.replaceState(null, '', safePath + window.location.search);
 })();
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+// Synchronous initial mount, paired with `blocking="render"` on this entry
+// script (see vite-plugin-render-blocking-entry.ts).
+//
+// WHY: crossing the Personal↔team boundary is a full-document navigation, and a
+// cross-document view transition holds the outgoing page until the incoming
+// document's FIRST RENDER. Left alone, that first render is an empty
+// `<div id="root">` — the transition then faithfully reveals a blank page and the
+// console flashes. blocking="render" withholds the first render until this script
+// executes; flushSync makes React commit INSIDE that window, so the first render
+// already contains the shell.
+//
+// Measured (CDP screencast, local→team, Chrome 150): 2 blank frames / ~71ms →
+// 0 blank frames, reproduced 3×, and the blank returns when either half is
+// removed. Both halves are required — blocking="render" alone still left one
+// ~16ms blank frame because React's commit landed after the render unblocked.
+const rootEl = document.getElementById('root')!;
+flushSync(() => ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <AppProviders>
-      <RouterProvider router={router} />
+      {/* v7_startTransition (2026-07-26): route navigations run inside React's
+          startTransition. WHY: master pages are React.lazy, so clicking a nav item
+          suspends. Outside a transition React 18 hides the suspended subtree and
+          shows the nearest Suspense fallback — which blanked the entire AppShell
+          (sidebar + header included) until the page chunk arrived, i.e. the
+          "菜单切换闪一下" report. Inside a transition React keeps the CURRENT page
+          on screen until the next is ready: no fallback, no flash.
+
+          Set in ALL THREE edition entrypoints (user / master / trial composer) so
+          navigation semantics do not diverge per edition. Paired with the Suspense
+          boundary that now sits inside AppShell around <Outlet/>.
+
+          NOTE this belongs on RouterProvider, NOT createBrowserRouter — the data
+          router's `future` config is a different set of flags and rejects this one.
+
+          Trade-off: a slow chunk now reads as "click did nothing" rather than a
+          flash. Fine on LAN private deployments; if it ever bites, add a pending
+          indicator from useNavigation().state === "loading" instead of reverting. */}
+      <RouterProvider router={router} future={{ v7_startTransition: true }} />
     </AppProviders>
   </React.StrictMode>
-);
+));

@@ -28,6 +28,7 @@ import { usageApi, type UsageDetailRow } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
 import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import { formatUsageDateTimeCompact, usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
+import { Pagination } from '@/shared/ui/Pagination';
 
 const PAGE_SIZE = 30;
 
@@ -98,7 +99,8 @@ export default function UserUsageDetailPage() {
   const { t } = useTranslation();
   const [sp, setSp] = useSearchParams();
   const [expanded, setExpanded] = useState<number | null>(null);
-  const [page, setPage] = useState(0);
+  // 1-indexed, matching the shared <Pagination> contract.
+  const [page, setPage] = useState(1);
   // Column sort (client-side, over the loaded window). Default mirrors the
   // backend order (newest first). Clicking a header switches the key; clicking
   // the active header toggles asc/desc.
@@ -163,10 +165,11 @@ export default function UserUsageDetailPage() {
   }, [filteredRows, sort]);
 
   // Reset to first page whenever the filter set changes.
-  useEffect(() => { setPage(0); setExpanded(null); }, [filter, model, key, session, app, protocol, identity, date, usageIdentityKey]);
+  useEffect(() => { setPage(1); setExpanded(null); }, [filter, model, key, session, app, protocol, identity, date, usageIdentityKey]);
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const pageSafe = Math.min(page, totalPages - 1);
-  const pageRows = rows.slice(pageSafe * PAGE_SIZE, (pageSafe + 1) * PAGE_SIZE);
+  // Clamp: a filter change can shrink the list under the current page.
+  const pageSafe = Math.min(page, totalPages);
+  const pageRows = rows.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
   // Header click → sort by that column; clicking the active column toggles dir.
   const toggleSort = (key: string) => {
@@ -272,7 +275,7 @@ export default function UserUsageDetailPage() {
             {q.isLoading && <tr><td colSpan={6} className="ud-empty">{t('usageDetail.loading')}</td></tr>}
             {!q.isLoading && rows.length === 0 && <tr><td colSpan={6} className="ud-empty">{t('usageDetail.empty')}</td></tr>}
             {pageRows.map((r, localI) => {
-              const i = pageSafe * PAGE_SIZE + localI;
+              const i = (pageSafe - 1) * PAGE_SIZE + localI;
               const ok = r.request_status === 'success';
               const reason = HTTP_REASON[r.http_status_code] || '';
               // Generic LLM term for the short status label; the raw provider code
@@ -352,16 +355,16 @@ export default function UserUsageDetailPage() {
         </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="ud-pager">
-          <span>{t('usageDetail.pageRange', { from: pageSafe * PAGE_SIZE + 1, to: Math.min((pageSafe + 1) * PAGE_SIZE, rows.length), total: rows.length })}</span>
-          <div className="ud-pager-ctl">
-            <button disabled={pageSafe === 0} onClick={() => setPage(pageSafe - 1)}>{t('usageDetail.prev')}</button>
-            <span>{pageSafe + 1} / {totalPages}</span>
-            <button disabled={pageSafe >= totalPages - 1} onClick={() => setPage(pageSafe + 1)}>{t('usageDetail.next')}</button>
-          </div>
-        </div>
-      )}
+      {/* Client-sliced list, so the total is simply rows.length → page-number
+          mode. Replaced the page-local .ud-pager (2026-07-26): one pagination bar
+          across the console, and it now stays visible on a single page instead of
+          disappearing. */}
+      <Pagination
+        page={pageSafe}
+        pageSize={PAGE_SIZE}
+        total={rows.length}
+        onPage={setPage}
+      />
 
       <style>{`
         .ud-page { color: var(--foreground); }
@@ -447,11 +450,6 @@ export default function UserUsageDetailPage() {
 
         .ud-empty { text-align: center; padding: 36px; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 12px; }
 
-        .ud-pager { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted-foreground); }
-        .ud-pager-ctl { display: flex; align-items: center; gap: 14px; }
-        .ud-pager-ctl button { background: var(--card); border: 1px solid var(--border); color: var(--foreground); border-radius: 6px; padding: 4px 14px; cursor: pointer; font: inherit; transition: background 110ms ease, border-color 110ms ease; }
-        .ud-pager-ctl button:hover:not(:disabled) { border-color: var(--muted-foreground); background: rgba(250,204,21,0.06); }
-        .ud-pager-ctl button:disabled { opacity: 0.35; cursor: not-allowed; }
       `}</style>
     </div>
   );

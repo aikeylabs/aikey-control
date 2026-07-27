@@ -18,7 +18,13 @@
  *   localStorage.setItem('aikey-cross-app:team-base-url', 'http://192.168.3.62:3000')
  */
 
+import { resolveCrossAppPeer } from '@/shared/utils/cross-app-peer';
+
 const STORAGE_KEY = 'aikey-cross-app:team-base-url';
+/** THIS side's own base URL, as cached by the B-side bundle when the composing
+ *  gateway makes both sides share one localStorage. Read ONLY to detect poison:
+ *  a peer value equal to it is definitionally wrong (see resolveCrossAppPeer). */
+const OWN_SIDE_KEY = 'aikey-cross-app:personal-base-url';
 const ENDPOINT = '/system/team-url';
 const REFRESH_TIMEOUT_MS = 3000;
 
@@ -34,21 +40,40 @@ interface TeamUrlResponse {
  * render path so the sidebar can show team entries immediately if the
  * endpoint has been resolved on a prior visit. */
 export function getOtherBaseUrl(): string | null {
+  let stored: string | null = null;
+  let own: string | null = null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw || !raw.trim()) return null;
-    const trimmed = raw.trim().replace(/\/$/, '');
-    try {
-      // eslint-disable-next-line no-new
-      new URL(trimmed);
-    } catch {
-      console.warn(`[cross-app-menu] team-base-url is not a valid URL: ${raw}`);
-      return null;
-    }
-    return trimmed;
+    stored = localStorage.getItem(STORAGE_KEY);
+    own = localStorage.getItem(OWN_SIDE_KEY);
   } catch {
-    return null;
+    return null; // localStorage disabled — treat as "no team configured".
   }
+
+  // Shares the pure resolver with the B-side copy (shared/utils is dual-edit
+  // enforced; THIS file is not, and the two sides drifting is how the
+  // 2026-07-26 poison bug lived on one side only). A passes
+  // peerServedByThisOrigin:false — its peer is the TEAM server, which stays
+  // remote even when the gateway forwards team routes on this origin — and
+  // fallback:null so "no team configured" keeps returning null, which callers
+  // use as the cross-app menu VISIBILITY signal.
+  const r = resolveCrossAppPeer({
+    gatewayActive: isTeamGatewayActive(),
+    peerServedByThisOrigin: false,
+    currentOrigin: typeof window === 'undefined' ? '' : window.location.origin,
+    storedPeer: stored,
+    storedOwn: own,
+    fallback: null,
+  });
+
+  if (r.rejected) {
+    console.warn(`[cross-app-menu] rejected team-base-url: ${r.rejected}`);
+  }
+  try {
+    if (r.heal) localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* localStorage disabled — resolution above is still correct for this render. */
+  }
+  return r.url;
 }
 
 /** Programmatic setter — used by future Settings UI / login post-flow

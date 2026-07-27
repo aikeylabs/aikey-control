@@ -20,6 +20,7 @@ import { complianceApi, type ComplianceEventDTO } from '@/shared/api/user/compli
 import { appsApi } from '@/shared/api/user/apps';
 import { Badge } from '@/shared/ui/Badge';
 import { PageHeader } from '@/shared/ui/PageHeader';
+import { Pagination } from '@/shared/ui/Pagination';
 import { formatDateTime } from '@/shared/utils/datetime-intl';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterBar } from '@/shared/ui/FilterBar';
@@ -494,32 +495,16 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
-          <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-            {t('compliancePage.pageRange', {
-              from: total === 0 ? 0 : offset + 1,
-              to: Math.min(offset + PAGE_SIZE, total),
-              total,
-            })}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              className="px-3 py-1 rounded border text-xs font-mono disabled:opacity-40"
-              style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
-              disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-            >{t('compliancePage.prev')}</button>
-            <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              {t('compliancePage.pageOf', { page: Math.floor(offset / PAGE_SIZE) + 1, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)) })}
-            </span>
-            <button
-              className="px-3 py-1 rounded border text-xs font-mono disabled:opacity-40"
-              style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
-              disabled={offset + PAGE_SIZE >= total}
-              onClick={() => setOffset(offset + PAGE_SIZE)}
-            >{t('compliancePage.next')}</button>
-          </div>
+        {/* Server-paged (limit/offset + total), so the shared bar runs in
+            page-number mode — its numbered buttons replace the old "第 n / m 页"
+            readout. `offset` stays the state; convert at the boundary. */}
+        <div style={{ borderTop: '1px solid var(--border)' }}>
+          <Pagination
+            page={Math.floor(offset / PAGE_SIZE) + 1}
+            pageSize={PAGE_SIZE}
+            total={total}
+            onPage={(p) => setOffset((p - 1) * PAGE_SIZE)}
+          />
         </div>
       </div>
 

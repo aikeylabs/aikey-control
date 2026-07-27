@@ -15,6 +15,9 @@ const (
 	EventControlMockProviderBaseURLMissing       = "control.group_runtime.mock_base_url_missing"
 	EventControlOAuthGroupAutoVKFailed           = "control.oauth_group.auto_vk_failed"
 	EventControlOAuthGroupAttachMemberListFailed = "control.oauth_group.attach_member_list_failed"
+	EventControlOAuthGroupEnableMemberListFailed = "control.oauth_group.enable_member_list_failed"
+	EventControlSnapshotOAuthGroupResolveFailed  = "control.snapshot.oauth_group_resolve_failed"
+	EventControlSnapshotOAuthGroupBumpFailed     = "control.snapshot.oauth_group_bump_failed"
 	EventControlUsageReportingTimeZoneReadFailed = "control.usage.reporting_time_zone_read_failed"
 	EventControlUsageReportingTimeZoneInvalid    = "control.usage.reporting_time_zone_invalid"
 	// EventControlSSOStateRejected fires when a `state` handle is presented that
