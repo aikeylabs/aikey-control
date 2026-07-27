@@ -615,6 +615,36 @@ func BizOauthGroupCredInUse(credentialID string) *DomainError {
 		Meta:    map[string]any{"credential_id": credentialID}}
 }
 
+// BizOauthGroupCredInUseAt is the user-actionable form of the one-group
+// invariant. The generic constructor above remains available to low-level/admin
+// callers that do not have both group rows. Self-service onboarding does have
+// that context and must say what actually happened instead of returning a false
+// success or exposing only an internal credential UUID.
+func BizOauthGroupCredInUseAt(credentialID, currentGroupID, currentGroupAlias, targetGroupID, targetGroupAlias string) *DomainError {
+	currentName := strings.TrimSpace(currentGroupAlias)
+	if currentName == "" {
+		currentName = currentGroupID
+	}
+	targetName := strings.TrimSpace(targetGroupAlias)
+	if targetName == "" {
+		targetName = targetGroupID
+	}
+	return &DomainError{
+		Code: CodeBizOauthGroupCredInUse,
+		Message: fmt.Sprintf(
+			"This OAuth account already belongs to OAuth group %q and was not added to %q. An OAuth account can belong to only one OAuth group. Remove it from %q or move it explicitly, then try again. The existing group assignment and login credential were not changed.",
+			currentName, targetName, currentName,
+		),
+		Meta: map[string]any{
+			"credential_id":       credentialID,
+			"current_group_id":    currentGroupID,
+			"current_group_alias": currentName,
+			"target_group_id":     targetGroupID,
+			"target_group_alias":  targetName,
+		},
+	}
+}
+
 // BizOauthGroupRatioRejected — issuing to a group would push the seats:accounts
 // ratio past the reject threshold (N4). The user must add accounts to the group
 // (relieve the bottleneck at the source) before issuing more seats.

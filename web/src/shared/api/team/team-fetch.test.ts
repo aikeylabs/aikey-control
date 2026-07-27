@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { teamGetJSON, isTeamFetchError } from './team-fetch';
+import { teamGetJSON, teamPostJSON, isTeamFetchError, isTeamWriteError } from './team-fetch';
 
 /**
  * Transport-vs-not-logged-in classification fence (2026-07-12 bugfix).
@@ -118,5 +118,45 @@ describe('teamGetJSON — remote team hop (unchanged behaviour)', () => {
     const res = await teamGetJSON<Array<{ id: string }>>('/accounts/me/x');
     expect(isTeamFetchError(res)).toBe(false);
     expect(res).toEqual([{ id: 'a' }]);
+  });
+});
+
+describe('teamPostJSON — actionable domain errors', () => {
+  it('preserves the master reason for a cross-group OAuth account conflict', async () => {
+    const message =
+      'This OAuth account already belongs to OAuth group "BoleadTechOffice" and was not added to "agent-pool-335923591-anthropic". Remove it from "BoleadTechOffice" first, then try again.';
+    mockFetch({
+      '/system/team-url': async () => jsonRes(OK_URL),
+      '/system/team-jwt': async () => jsonRes(OK_JWT),
+      'team.example': async () =>
+        jsonRes(
+          {
+            error: 'BIZ_OAUTH_GROUP_CRED_IN_USE',
+            message,
+            current_group_alias: 'BoleadTechOffice',
+            target_group_alias: 'agent-pool-335923591-anthropic',
+          },
+          409,
+        ),
+    });
+
+    const res = await teamPostJSON('/accounts/me/oauth-accounts', {
+      provider_id: 'anthropic',
+      login_email: 'roman@example.test',
+      password: 'not-logged',
+      oauth_group_id: 'agent-group',
+    });
+    expect(isTeamWriteError(res)).toBe(true);
+    if (!isTeamWriteError(res)) return;
+    expect(res).toEqual({
+      kind: 'domain',
+      status: 409,
+      code: 'BIZ_OAUTH_GROUP_CRED_IN_USE',
+      message,
+    });
+    // AddAccountModal renders res.message directly. This exact assertion keeps
+    // the two-hop helper from collapsing it to the generic add failure.
+    expect(res.message).toContain('BoleadTechOffice');
+    expect(res.message).toContain('agent-pool-335923591-anthropic');
   });
 });
