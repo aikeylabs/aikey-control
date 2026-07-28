@@ -20,6 +20,12 @@ const (
 	EventControlSnapshotOAuthGroupBumpFailed     = "control.snapshot.oauth_group_bump_failed"
 	EventControlUsageReportingTimeZoneReadFailed = "control.usage.reporting_time_zone_read_failed"
 	EventControlUsageReportingTimeZoneInvalid    = "control.usage.reporting_time_zone_invalid"
+	// EventControlAdminAgentVKAction records an ADMIN minting or rotating an
+	// online agent's VK from the master console. Privileged: a rotate
+	// invalidates the credential another member currently has configured, so
+	// the actor, the target agent seat and the action are auditable. Never
+	// carries token material (the plaintext is returned to the caller only).
+	EventControlAdminAgentVKAction = "control.onlineagent.admin_vk_action"
 	// EventControlSSOStateRejected fires when a `state` handle is presented that
 	// was already consumed or was issued for another provider. A handle goes to
 	// the provider exactly once, so this is an attack signal — alert on it rather

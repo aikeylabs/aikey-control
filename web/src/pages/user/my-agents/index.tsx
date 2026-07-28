@@ -159,6 +159,32 @@ function ConnectionSelfCheck({ agent }: { agent: MyAgentDTO }) {
 
 // ── Copyable connection field (base_url / VK) with reveal-once eye ─────────────
 
+// Reveal toggle — lucide "eye" / "eye-off" inlined, matching this app's icon
+// convention (no icon-library dependency; see UserShell's nav glyphs). Replaces
+// the 👁/🙈 emoji, which rendered as a monkey face and matched no other control
+// (user feedback 2026-07-28). Kept byte-identical to the master console's twin
+// in aikey-control-master/web/src/pages/master/orgs/agents/index.tsx so the two
+// consoles cannot drift.
+function EyeIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.06 12.35a1 1 0 010-.7 10.75 10.75 0 0119.88 0 1 1 0 010 .7 10.75 10.75 0 01-19.88 0z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.73 5.08a10.74 10.74 0 0111.21 6.57 1 1 0 010 .7 10.75 10.75 0 01-1.45 2.49" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.08 14.16a3 3 0 01-4.24-4.24" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17.48 17.5a10.75 10.75 0 01-15.42-5.15 1 1 0 010-.7 10.75 10.75 0 014.45-5.14" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2 2l20 20" />
+    </svg>
+  );
+}
+
 function CopyField({ label, value, secret = false }: { label: string; value: string; secret?: boolean }) {
   const { t } = useTranslation();
   const [revealed, setRevealed] = useState(!secret);
@@ -173,10 +199,11 @@ function CopyField({ label, value, secret = false }: { label: string; value: str
           <button
             onClick={() => setRevealed(r => !r)}
             title={revealed ? t('myAgents.hide') : t('myAgents.reveal')}
-            className="text-[10px] font-mono px-2 py-2 rounded border"
+            aria-label={revealed ? t('myAgents.hide') : t('myAgents.reveal')}
+            className="inline-flex items-center justify-center p-2 rounded border"
             style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
           >
-            {revealed ? '🙈' : '👁'}
+            {revealed ? <EyeOffIcon /> : <EyeIcon />}
           </button>
         )}
         <button
