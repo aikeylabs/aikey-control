@@ -33,6 +33,29 @@
  */
 import { type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+
+/**
+ * DIALOG_LAYER — the single source of truth for dialog stacking order.
+ *
+ * Why a table and not a runtime stack (2026-07-28): our nesting order is
+ * SEMANTIC and fixed — a confirmation always sits above the content dialog that
+ * spawned it — and the depth is 2. A push/pop stack solves arbitrary depth at
+ * the cost of shared mutable state that drifts whenever a dialog unmounts
+ * without popping. An enumerated scale is stateless and cannot drift.
+ *
+ * The bug this fixes: ModalShell hard-coded z-[60] while ActionDialog hard-coded
+ * z-50, so the first screen to stack a confirm ON a ModalShell (the agents page's
+ * VK → 轮换 flow) rendered the confirm UNDERNEATH it. The numbers were never
+ * compared because they lived in two files.
+ *
+ * Add a new layer here, never a bare z-* class in a dialog component.
+ */
+export const DIALOG_LAYER = {
+  /** Content dialogs (ModalShell, page-local drawers-as-modals). */
+  content: 60,
+  /** Confirmations / destructive gates — always ABOVE the dialog that opened them. */
+  confirm: 70,
+} as const;
 import { useTranslation } from 'react-i18next';
 
 /** Thin portal: mounts children on document.body, nothing else. */
@@ -69,10 +92,10 @@ export function ModalShell({
   const { t } = useTranslation();
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[60]" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={onClose} />
+      <div className="fixed inset-0" style={{ zIndex: DIALOG_LAYER.content, backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={onClose} />
       <div
-        className="fixed left-1/2 top-1/2 z-[60] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border"
-        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+        className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border"
+        style={{ zIndex: DIALOG_LAYER.content, backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
       >
         <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-mono font-bold" style={{ color: 'var(--foreground)' }}>

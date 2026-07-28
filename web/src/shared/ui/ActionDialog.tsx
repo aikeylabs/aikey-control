@@ -1,5 +1,10 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+
+// Stacking order comes from the shared scale, never a bare z-* here: a
+// confirmation must render ABOVE the content dialog that spawned it (the agents
+// page's VK → 轮换 flow is the first to stack them). See DIALOG_LAYER.
+import { DIALOG_LAYER } from './ModalShell';
 import { Trans, useTranslation } from 'react-i18next';
 
 interface ActionDialogProps {
@@ -58,13 +63,13 @@ export function ActionDialog({
   return createPortal(
     <>
       <div
-        className="fixed inset-0 z-50"
-        style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+        className="fixed inset-0"
+        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'rgba(0,0,0,0.6)' }}
         onClick={onClose}
       />
       <div
-        className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border p-6"
-        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+        className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border p-6"
+        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
       >
         {/* Icon + Title */}
         <div className="flex items-start gap-3 mb-4">
