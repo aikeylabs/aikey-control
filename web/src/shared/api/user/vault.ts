@@ -15,7 +15,10 @@
  * Unlock / lock / status endpoints are shared with the Import page and live
  * in ./import.ts — this module does not redefine them.
  */
+import axios from 'axios';
+
 import { httpClient } from '../http-client';
+import { brokerError } from '../error-message';
 
 // ── Unified target ───────────────────────────────────────────────────────
 //
@@ -760,16 +763,24 @@ export interface OAuthPollRequest {
 }
 
 async function postBrokerJSON(url: string, body: unknown): Promise<OAuthSession> {
-  const res = await httpClient.post<OAuthSession | { error: { code?: string; message?: string } }>(
-    url,
-    body,
-    { timeout: 60_000 },
-  );
+  let res;
+  try {
+    res = await httpClient.post<OAuthSession | { error: { code?: string; message?: string } }>(
+      url,
+      body,
+      { timeout: 60_000 },
+    );
+  } catch (e) {
+    // Non-2xx from the relay: surface ITS envelope, not axios's status-code
+    // prose (see brokerError docblock).
+    if (axios.isAxiosError(e) && e.response?.data) {
+      throw brokerError(e.response.data, e.message);
+    }
+    throw e;
+  }
   const data = res.data as OAuthSession & { error?: { code?: string; message?: string } };
   if (data?.error) {
-    const err = new Error(data.error.message || 'OAuth broker error') as Error & { code?: string };
-    err.code = data.error.code;
-    throw err;
+    throw brokerError(data, 'OAuth broker error');
   }
   return data;
 }

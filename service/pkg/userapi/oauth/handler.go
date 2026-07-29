@@ -11,11 +11,11 @@
 //
 // Endpoints exposed (mirror the broker's, prefixed with `/api/user/`):
 //   - POST /api/user/oauth/login   — start a session OR submit code
-//                                    (Phase-1 / Phase-2 of the broker's
-//                                    `POST /oauth/login`)
+//     (Phase-1 / Phase-2 of the broker's
+//     `POST /oauth/login`)
 //   - GET  /api/user/oauth/status  — poll session status (used by Codex
-//                                    auth_code flow waiting for the
-//                                    localhost callback the broker hosts)
+//     auth_code flow waiting for the
+//     localhost callback the broker hosts)
 //   - POST /api/user/oauth/poll    — Device-Code poll (Kimi)
 //
 // Why not also expose logout / accounts / display-identity here: those
@@ -129,6 +129,30 @@ func PoolStatusHandler(w http.ResponseWriter, r *http.Request) {
 	forward(w, r, http.MethodGet, u.String(), false)
 }
 
+// writeProxyUnavailable emits the 502 the relay answers with when nothing is
+// listening on the proxy port. One function so every relay endpoint (personal
+// /oauth/* and pool /oauth/pool/*) fails with the identical, fully
+// self-serviceable envelope: what broke, why the OAuth flow needs the proxy at
+// all, how to check, how to fix, then retry. The message deliberately names
+// `aikey proxy status` BEFORE the start commands — checking first tells the
+// user whether this is "not started" or "crashing on start", which have
+// different fixes.
+func writeProxyUnavailable(w http.ResponseWriter) {
+	http.Error(w,
+		`{"error":{"code":"PROXY_UNAVAILABLE","message":"aikey-proxy is not running (nothing is listening on 127.0.0.1:`+
+			proxyPort()+
+			`). OAuth sign-in is brokered by the proxy process, so it must be up before an account can be added. Check its state with `+"`aikey proxy status`"+`; start it with `+"`aikey service start all`"+` (or `+"`aikey proxy start`"+`); if it keeps dying, run `+"`aikey doctor`"+` for diagnosis. Then retry adding the account."}}`,
+		http.StatusBadGateway)
+}
+
+// proxyPort returns the port half of proxyBase, for error messages.
+func proxyPort() string {
+	if p := os.Getenv("AIKEY_PROXY_PORT"); p != "" {
+		return p
+	}
+	return defaultProxyPort
+}
+
 // forward issues a single HTTP request to the broker and streams the
 // response straight back. It preserves status code and a minimal set
 // of response headers (Content-Type, Content-Length) — broker error
@@ -150,12 +174,14 @@ func forward(w http.ResponseWriter, r *http.Request, method, target string, with
 
 	res, err := forwardClient.Do(req)
 	if err != nil {
-		// Most common cause: proxy not running. The web modal's
-		// friendly-error mapping (friendlyTestError) catches the 502
-		// and points the user to `aikey service start proxy`.
+		// Most common cause: the proxy process is not running. This message
+		// is the SINGLE SOURCE for what the user sees (the web relays it
+		// verbatim — bugfix 2026-07-29: it used to be swallowed by the
+		// browser client and rendered as a bare "502"), so it must carry the
+		// full self-service path: why it failed, how to check, how to fix.
 		slog.Warn("oauth.forward proxy unreachable",
 			slog.String("target", target), slog.String("err", err.Error()))
-		http.Error(w, `{"error":{"code":"PROXY_UNAVAILABLE","message":"aikey-proxy is not reachable. Run `+"`aikey proxy start`"+`."}}`, http.StatusBadGateway)
+		writeProxyUnavailable(w)
 		return
 	}
 	defer res.Body.Close()

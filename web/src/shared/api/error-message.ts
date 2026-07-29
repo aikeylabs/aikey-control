@@ -83,3 +83,23 @@ export const ERR_PROXY_UNAVAILABLE = 'PROXY_UNAVAILABLE';
 export function isProxyUnavailable(raw: unknown): boolean {
   return isRecord(raw) && (raw as CodedError).code === ERR_PROXY_UNAVAILABLE;
 }
+
+/**
+ * Turn a broker/relay error envelope into a thrown coded Error.
+ *
+ * WHY (bugfix 2026-07-29): the local-server relay answers non-2xx for its own
+ * failures — most importantly 502 {code: "PROXY_UNAVAILABLE", message:
+ * "...aikey proxy status..."} when aikey-proxy is not running. axios THROWS on
+ * non-2xx, so an unwrap placed after `await post(...)` never runs for exactly
+ * the errors that carry the most actionable guidance; the UI then rendered the
+ * bare "Request failed with status code 502". Callers pass the response BODY
+ * here from both the non-2xx catch and the 2xx-with-error path so the relay's
+ * message is the single source the user reads. (The fetch-based pool client
+ * always unwrapped correctly; this brings the axios path to parity.)
+ */
+export function brokerError(envelope: unknown, fallback: string): Error & { code?: string } {
+  const e = (envelope as { error?: { code?: string; message?: string } } | undefined)?.error;
+  const err = new Error(e?.message || fallback) as Error & { code?: string };
+  err.code = e?.code;
+  return err;
+}
