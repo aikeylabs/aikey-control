@@ -46,6 +46,7 @@ import { useHookReadinessStore } from '@/store';
 import { HookReadinessBanner } from '@/shared/components/HookReadinessBanner';
 import { ModelMappingBanner } from '../_shared/ModelMappingBanner';
 import { PoolAccountList } from '../_shared/PoolAccountList';
+import { UnlockPopover } from '../_shared/UnlockPopover';
 import {
   HookWireRcModal,
   useHookWireRcModal,
@@ -631,6 +632,38 @@ export default function UserVaultPage() {
   const [unlockPassword, setUnlockPassword] = useState('');
   const [unlockError, setUnlockError] = useState<string | null>(null);
 
+  // In-place unlock popover (2026-07-29): clicking Use on a locked vault
+  // opens a Master Password prompt anchored at the button instead of the
+  // old dead-end (disabled button + tooltip pointing at the banner).
+  // `unlockPrompt` renders the popover; `pendingUse` survives the popover
+  // so the interrupted switch resumes once ['vault-status'] flips to
+  // unlocked (a fresh `unlocked` closure — resuming synchronously inside
+  // the popover callback would re-enter switchTo with the stale locked
+  // value and loop back into the prompt).
+  const [unlockPrompt, setUnlockPrompt] = useState<{
+    anchor: { left: number; top: number; width: number };
+    target: VaultRowRecord;
+    groupProvider: string;
+  } | null>(null);
+  const [pendingUse, setPendingUse] = useState<{
+    target: VaultRowRecord;
+    groupProvider: string;
+  } | null>(null);
+
+  // Resume the interrupted Use once the vault session reports unlocked —
+  // this render's `unlocked` is fresh, so switchTo won't bounce back into
+  // the locked guard. Also covers "user unlocked via the banner while the
+  // popover was open": any lock→unlock flip with a pending target resumes.
+  useEffect(() => {
+    if (!unlocked || !pendingUse) return;
+    const { target, groupProvider } = pendingUse;
+    setPendingUse(null);
+    switchTo(target, groupProvider);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- switchTo is a
+    // page-level function recreated per render; keying on it would fire the
+    // effect every render. unlocked+pendingUse are the real triggers.
+  }, [unlocked, pendingUse]);
+
   // First-run "Set Master Password" state (shown only when initialized=false).
   // Per 20260430-个人vault-Web首次设置-方案A.md §1.1 — two password fields,
   // both client-side; backend only receives `password` (confirm is a UI
@@ -1157,9 +1190,23 @@ export default function UserVaultPage() {
   // the user clicked under. Without it, clicking Use on a multi-provider
   // record that's active in some OTHER group would no-op silently because
   // the legacy flat `in_use === true` check fired (regression 2026-04-30).
-  function switchTo(target: VaultRowRecord, groupProvider: string) {
+  function switchTo(target: VaultRowRecord, groupProvider: string, anchorEl?: HTMLElement) {
     if (recordInUseForGroup(target, groupProvider)) return;
     if (!unlocked) {
+      // In-place unlock (2026-07-29): with an anchor and an initialized
+      // vault, offer the password right where the click happened; the
+      // switch resumes automatically after unlock (see the pendingUse
+      // effect). Uninitialized vaults keep the toast — first-run must go
+      // through the Set Master Password banner, a popover can't init.
+      if (initialized && anchorEl) {
+        const r = anchorEl.getBoundingClientRect();
+        setUnlockPrompt({
+          anchor: { left: r.left, top: r.top, width: r.width },
+          target,
+          groupProvider,
+        });
+        return;
+      }
       pushToast({
         kind: 'error',
         title: t('vault.toastUnlockFirstTitle'),
@@ -1970,7 +2017,7 @@ export default function UserVaultPage() {
                                 manuallyHidden={manualHidden.has(k)}
                                 switchPending={switchingIds.has(k)}
                                 justSwitched={justSwitchedIds.has(k)}
-                                onSwitch={() => switchTo(r, g.provider)}
+                                onSwitch={(anchorEl) => switchTo(r, g.provider, anchorEl)}
                                 onTest={() => runTest(r)}
                                 testRunning={
                                   testPhase === 'running'
@@ -2005,6 +2052,22 @@ export default function UserVaultPage() {
           <PageFooter />
         </div>
       </div>
+
+      {unlockPrompt && (
+        <UnlockPopover
+          anchor={unlockPrompt.anchor}
+          onClose={() => setUnlockPrompt(null)}
+          onUnlocked={() => {
+            // Hand the target to the resume effect (which waits for the
+            // fresh `unlocked` render) and drop the popover immediately.
+            setPendingUse({
+              target: unlockPrompt.target,
+              groupProvider: unlockPrompt.groupProvider,
+            });
+            setUnlockPrompt(null);
+          }}
+        />
+      )}
 
       {addOpen && (
         <AddKeyModal
@@ -2942,7 +3005,9 @@ const Row = React.memo(function Row(props: {
   /** Briefly apply .just-switched for the route-pulse keyframe animation
    *  after a successful switch (600ms). Parent sets then clears this prop. */
   justSwitched?: boolean;
-  onSwitch?: () => void;
+  /** anchorEl (2026-07-29): the clicked button element, so a locked vault
+   *  can open the in-place UnlockPopover anchored at the click site. */
+  onSwitch?: (anchorEl?: HTMLElement) => void;
   /** Test connection icon button (2026-05-22) — runs the connectivity
    *  probe against this row's credential and persists the result to
    *  `extra.$.last_test`. Moved from the drawer to the row to match the
@@ -3366,16 +3431,24 @@ const Row = React.memo(function Row(props: {
               // below which is enabled regardless.
               const teamUnusable = isTeam && (r as TeamRowRecord).effective_status !== 'active';
               if (teamUnusable) return null;
+              // Locked is no longer a disabled dead-end (2026-07-29): the
+              // click opens an in-place Master Password popover and the
+              // switch resumes after unlock — so the button stays enabled
+              // and the tooltip promises exactly that. Native title tooltips
+              // work on enabled buttons, so the CSS :disabled tooltip
+              // fallback isn't needed for this state anymore. Uninitialized
+              // vaults fall back to the toast inside switchTo (first-run
+              // goes through the Set Master Password banner).
               const useTitle = props.locked
-                ? t('vault.useLockedTitle')
+                ? t('vault.useLockedClickTitle')
                 : 'Route all requests through ' + (r.alias ?? t('vault.unnamed')) + '  (aikey use)';
               return (
                 <button
                   type="button"
                   className="row-use-btn"
                   title={useTitle}
-                  onClick={props.onSwitch}
-                  disabled={props.locked || !!props.switchPending}
+                  onClick={(e) => props.onSwitch?.(e.currentTarget)}
+                  disabled={!!props.switchPending}
                   aria-label={t('vault.setAsActiveKeyAria')}
                 >
                   <ZapIcon className="w-3 h-3" />

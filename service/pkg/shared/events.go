@@ -20,6 +20,9 @@ const (
 	EventControlSnapshotOAuthGroupBumpFailed     = "control.snapshot.oauth_group_bump_failed"
 	EventControlUsageReportingTimeZoneReadFailed = "control.usage.reporting_time_zone_read_failed"
 	EventControlUsageReportingTimeZoneInvalid    = "control.usage.reporting_time_zone_invalid"
+	EventControlAgentPoolStatusReadFailed        = "control.onlineagent.pool_status_read_failed"
+	EventControlAgentPoolUtilizationReadFailed   = "control.onlineagent.pool_utilization_read_failed"
+	EventControlAgentLastRouteReadFailed         = "control.onlineagent.last_route_read_failed"
 	// EventControlAdminAgentVKAction records an ADMIN minting or rotating an
 	// online agent's VK from the master console. Privileged: a rotate
 	// invalidates the credential another member currently has configured, so

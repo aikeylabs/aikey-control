@@ -1,5 +1,33 @@
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { paginationModel, type PaginationInput } from './Pagination.model';
+import {
+  paginationModel,
+  pageSizeOptions,
+  readStoredPageSize,
+  storePageSize,
+  type PaginationInput,
+} from './Pagination.model';
+
+/**
+ * Caller-side hook for the page-size selector (2026-07-29).
+ *
+ * Usage: `const [pageSize, setPageSize] = useStoredPageSize(20);` then pass
+ * both to <Pagination pageSize={pageSize} onPageSize={setPageSize} …>. The
+ * argument is the PAGE'S OWN default — it only applies until the user has
+ * picked a size anywhere (one global preference, see Pagination.model.ts).
+ *
+ * Server-paged callers must also key their query on pageSize (it is the wire
+ * `limit`); the component resets to page 1 on change, which resets the offset
+ * through the caller's existing onPage conversion.
+ */
+export function useStoredPageSize(defaultSize: number): [number, (n: number) => void] {
+  const [size, setSize] = useState<number>(() => readStoredPageSize(defaultSize));
+  const set = useCallback((n: number) => {
+    storePageSize(n);
+    setSize(n);
+  }, []);
+  return [size, set];
+}
 
 /**
  * The canonical pagination bar — one component behind every paginated table
@@ -41,12 +69,19 @@ import { paginationModel, type PaginationInput } from './Pagination.model';
  * All visibility / mode / enablement decisions live in Pagination.model.ts so
  * they are unit-testable without a DOM; this file is the renderer.
  */
-type PaginationProps = PaginationInput & { onPage: (p: number) => void };
+type PaginationProps = PaginationInput & {
+  onPage: (p: number) => void;
+  /** Present ⇒ render the per-page size selector. On change the component
+   *  stores nothing itself — it calls this AND resets to page 1 (a density
+   *  change re-anchors the window; keeping a stale page index would show an
+   *  empty page past the new end). Pair with useStoredPageSize. */
+  onPageSize?: (n: number) => void;
+};
 
 const BTN = 'px-2.5 py-1 text-[10px] font-mono rounded border disabled:opacity-30';
 const BTN_STYLE = { borderColor: 'var(--border)', color: 'var(--muted-foreground)' } as const;
 
-export function Pagination({ onPage, ...input }: PaginationProps) {
+export function Pagination({ onPage, onPageSize, ...input }: PaginationProps) {
   const { t } = useTranslation();
   const m = paginationModel(input as PaginationInput);
   if (!m.visible) return null;
@@ -57,6 +92,19 @@ export function Pagination({ onPage, ...input }: PaginationProps) {
         {m.mode === 'pages' ? t('pagination.range', m.range) : t('pagination.pageN', { n: m.page })}
       </span>
       <div className="flex items-center gap-1">
+        {onPageSize && (
+          <select
+            value={input.pageSize}
+            onChange={(e) => { onPageSize(Number(e.target.value)); onPage(1); }}
+            aria-label={t('pagination.perPageAria')}
+            className="mr-2 px-1.5 py-1 text-[10px] font-mono rounded border cursor-pointer"
+            style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)', backgroundColor: 'var(--card)' }}
+          >
+            {pageSizeOptions(input.pageSize).map((n) => (
+              <option key={n} value={n}>{t('pagination.perPage', { n })}</option>
+            ))}
+          </select>
+        )}
         <button disabled={m.prevDisabled} onClick={() => onPage(input.page - 1)} className={BTN} style={BTN_STYLE}>
           {t('pagination.prev')}
         </button>

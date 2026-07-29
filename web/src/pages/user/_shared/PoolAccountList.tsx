@@ -12,14 +12,24 @@ interface PoolAccountListProps {
   loginHref?: (credentialId?: string) => string;
   loginTitle?: string;
   loginLabel?: string;
+  /** Explicit selection semantics for non-Vault consumers. When absent, the
+   * established local-proxy current_routed → assigned fallback is preserved. */
+  selection?: {
+    primaryAccountId?: string;
+    primaryLabel: string;
+    secondaryAccountId?: string;
+    secondaryLabel?: string;
+    showDefaultBadge?: boolean;
+  };
+  showRemaining?: boolean;
 }
 
-function UsageRow(props: { label: string; percent: number; cap?: number; danger: boolean }) {
+function UsageRow(props: { label: string; percent: number; cap?: number; danger: boolean; valueText?: string }) {
   return (
     <div className="pool-account-usage-row">
       <div className="pool-account-usage-label">
         <span>{props.label}{props.cap != null ? ` · ${props.cap}%` : ''}</span>
-        <span>{props.percent}%</span>
+        <span>{props.valueText ?? `${props.percent}%`}</span>
       </div>
       <div
         className="pool-account-usage-track"
@@ -43,9 +53,11 @@ function UsageRow(props: { label: string; percent: number; cap?: number; danger:
  * renders only the existing group-runtime read model; it never derives routing
  * or quota state in the browser.
  */
-export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel }: PoolAccountListProps) {
+export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel, selection, showRemaining = false }: PoolAccountListProps) {
   const { t } = useTranslation();
-  const routed = routedGroupAccount(accounts);
+  const routed = selection
+    ? (accounts ?? []).find((account) => account.account_id === selection.primaryAccountId)
+    : routedGroupAccount(accounts);
   const sorted = (accounts ?? []).slice().sort((a, b) => a.priority - b.priority || a.account_id.localeCompare(b.account_id));
   const routeStatusLabel = (status: string): string => {
     switch (status) {
@@ -71,6 +83,7 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel }:
     <>
       {sorted.map((account) => {
         const isRouted = account.account_id === routed?.account_id;
+        const isSecondary = Boolean(selection?.secondaryAccountId) && account.account_id === selection?.secondaryAccountId;
         const tone = poolAccountTone(account.route_status);
         const exhausted = account.route_status === 'window_exhausted';
         const util5h = quotaPercent(account.util_5h);
@@ -87,8 +100,9 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel }:
           >
             <div className="pool-account-heading">
               <span className="pool-account-identity">{account.identity || account.account_id}</span>
-              {account.assigned && <span className="chip">{t('poolAccount.default')}</span>}
-              {isRouted && <span className="chip info">{t('poolAccount.currentRouted')}</span>}
+              {account.assigned && (selection?.showDefaultBadge ?? true) && <span className="chip">{t('poolAccount.default')}</span>}
+              {isRouted && <span className="chip info">{selection?.primaryLabel ?? t('poolAccount.currentRouted')}</span>}
+              {isSecondary && !isRouted && <span className="chip">{selection?.secondaryLabel}</span>}
               {account.route_status && (
                 <span className={`chip ${tone === 'muted' ? '' : tone}`}>
                   {routeStatusLabel(account.route_status)}
@@ -131,8 +145,8 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel }:
             <div className="pool-account-usage">
               {hasUsage ? (
                 <>
-                  {util5h != null && <UsageRow label={t('poolAccount.util5h')} percent={util5h} cap={account.window_max_util_pct} danger={exhausted || (account.window_max_util_pct != null ? util5h >= account.window_max_util_pct : util5h >= 100)} />}
-                  {util7d != null && <UsageRow label={t('poolAccount.util7d')} percent={util7d} cap={account.window_7d_max_util_pct} danger={exhausted || (account.window_7d_max_util_pct != null ? util7d >= account.window_7d_max_util_pct : util7d >= 100)} />}
+                  {util5h != null && <UsageRow label={t('poolAccount.util5h')} percent={util5h} cap={account.window_max_util_pct} danger={exhausted || (account.window_max_util_pct != null ? util5h >= account.window_max_util_pct : util5h >= 100)} valueText={showRemaining ? t('poolAccount.usedAndRemaining', { used: util5h, remaining: Math.max(0, 100 - util5h) }) : undefined} />}
+                  {util7d != null && <UsageRow label={t('poolAccount.util7d')} percent={util7d} cap={account.window_7d_max_util_pct} danger={exhausted || (account.window_7d_max_util_pct != null ? util7d >= account.window_7d_max_util_pct : util7d >= 100)} valueText={showRemaining ? t('poolAccount.usedAndRemaining', { used: util7d, remaining: Math.max(0, 100 - util7d) }) : undefined} />}
                 </>
               ) : (
                 <div className="pool-account-usage-empty">{t('poolAccount.noObservation')}</div>

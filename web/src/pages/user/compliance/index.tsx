@@ -20,7 +20,7 @@ import { complianceApi, type ComplianceEventDTO } from '@/shared/api/user/compli
 import { appsApi } from '@/shared/api/user/apps';
 import { Badge } from '@/shared/ui/Badge';
 import { PageHeader } from '@/shared/ui/PageHeader';
-import { Pagination } from '@/shared/ui/Pagination';
+import { Pagination, useStoredPageSize } from '@/shared/ui/Pagination';
 import { formatDateTime } from '@/shared/utils/datetime-intl';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterBar } from '@/shared/ui/FilterBar';
@@ -135,6 +135,9 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   const [searchParams, setSearchParams] = useSearchParams();
   const [selected, setSelected] = useState<ComplianceEventDTO | null>(null);
   const [offset, setOffset] = useState(0);
+  // User-selectable page size (global localStorage preference, 2026-07-29);
+  // doubles as the wire `limit`, so it must be part of the queryKey.
+  const [pageSize, setPageSize] = useStoredPageSize(PAGE_SIZE);
   const [packsOpen, setPacksOpen] = useState(false);
 
   // ── Compliance master switch (feature on/off) ────────────────────────────
@@ -208,12 +211,12 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   }
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['compliance-self', { severity, category, action, offset }],
+    queryKey: ['compliance-self', { severity, category, action, offset, pageSize }],
     queryFn: () => source.listEvents({
       severity: severity || undefined,
       category: category || undefined,
       action: action || undefined,
-      limit: PAGE_SIZE,
+      limit: pageSize,
       offset,
     }),
   });
@@ -503,10 +506,11 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
             readout. `offset` stays the state; convert at the boundary. */}
         <div style={{ borderTop: '1px solid var(--border)' }}>
           <Pagination
-            page={Math.floor(offset / PAGE_SIZE) + 1}
-            pageSize={PAGE_SIZE}
+            page={Math.floor(offset / pageSize) + 1}
+            pageSize={pageSize}
+            onPageSize={setPageSize}
             total={total}
-            onPage={(p) => setOffset((p - 1) * PAGE_SIZE)}
+            onPage={(p) => setOffset((p - 1) * pageSize)}
           />
         </div>
       </div>

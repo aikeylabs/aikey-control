@@ -28,7 +28,7 @@ import { usageApi, type UsageDetailRow } from '@/shared/api/usage';
 import { runtimeConfig } from '@/app/config/runtime';
 import { isLocalUsageScope } from '@/shared/usage/local-identity';
 import { formatUsageDateTimeCompact, usageCalendarDateDaysAgo } from '@/shared/usage/usage-time-zone';
-import { Pagination } from '@/shared/ui/Pagination';
+import { Pagination, useStoredPageSize } from '@/shared/ui/Pagination';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 const PAGE_SIZE = 30;
@@ -102,6 +102,8 @@ export default function UserUsageDetailPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   // 1-indexed, matching the shared <Pagination> contract.
   const [page, setPage] = useState(1);
+  // User-selectable page size (global localStorage preference, 2026-07-29).
+  const [pageSize, setPageSize] = useStoredPageSize(PAGE_SIZE);
   // Column sort (client-side, over the loaded window). Default mirrors the
   // backend order (newest first). Clicking a header switches the key; clicking
   // the active header toggles asc/desc.
@@ -167,10 +169,10 @@ export default function UserUsageDetailPage() {
 
   // Reset to first page whenever the filter set changes.
   useEffect(() => { setPage(1); setExpanded(null); }, [filter, model, key, session, app, protocol, identity, date, usageIdentityKey]);
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   // Clamp: a filter change can shrink the list under the current page.
   const pageSafe = Math.min(page, totalPages);
-  const pageRows = rows.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  const pageRows = rows.slice((pageSafe - 1) * pageSize, pageSafe * pageSize);
 
   // Header click → sort by that column; clicking the active column toggles dir.
   const toggleSort = (key: string) => {
@@ -277,7 +279,7 @@ export default function UserUsageDetailPage() {
             {q.isLoading && <tr><td colSpan={6} className="ud-empty">{t('usageDetail.loading')}</td></tr>}
             {!q.isLoading && rows.length === 0 && <tr><td colSpan={6} className="ud-empty">{t('usageDetail.empty')}</td></tr>}
             {pageRows.map((r, localI) => {
-              const i = (pageSafe - 1) * PAGE_SIZE + localI;
+              const i = (pageSafe - 1) * pageSize + localI;
               const ok = r.request_status === 'success';
               const reason = HTTP_REASON[r.http_status_code] || '';
               // Generic LLM term for the short status label; the raw provider code
@@ -363,7 +365,8 @@ export default function UserUsageDetailPage() {
           disappearing. */}
       <Pagination
         page={pageSafe}
-        pageSize={PAGE_SIZE}
+        pageSize={pageSize}
+        onPageSize={setPageSize}
         total={rows.length}
         onPage={setPage}
       />

@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 interface DetailDrawerProps {
   open: boolean;
@@ -10,6 +11,9 @@ interface DetailDrawerProps {
 }
 
 export function DetailDrawer({ open, onClose, title, subtitle, children }: DetailDrawerProps) {
+  const { t } = useTranslation();
+  const titleId = useId();
+  const subtitleId = useId();
   // Close on Escape
   useEffect(() => {
     if (!open) return;
@@ -48,8 +52,12 @@ export function DetailDrawer({ open, onClose, title, subtitle, children }: Detai
       {/* Drawer */}
       <div
         className="fixed top-0 right-0 h-full z-50 flex flex-col transition-transform duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={subtitle ? subtitleId : undefined}
         style={{
-          width: 480,
+          width: 'min(480px, 100vw)',
           backgroundColor: 'var(--card)',
           borderLeft: '1px solid var(--border)',
           boxShadow: '-8px 0 32px rgba(0,0,0,0.6)',
@@ -62,17 +70,19 @@ export function DetailDrawer({ open, onClose, title, subtitle, children }: Detai
           style={{ borderBottom: '1px solid var(--border)' }}
         >
           <div>
-            <h2 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
+            <h2 id={titleId} className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
               {title}
             </h2>
             {subtitle && (
-              <p className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>
+              <p id={subtitleId} className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>
                 {subtitle}
               </p>
             )}
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label={t('modalShell.closeAria')}
             className="ml-4 flex-shrink-0 p-1 rounded transition-colors"
             style={{ color: 'var(--muted-foreground)' }}
           >

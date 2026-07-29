@@ -90,3 +90,46 @@ export function pageWindow(page: number, totalPages: number): (number | '...')[]
       return acc;
     }, []);
 }
+
+// ── Page-size selection (2026-07-29) ─────────────────────────────────────────
+//
+// One GLOBAL preference (user decision 2026-07-29): the reader who wants denser
+// tables wants them everywhere, so a single localStorage key beats a per-table
+// key that must be re-set on every page. Callers keep their own DEFAULT (log
+// tables 20, config tables 10 …) — the stored value only overrides it once the
+// user has actively picked a size anywhere.
+
+export const PAGE_SIZE_STORAGE_KEY = 'aikey:page-size';
+
+/** The fixed menu; a caller default outside this list is spliced in so the
+ *  select never shows a value that isn't one of its options. */
+export const PAGE_SIZE_CHOICES = [10, 15, 20, 25, 30, 50] as const;
+
+export function pageSizeOptions(current: number): number[] {
+  return [...new Set([...PAGE_SIZE_CHOICES, current])].sort((a, b) => a - b);
+}
+
+/** Bounds guard: a corrupted / hand-edited stored value must never produce a
+ *  0-row or 10k-row page. Outside the sane band → caller default. */
+function saneSize(n: number): boolean {
+  return Number.isInteger(n) && n >= 5 && n <= 100;
+}
+
+export function readStoredPageSize(fallback: number): number {
+  try {
+    const raw = localStorage.getItem(PAGE_SIZE_STORAGE_KEY);
+    if (!raw) return fallback;
+    const n = Number(raw);
+    return saneSize(n) ? n : fallback;
+  } catch {
+    return fallback; // private mode / storage disabled
+  }
+}
+
+export function storePageSize(n: number): void {
+  try {
+    if (saneSize(n)) localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(n));
+  } catch {
+    /* private mode — selection still applies for this render, just not remembered */
+  }
+}

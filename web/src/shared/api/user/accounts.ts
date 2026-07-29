@@ -21,6 +21,7 @@ import {
 const ME_BRIDGE_BASE: string = runtimeConfig.vaultBridgeApiBase ?? '/accounts/me';
 
 import type { AccountDTO, LoginResponse } from '../types/account';
+import type { GroupAccountRef } from './delivery';
 
 export interface RegisterRequest {
   email: string;
@@ -35,7 +36,42 @@ export interface AgentSourceDTO {
   oauth_group_id?: string;
   name?: string;
   provider_code?: string;
+  protocol_type?: string;
   owner_pool: boolean; // true = my own agent pool, false = a company pool
+}
+
+export type AgentRoutingState =
+  | 'bound'
+  | 'binding_pending'
+  | 'unbound'
+  | 'binding_stale'
+  | 'source_unavailable'
+  | 'unavailable';
+
+export interface AgentRoutingSummaryDTO {
+  state: AgentRoutingState;
+  account_id?: string;
+  identity?: string;
+  binding_updated_at?: number;
+}
+
+export interface AgentPoolStatusDTO {
+  agent_seat_id: string;
+  source: AgentSourceDTO;
+  binding: AgentRoutingSummaryDTO;
+  accounts: GroupAccountRef[];
+  accounts_state: 'available' | 'unavailable';
+}
+
+export interface AgentLastServedStatusDTO {
+  agent_seat_id: string;
+  state: 'available' | 'no_data' | 'unavailable';
+  last_served?: {
+    account_id: string;
+    identity?: string;
+    request_at_ms: number;
+    request_status?: string;
+  };
 }
 
 // One online agent (GET /accounts/me/agents). The connection fields
@@ -44,6 +80,7 @@ export interface AgentSourceDTO {
 // storage; never recoverable later). On the list they are absent EXCEPT vk_hint.
 export interface MyAgentDTO {
   seat_id: string;
+  owner_seat_id?: string;
   alias: string;
   status: string;
   source: AgentSourceDTO;
@@ -68,6 +105,9 @@ export interface MyAgentDTO {
    * yet, or when the VK predates hints (issued before v1.0.1-alpha.5) — rotate to
    * populate. Never the plaintext (unrecoverable). */
   vk_hint?: string;
+  /** Lightweight allocation-ledger projection for the list. This is the
+   * public Ingress binding, not the local Vault/proxy current_routed state. */
+  routing_summary?: AgentRoutingSummaryDTO;
 }
 
 // Matches OrgSeat JSON from backend: seat_id, org_id, invited_email, seat_status, etc.
@@ -137,6 +177,18 @@ export const userAccountsApi = {
       throw new Error(`agents unavailable: ${res.kind}`);
     }
     return res.agents ?? [];
+  },
+
+  agentPoolStatus: async (seatId: string): Promise<AgentPoolStatusDTO> => {
+    const res = await teamGetJSON<AgentPoolStatusDTO>(`/accounts/me/agents/${seatId}/pool-status`);
+    if (isTeamFetchError(res)) throw new Error(`agent pool status unavailable: ${res.kind}`);
+    return res;
+  },
+
+  agentLastRoute: async (seatId: string): Promise<AgentLastServedStatusDTO> => {
+    const res = await teamGetJSON<AgentLastServedStatusDTO>(`/accounts/me/agents/${seatId}/last-route`);
+    if (isTeamFetchError(res)) throw new Error(`agent last route unavailable: ${res.kind}`);
+    return res;
   },
 
   createAgent: async (body: { alias: string; provider_code?: string; oauth_group_id?: string }): Promise<MyAgentDTO> => {

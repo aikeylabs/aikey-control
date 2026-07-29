@@ -15,11 +15,12 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { userAccountsApi, type MyAgentDTO } from '@/shared/api/user/accounts';
+import { userAccountsApi, type AgentRoutingSummaryDTO, type MyAgentDTO } from '@/shared/api/user/accounts';
 import { Badge } from '@/shared/ui/Badge';
+import { DetailDrawer } from '@/shared/ui/DetailDrawer';
 import { ModalPortal } from '@/shared/ui/ModalShell';
 import { copyText } from '@/shared/utils/clipboard';
-import { formatDate } from '@/shared/utils/datetime-intl';
+import { formatDate, formatDateTime } from '@/shared/utils/datetime-intl';
 // Shared keys-family table skin (same one virtual-keys / team-oauth / vault
 // inject): mono uppercase thead, row rhythm, borders. Scoped under
 // `.vault-page` + `table.vault`, so injecting it is inert until both classes
@@ -27,6 +28,159 @@ import { formatDate } from '@/shared/utils/datetime-intl';
 // with /user/virtual-keys) instead of hand-copying the values keeps a single
 // source of truth for the keys-page table look.
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
+import { PoolAccountList } from '../_shared/PoolAccountList';
+
+function routingStateLabel(summary: AgentRoutingSummaryDTO | undefined, t: (key: string) => string): string {
+  switch (summary?.state) {
+    case 'bound': return t('myAgents.routing.bound');
+    case 'binding_pending': return t('myAgents.routing.bindingPending');
+    case 'unbound': return t('myAgents.routing.unbound');
+    case 'binding_stale': return t('myAgents.routing.bindingStale');
+    case 'source_unavailable': return t('myAgents.routing.sourceUnavailable');
+    default: return t('myAgents.routing.unavailable');
+  }
+}
+
+function RoutingCell({ agent, onOpen }: { agent: MyAgentDTO; onOpen: () => void }) {
+  const { t } = useTranslation();
+  const summary = agent.routing_summary;
+  const label = summary?.state === 'bound'
+    ? (summary.identity || summary.account_id || routingStateLabel(summary, t))
+    : routingStateLabel(summary, t);
+  return (
+    <button
+      type="button"
+      className="row-use-btn max-w-[220px] truncate"
+      onClick={onOpen}
+      title={t('myAgents.routing.openTitle', { account: label })}
+    >
+      {label}
+    </button>
+  );
+}
+
+function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onClose: () => void }) {
+  const { t } = useTranslation();
+  const poolQuery = useQuery({
+    queryKey: ['my-agent-pool-status', agent?.seat_id],
+    queryFn: () => userAccountsApi.agentPoolStatus(agent!.seat_id),
+    enabled: Boolean(agent?.seat_id),
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+  const latestQuery = useQuery({
+    queryKey: ['my-agent-last-route', agent?.seat_id],
+    queryFn: () => userAccountsApi.agentLastRoute(agent!.seat_id),
+    enabled: Boolean(agent?.seat_id),
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+  const lastRoute = latestQuery.data?.last_served;
+  const binding = poolQuery.data?.binding ?? agent?.routing_summary;
+  const bindingLabel = binding?.state === 'bound'
+    ? (binding.identity || binding.account_id || t('myAgents.routing.bound'))
+    : routingStateLabel(binding, t);
+  const lastLabel = lastRoute?.identity || lastRoute?.account_id;
+  const diverged = Boolean(
+    binding?.state === 'bound'
+      && binding.account_id
+      && lastRoute?.account_id
+      && binding.account_id !== lastRoute.account_id,
+  );
+
+  // Do not leave off-screen drawer controls in the tab order when closed.
+  if (!agent) return null;
+
+  return (
+    <DetailDrawer
+      open
+      onClose={onClose}
+      title={t('myAgents.routing.drawerTitle', { name: agent?.alias ?? '' })}
+      subtitle={t('myAgents.routing.drawerSubtitle')}
+    >
+      <div className="space-y-5 font-mono">
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="card p-4">
+            <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.ingressBinding')}</p>
+            <p className="mt-2 text-sm break-all" style={{ color: 'var(--foreground)' }}>{bindingLabel}</p>
+            {binding?.binding_updated_at ? (
+              <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+                {t('myAgents.routing.bindingUpdated', { time: formatDateTime(binding.binding_updated_at * 1000) })}
+              </p>
+            ) : null}
+          </div>
+          <div className="card p-4">
+            <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.lastServed')}</p>
+            <p className="mt-2 text-sm break-all" style={{ color: 'var(--foreground)' }}>
+              {latestQuery.isLoading
+                ? t('myAgents.routing.loading')
+                : latestQuery.isError || latestQuery.data?.state === 'unavailable'
+                  ? t('myAgents.routing.lastUnavailable')
+                  : lastLabel || t('myAgents.routing.noRequests')}
+            </p>
+            {lastRoute?.request_at_ms ? (
+              <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+                {t('myAgents.routing.lastRequestAt', { time: formatDateTime(lastRoute.request_at_ms) })}
+              </p>
+            ) : null}
+          </div>
+        </section>
+
+        {diverged && (
+          <div role="status" className="rounded px-3 py-2 text-xs" style={{ color: '#fbbf24', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(251,191,36,0.07)' }}>
+            {t('myAgents.routing.failoverNotice')}
+          </div>
+        )}
+
+        <section>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xs font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('myAgents.routing.poolAccounts')}</h3>
+              <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.poolAccountsHint')}</p>
+            </div>
+            <Link
+              to={agent?.source.oauth_group_id ? `/user/team-oauth?group=${encodeURIComponent(agent.source.oauth_group_id)}` : '/user/team-oauth'}
+              className="row-use-btn whitespace-nowrap"
+              onClick={onClose}
+            >
+              {t('myAgents.routing.manageAccounts')}
+            </Link>
+          </div>
+
+          {poolQuery.isLoading && <div className="card p-4 text-xs" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.loading')}</div>}
+          {poolQuery.isError && (
+            <div role="alert" className="card p-4 text-xs" style={{ color: '#fca5a5' }}>
+              <p>{t('myAgents.routing.poolLoadError')}</p>
+              <button type="button" className="row-use-btn mt-3" onClick={() => void poolQuery.refetch()}>{t('myAgents.retry')}</button>
+            </div>
+          )}
+          {poolQuery.data?.accounts_state === 'unavailable' && (
+            <div role="alert" className="card p-4 text-xs" style={{ color: '#fca5a5' }}>
+              <p>{t('myAgents.routing.poolLoadError')}</p>
+              <button type="button" className="row-use-btn mt-3" onClick={() => void poolQuery.refetch()}>{t('myAgents.retry')}</button>
+            </div>
+          )}
+          {poolQuery.data?.accounts_state !== 'unavailable' && poolQuery.data && poolQuery.data.accounts.length === 0 && (
+            <div className="card p-4 text-xs" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.emptyPool')}</div>
+          )}
+          {poolQuery.data?.accounts_state !== 'unavailable' && poolQuery.data && poolQuery.data.accounts.length > 0 && (
+            <PoolAccountList
+              accounts={poolQuery.data.accounts}
+              selection={{
+                primaryAccountId: binding?.state === 'bound' ? binding.account_id : undefined,
+                primaryLabel: t('myAgents.routing.ingressBindingBadge'),
+                secondaryAccountId: lastRoute?.account_id,
+                secondaryLabel: t('myAgents.routing.lastServedBadge'),
+                showDefaultBadge: false,
+              }}
+              showRemaining
+            />
+          )}
+        </section>
+      </div>
+    </DetailDrawer>
+  );
+}
 
 function sourceBadge(src: MyAgentDTO['source'], t: (k: string) => string) {
   const isApiKey = src.type === 'api_key';
@@ -611,6 +765,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
 export default function MyAgentsPage() {
   const { t } = useTranslation();
   const [createOpen, setCreateOpen] = useState(false);
+  const [routingAgent, setRoutingAgent] = useState<MyAgentDTO | null>(null);
   const { data: agents, isLoading, isError, refetch } = useQuery({
     queryKey: ['my-agents'],
     queryFn: userAccountsApi.myAgents,
@@ -683,17 +838,18 @@ export default function MyAgentsPage() {
                 <th>{t('myAgents.col.source')}</th>
                 <th>{t('myAgents.col.status')}</th>
                 <th>{t('myAgents.col.availability')}</th>
+                <th>{t('myAgents.col.routing')}</th>
                 <th>{t('myAgents.col.created')}</th>
                 <th style={{ textAlign: 'right' }}>{t('myAgents.col.actions')}</th>
               </tr>
             </thead>
             <tbody className="font-mono text-xs">
               {isLoading && (
-                <tr><td colSpan={6} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.loading')}</td></tr>
+                <tr><td colSpan={7} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.loading')}</td></tr>
               )}
               {isError && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-8 text-center">
+                  <td colSpan={7} className="px-5 py-8 text-center">
                     <div role="alert" aria-live="assertive" className="inline-flex items-center gap-3 rounded px-3 py-2" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.38)' }}>
                       <span>{t('myAgents.loadError')}</span>
                       <button type="button" className="row-use-btn" onClick={() => void refetch()}>{t('myAgents.retry')}</button>
@@ -702,7 +858,7 @@ export default function MyAgentsPage() {
                 </tr>
               )}
               {agents && agents.length === 0 && (
-                <tr><td colSpan={6} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.empty')}</td></tr>
+                <tr><td colSpan={7} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.empty')}</td></tr>
               )}
               {agents?.map(agent => (
                 <tr key={agent.seat_id}>
@@ -712,6 +868,7 @@ export default function MyAgentsPage() {
                     <span className={`badge ${agent.status === 'active' ? 'badge-active' : 'badge-neutral'}`}>{agent.status}</span>
                   </td>
                   <td className="px-5 py-4"><PoolReadinessBadge agent={agent} linkToOauth /></td>
+                  <td className="px-5 py-4"><RoutingCell agent={agent} onOpen={() => setRoutingAgent(agent)} /></td>
                   {/* VK value column removed 2026-07-22 (user): the masked VK hint
                       no longer shows inline; members still mint/rotate/reveal via the
                       row's "获取 VK" / "轮换" actions (AgentRowActions). */}
@@ -727,6 +884,7 @@ export default function MyAgentsPage() {
       </section>
 
       <CreateAgentModal open={createOpen} onClose={() => setCreateOpen(false)} agents={agents ?? []} />
+      <AgentRoutingDrawer agent={routingAgent} onClose={() => setRoutingAgent(null)} />
     </div>
   );
 }

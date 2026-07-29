@@ -1,5 +1,12 @@
-import { describe, it, expect } from 'vitest';
-import { paginationModel, pageWindow } from './Pagination.model';
+import { describe, it, expect, afterEach } from 'vitest';
+import {
+  paginationModel,
+  pageWindow,
+  pageSizeOptions,
+  readStoredPageSize,
+  storePageSize,
+  PAGE_SIZE_STORAGE_KEY,
+} from './Pagination.model';
 
 /**
  * Fences for the unified pagination bar (2026-07-26). Four pagination
@@ -92,5 +99,72 @@ describe('pageWindow', () => {
   it('never emits an ellipsis standing in for a single page', () => {
     // page 3 of 5 → 1,2,3,4,5 with no gap to bridge.
     expect(pageWindow(3, 5)).toEqual([1, 2, 3, 4, 5]);
+  });
+});
+
+describe('page-size selection (2026-07-29)', () => {
+  // One GLOBAL localStorage preference; the caller's default only applies until
+  // the user has picked a size anywhere. These pin the storage contract the
+  // useStoredPageSize hook and the <select> both rely on.
+  //
+  // ⚠️ Stub hygiene: these tests install globalThis.localStorage — including a
+  // THROWING one for the private-mode case. Without restore, the throwing stub
+  // leaks into whatever file the worker runs next and fails it at random
+  // (observed 2026-07-29: 2 unrelated failures that vanished on re-run). A
+  // fence that fails nondeterministically trains people to re-run until green.
+  const hadLS = Object.prototype.hasOwnProperty.call(globalThis, 'localStorage');
+  const savedLS = (globalThis as Record<string, unknown>).localStorage;
+  afterEach(() => {
+    if (hadLS) (globalThis as Record<string, unknown>).localStorage = savedLS;
+    else delete (globalThis as Record<string, unknown>).localStorage;
+  });
+
+  function stubStorage(seed: Record<string, string> = {}) {
+    const store = new Map(Object.entries(seed));
+    (globalThis as Record<string, unknown>).localStorage = {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    return store;
+  }
+
+  it('options always contain the fixed menu plus the current value, sorted', () => {
+    expect(pageSizeOptions(20)).toEqual([10, 15, 20, 25, 30, 50]);
+    // A caller default outside the menu (compliance triage used 50 before it was
+    // added; a future 40 default) must be spliced in — the select must never
+    // display a value that is not one of its options.
+    expect(pageSizeOptions(40)).toEqual([10, 15, 20, 25, 30, 40, 50]);
+  });
+
+  it('reads the stored preference, falling back to the caller default', () => {
+    stubStorage({ [PAGE_SIZE_STORAGE_KEY]: '30' });
+    expect(readStoredPageSize(20)).toBe(30);
+    stubStorage();
+    expect(readStoredPageSize(20)).toBe(20);
+  });
+
+  it('rejects corrupted stored values instead of producing absurd pages', () => {
+    for (const bad of ['0', '-5', '10000', 'abc', '12.5']) {
+      stubStorage({ [PAGE_SIZE_STORAGE_KEY]: bad });
+      expect(readStoredPageSize(20), `stored ${JSON.stringify(bad)} must fall back`).toBe(20);
+    }
+  });
+
+  it('persists a picked size and refuses to persist an insane one', () => {
+    const store = stubStorage();
+    storePageSize(25);
+    expect(store.get(PAGE_SIZE_STORAGE_KEY)).toBe('25');
+    storePageSize(10000);
+    expect(store.get(PAGE_SIZE_STORAGE_KEY), 'insane value must not overwrite').toBe('25');
+  });
+
+  it('survives storage being unavailable (private mode)', () => {
+    (globalThis as Record<string, unknown>).localStorage = {
+      getItem() { throw new Error('denied'); },
+      setItem() { throw new Error('denied'); },
+    };
+    expect(readStoredPageSize(20)).toBe(20);
+    expect(() => storePageSize(25)).not.toThrow();
   });
 });
