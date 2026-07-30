@@ -7,10 +7,15 @@ interface DetailDrawerProps {
   onClose: () => void;
   title: string;
   subtitle?: string;
+  /** Drawer width in px. Default 480 (the read-mostly detail drawers).
+   *  Editing-heavy drawers (e.g. the oauth-pool editor with inline egress
+   *  inputs, 2026-07-18) pass a wider value — at 480 the inline editor rows
+   *  leave the textarea ~130px. Capped to the viewport via maxWidth. */
+  width?: number;
   children: React.ReactNode;
 }
 
-export function DetailDrawer({ open, onClose, title, subtitle, children }: DetailDrawerProps) {
+export function DetailDrawer({ open, onClose, title, subtitle, width = 480, children }: DetailDrawerProps) {
   const { t } = useTranslation();
   const titleId = useId();
   const subtitleId = useId();
@@ -57,7 +62,8 @@ export function DetailDrawer({ open, onClose, title, subtitle, children }: Detai
         aria-labelledby={titleId}
         aria-describedby={subtitle ? subtitleId : undefined}
         style={{
-          width: 'min(480px, 100vw)',
+          width,
+          maxWidth: '96vw',
           backgroundColor: 'var(--card)',
           borderLeft: '1px solid var(--border)',
           boxShadow: '-8px 0 32px rgba(0,0,0,0.6)',

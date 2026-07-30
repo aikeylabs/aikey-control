@@ -1621,7 +1621,6 @@
     "eventBinding": "协议通道",
     "eventSwitched": "已切换",
     "riskTableTitle": "系统告警 / 风险与关注",
-    "criticalEventsOnly": "仅关键事件",
     "loadingDots": "加载中…",
     "noCriticalEvents": "无关键事件 — 一切正常",
     "colSubjectId": "对象 ID",

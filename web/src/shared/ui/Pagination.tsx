@@ -93,17 +93,34 @@ export function Pagination({ onPage, onPageSize, ...input }: PaginationProps) {
       </span>
       <div className="flex items-center gap-1">
         {onPageSize && (
-          <select
-            value={input.pageSize}
-            onChange={(e) => { onPageSize(Number(e.target.value)); onPage(1); }}
-            aria-label={t('pagination.perPageAria')}
-            className="mr-2 px-1.5 py-1 text-[10px] font-mono rounded border cursor-pointer"
-            style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)', backgroundColor: 'var(--card)' }}
-          >
-            {pageSizeOptions(input.pageSize).map((n) => (
-              <option key={n} value={n}>{t('pagination.perPage', { n })}</option>
-            ))}
-          </select>
+          // Same visual weight as the sibling prev/next buttons (BTN_STYLE,
+          // transparent bg) — user report 2026-07-29: the control read brighter
+          // than the row and drew the eye. `appearance-none` is required, not
+          // cosmetic: without it Safari/macOS keeps painting the native
+          // button-face background and ignores the author background-color
+          // (a plain `backgroundColor: transparent` fix did NOT land there).
+          // Dropping native appearance also drops the built-in chevron, so a
+          // pointer-transparent ▾ glyph restores the affordance.
+          <span className="relative mr-2">
+            <select
+              value={input.pageSize}
+              onChange={(e) => { onPageSize(Number(e.target.value)); onPage(1); }}
+              aria-label={t('pagination.perPageAria')}
+              className="pl-1.5 pr-5 py-1 text-[10px] font-mono rounded border cursor-pointer appearance-none"
+              style={{ ...BTN_STYLE, backgroundColor: 'transparent' }}
+            >
+              {pageSizeOptions(input.pageSize).map((n) => (
+                <option key={n} value={n}>{t('pagination.perPage', { n })}</option>
+              ))}
+            </select>
+            <span
+              aria-hidden
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-[8px]"
+              style={{ color: 'var(--muted-foreground)' }}
+            >
+              ▾
+            </span>
+          </span>
         )}
         <button disabled={m.prevDisabled} onClick={() => onPage(input.page - 1)} className={BTN} style={BTN_STYLE}>
           {t('pagination.prev')}

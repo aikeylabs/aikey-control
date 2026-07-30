@@ -1,7 +1,7 @@
 import React from 'react';
 
-type ButtonVariant = 'primary' | 'outline' | 'ghost';
-type ButtonSize = 'sm' | 'md' | 'lg';
+type ButtonVariant = 'primary' | 'primary-dim' | 'outline' | 'ghost';
+type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -12,6 +12,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const sizeClass: Record<ButtonSize, string> = {
+  xs: 'text-[10px] px-2 py-0.5',
   sm: 'text-[10px] px-3 py-1',
   md: 'text-xs px-4 py-1.5',
   lg: 'text-sm px-5 py-2.5',
@@ -19,6 +20,9 @@ const sizeClass: Record<ButtonSize, string> = {
 
 const variantClass: Record<ButtonVariant, string> = {
   primary: 'btn-primary',
+  // Dim-yellow filled — for secondary/inline actions where full primary reads
+  // too loud (maps to .btn-primary-dim; same hue, yellow-600 not yellow-400).
+  'primary-dim': 'btn-primary-dim',
   outline: 'btn-outline',
   ghost: 'btn-ghost',
 };

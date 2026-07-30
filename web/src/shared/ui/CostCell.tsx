@@ -23,6 +23,12 @@ export interface CostCellProps {
  * published price table, not billed amounts (see the page footnote). The
  * badge stays in muted color (no new palette value) — the ⚠ glyph is the
  * signal — per the project's visual-consistency rule.
+ *
+ * 🔴 DUAL-EDIT: this file exists byte-identically in aikey-control/web and
+ * aikey-control-master/web. The trial composer resolves `@/shared/ui/CostCell`
+ * to the MASTER copy even for user pages, so an edit to one copy alone changes
+ * user-page rendering in Trial and nowhere else — which is why the two are
+ * fenced by web-drift-check.
  */
 export function CostCell({ value, unpricedCount }: CostCellProps) {
   const { t } = useTranslation();

@@ -67,7 +67,13 @@ const SUGGESTIONS: Record<string, string> = {
   BIZ_BIND_NOT_DELIVERED:      'The binding could not be delivered to the proxy. Check that the credential is valid and the provider is reachable.',
   BIZ_BIND_ALIAS_TAKEN:        'This binding alias is already in use in this org. Choose a different alias.',
   BIZ_BIND_DUPLICATE_TARGET:   'An active binding for this protocol/provider pair already exists on this virtual key. Use a different provider or retire the existing binding first.',
-  BIZ_KEY_ALIAS_TAKEN:        'This virtual key alias is already in use for this seat. Choose a different alias.',
+  BIZ_VK_GROUP_EXCLUSIVE:      'A virtual key cannot mix an OAuth group with direct credentials. Issue a separate virtual key for this credential.',
+  // 2026-07-13: a revoked key used to keep squatting on its alias forever, so
+  // this fired on every re-issue and the old copy ("choose a different alias")
+  // left the admin with no idea WHY — the key they'd just revoked was invisible
+  // to them as the culprit. Revoking now releases the alias (v1.0.1-alpha.5), so
+  // a live key is the only thing that can still hold it — say so.
+  BIZ_KEY_ALIAS_TAKEN:        'An ACTIVE virtual key on this seat already uses this alias. Revoke that key first (revoking frees its alias), or choose a different alias.',
   BIZ_CRED_NAME_TAKEN:        'A credential with this name already exists. Use a different display name.',
   BIZ_PROV_CODE_TAKEN:        'A provider with this code already exists. Use a different provider code.',
 
@@ -79,6 +85,7 @@ const SUGGESTIONS: Record<string, string> = {
   // BIZ — Credential
   BIZ_CRED_NOT_FOUND: 'The credential was not found. It may have been deleted from Provider Accounts.',
   BIZ_CRED_INACTIVE:  'This credential is not active. Go to Provider Accounts and rotate or replace it.',
+  BIZ_CRED_HAS_ACTIVE_REFS: 'Migrate its active channels to another credential (Migrate action), or remove the account from its OAuth account pool, then delete again.',
 
   // BIZ — Provider
   BIZ_PROV_NOT_FOUND: 'The provider was not found. It may have been removed.',
@@ -194,6 +201,7 @@ const LABELS: Record<string, string> = {
   BIZ_BIND_NO_ACTIVE:         'No Active Channel',
   BIZ_BIND_NOT_DELIVERED:     'Delivery Failed',
   BIZ_BIND_ALIAS_TAKEN:       'Alias Taken',
+  BIZ_VK_GROUP_EXCLUSIVE:     'Issue a Separate Key',
   BIZ_BIND_DUPLICATE_TARGET:  'Already Issued',
 
   // BIZ — OAuth login binding / routing
@@ -206,6 +214,7 @@ const LABELS: Record<string, string> = {
   BIZ_PROV_CODE_TAKEN: 'Code Taken',
   BIZ_CRED_NOT_FOUND:  'Credential Not Found',
   BIZ_CRED_INACTIVE:   'Credential Inactive',
+  BIZ_CRED_HAS_ACTIVE_REFS: 'Still In Use',
   BIZ_PROV_NOT_FOUND:  'Provider Not Found',
 
   // DATA

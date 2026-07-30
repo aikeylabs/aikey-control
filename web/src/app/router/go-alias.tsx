@@ -43,6 +43,8 @@ export const GO_TARGETS: Record<string, string> = {
   // may render empty / hidden state — same UX as accessing the URL
   // directly). Added 2026-05-24 after user surfaced `aikey web
   // trust-check` errored "Unknown page" despite the route existing.
+  // 2026-05-30: this alias existed only in aikey-control/web for a while;
+  // dual-edited into both copies so the two consoles resolve it identically.
   'trust-check': '/user/trust-check',
 
   // Historical / alternate names the CLI may still send. Keep them
@@ -54,7 +56,7 @@ export const GO_TARGETS: Record<string, string> = {
   // Common spellings for the personal credential vault.
   secrets: '/user/vault',
   'my-vault': '/user/vault',
-  // Short alias for trust-check (`aikey web trust`).
+  // Short alias for trust-check (`aikey web trust`). Dual-edited 2026-05-30.
   trust: '/user/trust-check',
   // Phase 3B R7 (2026-05-11): team-keys / virtual-keys / keys aliases
   // previously pointed at A's local /user/virtual-keys stub. The

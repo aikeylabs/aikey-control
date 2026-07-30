@@ -1621,7 +1621,6 @@
     "eventBinding": "Binding",
     "eventSwitched": "Switched",
     "riskTableTitle": "SYSTEM ALERTS / RISK & ATTENTION",
-    "criticalEventsOnly": "Critical events only",
     "loadingDots": "Loading.....",
     "noCriticalEvents": "No critical events — all clear",
     "colSubjectId": "Subject ID",

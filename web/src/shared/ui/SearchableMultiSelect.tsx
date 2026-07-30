@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { SelectOption } from './SearchableSelect';
+import { optionHaystack, type SelectOption } from './SearchableSelect';
 
 interface SearchableMultiSelectProps {
   options: SelectOption[];
@@ -61,11 +61,7 @@ export function SearchableMultiSelect({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return options.filter(
-      (o) =>
-        !values.includes(o.value) &&
-        (!q ||
-          o.label.toLowerCase().includes(q) ||
-          o.value.toLowerCase().includes(q)),
+      (o) => !values.includes(o.value) && (!q || optionHaystack(o).includes(q)),
     );
   }, [options, search, values]);
 
@@ -103,6 +99,12 @@ export function SearchableMultiSelect({
     const el = listRef.current.children[highlightIdx] as HTMLElement | undefined;
     el?.scrollIntoView({ block: 'nearest' });
   }, [highlightIdx, open]);
+
+  // A chip shows the option's human label (e.g. the seat's email), not the raw
+  // stored value (e.g. the seat_id). Falls back to the value itself for custom /
+  // unknown entries that have no matching option — matching the dropdown rows,
+  // which also render `opt.label`.
+  const labelFor = (v: string) => options.find((o) => o.value === v)?.label ?? v;
 
   function add(v: string) {
     const trimmed = v.trim();
@@ -162,7 +164,7 @@ export function SearchableMultiSelect({
               letterSpacing: '0.04em',
             }}
           >
-            <span>{v}</span>
+            <span>{labelFor(v)}</span>
             <button
               type="button"
               onClick={(e) => {
@@ -265,6 +267,11 @@ export function SearchableMultiSelect({
                   }}
                 >
                   {opt.label}
+                  {opt.detail && (
+                    <span className="block text-[10px] mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                      {opt.detail}
+                    </span>
+                  )}
                 </div>
               ))
             )}

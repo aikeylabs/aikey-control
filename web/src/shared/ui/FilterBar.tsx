@@ -19,6 +19,10 @@ interface FilterBarProps {
   onSearchChange?: (v: string) => void;
   searchPlaceholder?: string;
 
+  /** Extra filter controls, rendered LEFT-aligned right after the status
+      select (e.g. a tag filter) — actions stays the right-side slot. */
+  extraFilters?: React.ReactNode;
+
   /** Right-side actions slot */
   actions?: React.ReactNode;
 }
@@ -31,6 +35,7 @@ export function FilterBar({
   searchValue,
   onSearchChange,
   searchPlaceholder,
+  extraFilters,
   actions,
 }: FilterBarProps) {
   const { t } = useTranslation();
@@ -53,7 +58,13 @@ export function FilterBar({
           </svg>
           <input
             type="text"
-            className="pl-9 pr-3 py-2 text-sm w-56"
+            // 2026-06-11: pl-9 pr-3 py-2 text-sm (38px) — was py-1.5
+            // text-xs (30px) which read shorter than the sibling
+            // SearchableSelect (38px) in the same FilterBar row,
+            // making every filter row look misaligned. The canonical
+            // master-nav filter-row height is 38px (SearchableSelect's
+            // intrinsic); every input in a filter row should match.
+            className="pl-9 pr-3 py-2 text-sm w-52"
             placeholder={resolvedSearchPlaceholder}
             value={searchValue ?? ''}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -71,6 +82,9 @@ export function FilterBar({
           style={{ minWidth: 160 }}
         />
       )}
+
+      {/* Extra left-aligned filters (after status) */}
+      {extraFilters}
 
       {/* Right actions */}
       {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
