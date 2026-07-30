@@ -106,8 +106,6 @@
   "oauthContribute.providerCodex",
   "oauthContribute.signInFor",
   "oauthContribute.signInTitle",
-  "oauthContribute.status.auth_failed",
-  "oauthContribute.status.revoked",
   "oauthContribute.toastDismiss",
   "overview.teamOAuthProtocol",
   "providerAccounts.activeChannelCount_plural",

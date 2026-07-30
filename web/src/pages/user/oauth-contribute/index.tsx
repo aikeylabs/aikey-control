@@ -15,7 +15,7 @@
  *   - GET /accounts/me/group-routed-credential (no id) → reveal password (routed only)
  *   - POST /api/user/oauth/pool/*           → pool sign-in (relay → proxy broker)
  */
-import React, { useMemo, useState, useRef, useCallback } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ModalPortal } from '@/shared/ui/ModalShell';
 import { useTranslation } from 'react-i18next';
@@ -36,6 +36,14 @@ import {
   type MemberEgressTestResult,
 } from '@/shared/api/team/oauth-contribute';
 import { deriveEgressPresentation } from './egress-presentation';
+import {
+  accountScopeCounts,
+  accountScopeSections,
+  filterAgentPools,
+  filterPersonalAccounts,
+  initialAccountScope,
+  type AccountScopeFilter,
+} from './account-scope';
 import {
   isTeamFetchError,
   isTeamWriteError,
@@ -126,16 +134,10 @@ function statusChip(s: string): { cls: string; dot: string } {
   }
 }
 
-/** auth_failed + revoked both mean "no longer usable" — the status filter folds
- *  them into a single 已失效 (Inactive) pill. */
-function isInactiveStatus(s: string): boolean {
-  return s === 'auth_failed' || s === 'revoked';
-}
-
-/** Status filter pill — the same `.filter-pill` capsule the vault FilterStrip
+/** Account-scope pill — the same `.filter-pill` capsule the vault FilterStrip
  *  uses. Kept inline (2nd consumer; extract to _shared on the 3rd, per the
  *  toast-stack note below). */
-function StatusFilterPill(props: {
+function AccountScopePill(props: {
   active: boolean;
   onClick: () => void;
   label: string;
@@ -143,6 +145,9 @@ function StatusFilterPill(props: {
 }) {
   return (
     <button
+      type="button"
+      role="radio"
+      aria-checked={props.active}
       className={`filter-pill${props.active ? ' active' : ''}`}
       onClick={props.onClick}
     >
@@ -169,11 +174,12 @@ export default function OAuthContributePage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
-  // Status filter (2026-07-07): 全部 / 已登录 / 待登录 / 已失效. `inactive` folds
-  // auth_failed + revoked. Pill labels reuse the status-chip i18n so the filter
-  // names match the table's 状态 column exactly.
-  const [statusFilter, setStatusFilter] =
-    useState<'all' | 'logged_in' | 'needs_login' | 'inactive'>('all');
+  const [searchParams] = useSearchParams();
+  const initialPoolFilter = searchParams.get('group');
+  // Ownership, not login status, is the page's primary task boundary. Group
+  // ownership arrives asynchronously from MyGroups, so a deep link starts
+  // neutral and is resolved once from the authoritative `is_owner` flag below.
+  const [scopeFilter, setScopeFilter] = useState<AccountScopeFilter>('all');
   // Which routed account's sign-in panel is open, by credential_id. A member in
   // MULTIPLE pools has one routed account PER pool (2026-07-01) — each must expand
   // independently, so this is a per-account id, not a single shared boolean.
@@ -187,7 +193,6 @@ export default function OAuthContributePage() {
   // sends the same target to Master, which authorizes it and marks it current for
   // this pool; an unauthorized/stale id therefore fails closed instead of opening
   // controls for an arbitrary account.
-  const [searchParams] = useSearchParams();
   const [expandedCred, setExpandedCred] = useState<string | null>(
     () => searchParams.get('expand'),
   );
@@ -205,23 +210,36 @@ export default function OAuthContributePage() {
   const ownerGroupsErr = ownerGroupsQ.data && isTeamFetchError(ownerGroupsQ.data)
     ? ownerGroupsQ.data
     : undefined;
+  const myGroups: MyOauthGroup[] = useMemo(
+    () => (Array.isArray(ownerGroupsQ.data) ? ownerGroupsQ.data : []),
+    [ownerGroupsQ.data],
+  );
   const ownerPools: MyOauthGroup[] = useMemo(() => {
-    const gs = Array.isArray(ownerGroupsQ.data) ? ownerGroupsQ.data : [];
-    return gs.filter((g) => g.is_owner);
-  }, [ownerGroupsQ.data]);
-  // Pool filter (2026-07-22): deep-linked from my-agents' 待登录 chip
-  // (?group=<oauth_group_id>) so Team OAuth lands scoped to that agent-pool.
+    return myGroups.filter((g) => g.is_owner);
+  }, [myGroups]);
+  // Pool filter (2026-07-22): deep-linked from My Agents
+  // (?group=<oauth_group_id>) so Team OAuth lands scoped to that source group.
   // State-only (the URL is just the initial value); the removable toolbar chip
-  // clears it back to "all pools". Name resolves from the owned-pool alias (the
-  // sign-in-able 待登录 pools live in ownerPools); falls back to the id.
-  const [poolFilter, setPoolFilter] = useState<string | null>(() => searchParams.get('group'));
+  // clears it back to "all pools". The alias resolves across every visible
+  // membership because advanced-path Agents can use a company pool.
+  const [poolFilter, setPoolFilter] = useState<string | null>(() => initialPoolFilter);
+  // Resolve a deep link once per group so 30-second query refreshes never
+  // override a category the user selected manually. Unknown groups remain on
+  // All; if eventual consistency makes the group appear later, it then resolves.
+  const autoResolvedGroupRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!poolFilter || autoResolvedGroupRef.current === poolFilter) return;
+    if (!myGroups.some((group) => group.oauth_group_id === poolFilter)) return;
+    setScopeFilter(initialAccountScope(poolFilter, myGroups));
+    autoResolvedGroupRef.current = poolFilter;
+  }, [myGroups, poolFilter]);
   const visibleOwnerPools = useMemo(
-    () => (poolFilter ? ownerPools.filter((g) => g.oauth_group_id === poolFilter) : ownerPools),
-    [ownerPools, poolFilter],
+    () => filterAgentPools(ownerPools, poolFilter, search),
+    [ownerPools, poolFilter, search],
   );
   const poolFilterName = useMemo(
-    () => (poolFilter ? ownerPools.find((g) => g.oauth_group_id === poolFilter)?.alias ?? poolFilter : null),
-    [poolFilter, ownerPools],
+    () => (poolFilter ? myGroups.find((g) => g.oauth_group_id === poolFilter)?.alias ?? poolFilter : null),
+    [poolFilter, myGroups],
   );
   // The deep-linked id, frozen at mount (a plain ref, NOT re-read from the URL):
   // used only for the one-time scroll-into-view of the auto-expanded row.
@@ -261,31 +279,20 @@ export default function OAuthContributePage() {
   const fetchErr: TeamFetchError | undefined =
     result && isTeamFetchError(result) ? result : undefined;
 
-  const filtered = useMemo(
-    () =>
-      accounts.filter((a) => {
-        if (poolFilter && a.oauth_group_id !== poolFilter) return false;
-        if (statusFilter !== 'all') {
-          const ok = statusFilter === 'inactive'
-            ? isInactiveStatus(a.status)
-            : a.status === statusFilter;
-          if (!ok) return false;
-        }
-        return a.identity.toLowerCase().includes(search.trim().toLowerCase());
-      }),
-    [accounts, search, statusFilter, poolFilter],
+  const visiblePersonalAccounts = useMemo(
+    () => filterPersonalAccounts(accounts, poolFilter, search),
+    [accounts, poolFilter, search],
   );
-  // Pill counts — off the UNfiltered list so each pill shows its own total
-  // regardless of the active filter (mirrors the vault FilterStrip).
-  const statusCounts = useMemo(() => {
-    const c = { all: accounts.length, logged_in: 0, needs_login: 0, inactive: 0 };
-    for (const a of accounts) {
-      if (a.status === 'logged_in') c.logged_in += 1;
-      else if (a.status === 'needs_login') c.needs_login += 1;
-      else if (isInactiveStatus(a.status)) c.inactive += 1;
-    }
-    return c;
-  }, [accounts]);
+  // Category counts deliberately ignore search, matching the shared filter-pill
+  // convention, but honor an explicit group deep link. Every number uses the
+  // same unit: account rows rendered in that ownership scope.
+  const scopeCounts = useMemo(
+    () => accountScopeCounts(accounts, ownerPools, poolFilter),
+    [accounts, ownerPools, poolFilter],
+  );
+  const visibleSections = accountScopeSections(scopeFilter);
+  const showPersonalAccounts = visibleSections.includes('personal');
+  const showAgentPools = visibleSections.includes('agent_pool');
   const routed = accounts.find((a) => a.is_routed);
 
   const listQueryError = listQ.isError
@@ -369,13 +376,15 @@ export default function OAuthContributePage() {
             </div>
           )}
 
-          {/* Search + status filter. Kept on the ERROR path (was gated behind
+          {/* Search + ownership filter. Kept on the ERROR path (was gated behind
               `ready`, which is false on fetchErr) so a failed load degrades the
               way Team Keys does — page keeps its skeleton, only the table body
               swaps to the message — instead of collapsing to a bare card
-              (2026-07-12 alignment). The no-accounts happy path still hides the
-              strip, as before: searching an empty list is meaningless. */}
-          {!listQ.isLoading && (fetchErr || listQueryError || accounts.length > 0) && (
+              (2026-07-12 alignment). The strip remains available when either
+              ownership source has data. */}
+          {!listQ.isLoading && (
+            fetchErr || listQueryError || accounts.length > 0 || ownerPools.length > 0
+          ) && (
             <div className="flex items-center gap-4 flex-wrap">
               <div className="relative">
                 <SearchIcon
@@ -393,31 +402,25 @@ export default function OAuthContributePage() {
               <div
                 className="filter-group"
                 role="radiogroup"
-                aria-label={t('oauthContribute.filterByStatusAria')}
+                aria-label={t('oauthContribute.filterByScopeAria')}
               >
-                <StatusFilterPill
-                  active={statusFilter === 'all'}
-                  onClick={() => setStatusFilter('all')}
+                <AccountScopePill
+                  active={scopeFilter === 'all'}
+                  onClick={() => setScopeFilter('all')}
                   label={t('oauthContribute.filterAll')}
-                  count={statusCounts.all}
+                  count={scopeCounts.all}
                 />
-                <StatusFilterPill
-                  active={statusFilter === 'logged_in'}
-                  onClick={() => setStatusFilter('logged_in')}
-                  label={t('oauthContribute.status.logged_in')}
-                  count={statusCounts.logged_in}
+                <AccountScopePill
+                  active={scopeFilter === 'personal'}
+                  onClick={() => setScopeFilter('personal')}
+                  label={t('oauthContribute.filterPersonalAccounts')}
+                  count={scopeCounts.personal}
                 />
-                <StatusFilterPill
-                  active={statusFilter === 'needs_login'}
-                  onClick={() => setStatusFilter('needs_login')}
-                  label={t('oauthContribute.status.needs_login')}
-                  count={statusCounts.needs_login}
-                />
-                <StatusFilterPill
-                  active={statusFilter === 'inactive'}
-                  onClick={() => setStatusFilter('inactive')}
-                  label={t('oauthContribute.filterInactive')}
-                  count={statusCounts.inactive}
+                <AccountScopePill
+                  active={scopeFilter === 'agent_pool'}
+                  onClick={() => setScopeFilter('agent_pool')}
+                  label={t('oauthContribute.filterAgentPools')}
+                  count={scopeCounts.agent_pool}
                 />
               </div>
               {/* Pool filter chip (2026-07-22) — deep-linked from my-agents'
@@ -432,7 +435,11 @@ export default function OAuthContributePage() {
                   {poolFilterName}
                   <button
                     type="button"
-                    onClick={() => setPoolFilter(null)}
+                    onClick={() => {
+                      setPoolFilter(null);
+                      setScopeFilter('all');
+                      autoResolvedGroupRef.current = null;
+                    }}
                     aria-label={t('oauthContribute.clearPoolFilter')}
                     style={{ marginLeft: '2px', color: 'inherit', opacity: 0.7, cursor: 'pointer', background: 'none', border: 'none', padding: 0, fontSize: '13px', lineHeight: 1 }}
                   >×</button>
@@ -441,10 +448,74 @@ export default function OAuthContributePage() {
             </div>
           )}
 
-          {/* Owner agent pools — FULL composition, every account sign-in-able
-              (2026-07-18): one card per owned pool, provider-partitioned by
-              construction (R34 one-provider-per-group). */}
-          {visibleOwnerPools.map((g) => (
+          {/* Personal routed/history accounts. This section intentionally comes
+              before Agent pools in the combined view (2026-07-29 user rule). */}
+          {showPersonalAccounts && (
+            <section className="card overflow-hidden">
+              <div className="card-header flex items-center gap-2 px-4 py-3">
+                <span
+                  className="text-[10px] font-mono uppercase tracking-wider"
+                  style={{ color: 'var(--muted-foreground)' }}
+                >
+                  {t('oauthContribute.personalAccountsTitle')}
+                  {' · '}
+                  {fetchErr || listQueryError
+                    ? t('oauthContribute.accountListUnavailable')
+                    : routed
+                      ? t('oauthContribute.historyNote')
+                      : t('oauthContribute.noRoutedAccount')}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                {listQ.isLoading && <EmptyState message={t('oauthContribute.loading')} />}
+                {(fetchErr || listQueryError) && (
+                  <EmptyState
+                    message={fetchErr ? t(fetchErrKey(fetchErr)) : listQueryError}
+                    tone="error"
+                    onRetry={() => void listQ.refetch()}
+                    retryLabel={t('oauthContribute.retryLoad')}
+                  />
+                )}
+                {ready && visiblePersonalAccounts.length === 0 && (
+                  <EmptyState message={t('oauthContribute.empty')} />
+                )}
+                {ready && visiblePersonalAccounts.length > 0 && (
+                  <table className="vault">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '34%' }}>{t('oauthContribute.colEmail')}</th>
+                        <th style={{ width: '18%' }}>{t('oauthContribute.colPoolGroup')}</th>
+                        <th style={{ width: '16%' }}>{t('oauthContribute.colLastLogin')}</th>
+                        <th style={{ width: '12%' }}>{t('oauthContribute.colStatus')}</th>
+                        <th style={{ width: '20%', textAlign: 'right' }} aria-hidden="true" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visiblePersonalAccounts.map((a) => (
+                        <AccountRow
+                          key={a.credential_id}
+                          account={a}
+                          expanded={!!a.is_routed && expandedCred === a.credential_id}
+                          // Deep-link arrival (2026-07-12): scroll the auto-expanded card
+                          // into view once — the vault CTA's whole point is landing the
+                          // user ON the right account, not above/below it off-screen.
+                          scrollOnMount={deepLinkCred === a.credential_id}
+                          onToggle={() =>
+                            setExpandedCred((c) => (c === a.credential_id ? null : a.credential_id))
+                          }
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Owner Agent pools. Full composition and every account is sign-in-able
+              (2026-07-18); one card per provider-partitioned owner pool. */}
+          {showAgentPools && visibleOwnerPools.map((g) => (
             <section key={g.oauth_group_id} className="card overflow-hidden">
               <div className="card-header flex items-center gap-2 px-4 py-3">
                 <span
@@ -500,69 +571,10 @@ export default function OAuthContributePage() {
             </section>
           ))}
 
-          {/* Company/history accounts. With a pool filter active, only render
-              this if it has matching accounts — an owned-pool filter renders its
-              section above and leaves this empty, so we hide it. (2026-07-22) */}
-          {(!poolFilter || filtered.length > 0) && (
-          <section className="card overflow-hidden">
-            <div className="card-header flex items-center gap-2 px-4 py-3">
-              <span
-                className="text-[10px] font-mono uppercase tracking-wider"
-                style={{ color: 'var(--muted-foreground)' }}
-              >
-                {fetchErr || listQueryError
-                  ? t('oauthContribute.accountListUnavailable')
-                  : routed
-                    ? t('oauthContribute.historyNote')
-                    : t('oauthContribute.noRoutedAccount')}
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              {listQ.isLoading && <EmptyState message={t('oauthContribute.loading')} />}
-              {(fetchErr || listQueryError) && (
-                <EmptyState
-                  message={fetchErr ? t(fetchErrKey(fetchErr)) : listQueryError}
-                  tone="error"
-                  onRetry={() => void listQ.refetch()}
-                  retryLabel={t('oauthContribute.retryLoad')}
-                />
-              )}
-              {ready && accounts.length === 0 && <EmptyState message={t('oauthContribute.empty')} />}
-              {ready && accounts.length > 0 && filtered.length === 0 && (
-                <EmptyState message={t('oauthContribute.empty')} />
-              )}
-              {ready && filtered.length > 0 && (
-                <table className="vault">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '34%' }}>{t('oauthContribute.colEmail')}</th>
-                      <th style={{ width: '18%' }}>{t('oauthContribute.colPoolGroup')}</th>
-                      <th style={{ width: '16%' }}>{t('oauthContribute.colLastLogin')}</th>
-                      <th style={{ width: '12%' }}>{t('oauthContribute.colStatus')}</th>
-                      <th style={{ width: '20%', textAlign: 'right' }} aria-hidden="true" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((a) => (
-                      <AccountRow
-                        key={a.credential_id}
-                        account={a}
-                        expanded={!!a.is_routed && expandedCred === a.credential_id}
-                        // Deep-link arrival (2026-07-12): scroll the auto-expanded card
-                        // into view once — the vault CTA's whole point is landing the
-                        // user ON the right account, not above/below it off-screen.
-                        scrollOnMount={deepLinkCred === a.credential_id}
-                        onToggle={() =>
-                          setExpandedCred((c) => (c === a.credential_id ? null : a.credential_id))
-                        }
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </section>
+          {showAgentPools && !ownerGroupsQ.isLoading && !ownerGroupsErr && visibleOwnerPools.length === 0 && (
+            <section className="card overflow-hidden">
+              <EmptyState message={t('oauthContribute.agentPoolsEmpty')} />
+            </section>
           )}
         </div>
       </div>
@@ -629,6 +641,23 @@ function AccountRow({
   const { t } = useTranslation();
   const sc = statusChip(account.status);
   const isRouted = !!account.is_routed;
+  // Keep every wire status mapped explicitly. Besides making unknown future
+  // statuses fall back safely, the static keys are also checked by the i18n
+  // coverage test (a template-string lookup is invisible to that guardrail).
+  const statusLabel = (() => {
+    switch (account.status) {
+      case 'logged_in':
+        return t('oauthContribute.status.logged_in');
+      case 'needs_login':
+        return t('oauthContribute.status.needs_login');
+      case 'auth_failed':
+        return t('oauthContribute.status.auth_failed');
+      case 'revoked':
+        return t('oauthContribute.status.revoked');
+      default:
+        return account.status;
+    }
+  })();
   // Callback ref (not useEffect): fires exactly when the <tr> mounts, which for a
   // deep link is the first data render — no re-fire on expand/collapse re-renders.
   const scrollRef = useCallback(
@@ -716,7 +745,7 @@ function AccountRow({
             {sc.dot !== 'idle' && (
               <span className={`status-dot ${sc.dot}`} style={{ width: 5, height: 5 }} />
             )}
-            {t(`oauthContribute.status.${account.status}`, account.status)}
+            {statusLabel}
           </span>
         </td>
         <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>

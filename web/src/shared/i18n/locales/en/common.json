@@ -1621,7 +1621,6 @@
     "eventBinding": "Binding",
     "eventSwitched": "Switched",
     "riskTableTitle": "SYSTEM ALERTS / RISK & ATTENTION",
-    "criticalEventsOnly": "Critical events only",
     "loadingDots": "Loading.....",
     "noCriticalEvents": "No critical events — all clear",
     "colSubjectId": "Subject ID",
@@ -2545,9 +2544,12 @@
     "loading": "Loading...",
     "historyNote": "You are routed to the highlighted account; past accounts are kept for history.",
     "searchPlaceholder": "Search by email",
-    "filterByStatusAria": "Filter by status",
+    "filterByScopeAria": "Filter by account ownership",
     "filterAll": "All",
-    "filterInactive": "Inactive",
+    "filterPersonalAccounts": "Personal accounts",
+    "filterAgentPools": "Agent pools",
+    "personalAccountsTitle": "Personal accounts",
+    "agentPoolsEmpty": "No Agent pool accounts match this view.",
     "colEmail": "Email",
     "colPoolGroup": "Pool group",
     "clearPoolFilter": "Clear pool filter",
@@ -2823,5 +2825,11 @@
     "titleAuth": "Session invalid — page data could not load",
     "more": "{{count}} more error type(s)",
     "dismiss": "Dismiss"
+  },
+  "filterTokenBar": {
+    "placeholder": "Filter…",
+    "noMatches": "No matches",
+    "useValue": "Use \"{{value}}\"",
+    "remove": "Remove filter"
   }
 }

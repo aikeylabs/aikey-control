@@ -735,6 +735,17 @@ textarea:focus {
 input::placeholder {
   color: var(--muted-foreground) !important;
 }
+/* Pagination page-size select (2026-07-29, mirror of master/web — dual-edit
+   whitelist path): must sit as quiet as the sibling prev/next buttons
+   (transparent bg, muted text). The generic
+   `select { background-color: var(--muted) !important }` rule above overrides
+   ANY inline style, which is why an inline-style fix silently fails — this
+   class out-specifies it (element+class > element, both !important).
+   Keep in sync with Pagination.tsx BTN_STYLE. */
+select.page-size-select {
+  background-color: transparent !important;
+  color: var(--muted-foreground) !important;
+}
 
 /* ── Cross-document View Transitions (2026-07-22, Route-3 spike) ──
    Smooth the cross-app full-page reload: Account / Compliance / Overview are a
