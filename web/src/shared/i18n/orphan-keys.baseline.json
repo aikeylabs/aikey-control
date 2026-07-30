@@ -15,8 +15,6 @@
     "oauthContribute.pasteCode",
     "oauthContribute.signInFor",
     "oauthContribute.signInTitle",
-    "oauthContribute.status.auth_failed",
-    "oauthContribute.status.revoked",
     "overview.teamOAuthProtocol",
     "providerAccounts.activeChannelCount_plural",
     "providerAccounts.channelCount_plural",

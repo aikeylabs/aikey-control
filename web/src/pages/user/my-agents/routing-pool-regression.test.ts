@@ -7,6 +7,7 @@ import * as path from 'node:path';
 const PAGE = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/user/my-agents/index.tsx'), 'utf-8');
 const ACCOUNTS_API = fs.readFileSync(path.resolve(process.cwd(), 'src/shared/api/user/accounts.ts'), 'utf-8');
 const POOL_LIST = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/user/_shared/PoolAccountList.tsx'), 'utf-8');
+const DETAIL_DRAWER = fs.readFileSync(path.resolve(process.cwd(), 'src/shared/ui/DetailDrawer.tsx'), 'utf-8');
 
 describe('My Agents routing and account-pool observability', () => {
   it('keeps public Ingress binding separate from local Vault routing state', () => {
@@ -37,5 +38,17 @@ describe('My Agents routing and account-pool observability', () => {
     expect(POOL_LIST).toContain(': routedGroupAccount(accounts)');
     expect(PAGE).toContain('primaryLabel: t(\'myAgents.routing.ingressBindingBadge\')');
     expect(PAGE).toContain('showRemaining');
+  });
+
+  it('restores the shared keys-page skin inside the portaled routing drawer', () => {
+    expect(DETAIL_DRAWER).toContain('createPortal(');
+    expect(DETAIL_DRAWER).toContain('document.body');
+    expect(PAGE).toContain('className="vault-page space-y-5 font-mono"');
+  });
+
+  it('opens the same routing drawer from both the Agent name and routing account', () => {
+    const openCalls = PAGE.match(/setRoutingAgent\(agent\)/g) ?? [];
+    expect(openCalls).toHaveLength(2);
+    expect(PAGE).toContain("aria-label={t('myAgents.routing.openTitle', { account: agent.alias })}");
   });
 });

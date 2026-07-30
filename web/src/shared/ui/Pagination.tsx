@@ -88,26 +88,30 @@ export function Pagination({ onPage, onPageSize, ...input }: PaginationProps) {
 
   return (
     <div className="flex items-center justify-between px-2 py-3">
-      <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-        {m.mode === 'pages' ? t('pagination.range', m.range) : t('pagination.pageN', { n: m.page })}
-      </span>
-      <div className="flex items-center gap-1">
+      {/* Left group: range text + per-page selector (user request 2026-07-29:
+          the selector aligns LEFT with the count, not with the pager). */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+          {m.mode === 'pages' ? t('pagination.range', m.range) : t('pagination.pageN', { n: m.page })}
+        </span>
         {onPageSize && (
-          // Same visual weight as the sibling prev/next buttons (BTN_STYLE,
+          // Same visual weight as the prev/next buttons (BTN_STYLE,
           // transparent bg) — user report 2026-07-29: the control read brighter
-          // than the row and drew the eye. `appearance-none` is required, not
-          // cosmetic: without it Safari/macOS keeps painting the native
-          // button-face background and ignores the author background-color
-          // (a plain `backgroundColor: transparent` fix did NOT land there).
+          // than the row and drew the eye. Two things are load-bearing here:
+          // `appearance-none` (Safari ignores author backgrounds on native
+          // selects) and the `page-size-select` class — index.css has a global
+          // `select { background-color: var(--muted) !important }` rule that
+          // silently overrides ANY inline style, so the transparent bg + muted
+          // text live in that class (see index.css), not in `style`.
           // Dropping native appearance also drops the built-in chevron, so a
           // pointer-transparent ▾ glyph restores the affordance.
-          <span className="relative mr-2">
+          <span className="relative">
             <select
               value={input.pageSize}
               onChange={(e) => { onPageSize(Number(e.target.value)); onPage(1); }}
               aria-label={t('pagination.perPageAria')}
-              className="pl-1.5 pr-5 py-1 text-[10px] font-mono rounded border cursor-pointer appearance-none"
-              style={{ ...BTN_STYLE, backgroundColor: 'transparent' }}
+              className="page-size-select pl-1.5 pr-5 py-1 text-[10px] font-mono rounded border cursor-pointer appearance-none"
+              style={{ borderColor: BTN_STYLE.borderColor }}
             >
               {pageSizeOptions(input.pageSize).map((n) => (
                 <option key={n} value={n}>{t('pagination.perPage', { n })}</option>
@@ -122,6 +126,8 @@ export function Pagination({ onPage, onPageSize, ...input }: PaginationProps) {
             </span>
           </span>
         )}
+      </div>
+      <div className="flex items-center gap-1">
         <button disabled={m.prevDisabled} onClick={() => onPage(input.page - 1)} className={BTN} style={BTN_STYLE}>
           {t('pagination.prev')}
         </button>

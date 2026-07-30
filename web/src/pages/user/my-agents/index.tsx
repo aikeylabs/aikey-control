@@ -98,7 +98,11 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
       title={t('myAgents.routing.drawerTitle', { name: agent?.alias ?? '' })}
       subtitle={t('myAgents.routing.drawerSubtitle')}
     >
-      <div className="space-y-5 font-mono">
+      {/* DetailDrawer portals to document.body, outside the page-level
+          .vault-page scope. Re-establish that shared skin scope here so the
+          canonical PoolAccountList, cards, chips, and actions render exactly
+          as they do on Team Keys without duplicating any CSS. */}
+      <div className="vault-page space-y-5 font-mono">
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="card p-4">
             <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.ingressBinding')}</p>
@@ -862,7 +866,17 @@ export default function MyAgentsPage() {
               )}
               {agents?.map(agent => (
                 <tr key={agent.seat_id}>
-                  <td className="px-5 py-4" style={{ color: 'var(--soft-foreground)' }}>{agent.alias}</td>
+                  <td className="px-5 py-4" style={{ color: 'var(--soft-foreground)' }}>
+                    <button
+                      type="button"
+                      className="alias-main mono cursor-pointer text-left hover:underline focus-visible:underline"
+                      onClick={() => setRoutingAgent(agent)}
+                      title={t('myAgents.routing.openTitle', { account: agent.alias })}
+                      aria-label={t('myAgents.routing.openTitle', { account: agent.alias })}
+                    >
+                      {agent.alias}
+                    </button>
+                  </td>
                   <td className="px-5 py-4">{sourceBadge(agent.source, t)}</td>
                   <td className="px-5 py-4">
                     <span className={`badge ${agent.status === 'active' ? 'badge-active' : 'badge-neutral'}`}>{agent.status}</span>
