@@ -325,6 +325,7 @@ const (
 	// BIZ — Seat Group (通用凭证共享组 / oauth_group)
 	CodeBizOauthGroupNotFound         = "BIZ_OAUTH_GROUP_NOT_FOUND"
 	CodeBizRouteGroupNotFound         = "BIZ_ROUTE_GROUP_NOT_FOUND"
+	CodeBizRouteGroupOriginConflict   = "BIZ_ROUTE_GROUP_ORIGIN_CONFLICT"
 	CodeBizOauthGroupDefaultProtected = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
 	CodeBizOauthGroupCredInUse        = "BIZ_OAUTH_GROUP_CRED_IN_USE"
 	// CodeBizOauthGroupRatioRejected: issuing to a group would push seats:accounts
@@ -612,6 +613,21 @@ func BizRouteGroupNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizRouteGroupNotFound,
 		Message: fmt.Sprintf("route group %q not found", id),
 		Meta:    map[string]any{"id": id}}
+}
+
+// BizRouteGroupOriginConflict — this (key, protocol) chain would end up with
+// hops from two different origins: one template and an ungrouped hop, or two
+// templates (P0a task 0b.9d).
+//
+// 🔴 Typed, not a bare error. The refusal itself is deliberate and its message
+// already explains what to do — but returned as a plain error it reached
+// HandleDomainErr, which logs "unhandled internal error" and answers 500
+// SYS_INTERNAL. The administrator then sees "an unexpected error occurred" for a
+// decision the system made on purpose and can act on. **A refusal that arrives
+// as a crash is indistinguishable from a bug**, and the reader's next move is to
+// retry or file a defect rather than to detach the existing chain.
+func BizRouteGroupOriginConflict(msg string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupOriginConflict, Message: msg}
 }
 
 // BizOauthGroupDefaultProtected — the per-org default group cannot be deleted.
