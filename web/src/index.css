@@ -1,3 +1,25 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+ * 🔴 DUAL-EDIT: this file is byte-identical in aikey-control/web and
+ * aikey-control-master/web, and it is fenced by `make web-drift-check`.
+ *
+ * It has to be, and the reason is not tidiness. The trial composer's entry
+ * stylesheet is `@import '.../aikey-control-master-web/src/index.css'` — so a
+ * USER page rendered in Trial has always been painted by the MASTER copy, while
+ * the same page in Personal was painted by the user copy. The two drifted for
+ * months and the visible result was one page with two looks depending on which
+ * edition you opened: pill badges vs 2px badges, #facc15 vs #eab308 primary
+ * buttons. Nobody chose that; it was an artefact of the split.
+ *
+ * The 2026-07-30 reconciliation took THIS file (master's) as the shared one
+ * because it was already the one shipping to user pages through Trial, and
+ * because its later rules each carry a recorded rationale (the 2026-06-09 button
+ * dim came from user feedback). Personal now matches what Trial already showed.
+ *
+ * Note the `.nav-item` base bump below is master-AppShell-only in effect:
+ * `.user-sidebar .nav-item` overrides padding and font for the user sidebar, in
+ * this same file, so user navigation is untouched by it.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap');
 
 @tailwind base;
@@ -8,16 +30,9 @@
 :root {
   /* Exact values from theme_2.css */
   --background: #18181b;       /* zinc-900 */
-  --foreground: #f4f4f5;       /* zinc-50 — body text, labels, small headings */
-  /* Display foreground (2026-05-23) — used by large prominent
-     headings (page H1s, topbar breadcrumb current-page, sidebar
-     brand wordmark). Warm off-white pairs with the amber accent
-     palette and reads as a "premium whisper" instead of pure-white
-     billboard-shout. Body text keeps `--foreground` so reading
-     contrast isn't reduced. */
-  --display-foreground: #c8c4ba;
-  /* Soft foreground (2026-05-23 v2) — intermediate tier between
-     --foreground (pure white) and --display-foreground (heading
+  --foreground: #f4f4f5;       /* zinc-50 */
+  /* Soft foreground (2026-05-23 mirror of user/web) — intermediate tier
+     between --foreground (pure white) and --display-foreground (heading
      dim). Used for prominent row content + status labels that need
      to read as "primary" without screaming pure-white: vault row
      aliases, "VAULT LOCKED" banner label, etc. Only ~6% darker than
@@ -34,17 +49,19 @@
   --popover-foreground: #f4f4f5;
   --primary: #facc15;          /* yellow-400 — accents, active rails, brand glyph */
   --primary-foreground: #18181b;
-  /* Dim amber (2026-05-23) — for SECONDARY amber treatments where the
-     full --primary reads as too loud: top divider lines, faint state
-     borders, low-emphasis indicator strokes. Matches the value already
-     used by the existing .vault-header box-shadow halo `rgba(202, 138,
-     4, .1)` so the divider line + its glow now share the same hue
-     basis. Single source of truth — add new amber-dim uses here. */
+  /* Dim amber (2026-05-23 mirror of user/web) — for SECONDARY amber
+     treatments where the full --primary reads as too loud: top divider
+     lines, faint state borders, low-emphasis indicator strokes. Matches
+     the value already used by the existing .vault-header box-shadow halo
+     `rgba(202, 138, 4, .1)` so the divider line + its glow now share the
+     same hue basis. Single source of truth — add new amber-dim uses
+     here. */
   --primary-dim: #ca8a04;      /* yellow-600 */
   --secondary: #3f3f46;        /* zinc-700 */
   --secondary-foreground: #f4f4f5;
   --muted: #3f3f46;
   --muted-foreground: #a1a1aa; /* zinc-400 */
+  --faint-foreground: #71717a; /* zinc-500 — dimmest caption tier, e.g. nav group titles */
   --accent: #3f3f46;
   --accent-foreground: #f4f4f5;
   --destructive: #ef4444;      /* red-500 */
@@ -62,11 +79,19 @@
   --success: #4ade80;
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Space Mono', ui-monospace, monospace;
-  /* Display font — aligned with aikeylabs.com main site (logo + headlines
-     there use Space Grotesk via the `font-display` Tailwind class). Loaded
-     in the @import above. Kept as a CSS variable so non-Tailwind layouts
-     (UserShell brand row) can reference it inline. */
+  /* Display font (2026-05-30 mirror of user/web) — aligned with
+     aikeylabs.com main site (logo + headlines there use Space Grotesk
+     via the `font-display` Tailwind class). Loaded in the @import
+     above. Kept as a CSS variable so non-Tailwind layouts (UserShell
+     brand row) can reference it inline. */
   --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  /* Display foreground tier (2026-05-30 mirror of user/web) —
+     warm off-white for premium headings + brand wordmark. Pairs with
+     the amber accent palette and reads as a "premium whisper"
+     instead of pure-white billboard-shout. Hierarchy (brightest →
+     dimmest): --foreground #f4f4f5 → --display-foreground #c8c4ba →
+     --muted-foreground #a1a1aa. */
+  --display-foreground: #c8c4ba;
   --radius: 0.375rem;
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
@@ -132,11 +157,11 @@ body {
 /* ── Vault Header ── */
 .vault-header {
   background: linear-gradient(180deg, var(--card) 0%, var(--background) 100%);
-  /* Border switched from full --primary (#facc15) to --primary-dim
-     (#ca8a04, yellow-600) so the divider reads as a calm accent stripe
-     instead of a hot neon line. The box-shadow's rgba(202, 138, 4, …)
-     halo is already at the same hue basis, so line + glow now belong
-     to the same color story. */
+  /* 2026-05-23 mirror of user/web: border switched from full --primary
+     (#facc15) to --primary-dim (#ca8a04, yellow-600) so the line shares
+     the same hue basis as the existing box-shadow halo rgba(202,138,4)
+     below. Reduces the "billboard amber" feel of the original
+     full-strength stroke while keeping it readable as an accent. */
   border-bottom: 1px solid var(--primary-dim);
   box-shadow: 0 1px 10px rgba(202, 138, 4, 0.1);
 }
@@ -151,12 +176,17 @@ body {
 .nav-item {
   display: flex;
   align-items: center;
-  padding: 0.625rem 0.75rem;
+  /* 2026-05-12: slight bump for the AppShell (master) sidebar —
+     padding 10/12 → 12/14, font 14 → 15, item gap 4 → 6.
+     Same "slightly more generous" intent the .user-sidebar override
+     (14.5px font) already applied on the user side; brings master to a
+     comparable breathing room without changing the visual language. */
+  padding: 0.75rem 0.875rem;
   border-radius: var(--radius-sm);
   color: var(--muted-foreground);
   transition: all 150ms ease;
-  font-size: 0.875rem;
-  margin-bottom: 0.25rem;
+  font-size: 0.9375rem;
+  margin-bottom: 0.375rem;
   font-weight: 500;
   border: 1px solid transparent;
   text-decoration: none;
@@ -173,11 +203,11 @@ body {
   box-shadow: inset 2px 0 0 0 var(--primary);
 }
 .nav-group-title {
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: var(--muted-foreground);
-  margin: 1.5rem 0 0.5rem 0.75rem;
+  color: var(--faint-foreground); /* dimmer than item labels so groups recede (2026-06-26) */
+  margin: 1.75rem 0 0.625rem 0.75rem;
   font-family: var(--font-mono);
 }
 
@@ -197,22 +227,26 @@ body {
    horizontal padding. nav 10→14px + item 14→18px → total 32px gutter from
    sidebar edge to icon (was 24px). Gives菜单项明显的"呼吸空间",和右侧
    主内容的 px-6 (24px) 两侧节奏对齐。 */
-/* Top padding bumped 18→24 (2026-05-23) so the first nav item
-   (Overview) doesn't sit too close to the brand row — gives a bit
-   more visual separation between the wordmark and the navigation. */
+/* 2026-05-30 mirror of user/web: top padding 18→24 gives the first
+   group +6px breathing room below the brand row's bottom edge, so the
+   sidebar doesn't feel like brand and nav are jammed together. */
 .user-sidebar nav { padding: 24px 14px 8px 14px; }
 
+/* 2026-05-30 mirror of user/web spacing: tighter group gap (18 was 22)
+   + tighter item gap (3 was 5). master had drifted to larger values
+   over time; aligning lets the trial composer + standalone master
+   render the same vertical rhythm as Personal. */
 .user-sidebar .nav-section + .nav-section { margin-top: 18px; }
 .user-sidebar .nav-section > .nav-item + .nav-item { margin-top: 3px; }
 
 .user-sidebar .nav-item {
   position: relative;
   gap: 12px;
-  /* Vertical padding tightened 11→9 (2026-05-23, v2 after first
-     pass of 8px felt a touch cramped). -4px per item × ~10 visible
-     items reclaims ~40px of vertical real estate while keeping the
-     row tall enough to read as "tappable". Section gap 22→18 and
-     per-item gap 5→3 keep the cadence proportional. */
+  /* 2026-05-30 mirror of user/web (2026-05-23 tightening pass):
+     vertical padding 11→9 reclaims ~40px of vertical real estate
+     across ~10 visible items while keeping the row tall enough to
+     read as "tappable". Pairs with the section gap 22→18 and per-
+     item gap 5→3 already synced earlier for proportional cadence. */
   padding: 9px 18px;
   border-radius: 7px;
   /* 2026-04-24: font-size 13.5 → 14.5 + weight 500 → 550 (via
@@ -590,24 +624,27 @@ body {
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.1rem 0.5rem;
-  border-radius: 9999px;
-  font-size: 0.64rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 2px;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   font-family: var(--font-mono);
 }
 .badge-active {
-  background-color: rgba(34, 197, 94, 0.16);
+  background-color: rgba(34, 197, 94, 0.1);
   color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
 }
 .badge-suspended {
-  background-color: rgba(249, 115, 22, 0.16);
+  background-color: rgba(249, 115, 22, 0.1);
   color: #fb923c;
+  border: 1px solid rgba(249, 115, 22, 0.3);
 }
 .badge-revoked {
-  background-color: rgba(239, 68, 68, 0.16);
+  background-color: rgba(239, 68, 68, 0.1);
   color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 .badge-neutral {
   background-color: var(--muted);
@@ -631,14 +668,24 @@ body {
   border: none;
   outline: none;
 }
+/* Slightly dimmed amber base (2026-06-09 user feedback). Was
+   var(--primary) (#facc15 yellow-400) — the bright yellow felt too loud
+   on top-right action buttons that show up on every master page
+   (邀请席位, 添加凭据, 新建通道, +新建通道, etc.). Dropped one shade to
+   yellow-500 (#eab308) so the CTA still reads as "this is the primary
+   action" but doesn't compete visually with page content. Hover bumps
+   back to yellow-400 to keep affordance lift on aim.
+   --primary token itself is NOT changed — it's used elsewhere (focus
+   rings, chart accents, in-use indicators) where the brighter hue is
+   correct. This dim is scoped to .btn-primary only. */
 .btn-primary {
-  background-color: var(--primary);
+  background-color: #eab308;
   color: var(--primary-foreground);
   box-shadow: var(--glow-primary);
-  border: 1px solid rgba(250, 204, 21, 0.5);
+  border: 1px solid rgba(234, 179, 8, 0.55);
 }
 .btn-primary:hover {
-  background-color: #fde047;
+  background-color: var(--primary);
   box-shadow: var(--glow-primary-hover);
   transform: translateY(-1px);
 }
@@ -760,6 +807,8 @@ select.page-size-select {
    aikey-control/web and aikey-control-master/web index.css must carry this for
    the cross-bundle transition to fire. Client-side (NavLink) navigations are
    unaffected — cross-document VT only triggers on real document navigations.
+   The master console (AppShell) sidebar has no `.user-sidebar` class, so only
+   the forwarded /user/* sidebar is named (master→master stays client-side).
    See bugfix 2026-07-22-scrollbar-gutter-content-reflow.md. */
 @view-transition {
   navigation: auto;

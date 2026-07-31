@@ -1,3 +1,6 @@
+import i18next from 'i18next';
+import { calendarDateAsUTCDate, getEffectiveUsageTimeZone } from '@/shared/usage/usage-time-zone';
+
 /**
  * Locale-aware date/time formatters.
  *
@@ -20,28 +23,25 @@
  * chart-render hot path, so the cache pays off.
  */
 
-import i18next from 'i18next';
-import { calendarDateAsUTCDate, getEffectiveUsageTimeZone } from '@/shared/usage/usage-time-zone';
-
 /** UI display locale.
  *
- * As of Phase 0 i18n (2026-05-30) this follows the active i18n
- * language *explicitly* (the i18next singleton's resolved language),
- * still defaulting to en-US. It no longer reads raw
- * `navigator.language`: the earlier navigator-based behaviour leaked
- * locale-specific phrasings into places that hadn't actually been
- * translated — e.g. `Intl.RelativeTimeFormat` rendered
+ * As of 2026-04-24 this was pinned to "en-US" per CLAUDE.md "代码与
+ * UI 语言" rule. With Phase 0 i18n it now follows the *active i18n
+ * language* (an explicit user-picked / localStorage-cached choice),
+ * NOT the raw `navigator.language`. The original navigator-based
+ * reading leaked locale-specific phrasings into places that hadn't
+ * been translated — e.g. `Intl.RelativeTimeFormat` rendered
  * `rtf.format(0, 'second')` as "现在" / "jetzt" for Chinese / German
  * browsers, producing a mixed-language UI (the label "Updated" was
  * always English, the suffix was not). Numeric date formats
  * ({month/day ordering, weekday names}) were similarly locale-
- * dependent.
+ * dependent. Driving off the explicit i18n language avoids that:
+ * formats only switch to zh-CN when the user actually selects 中文,
+ * and en-US remains the safe default for every other case.
  *
- * Now the locale is driven only by the user's explicit i18n choice
- * (en / zh), so date/time rendering stays in lock-step with the rest
- * of the translated UI. This is the single swap point: as the message
- * catalogue grows, every cached formatter below automatically re-keys
- * under the active language. */
+ * This is the single swap point: it reads the active locale from the
+ * i18next singleton and every cached formatter below automatically
+ * re-keys under it. */
 function locale(): string {
   const lng = i18next.resolvedLanguage || i18next.language || 'en';
   return lng.startsWith('zh') ? 'zh-CN' : 'en-US';
@@ -143,6 +143,39 @@ export function formatDateTime(d: Date | string | number): string {
     hour: 'numeric',
     minute: '2-digit',
     timeZone: getEffectiveUsageTimeZone(),
+  }).format(date);
+}
+
+/** Date + time for the conversation-audit module: the VIEWER's local timezone,
+ * 24-hour clock, WITH an explicit timezone label (e.g. "Jun 17, 2026, 16:00
+ * GMT+8").
+ *
+ * Why local-with-label (not bare-local, not forced-UTC):
+ *  - Forced UTC (an earlier attempt) made an admin in UTC+8 read "08:00" for a
+ *    16:00 event — they correctly reported it as wrong; on an audit surface a
+ *    reviewer wants to see their own wall clock, not a mental +8 conversion.
+ *  - Bare local (the generic `formatDateTime`) shows the right clock but gives
+ *    no hint *which* zone, which is ambiguous when the reader must reason about
+ *    exactly *when* something happened.
+ * So: render in the viewer's local zone (matches their wall clock) and append
+ * the resolved zone via `timeZoneName: 'short'` so the value is self-describing.
+ * `hour12: false` removes AM/PM noise. Locale still follows the active UI
+ * language. NOTE: the server-side .md export
+ * (`aikey-data/query-service/.../conversation_export.go`) still renders UTC and
+ * is labelled "UTC"; because both sides are labelled there is no ambiguity even
+ * though the wall-clock numbers differ for a non-UTC viewer. */
+export function formatDateTimeAudit(d: Date | string | number): string {
+  const date = toDate(d);
+  if (!date) return '';
+  return dtf({
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: getEffectiveUsageTimeZone(),
+    timeZoneName: 'short',
   }).format(date);
 }
 

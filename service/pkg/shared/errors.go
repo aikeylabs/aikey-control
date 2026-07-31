@@ -324,6 +324,7 @@ const (
 
 	// BIZ — Seat Group (通用凭证共享组 / oauth_group)
 	CodeBizOauthGroupNotFound         = "BIZ_OAUTH_GROUP_NOT_FOUND"
+	CodeBizRouteGroupNotFound         = "BIZ_ROUTE_GROUP_NOT_FOUND"
 	CodeBizOauthGroupDefaultProtected = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
 	CodeBizOauthGroupCredInUse        = "BIZ_OAUTH_GROUP_CRED_IN_USE"
 	// CodeBizOauthGroupRatioRejected: issuing to a group would push seats:accounts
@@ -598,6 +599,18 @@ func BizCredHasActiveRefs(id string, bindingCount, virtualKeyCount int, groupIDs
 func BizOauthGroupNotFound(id string) *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupNotFound,
 		Message: fmt.Sprintf("OAuth account pool %q not found", id),
+		Meta:    map[string]any{"id": id}}
+}
+
+// BizRouteGroupNotFound — an upstream-fallback route-group template that does
+// not exist in this organization (P0a task 4.28).
+//
+// 🔴 Its own code, not reused from the OAuth pool: the two are different objects
+// with different next actions ("create a route group" vs "create an account
+// pool"), and a shared code would send half the readers to the wrong page.
+func BizRouteGroupNotFound(id string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupNotFound,
+		Message: fmt.Sprintf("route group %q not found", id),
 		Meta:    map[string]any{"id": id}}
 }
 

@@ -7,6 +7,8 @@ import { useUserAuthStore } from '@/store';
 import { runtimeConfig } from '@/app/config/runtime';
 import { BrandWordmark, BrandMark } from '@/shared/ui/BrandWordmark';
 import { userAccountsApi } from '@/shared/api/user/accounts';
+// Resolves to aikey-control/web via the `@/shared/api/user/*` tsconfig +
+// vite alias — one canonical copy, same as userAccountsApi above.
 import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
 import { SeatPendingBanner } from '@/shared/components/SeatPendingBanner';
@@ -407,6 +409,9 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   'my-agents':    { label: 'Agents',      originName: 'My Agents' },
   invites:        { label: 'Invites' },
   'trust-check':  { label: 'Trust Check' },
+  // Compliance Audit (G-series, 2026-06): user-side page; present in BOTH
+  // user/web and master/web because the trial composer resolves `@` to
+  // master/web (dual-edit rule — see UserShell.dual-edit.test.ts).
   compliance:     { label: 'Compliance Audit' },
   // Phase 4G (2026-06-01): Web Console Settings page breadcrumb label.
   settings:       { label: 'Settings' },
@@ -582,9 +587,11 @@ export function UserShell() {
   // the server returns `local@localhost`; in JWT mode it returns the
   // authenticated user. The zustand store is a secondary fallback for
   // the first paint before the query resolves.
-  // Default retries kept on purpose — see the Overview comment: a token
-  // rejected moments after `aikey login` is the gateway's 2s vault cache,
-  // not a dead session, and the default backoff is what heals it.
+  // Default retries kept on purpose: a token rejected moments after
+  // `aikey login` is the gateway's 2s vault cache (DefaultVaultCacheTTL,
+  // aikey-trial-server internal/gateway/gateway.go), not a dead session.
+  // The default backoff spans that window so the race heals itself;
+  // skipping retries would pin "session expired" on a fresh login.
   const meQuery = useQuery({ queryKey: ['me'], queryFn: userAccountsApi.me });
   // Gateway forwarded the vault JWT and the team server rejected it. The
   // store fallback below would happily serve a stale email from the dead
@@ -1079,17 +1086,21 @@ export function UserShell() {
         // personalOnly because the page calls trust-local on 8801,
         // which only lives on the user's machine.
         { path: '/user/trust-check', icon: <RadarIcon />, label: 'Trust Check', personalOnly: true },
-        // Compliance — `crossAppPreferred` (was personalOnly until 2026-06-12),
-        // same pattern as Account. WHY the change: at a centralized gateway
-        // (form ①) a member's events live on the team server, so when logged
-        // into team we want the ONE compliance entry to point THERE (the
-        // team self-view at the team server's /user/compliance), in-place —
-        // not a second "Team Compliance" row next to a now-empty local one.
-        // crossAppPreferred absorbs the team-compliance cross-app entry into
-        // this slot (used.add → no duplicate trailer). Logged-out / Personal
-        // (no team) falls back to the LOCAL self-view NavLink, which reads the
-        // local-server /api/user/compliance/events (control.db on the user's
-        // own machine). Admins still use /master/compliance/audit.
+        // Compliance — crossAppPreferred (was personalOnly until 2026-06-12), same
+        // pattern as Account. WHY: at a centralized gateway (form ①) a member's
+        // events live on the team server, so when logged into team the ONE
+        // compliance entry must point THERE, in-place — not add a second "Team
+        // Compliance" row beside a now-empty local one. crossAppPreferred absorbs
+        // the team-compliance cross-app entry into this slot (used.add → no
+        // duplicate trailer). Logged-out / Personal (no team) falls back to the
+        // LOCAL self-view NavLink, reading the local-server
+        // /api/user/compliance/events. Admins still use /master/compliance/audit.
+        //
+        // 🔴 DUAL-EDIT: this file is byte-identical in aikey-control/web and
+        // aikey-control-master/web. In the MASTER copy crossAppPreferred is
+        // ignored, so the same entry renders a local NavLink to that app's own
+        // /user/compliance instead of jumping back to :8090. One file, two
+        // behaviours decided at runtime — 🚫 not two files.
         { path: '/user/compliance', icon: <FingerprintIcon />, label: 'Compliance Audit', originName: 'Compliance Audit', crossAppPreferred: true },
       ],
     },
@@ -1408,7 +1419,7 @@ export function UserShell() {
                         // NOT also render as a trailing extra → duplicate row
                         // (2026-06-12). Scoped to crossAppPreferred only, so
                         // Usage/Team-Usage (which intentionally coexist) are
-                        // unaffected.
+                        // unaffected. MUST mirror aikey-control/web (dual-edit).
                         if (item.crossAppPreferred && otherBaseUrl) {
                           const xaSame = crossAppItems.find((e) => e.path === item.path);
                           if (xaSame) used.add(xaSame.id);

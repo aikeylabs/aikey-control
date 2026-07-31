@@ -118,6 +118,39 @@ function keysIn(dir: string): Map<string, string[]> {
   return found;
 }
 
+/**
+ * Every quoted dotted-identifier string in the tree — NOT a `t()` call site.
+ *
+ * 🔴 Used by R4 (orphans) only, and deliberately not by R1/R2. R4 asks a
+ * different question from the others: R1/R2 ask "does this key resolve", which
+ * needs a real call site; R4 asks "does anything still reference this key at
+ * all", and for that a mention IS a reference.
+ *
+ * Without this, R4 was blind to two patterns the project actively recommends:
+ *
+ *   · LabelRef models — a pure `*-model.ts` returns `{ key: 'ns.thing', params }`
+ *     and the render layer resolves it. The i18n guidance (20260530 §盲区 #2)
+ *     prescribes exactly this so non-component modules stay testable without
+ *     initialising i18next.
+ *   · copy tables — `const ROW_COPY = { field: 'ns.field.x' }` then
+ *     `t(ROW_COPY[f])`, written that way BECAUSE the alternative is a
+ *     backtick-interpolated key, which the dynamic budget above rightly limits.
+ *
+ * Both were reported as orphans — ~40 live keys — and the only way to silence
+ * that was to list live keys in the orphan BASELINE, which would have destroyed
+ * the one thing the baseline means ("these are dead"). The fence was blind; the
+ * fence is what changes.
+ */
+const QUOTED_KEY = /['"`]([A-Za-z][\w-]*(?:\.[A-Za-z][\w-]*)+)['"`]/g;
+
+function mentionedKeys(dir: string): Set<string> {
+  const out = new Set<string>();
+  for (const f of sourceFiles(dir)) {
+    for (const m of fs.readFileSync(f, 'utf-8').matchAll(QUOTED_KEY)) out.add(m[1]);
+  }
+  return out;
+}
+
 function dynamicCallSites(dir: string): number {
   return sourceFiles(dir).reduce((n, f) => n + [...fs.readFileSync(f, 'utf-8').matchAll(DYNAMIC_KEY)].length, 0);
 }
@@ -307,9 +340,25 @@ describe('i18n orphan keys (R4)', () => {
   const usedAnywhere = new Set<string>([
     ...keysIn(path.join(USER_WEB, 'src')).keys(),
     ...keysIn(path.join(MASTER_WEB, 'src')).keys(),
+    // A key a model emits or a copy table names is referenced, even though it is
+    // not a call site — see mentionedKeys.
+    ...mentionedKeys(path.join(USER_WEB, 'src')),
+    ...mentionedKeys(path.join(MASTER_WEB, 'src')),
   ]);
-  const reached = (k: string) =>
-    usedAnywhere.has(k) || [...usedAnywhere].some((u) => k.startsWith(`${u}.`));
+  // 🔴 Plural-aware, the same way `resolves()` is for R1. `t('routeGroups.hops',
+  // {count})` is written without a suffix, so the catalog's `hops_one` /
+  // `hops_other` have no literal mention anywhere — they are used through
+  // i18next's plural resolution. Reporting them as orphans would push somebody
+  // to delete the very forms that make the count render correctly.
+  const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
+  const reached = (k: string) => {
+    const base = k.replace(PLURAL_SUFFIX, '');
+    return (
+      usedAnywhere.has(k) ||
+      usedAnywhere.has(base) ||
+      [...usedAnywhere].some((u) => k.startsWith(`${u}.`))
+    );
+  };
 
   for (const [name, root] of [
     ['user/web', USER_WEB],

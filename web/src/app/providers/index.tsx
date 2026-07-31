@@ -12,40 +12,44 @@ const queryClient = new QueryClient({
   },
 });
 
-// Re-render the whole app subtree when the i18n language changes.
-//
-// Why: date/time strings come from `shared/utils/datetime-intl`, whose
-// `locale()` reads the i18next singleton directly (not via the React
-// `useTranslation` hook). Components that don't call `useTranslation`
-// therefore don't subscribe to `languageChanged` and keep showing the old
-// locale's dates until something else happens to re-render them.
-//
-// The least invasive correct fix is one high-level subscription here (the
-// provider that wraps the entire RouterProvider): bumping local state forces
-// React to re-render the subtree, so every `datetime-intl` call site
-// recomputes against the new locale — without editing each call site and
-// without remounting the app. A state bump preserves component instances and
-// router / query state, whereas a `key` change or full remount would discard
-// them.
-function useLanguageRerender(): void {
-  const [, force] = React.useReducer((n: number) => n + 1, 0);
-  React.useEffect(() => {
-    i18n.on('languageChanged', force);
-    return () => {
-      i18n.off('languageChanged', force);
-    };
-  }, []);
-}
-
 interface AppProvidersProps {
   children: React.ReactNode;
 }
 
+/**
+ * Re-render the whole app subtree when the i18n language changes.
+ *
+ * Why: date/time strings come from `shared/utils/datetime-intl.ts`, whose
+ * `locale()` reads the i18next singleton at format time (NOT via a React
+ * hook). Components that use those formatters but don't call
+ * `useTranslation()` (most chart/table cells) therefore have no subscription
+ * to language changes — they keep showing the old locale's dates until some
+ * unrelated state change happens to re-render them.
+ *
+ * The least-invasive correct fix is a SINGLE high-level subscription here,
+ * above RouterProvider: on 'languageChanged' we bump a counter, which
+ * re-renders `children` (the entire router subtree) once. Every date
+ * call-site re-runs and re-reads the new locale — no per-call-site edits,
+ * no whole-app remount (a state bump is not a `key` change, so component
+ * instances / scroll / focus / react-query cache are all preserved).
+ * i18next fires 'languageChanged' after the resources are loaded, so by the
+ * time this re-render runs `locale()` already returns the new value.
+ */
+function LanguageReactivityBoundary({ children }: { children: React.ReactNode }) {
+  const [, forceRender] = React.useReducer((n: number) => n + 1, 0);
+  React.useEffect(() => {
+    i18n.on('languageChanged', forceRender);
+    return () => {
+      i18n.off('languageChanged', forceRender);
+    };
+  }, []);
+  return <>{children}</>;
+}
+
 export function AppProviders({ children }: AppProvidersProps) {
-  useLanguageRerender();
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <LanguageReactivityBoundary>{children}</LanguageReactivityBoundary>
     </QueryClientProvider>
   );
 }

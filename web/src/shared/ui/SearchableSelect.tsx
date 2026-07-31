@@ -4,6 +4,22 @@ import { useTranslation } from 'react-i18next';
 export interface SelectOption {
   value: string;
   label: string;
+  /**
+   * Optional second line rendered under `label` in the dropdown (e.g. a seat's
+   * email under their name). The trigger / chip keeps showing `label` alone so
+   * the closed control stays one line tall.
+   */
+  detail?: string;
+  /**
+   * Extra text the search should match but that isn't rendered (e.g. an id, or
+   * an address a list deliberately hides). Defaults to label + detail + value.
+   */
+  searchText?: string;
+}
+
+/** Everything a typed query may match: what's on screen plus the opt-in extras. */
+export function optionHaystack(o: SelectOption): string {
+  return `${o.label} ${o.detail ?? ''} ${o.searchText ?? ''} ${o.value}`.toLowerCase();
 }
 
 interface SearchableSelectProps {
@@ -57,7 +73,7 @@ export function SearchableSelect({
   const filtered = useMemo(() => {
     if (!search.trim()) return options;
     const q = search.toLowerCase();
-    return options.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q));
+    return options.filter(o => optionHaystack(o).includes(q));
   }, [options, search]);
 
   const selectedLabel = options.find(o => o.value === value)?.label;
@@ -146,11 +162,11 @@ export function SearchableSelect({
           // treatment so the select and the search box read as one family.
           borderColor: open ? 'var(--primary)' : 'var(--border)',
           boxShadow: open ? '0 0 0 1px rgba(250, 204, 21, 0.2)' : 'none',
+          transition: 'border-color 150ms ease, box-shadow 150ms ease',
           color: selectedLabel ? 'var(--foreground)' : 'var(--muted-foreground)',
           opacity: disabled ? 0.5 : 1,
           cursor: disabled ? 'not-allowed' : 'pointer',
           fontFamily: 'var(--font-mono, ui-monospace, monospace)',
-          transition: 'border-color 150ms ease, box-shadow 150ms ease',
         }}
       >
         <span className="truncate">{selectedLabel || resolvedPlaceholder}</span>
@@ -212,6 +228,11 @@ export function SearchableSelect({
                   }}
                 >
                   {opt.label}
+                  {opt.detail && (
+                    <span className="block text-[10px] mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                      {opt.detail}
+                    </span>
+                  )}
                 </div>
               ))
             )}

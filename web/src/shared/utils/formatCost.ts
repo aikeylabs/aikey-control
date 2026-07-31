@@ -1,6 +1,11 @@
 /**
  * Format an estimated USD cost for display (cost-pricing Stage 4).
  *
+ * 🔴 DUAL-EDIT: byte-identical in aikey-control/web and aikey-control-master/web.
+ * The trial composer resolves the user pages' `@/shared/utils/formatCost` import
+ * to the MASTER copy, so an edit to one alone changes user-page money rendering
+ * in Trial and nowhere else.
+ *
  * Small amounts (< $10) render 4 decimals so sub-cent estimates stay
  * legible (a single cheap request can be $0.0001); larger amounts render
  * 2 decimals with thousands separators. Locale is locked to en-US per the
