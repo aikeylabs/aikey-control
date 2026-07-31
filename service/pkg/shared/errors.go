@@ -199,11 +199,13 @@ var zhMessages = map[string]string{
 	CodeExtProviderAuthFailure: "供应商 {{provider}} 拒绝了凭据，API 密钥可能无效或已吊销",
 	CodeExtProviderRateLimited: "供应商 {{provider}} 正在限流，请稍后重试",
 	CodeExtProviderUnavailable: "供应商 {{provider}} 不可用或无法连接",
+	CodeExtMailSendFailed:      "登录邮件发送失败（SMTP 错误），请稍后重试或联系管理员",
 
 	// SYS — system / infrastructure
-	CodeSysInternal: "发生未预期的错误",
-	CodeSysDB:       "发生数据库错误",
-	CodeSysConfig:   "服务配置错误",
+	CodeSysInternal:          "发生未预期的错误",
+	CodeSysDB:                "发生数据库错误",
+	CodeSysConfig:            "服务配置错误",
+	CodeSysMailNotConfigured: "邮件服务未配置，登录邮件未发送。请联系管理员配置 SMTP",
 }
 
 // ── Error code constants ───────────────────────────────────────────────────────
@@ -432,11 +434,22 @@ const (
 	CodeExtProviderAuthFailure = "EXT_PROVIDER_AUTH_FAILURE"
 	CodeExtProviderRateLimited = "EXT_PROVIDER_RATE_LIMITED"
 	CodeExtProviderUnavailable = "EXT_PROVIDER_UNAVAILABLE"
+	// CodeExtMailSendFailed means the SMTP relay rejected or failed the send.
+	// Introduced 2026-07-31: activation-email failures were previously
+	// swallowed (WARN only) and the login page showed a false "sent" state.
+	CodeExtMailSendFailed = "EXT_MAIL_SEND_FAILED"
 
 	// SYS — system / infrastructure (details logged, never exposed)
 	CodeSysInternal = "SYS_INTERNAL"
 	CodeSysDB       = "SYS_DB"
 	CodeSysConfig   = "SYS_CONFIG"
+	// CodeSysMailNotConfigured means the server has no SMTP credentials wired
+	// (LogMailer fallback) — email delivery is impossible, not merely failing.
+	CodeSysMailNotConfigured = "SYS_MAIL_NOT_CONFIGURED"
+	// CodeSysAgentVKInvalidationUnavailable means Control could not fence the
+	// previous Agent VK at the public ingress. Rotation is refused so a success
+	// response can never coexist with a still-usable old credential.
+	CodeSysAgentVKInvalidationUnavailable = "SYS_AGENT_VK_INVALIDATION_UNAVAILABLE"
 )
 
 // ── BIZ constructors ──────────────────────────────────────────────────────────
@@ -952,6 +965,14 @@ func ExtProviderUnavailable(provider string) *DomainError {
 		Meta:    map[string]any{"provider": provider}}
 }
 
+// ExtMailSendFailed indicates SMTP delivery of a login email failed.
+// The raw SMTP error is deliberately NOT included — callers must WARN-log it
+// before returning this (transport details can leak credentials/hosts).
+func ExtMailSendFailed() *DomainError {
+	return &DomainError{Code: CodeExtMailSendFailed,
+		Message: "the login email could not be sent (SMTP error) — retry later or contact your administrator"}
+}
+
 // ── SYS constructors ──────────────────────────────────────────────────────────
 
 // SysInternal returns a sanitised internal-error response.
@@ -968,4 +989,14 @@ func SysDB() *DomainError {
 // SysConfig returns a sanitised configuration-error response.
 func SysConfig() *DomainError {
 	return &DomainError{Code: CodeSysConfig, Message: "service configuration error"}
+}
+
+// SysMailNotConfigured indicates the server is running with the LogMailer
+// fallback (no SMTP credentials), so login emails are never delivered.
+// Why a distinct code from SysConfig: this is the #1 silent-failure cause of
+// "magic link never arrives" and must be diagnosable from the client side
+// without server-log access (see bugfix 20260731-cli-login-email-silent-success).
+func SysMailNotConfigured() *DomainError {
+	return &DomainError{Code: CodeSysMailNotConfigured,
+		Message: "email delivery is not configured on this server — the login email was NOT sent; ask your administrator to configure SMTP"}
 }

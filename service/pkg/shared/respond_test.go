@@ -48,6 +48,7 @@ func TestDomainErrorStatus_OAuthPoolAndOnlineAgentCodes(t *testing.T) {
 		{CodeBizOauthGroupProtocolInvalid, http.StatusUnprocessableEntity},
 		{CodeBizOauthGroupBotSeat, http.StatusUnprocessableEntity},
 		{CodeSysAllocationEngineUnavailable, http.StatusServiceUnavailable},
+		{CodeSysAgentVKInvalidationUnavailable, http.StatusServiceUnavailable},
 		{CodeBizAgentGroupNotMember, http.StatusForbidden},
 		{CodeBizAgentPoolNotOwner, http.StatusForbidden},
 		{CodeBizAgentLimitReached, http.StatusConflict},

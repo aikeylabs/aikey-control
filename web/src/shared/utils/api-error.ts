@@ -100,12 +100,15 @@ const SUGGESTIONS: Record<string, string> = {
   EXT_PROVIDER_AUTH_FAILURE:  'The provider rejected the API key. Rotate the credential in Provider Accounts and try again.',
   EXT_PROVIDER_RATE_LIMITED:  'The provider is throttling requests. Wait a moment and retry, or switch to a different credential.',
   EXT_PROVIDER_UNAVAILABLE:   'The provider is unreachable. Check provider status, verify the base URL, or try again later.',
+  EXT_MAIL_SEND_FAILED:       'The login email could not be sent (SMTP error). Retry later, or ask your administrator to check the SMTP settings.',
 
   // SYS
   SYS_ALLOCATION_ENGINE_UNAVAILABLE: 'The account is already disabled. Wait a moment and retry the delete action; do not re-enable it while reconciliation is pending.',
   SYS_INTERNAL: 'An unexpected server error occurred. The details have been logged. Contact support if the issue persists.',
   SYS_DB:       'A database error occurred. The details have been logged. Contact support if the issue persists.',
   SYS_CONFIG:   'A service configuration error occurred. Contact your administrator.',
+  SYS_MAIL_NOT_CONFIGURED: 'Email delivery is not configured on this server, so the login email was NOT sent. Ask your administrator to configure SMTP.',
+  SYS_AGENT_VK_INVALIDATION_UNAVAILABLE: 'The previous Agent API key could not be invalidated safely, so rotation was not applied. Check Hub OAuth ingress health and retry.',
 };
 
 /**
@@ -227,12 +230,15 @@ const LABELS: Record<string, string> = {
   EXT_PROVIDER_AUTH_FAILURE: 'Provider Auth Failed',
   EXT_PROVIDER_RATE_LIMITED: 'Rate Limited',
   EXT_PROVIDER_UNAVAILABLE:  'Provider Unreachable',
+  EXT_MAIL_SEND_FAILED:      'Email Send Failed',
 
   // SYS
   SYS_ALLOCATION_ENGINE_UNAVAILABLE: 'Retry Delete',
   SYS_INTERNAL: 'Server Error',
   SYS_DB:       'Database Error',
   SYS_CONFIG:   'Config Error',
+  SYS_MAIL_NOT_CONFIGURED: 'Email Not Configured',
+  SYS_AGENT_VK_INVALIDATION_UNAVAILABLE: 'Rotation Not Applied',
 };
 
 /**

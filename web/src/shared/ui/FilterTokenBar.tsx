@@ -2,17 +2,21 @@
  * FilterTokenBar — config-driven token filter input (20260729 usage-audit
  * flexible filters, design: roadmap20260320/技术实现/update/20260729-用量审计页自由筛选.md).
  *
- * ONE input hosts every filter dimension (user decision: no row of dropdowns):
- *   click → dimension-type list → value list → token chip; repeat to AND-combine.
- * Typing without picking a type suggests matching VALUES across all dimensions
- * (value-first search: "anthro" → 「Provider: anthropic」), so the common case
- * is one keystroke shorter.
+ * ONE input hosts every filter dimension (user decision: no row of dropdowns).
+ * The dropdown is a TWO-PANE command palette (superdesign 方向2, user-picked
+ * 2026-07-29 over the earlier full-width single list which read as sparse and
+ * messy): left pane lists dimensions, right pane previews the hovered/selected
+ * dimension's values — one glance instead of a two-step list swap. Typing
+ * without picking a dimension still value-first searches across ALL dimensions
+ * ("anthro" → 「供应商: anthropic」), so the common case is one keystroke
+ * shorter. Chips accumulate inline in the input; one token per dimension
+ * (re-pick overwrites); dimensions AND-combine.
  *
  * The component is a pure V-layer control: the caller owns the dimension
  * registry (labels, option sources) and the token state (usually mirrored to
- * URL params for deep-linking). One dimension holds at most one token (MVP
- * single-select; re-picking overwrites). Chip visuals anchor to the
- * established dismissible filter chip (bindings/virtual-keys pages).
+ * URL params for deep-linking). Visual spec anchors: card bg + border, 30px
+ * mono rows, amber left rail for the active dimension, keyboard-hint footer —
+ * all values from the Industrial Vault token set (no invented styles).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -39,7 +43,7 @@ export interface FilterToken {
 }
 
 interface Suggestion {
-  /** 'dim' rows switch the input into that dimension; 'val' rows apply a token. */
+  /** 'dim' rows switch the palette onto that dimension; 'val' rows apply a token. */
   kind: 'dim' | 'val';
   dimKey: string;
   label: string;
@@ -58,34 +62,40 @@ interface FilterTokenBarProps {
 export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: FilterTokenBarProps) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
+  // activeKey = the dimension the right pane previews. `explicit` marks a
+  // deliberate pick (click / Enter on a dim row): typed text then filters
+  // WITHIN that dimension instead of value-first searching across all.
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [explicit, setExplicit] = useState(false);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const dimByKey = useMemo(() => new Map(dimensions.map((d) => [d.key, d])), [dimensions]);
-  const activeDim = activeKey ? dimByKey.get(activeKey) : undefined;
+  const previewKey = activeKey ?? dimensions[0]?.key ?? null;
+  const previewDim = previewKey ? dimByKey.get(previewKey) : undefined;
 
+  // Right-pane rows. Browse mode (no text, or an explicitly picked dimension):
+  // the preview dimension's values. Search mode (text without an explicit
+  // pick): value-first hits across every dimension, plus dimension-name hits.
   const suggestions = useMemo<Suggestion[]>(() => {
     const q = text.trim().toLowerCase();
     const matches = (s: string) => s.toLowerCase().includes(q);
-    if (activeDim) {
-      const rows: Suggestion[] = activeDim.options
+    if (explicit || !q) {
+      if (!previewDim) return [];
+      const rows: Suggestion[] = previewDim.options
         .filter((o) => !q || matches(o.label) || matches(o.value))
-        .map((o) => ({ kind: 'val', dimKey: activeDim.key, label: o.label, value: o.value }));
-      const exact = activeDim.options.some((o) => o.value === text.trim());
-      if (activeDim.freeText && text.trim() && !exact) {
-        rows.push({ kind: 'val', dimKey: activeDim.key, label: t('filterTokenBar.useValue', { value: text.trim() }), value: text.trim() });
+        .map((o) => ({ kind: 'val', dimKey: previewDim.key, label: o.label, value: o.value }));
+      const exact = previewDim.options.some((o) => o.value === text.trim());
+      if (previewDim.freeText && text.trim() && !exact) {
+        rows.push({ kind: 'val', dimKey: previewDim.key, label: t('filterTokenBar.useValue', { value: text.trim() }), value: text.trim() });
       }
       return rows;
     }
     const dimRows: Suggestion[] = dimensions
-      .filter((d) => !q || matches(d.label))
-      .map((d) => ({ kind: 'dim', dimKey: d.key, label: d.label }));
-    if (!q) return dimRows;
-    // Value-first search: surface matching values across every dimension so a
-    // recognizable value ("anthro", an email) needs no type-picking step.
+      .filter((d) => matches(d.label))
+      .map((d) => ({ kind: 'dim', dimKey: d.key, label: `${d.label} ▸` }));
     const valRows: Suggestion[] = dimensions.flatMap((d) =>
       d.options
         .filter((o) => matches(o.label) || matches(o.value))
@@ -93,7 +103,7 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
         .map((o) => ({ kind: 'val' as const, dimKey: d.key, label: `${d.label}: ${o.label}`, value: o.value })),
     );
     return [...dimRows, ...valRows];
-  }, [dimensions, activeDim, text, t]);
+  }, [dimensions, previewDim, explicit, text, t]);
 
   useEffect(() => setHighlight(0), [text, activeKey, open]);
 
@@ -102,6 +112,7 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
         setOpen(false);
         setActiveKey(null);
+        setExplicit(false);
         setText('');
       }
     }
@@ -109,16 +120,22 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, []);
 
+  function selectDimension(key: string) {
+    setActiveKey(key);
+    setExplicit(true);
+    setText('');
+    inputRef.current?.focus();
+  }
+
   function apply(s: Suggestion) {
     if (s.kind === 'dim') {
-      setActiveKey(s.dimKey);
-      setText('');
-      inputRef.current?.focus();
+      selectDimension(s.dimKey);
       return;
     }
     // Same-dimension re-pick overwrites (MVP single-select per dimension).
     onChange([...tokens.filter((tk) => tk.key !== s.dimKey), { key: s.dimKey, value: s.value ?? '' }]);
     setActiveKey(null);
+    setExplicit(false);
     setText('');
     inputRef.current?.focus();
   }
@@ -141,14 +158,16 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
       const s = suggestions[highlight];
       if (open && s) apply(s);
     } else if (e.key === 'Escape') {
-      if (activeKey) {
+      if (explicit) {
+        setExplicit(false);
         setActiveKey(null);
         setText('');
       } else {
         setOpen(false);
       }
     } else if (e.key === 'Backspace' && text === '') {
-      if (activeKey) {
+      if (explicit) {
+        setExplicit(false);
         setActiveKey(null);
       } else if (tokens.length > 0) {
         removeToken(tokens[tokens.length - 1].key);
@@ -163,8 +182,14 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
     return `${dim.label}: ${opt?.label ?? tk.value}`;
   }
 
+  const explicitDim = explicit && activeKey ? dimByKey.get(activeKey) : undefined;
+  const searchMode = !explicit && text.trim() !== '';
+
   return (
-    <div ref={rootRef} className="relative flex-1 min-w-64">
+    // Width is the CALLER's decision (wrap in a sized container): a token bar
+    // stretched across the whole page reads as oversized (user report
+    // 2026-07-29), but the right cap depends on the page's toolbar.
+    <div ref={rootRef} className="relative w-full min-w-64">
       <div
         className="flex items-center flex-wrap gap-1.5 px-2 py-1.5 rounded border cursor-text"
         style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}
@@ -193,9 +218,9 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
             </button>
           </span>
         ))}
-        {activeDim && (
+        {explicitDim && (
           <span className="text-xs font-mono px-1" style={{ color: 'var(--muted-foreground)' }}>
-            {activeDim.label}:
+            {explicitDim.label}:
           </span>
         )}
         <input
@@ -208,41 +233,107 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          placeholder={tokens.length === 0 && !activeDim ? (placeholder ?? t('filterTokenBar.placeholder')) : ''}
-          className="flex-1 min-w-28 bg-transparent outline-none text-xs font-mono py-0.5"
+          placeholder={tokens.length === 0 && !explicitDim ? (placeholder ?? t('filterTokenBar.placeholder')) : ''}
+          // `filter-token-input` is load-bearing, not cosmetic: index.css has
+          // a global `input { background/border/radius !important }` rule that
+          // overrides ANY inline/utility style and rendered this inner input
+          // as a bright box-in-a-box (user report 2026-07-29). The class
+          // out-specifies it to keep the input truly transparent/borderless.
+          className="filter-token-input flex-1 min-w-28 bg-transparent outline-none text-xs font-mono py-0.5"
           style={{ color: 'var(--foreground)' }}
         />
       </div>
       {open && (
         <div
-          className="absolute z-20 mt-1 w-full max-h-72 overflow-y-auto rounded border shadow-lg"
-          style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}
+          className="absolute z-20 mt-1 w-[520px] max-w-full rounded border overflow-hidden flex flex-col"
+          style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-md)' }}
         >
-          {suggestions.length === 0 ? (
-            <div className="px-3 py-2 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
-              {t('filterTokenBar.noMatches')}
+          <div className="flex" style={{ maxHeight: 300 }}>
+            {/* Left pane: dimension list. Hover previews (browse mode only,
+                so typing isn't disturbed); click commits the pick. Hidden in
+                cross-dimension search mode — the grouped results carry the
+                dimension names themselves. */}
+            {!searchMode && (
+              <div className="w-[180px] shrink-0 overflow-y-auto border-r py-1" style={{ borderColor: 'var(--border)' }}>
+                {dimensions.map((d) => {
+                  const active = d.key === previewKey;
+                  return (
+                    <button
+                      key={d.key}
+                      className="relative flex items-center justify-between w-full text-left px-3 h-[30px] text-[11px] font-mono"
+                      style={{
+                        color: active ? 'var(--primary)' : 'var(--muted-foreground)',
+                        backgroundColor: active ? 'rgba(250,204,21,0.08)' : 'transparent',
+                      }}
+                      onMouseEnter={() => {
+                        if (!text) setActiveKey(d.key);
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        selectDimension(d.key);
+                      }}
+                    >
+                      {active && <span className="absolute left-0 top-0 bottom-0 w-[2px]" style={{ backgroundColor: 'var(--primary)' }} />}
+                      <span>{d.label}</span>
+                      <span className="text-[10px]">▸</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {/* Right pane: values of the preview dimension, or cross-dimension
+                search hits when typing without an explicit pick. */}
+            <div className="flex-1 min-w-0 flex flex-col">
+              {!searchMode && previewDim && (
+                <div className="px-3 py-2 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
+                  <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+                    {/* Two honest states (2026-07-29 user report — the old
+                        always-on "type to filter <dim>" promised in-dimension
+                        filtering while typing actually cross-searched): typing
+                        filters WITHIN the dimension only after an explicit
+                        pick; before that it searches across all dimensions. */}
+                    {explicit
+                      ? t('filterTokenBar.valueSearchHint', { dim: previewDim.label })
+                      : t('filterTokenBar.browseHint')}
+                  </span>
+                </div>
+              )}
+              <div className="flex-1 overflow-y-auto py-1">
+                {suggestions.length === 0 ? (
+                  <div className="px-3 py-2 text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                    {t('filterTokenBar.noMatches')}
+                  </div>
+                ) : (
+                  suggestions.map((s, i) => (
+                    <button
+                      key={`${s.kind}-${s.dimKey}-${s.value ?? ''}`}
+                      className="block w-full text-left px-3 h-[30px] text-[11px] font-mono truncate"
+                      style={{
+                        color: s.kind === 'dim' ? 'var(--foreground)' : 'var(--soft-foreground)',
+                        backgroundColor: i === highlight ? 'rgba(250,204,21,0.08)' : 'transparent',
+                      }}
+                      title={s.label}
+                      onMouseEnter={() => setHighlight(i)}
+                      // mousedown fires before the input's blur — onClick would
+                      // race the outside-click close handler on some browsers.
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        apply(s);
+                      }}
+                    >
+                      {s.label}
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
-          ) : (
-            suggestions.map((s, i) => (
-              <button
-                key={`${s.kind}-${s.dimKey}-${s.value ?? ''}`}
-                className="block w-full text-left px-3 py-2 text-xs font-mono"
-                style={{
-                  color: s.kind === 'dim' ? 'var(--foreground)' : 'var(--muted-foreground)',
-                  backgroundColor: i === highlight ? 'rgba(96,165,250,0.12)' : 'transparent',
-                }}
-                onMouseEnter={() => setHighlight(i)}
-                // mousedown fires before the input's blur — onClick would race
-                // the outside-click close handler on some browsers.
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  apply(s);
-                }}
-              >
-                {s.kind === 'dim' ? `${s.label} ▸` : s.label}
-              </button>
-            ))
-          )}
+          </div>
+          {/* Keyboard-hint footer (spec: 30px bar, faint black tint) */}
+          <div className="px-3 h-8 flex items-center border-t shrink-0" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(0,0,0,0.1)' }}>
+            <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+              {t('filterTokenBar.hints')}
+            </span>
+          </div>
         </div>
       )}
     </div>

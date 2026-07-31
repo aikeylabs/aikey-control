@@ -16,7 +16,7 @@
  *   - POST /api/user/oauth/pool/*           → pool sign-in (relay → proxy broker)
  */
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ModalPortal } from '@/shared/ui/ModalShell';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -175,6 +175,7 @@ export default function OAuthContributePage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const initialPoolFilter = searchParams.get('group');
   // Ownership, not login status, is the page's primary task boundary. Group
   // ownership arrives asynchronously from MyGroups, so a deep link starts
@@ -327,11 +328,21 @@ export default function OAuthContributePage() {
                 {t('oauthContribute.pageDescription')}
               </div>
             </div>
+            {/* 2026-07-31: switch-log drill-down — the allocation engine's
+                account-switch decision trail (third-level page, no menu item). */}
+            <button
+              type="button"
+              className="row-use-btn ml-auto flex-shrink-0"
+              style={{ height: 34 }}
+              onClick={() => navigate('/user/team-oauth/switch-log')}
+            >
+              {t('switchLog.entryButton')}
+            </button>
             {/* R24: employee self-service add — opens the modal to store an
                 account (email+password) into a pool group the member has joined. */}
             <button
               type="button"
-              className="row-use-btn ml-auto flex-shrink-0"
+              className="row-use-btn flex-shrink-0"
               /* Slightly taller than the base row-use-btn (28px) — this is a
                  header CTA, not a table-row action, so it can read a bit larger.
                  Inline height override (2026-07-07) beats the two-level
