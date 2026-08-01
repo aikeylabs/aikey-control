@@ -1967,7 +1967,6 @@
     "createChannel": "Create Channel →",
     "pageTitle": "Provider Accounts",
     "orgSubtitle": "Org · {{orgId}}",
-    "searchPlaceholder": "Search credential name / provider...",
     "cardTitle": "Provider Credentials",
     "recordsCount": "{{count}} records",
     "colCredentialName": "Credential Name",
@@ -2016,7 +2015,10 @@
     "confirmMigrate": "Confirm Migrate",
     "kindOfficial": "Official credential",
     "kindThirdParty": "Third-party credential",
-    "kindOAuth": "OAuth account"
+    "kindOAuth": "OAuth account",
+    "dimCredential": "Credential",
+    "dimKind": "Type",
+    "reset": "Reset"
   },
   "controlEvents": {
     "eventTypeKeyIssued": "Key Issued",

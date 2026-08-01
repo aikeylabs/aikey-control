@@ -20,6 +20,10 @@ export const TOOL_GLYPH: Record<string, string[]> = {
     'm18.36 5.64-2.83 2.83', 'm8.47 15.53-2.83 2.83',
   ],
   codex: ['M12 2 20.66 7v10L12 22 3.34 17V7Z'],
+  // kimi = crescent moon (2026-08-01 user request): the Moonshot「月之暗面」
+  // motif as a plain lucide-style stroke. Keyed by FAMILY name — kimi has no
+  // family-level display alias, so callers fall back to the family slug.
+  kimi: ['M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'],
 };
 
 // KIND_GLYPH — the credential-kind icon family (key = API key material,

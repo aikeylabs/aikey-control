@@ -1967,7 +1967,6 @@
     "createChannel": "创建通道 →",
     "pageTitle": "供应商账户",
     "orgSubtitle": "组织 · {{orgId}}",
-    "searchPlaceholder": "搜索凭据名称 / 供应商…",
     "cardTitle": "供应商凭据",
     "recordsCount": "{{count}} 条记录",
     "colCredentialName": "凭据名称",
@@ -2016,7 +2015,10 @@
     "confirmMigrate": "确认迁移",
     "kindOfficial": "官方凭据",
     "kindThirdParty": "第三方凭据",
-    "kindOAuth": "OAuth 账号"
+    "kindOAuth": "OAuth 账号",
+    "dimCredential": "凭据",
+    "dimKind": "类型",
+    "reset": "重置"
   },
   "controlEvents": {
     "eventTypeKeyIssued": "签发密钥",

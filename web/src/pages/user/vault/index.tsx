@@ -2937,21 +2937,21 @@ function GroupHeaderRow(props: {
               contrast. 2026-08-01 (user, two passes): the claude/codex tool
               glyph sits INSIDE the chip before the label (first cut had it
               standalone in front) — white via inheritColor so glyph + label
-              read as one mark. Keyed off the family's display alias;
-              alias-less families (kimi) render label-only (ToolGlyph
+              read as one mark. Keyed off the family's display alias, falling
+              back to the FAMILY name for alias-less families — that's how
+              kimi picks up its crescent-moon glyph (2026-08-01 user request);
+              families with no glyph at all still render label-only (ToolGlyph
               returns null for unknown slugs on purpose). */}
           <span
             className="gr-chip"
             style={{ background: color }}
             aria-hidden="false"
           >
-            {ENTRY_BY_FAMILY.get(provider)?.displayAlias && (
-              <ToolGlyph
-                slug={ENTRY_BY_FAMILY.get(provider)!.displayAlias!}
-                className="w-3.5 h-3.5"
-                inheritColor
-              />
-            )}
+            <ToolGlyph
+              slug={ENTRY_BY_FAMILY.get(provider)?.displayAlias ?? provider}
+              className="w-3.5 h-3.5"
+              inheritColor
+            />
             {provider}
           </span>
           {/* 2026-05-12 single-platform brand alias rendered OUTSIDE the

@@ -18,7 +18,8 @@
  * Visual spec (unchanged from the original pools-page glyph): single-stroke,
  * muted, 16px, in the style each tool is commonly simplified to on the web —
  * claude = eight-ray starburst (the Claude spark motif drawn as plain lines),
- * codex = hexagon outline (the common OpenAI-mark simplification). The tooltip
+ * codex = hexagon outline (the common OpenAI-mark simplification), kimi =
+ * crescent moon (the Moonshot motif). The tooltip
  * carries the tool name. An unknown family renders NOTHING (not a placeholder):
  * a wrong-but-present icon misinforms, an absent one just says "not a tool we
  * draw yet".
@@ -60,14 +61,26 @@ const TOOL_GLYPH: Record<string, string[]> = {
     'm18.36 5.64-2.83 2.83', 'm8.47 15.53-2.83 2.83',
   ],
   codex: ['M12 2 20.66 7v10L12 22 3.34 17V7Z'],
+  // kimi = crescent moon (2026-08-01 user request): the Moonshot「月之暗面」
+  // motif as a plain lucide-style stroke.
+  kimi: ['M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'],
 };
 
-export function ToolGlyph({ label }: { label: string }) {
-  const paths = TOOL_GLYPH[label];
+/**
+ * Props (2026-08-01 second pass, aligned with the vault chip usage):
+ *  - slug: the tool family key (preferred name; `label` kept as an alias for
+ *    the original call sites — the two are interchangeable).
+ *  - className: icon size override (default w-4 h-4).
+ *  - inheritColor: render in the parent's currentColor (e.g. white inside a
+ *    colored brand chip) instead of the default muted stroke.
+ */
+export function ToolGlyph({ slug, label, className = 'w-4 h-4', inheritColor }: { slug?: string; label?: string; className?: string; inheritColor?: boolean }) {
+  const key = slug ?? label ?? '';
+  const paths = TOOL_GLYPH[key];
   if (!paths) return null;
   return (
-    <span className="inline-flex shrink-0" title={label}>
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--muted-foreground)' }} aria-hidden="true">
+    <span className="inline-flex shrink-0" title={key}>
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={inheritColor ? undefined : { color: 'var(--muted-foreground)' }} aria-hidden="true">
         {paths.map((d) => <path key={d} strokeLinecap="round" strokeLinejoin="round" d={d} />)}
       </svg>
     </span>
