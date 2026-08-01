@@ -130,6 +130,23 @@ export const KEYS_PAGE_CSS = `
 .vault-page .chip.warning { color: var(--warning); background: rgba(249,115,22,0.09);  border-color: rgba(249,115,22,0.32); }
 .vault-page .chip.danger  { color: #fca5a5;       background: rgba(239,68,68,0.1);     border-color: rgba(239,68,68,0.35); }
 .vault-page .chip.info    { color: var(--info);   background: rgba(96,165,250,0.08);   border-color: rgba(96,165,250,0.3); }
+/* EXPERIMENT (2026-08-01, user request "去除边框试试看"): borderless status
+   chips across the keys family — tint bg + colored text carry the state,
+   border goes transparent (NOT removed: 1px stays in the box so chip
+   geometry is byte-identical and nothing shifts). Appended AFTER the
+   variant rules so source order wins at equal specificity. Revert = delete
+   this one block; keep = fold border-color into the rules above. */
+.vault-page .chip,
+.vault-page .chip.success,
+.vault-page .chip.warning,
+.vault-page .chip.danger,
+.vault-page .chip.info {
+  border-color: transparent;
+}
+/* (2026-08-01, later the same day) The Badge borderless + 4px-radius
+   overrides that briefly lived here moved into the .badge-* base rules in
+   index.css (both consoles, dual-edit synced) once the user extended the
+   borderless decision to the master console — single source again. */
 
 /* Pool account cards — shared by Vault + Team Keys drawers. Route state wins
    over selection color so an exhausted static-default account is unmistakable. */
@@ -655,6 +672,9 @@ export const KEYS_PAGE_CSS = `
      containing .gr-inner row height (28px) so the row doesn't grow. */
   display: inline-flex;
   align-items: center;
+  /* gap: breathing room between the in-chip tool glyph (2026-08-01) and the
+     provider label; inert on chips without a glyph. */
+  gap: 5px;
   padding: 2px 8px;
   border-radius: 6px;
   font-family: var(--font-sans);
@@ -2248,5 +2268,69 @@ export const KEYS_PAGE_CSS = `
   .modal-panel-guided .probe-row > div:nth-child(4) {
     display: none;
   }
+}
+
+/* ── V2 list-layout utilities (superdesign variant-2, 2026-08-01) ─────
+   Shared across the keys family (vault first, virtual-keys same day) so
+   the pages speak one visual language. All four are OPT-IN classes —
+   they style nothing unless a page renders them, so the other
+   .vault-page consumers are unaffected.
+
+   .kind-tile — bare credential-kind glyph before the alias
+   (key=personal / users=team / fingerprint=OAuth-flavored). Colorless
+   AND unboxed on user decision (2026-08-01, two passes): status chips
+   + provider brand dot already own the row's color channel, and a
+   chip-like frame read as yet another badge. The 22px box is an
+   invisible alignment slot so alias text starts at the same x. */
+.vault-page .kind-tile {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+/* .alias-name — ellipsize long machine aliases; full value stays on the
+   hover title. Only rows that wrap their alias text in .alias-name get
+   this (vault + virtual-keys); plain .alias-main text keeps the
+   2026-07-22 wrap behavior. */
+.vault-page .alias-main .alias-name {
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+/* .cell-empty — centered dimmed em-dash for not-applicable cells
+   (server-managed rows without a local created_at, keys never tested),
+   so a sparse column reads as intentional, not broken. */
+.vault-page .cell-empty {
+  display: block; text-align: center; opacity: 0.35;
+}
+
+/* tr.in-use identity recolor (2026-08-01 user request, third pass): the
+   routing signal sits ON the identity — kind glyph + alias text — replacing
+   the old green active-dot (a dot right next to an icon read as two
+   competing marks). Color = --primary golden yellow, the sidebar
+   menu-active accent (user-picked over green "不好看" and the in-use-chip
+   sky-blue): "this is where you ARE routing" reads like "this is where you
+   ARE in the nav", and it ties into the amber in-use row rail. Shared:
+   vault and virtual-keys both tag their routing row tr.in-use. */
+.vault-page table.vault tbody tr.in-use .kind-tile {
+  color: var(--primary);
+}
+.vault-page table.vault tbody tr.in-use .alias-main .alias-name {
+  color: var(--primary);
+}
+
+/* .action-rail / .action-slot — fixed-width slots in the actions cell:
+   the primary action (使用/登录/领取/IN USE/none) gets a constant rail
+   and absent trailing icons get a spacer slot, so icon buttons form
+   clean vertical rails across rows regardless of per-row state. */
+.vault-page .row-actions .action-rail {
+  min-width: 88px;
+  display: inline-flex; align-items: center; justify-content: flex-end;
+  flex-shrink: 0;
+}
+.vault-page .row-actions .action-slot {
+  width: 28px; height: 28px;
+  display: inline-flex;
+  flex-shrink: 0;
 }
 `;

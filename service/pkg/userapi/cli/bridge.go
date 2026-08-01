@@ -13,8 +13,40 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
 	"github.com/AiKeyLabs/pkg/aikeycompat"
 )
+
+// logDegradedStderr records stderr produced by a cli call that nevertheless
+// returned a well-formed envelope.
+//
+// Why (2026-08-01 bugfix): the three spawn paths below only logged stderr on
+// the FAILURE branches, so a cli that succeeded while quietly degrading left
+// no trace at all. Concretely: `query list_personal_with_masked` warned to
+// stderr about every vault entry it could not decrypt and then returned
+// status="ok" without those rows — the Web page showed fewer keys than the
+// vault holds and `aikey-local-server.err.log` stayed 0 bytes. Partial
+// success is precisely the case an operator cannot reconstruct after the
+// fact, so it gets a WARN.
+//
+// stderr keeps running through sanitizeForLog for the same reason as the
+// failure branches: a cli panic can carry key-shaped bytes, and slog persists
+// to disk.
+func (b *Bridge) logDegradedStderr(subcommand, action, requestID string, stderr *bytes.Buffer) {
+	if b.Logger == nil {
+		return
+	}
+	msg := strings.TrimSpace(stderr.String())
+	if msg == "" {
+		return
+	}
+	b.Logger.Warn("cli wrote stderr on a successful call",
+		slog.String("event.name", shared.EventUserAPICliBridgeStderr),
+		slog.String("subcommand", subcommand),
+		slog.String("action", action),
+		slog.String("request_id", requestID),
+		slog.String("stderr", sanitizeForLog(msg)))
+}
 
 // stdinEnvelope matches aikey-cli's commands_internal::protocol::StdinEnvelope.
 type stdinEnvelope struct {
@@ -182,6 +214,13 @@ func (b *Bridge) InvokeWithTimeout(
 			Msg:  "cli reply was not valid JSON (see server logs for details)",
 		}
 	}
+	// Prefer the envelope's request_id: the cli echoes the one it actually
+	// processed, which is what correlates with its own internal.jsonl line.
+	corrID := result.RequestID
+	if corrID == "" {
+		corrID = requestID
+	}
+	b.logDegradedStderr(subcommand, action, corrID, &stderr)
 	return &result, nil
 }
 
@@ -267,6 +306,7 @@ func (b *Bridge) InvokeInit(
 			Msg:  "cli reply was not valid JSON (see server logs for details)",
 		}
 	}
+	b.logDegradedStderr("init", "", requestID, &stderr)
 	return &result, nil
 }
 
@@ -335,6 +375,7 @@ func (b *Bridge) InvokeHookOp(
 			Msg:  "cli reply was not valid JSON (see server logs for details)",
 		}
 	}
+	b.logDegradedStderr("hook-op", action, requestID, &stderr)
 	return &result, nil
 }
 

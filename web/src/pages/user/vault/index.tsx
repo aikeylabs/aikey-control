@@ -57,11 +57,11 @@ import {
 } from '@/shared/components/DesktopConsentModal';
 import { friendlyTestError } from './friendlyTestError';
 import { displayProtocolFamily, familyOfProviderCode } from '@/shared/api/user/protocolFamily';
-import { protocolColumn } from '../_shared/protocol-column';
 import type { BindingAxis } from '@/shared/types/team-vault';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { ProviderMultiSelect } from '@/shared/ui/ProviderMultiSelect';
 import { ENTRY_BY_FAMILY } from '@/shared/generated/provider-registry';
+import { ToolGlyph } from '../_shared/tool-glyph';
 import {
   useTeamVaultStore,
   type TeamVaultStatus,
@@ -1905,7 +1905,13 @@ export default function UserVaultPage() {
                         {t('vault.aliasLabel')}<span className="th-hint">{t('vault.aliasEditableHint')}</span>
                         {sortKey === 'alias' && <span className="th-sort-arrow">↓</span>}
                       </th>
-                      <th style={{ width: '22%' }}>{t('vault.colProtocols')}</th>
+                      {/* Provider column (user request 2026-08-01, supersedes
+                          P1f D-12's protocol column): the PROTOCOL axis is
+                          already stated once by the group header this row sits
+                          under, so repeating it per-row was noise; the cell now
+                          carries the PROVIDER axis (moved in from the alias
+                          cell's inline chip). */}
+                      <th style={{ width: '22%' }}>{t('vault.provider')}</th>
                       <th style={{ width: '14%' }}>{t('vault.colStatus')}</th>
                       <th
                         style={{ width: '12%' }}
@@ -2608,7 +2614,11 @@ function FilterStrip(props: {
           <FilterPill
             active={props.typeFilter === 'oauth'}
             onClick={() => props.onTypeFilterChange('oauth')}
-            icon={<UserCheckIcon className="w-2.5 h-2.5" />}
+            /* Fingerprint, not user-check (user request 2026-08-01): the type
+               pills reuse the SAME three glyphs as the rows' kind tiles
+               (key / users / fingerprint) so toolbar and list speak one icon
+               language. */
+            icon={<FingerprintIcon className="w-2.5 h-2.5" />}
             label={t('vault.filterOAuth')}
             count={props.counts.oauth}
           />
@@ -2924,12 +2934,24 @@ function GroupHeaderRow(props: {
               colored chip so the group identifier and the per-row active
               indicator stay visually distinct. The chip's background uses
               the same provider brand color, foreground is white for
-              contrast. */}
+              contrast. 2026-08-01 (user, two passes): the claude/codex tool
+              glyph sits INSIDE the chip before the label (first cut had it
+              standalone in front) — white via inheritColor so glyph + label
+              read as one mark. Keyed off the family's display alias, falling
+              back to the FAMILY name for alias-less families — that's how
+              kimi picks up its crescent-moon glyph (2026-08-01 user request);
+              families with no glyph at all still render label-only (ToolGlyph
+              returns null for unknown slugs on purpose). */}
           <span
             className="gr-chip"
             style={{ background: color }}
             aria-hidden="false"
           >
+            <ToolGlyph
+              slug={ENTRY_BY_FAMILY.get(provider)?.displayAlias ?? provider}
+              className="w-3.5 h-3.5"
+              inheritColor
+            />
             {provider}
           </span>
           {/* 2026-05-12 single-platform brand alias rendered OUTSIDE the
@@ -3051,35 +3073,37 @@ const Row = React.memo(function Row(props: {
   // under THIS protocol group; falls back to `providerName` for older CLIs. Kept
   // separate from `providerName` (which drives the brand color) so the alias never
   // leaks into `providerBrandColor`. 🚫 web renders binding.provider, never derives.
-  const providerLabel = (() => {
+  // Distinct provider labels for THIS protocol group. A multi-provider VK
+  // (主备 bindings under one protocol, e.g. openai + zhipu + deepseek all on
+  // openai_compatible) legitimately has several; the CELL shows only the
+  // first + a (+N) hint (2026-08-01 user pick, option 1 — the same collapse
+  // the protocol column adopted 2026-07-23: the full comma list wrapped the
+  // 22% column and broke the V2 uniform row height). Full list stays on the
+  // cell title + in the drawer. No 主/备 wording on purpose: BindingAxis
+  // carries no role field, so the array order is the only ordering we have —
+  // we display it without claiming primary/fallback semantics.
+  const providerLabels = (() => {
     const bindings = r.target === 'team' ? (r as TeamRowRecord).bindings : undefined;
     if (Array.isArray(bindings) && bindings.length > 0) {
       const inGroup = bindings.filter(
         (b) => displayProtocolFamily(b.protocol) === props.groupProvider,
       );
       const pick = inGroup.length > 0 ? inGroup : bindings;
-      const labels = pick.map((b) =>
+      return [...new Set(pick.map((b) =>
         b.provider_display_alias ? `${b.provider}(${b.provider_display_alias})` : b.provider,
-      );
-      return [...new Set(labels)].join(', ');
+      ))];
     }
-    return providerName;
+    return [] as string[];
   })();
-  // P1f (design D-12): the PROTOCOLS column shows the PROTOCOL axis (not the
-  // provider). For a two-axis team key: distinct binding protocols; else the
-  // pre-P1f behavior (providerName). The provider goes in a chip next to the name.
+  const providerLabel = providerLabels.length > 0 ? providerLabels.join(', ') : providerName;
+  const primaryProviderLabel = providerLabels[0] ?? providerName;
+  const extraProviderCount = Math.max(0, providerLabels.length - 1);
+  // Two-axis detection (P1f D-12 lineage): team keys carry explicit bindings
+  // (provider × protocol). The per-row protocol readout was retired 2026-08-01
+  // (user request) — the group header alone states the protocol family, and
+  // the old protocol column now shows the provider axis instead.
   const teamBindings = r.target === 'team' ? (r as TeamRowRecord).bindings : undefined;
   const hasTwoAxis = Array.isArray(teamBindings) && teamBindings.length > 0;
-  // Distinct protocol families this key speaks. The row is rendered under one
-  // protocol group, so surface THAT group's protocol first and collapse the
-  // rest into a "(+N more)" hint (2026-07-23 user request): the full comma list
-  // overflowed this 22% column and just re-stated the group header on every
-  // multi-protocol key. Full list stays reachable via the cell title + drawer.
-  const protocolList = hasTwoAxis
-    ? [...new Set(teamBindings!.map((b) => displayProtocolFamily(b.protocol)).filter(Boolean))]
-    : [providerName];
-  const { primary: primaryProtocol, extraCount: extraProtocolCount } =
-    protocolColumn(protocolList, props.groupProvider, providerName);
   // Kind chip. Fully i18n'd (2026-07-07, user request): in Chinese the four
   // kinds render 密钥 / OAuth / 团队 / 团队 OAuth; English keeps KEY / OAUTH /
   // TEAM / TEAM-OAUTH. Values live in the vault namespace of the locale files.
@@ -3089,7 +3113,18 @@ const Row = React.memo(function Row(props: {
   const kindLabel = isTeamOAuthGroup
     ? t('vault.kindTeamOAuth')
     : isTeam ? t('vault.kindTeam') : isOAuth ? t('vault.kindOAuth') : t('vault.kindKey');
-  const kindClass = isTeam ? ' team' : isOAuth ? ' oauth' : '';
+  // V2 kind axis (superdesign variant-2 + user requests 2026-08-01): the type
+  // (密钥/团队/团队 OAuth) is carried ONLY by the kind tile at the head of the
+  // alias cell — the protocol column's kind pill was removed so mixed groups
+  // stop double-labeling every row. The tile is COLORLESS (second user pass):
+  // the glyph alone disambiguates — key=personal, users=team key,
+  // fingerprint=OAuth-flavored. Pool VKs (团队 OAuth) use the fingerprint on
+  // purpose — their defining trait is the OAuth renewal model, not team
+  // custody; the tile tooltip (kindLabel) keeps the full wording. The same
+  // three glyphs appear on the FilterStrip type pills so toolbar and rows
+  // speak one icon language.
+  const kindGlyph: 'personal' | 'team' | 'oauth' =
+    isTeamOAuthGroup || isOAuth ? 'oauth' : isTeam ? 'team' : 'personal';
 
   // Secondary alias line: route_token tail + contextual hint.
   const rtTail = shortRouteToken(
@@ -3119,44 +3154,63 @@ const Row = React.memo(function Row(props: {
     // (current_routed, engine-first) when available, else the master default. The
     // full candidate list is in the drawer.
     const defaultAcct = routedGroupAccount(r.group_accounts);
-    subLine = (
-      <>
-        {t('vault.teamKeyPrefix')}{teamShareLabel(r.share_status, t)}
-        {r.oauth_group_id && (
-          <>
-            <span className="mx-1 opacity-40">·</span>
-            {/* Show the OAuth group's NAME (group_alias) so a member in multiple
-                groups can tell which VK routes to which group; fall back to the
-                generic label for an unnamed group (2026-07-01). */}
-            <span style={{ color: 'var(--primary-dim)' }} title={t('vault.oauthGroupShared')}>
-              {(r as TeamRowRecord).group_alias || t('vault.oauthGroupShared')}
-            </span>
-            {defaultAcct ? (
-              <>
-                <span className="mx-1 opacity-40">·</span>
-                <span title={t('vault.oauthGroupDefaultAccount')}>{defaultAcct.identity}</span>
-              </>
-            ) : (
-              // Empty candidate set: the seat was unbound from the group, or the
-              // group has no enabled accounts → this group key can't route. Surface
-              // it so the member isn't left thinking a blank "Shared group" is fine.
-              <>
-                <span className="mx-1 opacity-40">·</span>
-                <span style={{ color: '#f59e0b' }} title={t('vault.oauthGroupNoAccessHint')}>
-                  {t('vault.oauthGroupNoAccess')}
-                </span>
-              </>
-            )}
-          </>
-        )}
-        {expires && (
-          <>
-            <span className="mx-1 opacity-40">·</span>
-            <span>{expires}</span>
-          </>
-        )}
-      </>
-    );
+    // V2 (superdesign variant-2, user-picked 2026-08-01 — supersedes the
+    // same-day 账号池-prefix decision): the kind tile + kind pill now carry the
+    // type axis, so the textual 团队密钥/账号池 prefixes are dropped and the
+    // meta line opens directly with what the user scans for (share state /
+    // pool name / routed account). Abnormal share states still render FIRST
+    // (失败要显眼) — only the happy-path 已领取 stays omitted, and only on
+    // pool rows; non-pool team keys keep their share state verbatim.
+    subLine = r.oauth_group_id
+      ? (
+        <>
+          {r.share_status !== 'claimed' && (
+            <>
+              {teamShareLabel(r.share_status, t)}
+              <span className="mx-1 opacity-40">·</span>
+            </>
+          )}
+          {/* Show the OAuth group's NAME (group_alias) so a member in multiple
+              groups can tell which VK routes to which group; fall back to the
+              generic label for an unnamed group (2026-07-01). */}
+          <span style={{ color: 'var(--primary-dim)' }} title={t('vault.oauthGroupShared')}>
+            {(r as TeamRowRecord).group_alias || t('vault.oauthGroupShared')}
+          </span>
+          {defaultAcct ? (
+            <>
+              <span className="mx-1 opacity-40">·</span>
+              <span title={t('vault.oauthGroupDefaultAccount')}>{defaultAcct.identity}</span>
+            </>
+          ) : (
+            // Empty candidate set: the seat was unbound from the group, or the
+            // group has no enabled accounts → this group key can't route. Surface
+            // it so the member isn't left thinking a blank "Shared group" is fine.
+            <>
+              <span className="mx-1 opacity-40">·</span>
+              <span style={{ color: '#f59e0b' }} title={t('vault.oauthGroupNoAccessHint')}>
+                {t('vault.oauthGroupNoAccess')}
+              </span>
+            </>
+          )}
+          {expires && (
+            <>
+              <span className="mx-1 opacity-40">·</span>
+              <span>{expires}</span>
+            </>
+          )}
+        </>
+      )
+      : (
+        <>
+          {teamShareLabel(r.share_status, t)}
+          {expires && (
+            <>
+              <span className="mx-1 opacity-40">·</span>
+              <span>{expires}</span>
+            </>
+          )}
+        </>
+      );
   } else {
     const o = r as OAuthVaultRecord;
     const expires = formatExpiresIn(o.token_expires_at, t);
@@ -3239,31 +3293,38 @@ const Row = React.memo(function Row(props: {
               className={`alias-main${aliasMono ? ' mono' : ''}`}
               style={r.alias ? undefined : { color: 'var(--muted-foreground)', fontStyle: 'italic' }}
             >
-              {inUse && (
-                /* CLI-style "active" dot — mirrors the green ● aikey
-                   route prints next to the currently-routing row so
-                   web and terminal read as one visual system. Placed
-                   before the alias text, sibling to the IN USE chip.
-                   Per-(record, provider) — see recordInUseForGroup. */
-                <span
-                  className="active-dot"
-                  aria-hidden="true"
-                  title={t('vault.currentlyRouting')}
-                />
-              )}
-              {r.alias || t('vault.unnamed')}
-              {/* P1f (design D-12): inline PROVIDER chip next to the key name —
-                  `zhipu(GLM)` — the provider axis. The PROTOCOLS column carries the
-                  protocol; this keeps the two axes visually distinct on the row. */}
-              {hasTwoAxis && (
-                <span
-                  className="kind-pill"
-                  style={{ marginLeft: 6, fontWeight: 400 }}
-                  title={t('vault.provider')}
-                >
-                  {providerLabel}
-                </span>
-              )}
+              {/* V2 kind tile (2026-08-01): glyph-codes the credential family
+                  before the name so mixed groups scan without reading. Tooltip
+                  reuses the kind pill's label — same glossary, two surfaces. */}
+              {/* w-4 (16px), not w-3 — sized up 2026-08-01 (user request) to match
+                  the team-oauth page's tool glyph so the three keys-family lists
+                  share one icon scale. */}
+              <span className={`kind-tile ${kindGlyph}`} title={kindLabel}>
+                {kindGlyph === 'oauth' ? (
+                  <FingerprintIcon className="w-4 h-4" />
+                ) : kindGlyph === 'team' ? (
+                  <UsersIcon className="w-4 h-4" />
+                ) : (
+                  <KeyRoundIcon className="w-4 h-4" />
+                )}
+              </span>
+              {/* The old green active-dot was removed 2026-08-01 (user request):
+                  the routing signal now lives on the kind glyph + alias text,
+                  both recolored green via tr.in-use CSS (vault-page-skin) — one
+                  signal, not a dot duplicating the icon right next to it. The
+                  CLI's green ● parity is carried by that recolor. */}
+              {/* .alias-name + title: skin-v1 truncates long machine names with
+                  an ellipsis (supersedes the 2026-07-22 wrap decision, see
+                  vault-page-skin.ts) — hover shows the full value. */}
+              <span
+                className="alias-name"
+                title={inUse ? t('vault.currentlyRouting') : r.alias ?? undefined}
+              >
+                {r.alias || t('vault.unnamed')}
+              </span>
+              {/* P1f D-12's inline provider chip moved into the provider column
+                  (user request 2026-08-01) — the alias cell now carries only
+                  identity (tile + dot + name). */}
               {/* IN USE chip moved to the Actions column (2026-04-25)
                   so every row's rightmost cell has the same routing
                   affordance — a "Use" button when the key is idle,
@@ -3284,16 +3345,23 @@ const Row = React.memo(function Row(props: {
             style={{ background: providerBrandColor(providerName) }}
             aria-hidden="true"
           />
-          {/* P1f: PROTOCOLS column shows the PROTOCOL axis (anthropic), not the provider. */}
-          <span className="name" title={protocolList.join(', ')}>
-            {primaryProtocol}
-            {extraProtocolCount > 0 && (
+          {/* Provider axis (user request 2026-08-01, supersedes P1f D-12): the
+              group header already carries the protocol family, so this column
+              shows the provider — `zhipu(GLM)`-style labels for two-axis team
+              keys (moved in from the alias cell's inline chip), the resolved
+              provider name for everything else. Kind pill removed the same
+              day: the type axis lives on the alias cell's kind tile.
+              Multi-provider VKs collapse to first + (+N), full list on title
+              (see providerLabels above). protocolMore key reused: the string
+              is a bare "(+N)", axis-neutral. */}
+          <span className="name" title={providerLabel}>
+            {hasTwoAxis ? primaryProviderLabel : providerName}
+            {hasTwoAxis && extraProviderCount > 0 && (
               <span style={{ marginLeft: 4, opacity: 0.6 }}>
-                {t('vault.protocolMore', { count: extraProtocolCount })}
+                {t('vault.protocolMore', { count: extraProviderCount })}
               </span>
             )}
           </span>
-          <span className={`kind-pill${kindClass}`}>{kindLabel}</span>
         </span>
       </td>
 
@@ -3325,6 +3393,17 @@ const Row = React.memo(function Row(props: {
             <span className="status-dot" style={{ width: 5, height: 5 }} />
             {t('vault.statusPendingDownload')}
           </span>
+        ) : r.status === 'undecryptable' ? (
+          // Red, and it needs its own branch rather than the generic fallback
+          // below: the fallback would print a bare uppercased status with no
+          // explanation, and this is the one state where the user cannot act
+          // without being told what happened. The key's ciphertext no longer
+          // matches the vault's master key, so it can never route again —
+          // the only remedies are overwrite (`aikey update`) or delete.
+          <span className="chip danger" title={t('vault.undecryptableTitle')}>
+            <span className="status-dot error" style={{ width: 5, height: 5 }} />
+            {t('vault.statusUndecryptable')}
+          </span>
         ) : (
           <span className="chip danger">
             <span className="status-dot error" style={{ width: 5, height: 5 }} />
@@ -3349,7 +3428,12 @@ const Row = React.memo(function Row(props: {
         className="font-mono text-[11.5px]"
         style={{ color: 'var(--muted-foreground)' }}
       >
-        {formatCreatedShort(r.created_at)}
+        {/* V2 (2026-08-01): server-managed rows have no local created_at — a
+            centered dimmed dash reads as "not applicable" instead of a bare
+            left-aligned dash that looks like a rendering bug. */}
+        {r.created_at
+          ? formatCreatedShort(r.created_at)
+          : <span className="cell-empty">—</span>}
       </td>
 
       <td style={{ textAlign: 'center' }}>
@@ -3407,6 +3491,12 @@ const Row = React.memo(function Row(props: {
           </div>
         ) : (
           <div className="row-actions">
+            {/* V2 fixed slots (2026-08-01): the primary action (使用 / 登录 /
+                IN USE / none) sits in a constant-width .action-rail and the
+                trailing Delete position gets an .action-slot spacer on team
+                rows, so the eye/test/edit icons form clean vertical rails
+                across rows regardless of each row's state. */}
+            <span className="action-rail">
             {/* Same cell, two states:
                   • in_use:false → "Use" switcher button (unchanged action)
                   • in_use:true  → "IN USE" chip (clickable, opens drawer
@@ -3431,6 +3521,12 @@ const Row = React.memo(function Row(props: {
               // below which is enabled regardless.
               const teamUnusable = isTeam && (r as TeamRowRecord).effective_status !== 'active';
               if (teamUnusable) return null;
+              // 2026-08-01: an undecryptable personal row can never route —
+              // aikey-proxy fails on the same ciphertext the list failed on.
+              // Hidden rather than greyed, following the inactive-team-key
+              // precedent right above: the row is read-only until the user
+              // overwrites (`aikey update`) or deletes it.
+              if (r.status === 'undecryptable') return null;
               // Locked is no longer a disabled dead-end (2026-07-29): the
               // click opens an in-place Master Password popover and the
               // switch resumes after unlock — so the button stays enabled
@@ -3493,6 +3589,7 @@ const Row = React.memo(function Row(props: {
                 {t('vault.inUse')}
               </button>
             )}
+            </span>
             <button
               className="icon-btn"
               title={t('vault.viewDetails')}
@@ -3511,7 +3608,7 @@ const Row = React.memo(function Row(props: {
                 unlocked (decryption happens server-side in aikey-proxy).
                 If the proxy is down the popup surfaces an actionable
                 error rather than the button being mysteriously greyed. */}
-            {props.onTest && (
+            {props.onTest ? (
               <button
                 className="icon-btn"
                 title={props.testRunning ? t('vault.probeInProgressTitle') : t('vault.testConnection')}
@@ -3524,16 +3621,33 @@ const Row = React.memo(function Row(props: {
               >
                 <ActivityIcon className="w-3.5 h-3.5" />
               </button>
+            ) : (
+              // Spacer keeps the edit/delete rail aligned when a row has no
+              // Test action (V2 fixed slots).
+              <span className="action-slot" aria-hidden="true" />
             )}
             <button
               className="icon-btn primary"
-              title={lockedTitle ?? t('vault.renameAliasTitle')}
+              // Renaming an undecryptable row changes nothing about why it is
+              // broken, and a successful rename would read as "fixed". The
+              // tooltip points at the two actions that do work.
+              title={
+                lockedTitle
+                ?? (r.status === 'undecryptable'
+                  ? t('vault.undecryptableFixHint')
+                  : t('vault.renameAliasTitle'))
+              }
               onClick={props.onBeginEdit}
-              disabled={props.locked}
+              disabled={props.locked || r.status === 'undecryptable'}
             >
               <EditIcon className="w-3.5 h-3.5" />
             </button>
-            {!isTeam && (
+            {/* Delete stays reachable on undecryptable rows ON PURPOSE — it is
+                the user's only way to clear an entry whose ciphertext no longer
+                matches the master key. Team rows get an .action-slot spacer
+                instead (server-managed lifecycle — no local delete), keeping
+                the icon rails aligned (V2 fixed slots). */}
+            {!isTeam ? (
               <button
                 className="icon-btn danger"
                 title={lockedTitle ?? t('vault.deleteTitle')}
@@ -3542,6 +3656,8 @@ const Row = React.memo(function Row(props: {
               >
                 <TrashIcon className="w-3.5 h-3.5" />
               </button>
+            ) : (
+              <span className="action-slot" aria-hidden="true" />
             )}
           </div>
         )}
@@ -3682,23 +3798,6 @@ function PageFooter() {
       className="flex flex-col gap-2 text-[12px] font-mono pt-1 pb-6"
       style={{ color: 'var(--muted-foreground)' }}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <a href="/user/cli-guide" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
-            <BookOpenIcon className="w-3 h-3" />
-            {t('vault.footerDocs')}
-          </a>
-          <a href="#" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
-            <LifeBuoyIcon className="w-3 h-3" />
-            {t('vault.footerSupport')}
-          </a>
-          <a href="#" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
-            <ShieldCheckIcon className="w-3 h-3" />
-            {t('vault.footerSecurity')}
-          </a>
-        </div>
-        <span>{t('vault.controlVault')}</span>
-      </div>
       {/*
         Why a footer encryption disclosure on the vault page (2026-04-22):
         Users land here after typing their master password and reasonably ask
@@ -3717,6 +3816,10 @@ function PageFooter() {
         "key derivation", "defense-in-depth") signal authority while
         staying technically faithful — exact params are still discoverable
         in VAULT_SPEC.md and the storage module for security reviewers.
+
+        Order (2026-08-01 user request): the security disclosure line sits
+        ABOVE the docs/support/security links row — the assurance reads as
+        the footer's headline, the nav links as the fine print.
       */}
       <div className="flex items-center gap-1.5 text-[11px] opacity-80">
         <LockIcon className="w-3 h-3" />
@@ -3725,6 +3828,23 @@ function PageFooter() {
           <span style={{ color: 'var(--foreground)' }}>AES-256-GCM</span>{t('vault.authenticatedEncryption')}
           <span style={{ color: 'var(--foreground)' }}>Argon2id</span>{t('vault.keyDerivationTail')}
         </span>
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <a href="/user/cli-guide" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
+            <BookOpenIcon className="w-3 h-3" />
+            {t('vault.footerDocs')}
+          </a>
+          <a href="#" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
+            <LifeBuoyIcon className="w-3 h-3" />
+            {t('vault.footerSupport')}
+          </a>
+          <a href="#" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
+            <ShieldCheckIcon className="w-3 h-3" />
+            {t('vault.footerSecurity')}
+          </a>
+        </div>
+        <span>{t('vault.controlVault')}</span>
       </div>
     </section>
   );
@@ -3952,6 +4072,12 @@ function DetailDrawer(props: {
                 <span className="chip warning" title={t('vault.pendingDownloadTitle')}>
                   <span className="status-dot" style={{ width: 5, height: 5 }} />
                   {t('vault.statusPendingDownload')}
+                </span>
+              ) : r.status === 'undecryptable' ? (
+                // Same rationale as the row chip — see there.
+                <span className="chip danger" title={t('vault.undecryptableTitle')}>
+                  <span className="status-dot error" style={{ width: 5, height: 5 }} />
+                  {t('vault.statusUndecryptable')}
                 </span>
               ) : (
                 <span className="chip danger">
@@ -4382,7 +4508,14 @@ function DetailDrawer(props: {
                     keeps short single-line commands visually quiet.
                     Bottom: terse hint. */}
                 {(() => {
-                  const cliCmd = `aikey get ${r.alias}`;
+                  // 2026-08-01: on an undecryptable row `aikey get` fails for
+                  // exactly the same reason the list failed, so offering it
+                  // would send the user down a dead end. Hand them the command
+                  // that actually resolves the state instead.
+                  const undecryptable = r.status === 'undecryptable';
+                  const cliCmd = undecryptable
+                    ? `aikey update ${r.alias}`
+                    : `aikey get ${r.alias}`;
                   const copied = copiedField === 'cli_get';
                   return (
                     <div className="drawer-field">
@@ -4390,7 +4523,11 @@ function DetailDrawer(props: {
                       <span className="v stack" style={{ width: '100%' }}>
                         <div className="secret-view masked" style={{ width: '100%' }}>
                           <div className="plain">
-                            {personal.secret_prefix === null ? (
+                            {undecryptable ? (
+                              <span className="mid" style={{ color: '#fca5a5' }}>
+                                {t('vault.undecryptableSecret')}
+                              </span>
+                            ) : personal.secret_prefix === null ? (
                               // Locked / too-short: a short bar of dots — the
                               // suffix span is absent in this branch, so we
                               // don't need to leave room for it on the right.
@@ -4435,7 +4572,11 @@ function DetailDrawer(props: {
                             )}
                           </button>
                         </span>
-                        <span className="hint">{t('vault.revealInTerminal')}</span>
+                        <span className="hint">
+                          {undecryptable
+                            ? t('vault.undecryptableFixHint')
+                            : t('vault.revealInTerminal')}
+                        </span>
                       </span>
                     </div>
                   );
@@ -4936,6 +5077,14 @@ function DetailDrawer(props: {
                   <>
                     <span className="status-dot" style={{ width: 5, height: 5 }} />
                     <span style={{ color: 'var(--warning, #f59e0b)' }}>{t('vault.statusNeedsLogin')}</span>
+                  </>
+                ) : r.status === 'undecryptable' ? (
+                  // Same rationale as the row chip — see there.
+                  <>
+                    <span className="status-dot error" style={{ width: 5, height: 5 }} />
+                    <span style={{ color: '#fca5a5' }} title={t('vault.undecryptableTitle')}>
+                      {t('vault.statusUndecryptable')}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -7528,6 +7677,11 @@ const ICON_TRASH =
   'M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0';
 const ICON_CHECK = 'M4.5 12.75l6 6 9-13.5';
 const ICON_X = 'M6 18L18 6M6 6l12 12';
+// lucide fingerprint — same path set as the master console's provider-accounts
+// KindTile (landed 2026-08-01) so the OAuth kind reads identically on both
+// consoles. Multi-subpath in one `d` renders fine as a single stroked path.
+const ICON_FINGERPRINT =
+  'M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4 M14 13.12c0 2.38 0 6.38-1 8.88 M17.29 21.02c.12-.6.43-2.3.5-3.02 M2 12a10 10 0 0 1 18-6 M2 16h.01 M21.8 16c.2-2 .131-5.354 0-6 M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2 M8.65 22c.21-.66.45-1.32.57-2 M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2';
 const ICON_MAIL =
   'M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75';
 const ICON_INFO =
@@ -7624,6 +7778,7 @@ function ZapIcon(p: { className?: string; style?: React.CSSProperties }) { retur
 function PlayIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_PLAY} {...p} />; }
 function UserCheckIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_USER_CHECK} {...p} />; }
 function UsersIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_USERS} {...p} />; }
+function FingerprintIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_FINGERPRINT} {...p} />; }
 function ShapesIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_SHAPES} {...p} />; }
 function TagIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_TAG} {...p} />; }
 function GlobeIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_GLOBE} {...p} />; }

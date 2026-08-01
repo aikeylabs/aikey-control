@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { userAccountsApi, type AgentRoutingSummaryDTO, type MyAgentDTO } from '@/shared/api/user/accounts';
-import { Badge } from '@/shared/ui/Badge';
+import { ToolGlyph, toolGlyphLabel } from '@/shared/ui/ToolGlyph';
 import { DetailDrawer } from '@/shared/ui/DetailDrawer';
 import { ModalPortal } from '@/shared/ui/ModalShell';
 import { copyText } from '@/shared/utils/clipboard';
@@ -28,6 +28,7 @@ import { formatDate, formatDateTime } from '@/shared/utils/datetime-intl';
 // with /user/virtual-keys) instead of hand-copying the values keeps a single
 // source of truth for the keys-page table look.
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
+import { KindGlyph } from '../_shared/tool-glyph';
 import { PoolAccountList } from '../_shared/PoolAccountList';
 
 // statusLabel maps a seat status to the SAME words the card-header chips use
@@ -205,7 +206,13 @@ function sourceBadge(src: MyAgentDTO['source'], t: (k: string) => string) {
   const isApiKey = src.type === 'api_key';
   return (
     <span className="inline-flex items-center gap-1.5">
-      <Badge variant={isApiKey ? 'gray' : 'green'}>{isApiKey ? 'API-KEY' : 'OAUTH'}</Badge>
+      {/* Kind glyph instead of the OAUTH/API-KEY text badge (2026-08-01 user
+          request): key = API key material, fingerprint = OAuth — the same
+          colorless icon language as the vault/virtual-keys kind tiles. The
+          wording moves to the tooltip. */}
+      <span className="kind-tile" title={isApiKey ? 'API-KEY' : 'OAUTH'}>
+        <KindGlyph kind={isApiKey ? 'key' : 'oauth'} />
+      </span>
       <span style={{ color: 'var(--muted-foreground)' }}>{src.name || (src.owner_pool ? t('myAgents.myPool') : '—')}</span>
     </span>
   );
@@ -920,15 +927,22 @@ export default function MyAgentsPage() {
               {agents?.map(agent => (
                 <tr key={agent.seat_id}>
                   <td className="px-5 py-4" style={{ color: 'var(--soft-foreground)' }}>
-                    <button
-                      type="button"
-                      className="alias-main mono cursor-pointer text-left hover:underline focus-visible:underline"
-                      onClick={() => setRoutingAgent(agent)}
-                      title={t('myAgents.routing.openTitle', { account: agent.alias })}
-                      aria-label={t('myAgents.routing.openTitle', { account: agent.alias })}
-                    >
-                      {agent.alias}
-                    </button>
+                    {/* Tool glyph LEFT of the name — same spec/placement as the
+                        admin OAuth pools and Agents lists (shared/ui/ToolGlyph).
+                        Outside the button so it is decoration, not a click
+                        target: the name alone opens the routing drawer. */}
+                    <div className="flex items-center gap-2">
+                      <ToolGlyph label={toolGlyphLabel(agent.source?.protocol_type, agent.source?.provider_code)} />
+                      <button
+                        type="button"
+                        className="alias-main mono cursor-pointer text-left hover:underline focus-visible:underline"
+                        onClick={() => setRoutingAgent(agent)}
+                        title={t('myAgents.routing.openTitle', { account: agent.alias })}
+                        aria-label={t('myAgents.routing.openTitle', { account: agent.alias })}
+                      >
+                        {agent.alias}
+                      </button>
+                    </div>
                   </td>
                   <td className="px-5 py-4">{sourceBadge(agent.source, t)}</td>
                   <td className="px-5 py-4">

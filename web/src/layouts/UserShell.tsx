@@ -197,39 +197,56 @@ function OverviewIcon()    { return <NavIcon d={ICON_OVERVIEW} />; }
 function UserIcon()        { return <NavIcon d={ICON_USER} />; }
 function ReceiptIcon()     { return <NavIcon d={ICON_RECEIPT} />; }
 function DollarIcon()      { return <NavIcon d={ICON_DOLLAR} />; }
+
+// Performance nav glyph (2026-08-01 user request): gauge/speedometer — the
+// canonical performance-profiling mark (lucide `gauge`). Replaces the dollar
+// sign, a leftover from the page's "Cost" era that no longer matches its
+// profiling identity.
+const ICON_GAUGE = 'm12 14 4-4 M3.34 19a10 10 0 1 1 17.32 0';
+function GaugeIcon() { return <NavIcon d={ICON_GAUGE} />; }
 function UploadCloudIcon() { return <NavIcon d={ICON_UPLOAD_CLOUD} />; }
 function AppsIcon()        { return <NavIcon d={ICON_APPS} />; }
 function BotIcon()         { return <NavIcon d={ICON_BOT} />; }
 function UserPlusIcon()    { return <NavIcon d={ICON_USER_PLUS} />; }
 function ShieldIcon()      { return <NavIcon d={ICON_SHIELD} />; }
 function FingerprintIcon() { return <NavIcon d={ICON_FINGERPRINT} />; }
+
+// Team-keys nav glyph (2026-08-01 user request): the SAME three-person mark
+// the vault page's kind tiles draw for team-managed keys (heroicons users
+// path, mirrored from pages/user/_shared/tool-glyph KIND_GLYPH.team) — the
+// menu and the rows it leads to now speak one icon language.
+const ICON_TEAM_KIND =
+  'M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z';
+function TeamKindIcon() { return <NavIcon d={ICON_TEAM_KIND} />; }
+
+// Compliance-audit nav glyph (2026-08-01 user request, second pass): scales
+// of justice (lucide `scale` compiled into one `d` via M subpaths) — the
+// canonical "rules / 合规" metaphor. First cut was clipboard-check; the
+// fingerprint before that now belongs to Team OAuth (the vault OAuth-kind
+// mark), and two fingerprints in one sidebar read as the same feature.
+const ICON_SCALE =
+  'm16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z M7 21h10 M12 3v18 M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2';
+function ScaleIcon() { return <NavIcon d={ICON_SCALE} />; }
+
+// Connected-Apps nav glyph (2026-08-01 user request): puzzle piece — the
+// universal plugin/extension metaphor. Chosen over the literal 插头 plug
+// (already the console-wide mark for DIRECT-CREDENTIAL kind) and the grid
+// (handed to Agents the same day). Lucide `puzzle`, single path.
+const ICON_PUZZLE =
+  'M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 2c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z';
+function PuzzleIcon() { return <NavIcon d={ICON_PUZZLE} />; }
 function SettingsIcon()    { return <NavIcon d={ICON_SETTINGS} />; }
 
-// Phase 3B R17 (2026-05-11): Team Usage glyph — bar chart at the
-// bottom + two small head circles above, to read as "team's
-// chart/metrics" in one mark. Personal Usage uses plain ReceiptIcon
-// (bar-chart-3); Team Usage needed a different glyph so the two
-// Insights rows (Usage + Team Usage) on the same sidebar group don't
-// look identical. Multi-shape SVG so we inline the markup instead of
-// reusing the NavIcon single-path scaffold.
+// Team Usage glyph. History: Phase 3B R17 (2026-05-11) used heads-over-bars
+// to say "team's metrics"; replaced 2026-08-01 (user feedback: cluttered at
+// 16px) with a plain axis + rising columns — still distinct from personal
+// Usage's receipt mark.
 function TeamUsageIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      viewBox="0 0 24 24"
-    >
-      <circle cx="8" cy="5" r="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="14" cy="5" r="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M4 21h17M7 21v-6M12 21v-9M17 21v-4"
-      />
-    </svg>
-  );
+  // 2026-08-01 (user request, v3): rising trend line (lucide trending-up).
+  // v2's axis+columns collided with personal Usage's icon (named ReceiptIcon
+  // but drawing a bar chart); a line chart keeps the "usage metrics" read
+  // while staying visually distinct in the same sidebar group.
+  return <NavIcon d="M22 7 13.5 15.5 8.5 10.5 2 17 M16 7h6v6" />;
 }
 
 // Multi-path lucide "radar" (M5 Day 1, 2026-05-21). Re-rendered as inline
@@ -322,15 +339,17 @@ function crossAppIconFor(iconName: string | undefined): React.ReactNode {
   switch (iconName) {
     case 'vault':        return <ShieldIcon />;
     case 'import':       return <UploadCloudIcon />;
-    case 'team':         return <KeyIcon />;
+    case 'team':         return <TeamKindIcon />;
     case 'chart':        return <ReceiptIcon />;
     case 'team-chart':   return <TeamUsageIcon />;
-    case 'cost':         return <DollarIcon />;
-    case 'apps':         return <AppsIcon />;
-    case 'my-agents':    return <BotIcon />;
+    case 'cost':         return <GaugeIcon />;
+    case 'apps':         return <PuzzleIcon />;
+    case 'my-agents':    return <AppsIcon />;
     case 'trust-check':  return <RadarIcon />;
-    case 'compliance':   return <FingerprintIcon />;
-    case 'oauth-contribute': return <ShareIcon />;
+    case 'compliance':   return <ScaleIcon />;
+    // 2026-08-01: fingerprint (the vault OAuth-kind mark) — was ShareIcon;
+    // must match the local-nav Team OAuth entry above.
+    case 'oauth-contribute': return <FingerprintIcon />;
     // 2026-05-30: mirrored from master/web for symmetry. A-side never
     // fetches personal-invites via cross-app (Personal advertises but
     // doesn't consume its own menu), but keeping the switch symmetric
@@ -1037,7 +1056,7 @@ export function UserShell() {
         // dropped A's local /user/virtual-keys nav entry — it was a
         // stub showing empty state since A's local-server has no team
         // data source.
-        { path: '/user/virtual-keys', icon: <KeyIcon />,         label: 'Team Keys',  originName: 'Virtual Keys', teamOnly: true },
+        { path: '/user/virtual-keys', icon: <TeamKindIcon />,    label: 'Team Keys',  originName: 'Virtual Keys', teamOnly: true },
         // OAuth pool contribute / per-member sign-in. personalOnly since
         // 2026-06-30 (RW8): the page now LIVES on the local node (A, 8090) —
         // it pulls team data via the two-hop team-fetch but is HOSTED locally,
@@ -1046,7 +1065,7 @@ export function UserShell() {
         // no longer exists). On B (team) the matching cross-app slot comes from
         // A's OWN_PERSONAL_MENU ('personal-oauth-contribute'). Same pattern as
         // Vault / Trust Check (local page + cross-app trailer on the other side).
-        { path: '/user/team-oauth', icon: <ShareIcon />,   label: 'Team OAuth', personalOnly: true, requiresTeamLogin: true },
+        { path: '/user/team-oauth', icon: <FingerprintIcon />,   label: 'Team OAuth', personalOnly: true, requiresTeamLogin: true },
       ],
     },
     {
@@ -1074,7 +1093,7 @@ export function UserShell() {
         // The page file, function name, CSS class, and trailer ID stay keyed
         // on "cost" (internal-only identifiers, not user-facing). Old
         // `/user/cost` URL still works via redirect in routes/user.tsx.
-        { path: '/user/performance',  icon: <DollarIcon />,    label: 'Performance', originName: 'Cost',          personalOnly: true },
+        { path: '/user/performance',  icon: <GaugeIcon />,     label: 'Performance', originName: 'Cost',          personalOnly: true },
       ],
     },
     {
@@ -1106,7 +1125,7 @@ export function UserShell() {
         // ignored, so the same entry renders a local NavLink to that app's own
         // /user/compliance instead of jumping back to :8090. One file, two
         // behaviours decided at runtime — 🚫 not two files.
-        { path: '/user/compliance', icon: <FingerprintIcon />, label: 'Compliance Audit', originName: 'Compliance Audit', crossAppPreferred: true },
+        { path: '/user/compliance', icon: <ScaleIcon />, label: 'Compliance Audit', originName: 'Compliance Audit', crossAppPreferred: true },
       ],
     },
     {
@@ -1131,8 +1150,8 @@ export function UserShell() {
         // user-side console); originName keeps 'My Agents' for selectors.
         // 2026-07-18 (user decision): Agents listed BEFORE Apps, matching the
         // group title order ("Agents & Apps").
-        { path: '/user/my-agents', icon: <BotIcon />, label: 'Agents', originName: 'My Agents', personalOnly: true, requiresTeamLogin: true },
-        { path: '/user/apps', icon: <AppsIcon />, label: 'Apps', originName: 'Connected Apps', personalOnly: true },
+        { path: '/user/my-agents', icon: <AppsIcon />, label: 'Agents', originName: 'My Agents', personalOnly: true, requiresTeamLogin: true },
+        { path: '/user/apps', icon: <PuzzleIcon />, label: 'Apps', originName: 'Connected Apps', personalOnly: true },
       ],
     },
     {

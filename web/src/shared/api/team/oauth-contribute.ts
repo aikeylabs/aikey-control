@@ -37,6 +37,11 @@ export interface OwnerPoolAccount {
   credential_id: string;
   identity: string;
   provider_code: string;
+  /** protocol axis (anthropic | openai_compatible | …), display-only
+   * (2026-08-01): drives the claude/codex tool glyph when provider_code
+   * (e.g. mock) can't decide. Omitted by older servers → glyph falls back
+   * to provider_code only. */
+  protocol_type?: string;
   enabled: boolean;
   /** logged_in | needs_login | auth_failed | revoked */
   login_status: string;
@@ -100,6 +105,11 @@ export interface MyPoolAccount {
   /** provider code (anthropic | openai | …), used only for row labels/branding.
    * Sign-in provider + flow come from the strict server login context. */
   provider_code?: string;
+  /** protocol axis (anthropic | openai_compatible | …), display-only
+   * (2026-08-01): drives the claude/codex tool glyph when provider_code
+   * (e.g. mock) can't decide. Omitted by older servers → glyph falls back
+   * to provider_code only. */
+  protocol_type?: string;
   /** whether this account exits through a configured egress line (own override
    * OR inherited group default, R46). Presence only — the raw URL never reaches
    * the member plane. Omitted by older servers → no chip. */

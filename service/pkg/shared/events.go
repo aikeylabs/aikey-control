@@ -58,4 +58,13 @@ const (
 	// registry's format is <service>.<area>.<state> and this service is control,
 	// so they join their siblings above.
 	EventControlSSOSeatAutoProvisioned = "control.sso.seat_auto_provisioned"
+	// EventUserAPICliBridgeStderr fires when an `aikey _internal` subprocess
+	// wrote to stderr yet still returned a well-formed envelope, i.e. the call
+	// SUCCEEDED but degraded. Before 2026-08-01 that stderr was discarded on
+	// the success path, so a cli that silently dropped rows from a response
+	// (the vault list skipping entries it could not decrypt) produced a page
+	// with missing data and not one line of evidence anywhere on the server.
+	// Partial success is exactly the case that needs a log line — a total
+	// failure at least surfaces an error code to the user.
+	EventUserAPICliBridgeStderr = "userapi.cli_bridge.stderr"
 )
