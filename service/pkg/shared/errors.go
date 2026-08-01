@@ -331,6 +331,10 @@ const (
 	CodeBizOauthGroupNotFound         = "BIZ_OAUTH_GROUP_NOT_FOUND"
 	CodeBizRouteGroupNotFound         = "BIZ_ROUTE_GROUP_NOT_FOUND"
 	CodeBizRouteGroupOriginConflict   = "BIZ_ROUTE_GROUP_ORIGIN_CONFLICT"
+	// CodeBizRouteGroupProtocolMismatch: a member credential does not speak the
+	// template's protocol (P0a rev10 task 4.50). 422 — a validation the admin
+	// fixes by choosing a different credential.
+	CodeBizRouteGroupProtocolMismatch = "BIZ_ROUTE_GROUP_PROTOCOL_MISMATCH"
 	CodeBizOauthGroupDefaultProtected = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
 	CodeBizOauthGroupCredInUse        = "BIZ_OAUTH_GROUP_CRED_IN_USE"
 	// CodeBizOauthGroupRatioRejected: issuing to a group would push seats:accounts
@@ -663,6 +667,42 @@ func BizRouteGroupNotFound(id string) *DomainError {
 // retry or file a defect rather than to detach the existing chain.
 func BizRouteGroupOriginConflict(msg string) *DomainError {
 	return &DomainError{Code: CodeBizRouteGroupOriginConflict, Message: msg}
+}
+
+// BizRouteGroupProtocolMismatch — a credential was chosen as a hop of a template
+// whose protocol it does not speak (P0a rev10, task 4.50).
+//
+// 🔴 Why this refusal has to exist at MEMBER-SAVE time, when one already exists
+// downstream: `validateDirectBindCredential` catches the same mismatch, but only
+// when the template is APPLIED to a key. `ReapplyRouteGroup` retires a key's
+// current chain before regenerating it hop by hop, outside any transaction — so
+// the downstream refusal fires with the old chain already gone, leaving a live
+// key serving hops 1..N-1. The mismatch is created in the template editor and
+// must be refused there, while it costs nothing but a red line.
+//
+// The message names all three facts an operator needs to act: WHICH credential,
+// what it speaks, and what this template requires. 🚫 Not "protocol mismatch" —
+// a chain has several hops and several credentials, and a refusal that does not
+// say which one leaves the reader clicking each in turn.
+func BizRouteGroupProtocolMismatch(credentialID, credProtocol, groupProtocol string) *DomainError {
+	return &DomainError{
+		Code: CodeBizRouteGroupProtocolMismatch,
+		// 🔴 No indefinite article before a protocol name. The name is a
+		// variable — "a anthropic" and "an openai_compatible" are both reachable
+		// from the same format string, and picking one is wrong half the time.
+		// Observed on a live run; a unit test asserting substrings never sees it.
+		Message: fmt.Sprintf(
+			"credential %s speaks %s, but this route group is %s. "+
+				"Every hop of a chain has to speak the protocol the chain is declared for — "+
+				"pick a credential that speaks %s, or build this chain in a route group "+
+				"declared for %s",
+			credentialID, credProtocol, groupProtocol, groupProtocol, credProtocol),
+		Meta: map[string]any{
+			"credential_id":      credentialID,
+			"credential_protocol": credProtocol,
+			"group_protocol":     groupProtocol,
+		},
+	}
 }
 
 // BizOauthGroupDefaultProtected — the per-org default group cannot be deleted.
