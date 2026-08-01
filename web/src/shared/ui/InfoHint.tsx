@@ -40,9 +40,21 @@ interface InfoHintProps {
   children: ReactNode;
   /** Optional hook for tests / fences. */
   testId?: string;
+  /**
+   * The character in the trigger. Defaults to `i` — an aside about the thing
+   * next to it, which is what the threshold rows use it for.
+   *
+   * `?` is the other legitimate value, for the case where the hint answers a
+   * question the reader is actually asking ("what does this page set?") rather
+   * than adding a footnote they did not ask for. It is a glyph swap ONLY: the
+   * three ways in and the always-present bubble are the component's contract and
+   * do not vary with it, which is why this is a prop rather than a second
+   * component someone would build with hover as the only trigger.
+   */
+  glyph?: 'i' | '?';
 }
 
-export function InfoHint({ label, children, testId }: InfoHintProps) {
+export function InfoHint({ label, children, testId, glyph = 'i' }: InfoHintProps) {
   const id = useId();
   // Click PINS the bubble open — the touch-screen path, and also what a mouse
   // user reaches for when a sentence is long enough to want to read twice.
@@ -90,7 +102,7 @@ export function InfoHint({ label, children, testId }: InfoHintProps) {
         }}
         data-testid={testId}
       >
-        <span aria-hidden="true">i</span>
+        <span aria-hidden="true">{glyph}</span>
       </button>
       <span
         id={id}
