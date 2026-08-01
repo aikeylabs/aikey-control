@@ -46,6 +46,9 @@ export function FilterBar({
       {/* Search */}
       {onSearchChange !== undefined && (
         <div className="relative">
+          {/* Magnifier icon: part of the filter-control family look — the
+              FilterTokenBar carries the same glyph (2026-07-29 user decision:
+              add it there, not remove it here). */}
           <svg
             className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none"
             style={{ color: 'var(--muted-foreground)' }}
@@ -58,13 +61,15 @@ export function FilterBar({
           </svg>
           <input
             type="text"
-            // 2026-06-11: pl-9 pr-3 py-2 text-sm (38px) — was py-1.5
-            // text-xs (30px) which read shorter than the sibling
-            // SearchableSelect (38px) in the same FilterBar row,
-            // making every filter row look misaligned. The canonical
-            // master-nav filter-row height is 38px (SearchableSelect's
-            // intrinsic); every input in a filter row should match.
-            className="pl-9 pr-3 py-2 text-sm w-52"
+            // 2026-06-11: pl-9 pr-3 py-2 text-sm (38px) — the canonical
+            // master-nav filter-row height (SearchableSelect's intrinsic);
+            // every input in a filter row should match.
+            // `filter-search-input` (2026-07-29): pins background to
+            // var(--card) so the box matches its row siblings (SearchableSelect
+            // trigger, FilterTokenBar) — without it the global
+            // `input { background: var(--muted) !important }` paints this one
+            // control a tier lighter than every other filter-row control.
+            className="filter-search-input pl-9 pr-3 py-2 text-sm w-52"
             placeholder={resolvedSearchPlaceholder}
             value={searchValue ?? ''}
             onChange={(e) => onSearchChange(e.target.value)}

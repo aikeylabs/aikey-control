@@ -782,6 +782,14 @@ textarea:focus {
 input::placeholder {
   color: var(--muted-foreground) !important;
 }
+/* FilterBar search input (2026-07-29): match the filter-row siblings
+   (SearchableSelect trigger + FilterTokenBar are both var(--card)). The
+   generic `input { background: var(--muted) !important }` rule above painted
+   this one control a tier lighter — same global-!important trap as
+   select.page-size-select / input.filter-token-input. */
+input.filter-search-input {
+  background-color: var(--card) !important;
+}
 /* FilterTokenBar inner input (2026-07-29): the token bar draws its OWN
    border/bg; the inner <input> must be a bare transparent caret line. The
    generic `input { background/border/radius !important }` rule above would
@@ -797,12 +805,11 @@ input.filter-token-input:focus {
   border: none !important;
   box-shadow: none !important;
 }
-/* Pagination page-size select (2026-07-29, mirror of master/web — dual-edit
-   whitelist path): must sit as quiet as the sibling prev/next buttons
-   (transparent bg, muted text). The generic
+/* Pagination page-size select (2026-07-29 user report ×3): must sit as quiet
+   as the sibling prev/next buttons (transparent bg, muted text). The generic
    `select { background-color: var(--muted) !important }` rule above overrides
-   ANY inline style, which is why an inline-style fix silently fails — this
-   class out-specifies it (element+class > element, both !important).
+   ANY inline style, which is why two inline-style fixes silently failed —
+   this class out-specifies it (element+class > element, both !important).
    Keep in sync with Pagination.tsx BTN_STYLE. */
 select.page-size-select {
   background-color: transparent !important;

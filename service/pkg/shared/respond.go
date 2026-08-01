@@ -102,7 +102,7 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
 		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
 		CodeBizAgentLimitReached, CodeBizAgentNonClusterOrg,
-		CodeBizAgentParentSeatRequired,
+		CodeBizAgentParentSeatRequired, CodeBizAgentStatusConflict,
 		CodeBizOauthLoginBindingChanged,
 		CodeBizOauthLoginContextUnavailable,
 		CodeBizOauthRoutedAccountAmbiguous,

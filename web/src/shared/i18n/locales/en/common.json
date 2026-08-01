@@ -98,7 +98,7 @@
     "navImport": "Import",
     "navTeamKeys": "Team Keys",
     "navOauthContribute": "Team OAuth",
-    "navSwitchLog": "Switch Log",
+    "navSwitchLog": "Dispatch Log",
     "navUsage": "Usage",
     "navUsageDetail": "Usage Detail",
     "navTeamUsage": "Team Usage",
@@ -1815,8 +1815,6 @@
     "issueKey": "Issue Key",
     "pageTitle": "Virtual Keys",
     "orgDescription": "Org · {{orgId}}",
-    "searchAliasPlaceholder": "Search alias...",
-    "allStatuses": "All statuses",
     "recordCount": "{{count}} records",
     "columnAlias": "Alias",
     "columnStatus": "Status",
@@ -1853,7 +1851,9 @@
     "confirmRotate": "Confirm Rotate",
     "rotatedNewToken": "Rotated — New Token",
     "newVirtualKeyToken": "New Virtual Key Token",
-    "revisionLabel": "Revision: "
+    "revisionLabel": "Revision: ",
+    "dimTag": "Batch Tag",
+    "reset": "Reset"
   },
   "bindings": {
     "createTitle": "Create Protocol Channel",
@@ -1887,9 +1887,6 @@
     "pageTitle": "Protocol Channels",
     "pageDescription": "Virtual Key protocol-level access configuration",
     "newChannel": "New Channel",
-    "searchPlaceholder": "Search channel name / virtual key / credential...",
-    "allProtocols": "All protocols",
-    "allProviders": "All providers",
     "reset": "Reset",
     "batchSwitchCredential": "Batch Switch Credential",
     "clearSelection": "Clear selection",
@@ -1924,7 +1921,11 @@
     "priorityNum": "Priority #{{priority}}",
     "drawerStatus": "Status",
     "drawerLastUpdated": "Last Updated",
-    "drawerUpdatedBy": "Updated By"
+    "drawerUpdatedBy": "Updated By",
+    "dimCredential": "Credential",
+    "dimVirtualKey": "Virtual Key",
+    "dimProvider": "Provider",
+    "dimProtocol": "Protocol"
   },
   "providerAccounts": {
     "addDialogTitle": "Add Provider Credential",
@@ -2540,8 +2541,8 @@
     "platformNote": "Windows / other browsers: the same idea works with a separate profile directory, e.g. chrome.exe --user-data-dir=\"C:\\\\chrome\\\\isolate_2\"."
   },
   "switchLog": {
-    "entryButton": "Switch Log",
-    "pageTitle": "Account Switch Log",
+    "entryButton": "Dispatch Log",
+    "pageTitle": "Account Dispatch Log",
     "pageDescription": "Decision trail of the account allocation engine — automatic switches, refills and protection decisions for your accounts and agent pools.",
     "backButton": "Team OAuth",
     "scopeAria": "Scope filter",
@@ -2784,6 +2785,14 @@
     "actionFailed": "The action failed. Please retry.",
     "empty": "No agents yet. Create one to expose a team OAuth VK to a third-party agent.",
     "disable": "Disable",
+    "enable": "Enable",
+    "enableTitle": "Bring this agent back. Its existing VK stays valid, so the third-party agent needs no reconfiguration.",
+    "revokedTerminal": "Revoked — create a new one",
+    "status": {
+      "active": "Active",
+      "suspended": "Disabled",
+      "revoked": "Revoked"
+    },
     "myPool": "My pool",
     "copy": "Copy",
     "copied": "Copied",
@@ -2888,6 +2897,9 @@
     "remove": "Remove filter",
     "valueSearchHint": "Type to filter {{dim}}…",
     "hints": "↑↓ Select · Enter Apply · Backspace Remove",
-    "browseHint": "Type to search across all dimensions · click a dimension to scope"
+    "keywordLabel": "Search",
+    "fuzzyApply": "Fuzzy search \"{{value}}\"",
+    "editToken": "Click to adjust this filter",
+    "close": "Close"
   }
 }

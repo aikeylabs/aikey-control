@@ -30,6 +30,21 @@ import { formatDate, formatDateTime } from '@/shared/utils/datetime-intl';
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { PoolAccountList } from '../_shared/PoolAccountList';
 
+// statusLabel maps a seat status to the SAME words the card-header chips use
+// (启用中 / 停用 / 已吊销). Before 2026-07-31 the cell printed the raw backend
+// string, which was tolerable only because `suspended` was unreachable for
+// agents — the "停用" button revoked instead of suspending. Now that pausing is
+// real, an untranslated "suspended" would sit in a Chinese UI right next to a
+// chip already calling that state 停用 (统一名词字典).
+function statusLabel(status: string, t: (key: string) => string): string {
+  switch (status) {
+    case 'active': return t('myAgents.status.active');
+    case 'suspended': return t('myAgents.status.suspended');
+    case 'revoked': return t('myAgents.status.revoked');
+    default: return status; // unknown future status: show it rather than hide it
+  }
+}
+
 function routingStateLabel(summary: AgentRoutingSummaryDTO | undefined, t: (key: string) => string): string {
   switch (summary?.state) {
     case 'bound': return t('myAgents.routing.bound');
@@ -676,10 +691,20 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
   const [confirmRotate, setConfirmRotate] = useState(false);
   const [revealed, setRevealed] = useState<MyAgentDTO | null>(null);
   const [actionErr, setActionErr] = useState('');
-  async function del() {
+  // Disable / Enable — the REVERSIBLE pair (2026-07-31 fix). The button used to
+  // call deleteAgent, which revokes terminally: a member who clicked "停用"
+  // expecting a pause silently lost the agent for good, because nothing in the
+  // product could move a seat out of `revoked`. Now "停用" parks the agent
+  // (suspended) and "启用" brings it back with its ORIGINAL VK still valid, so
+  // the third-party agent product needs no re-keying.
+  //
+  // `revoked` stays terminal on purpose and has no button: it is also what the
+  // orphan reconcile writes when a parent seat is removed (OA5/INV-B), so a
+  // member-plane "un-revoke" would let a member undo a governance action.
+  async function setStatus(action: 'suspend' | 'resume') {
     setLoading(true);
     try {
-      await userAccountsApi.deleteAgent(agent.seat_id);
+      await userAccountsApi.setAgentStatus(agent.seat_id, action);
       setActionErr('');
       qc.invalidateQueries({ queryKey: ['my-agents'] });
     } catch (e) {
@@ -747,14 +772,35 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
           </button>
         </>
       )}
-      <button
-        onClick={del}
-        disabled={loading}
-        className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
-        style={{ color: '#f97316', borderColor: 'rgba(249,115,22,0.3)', backgroundColor: 'rgba(249,115,22,0.06)' }}
-      >
-        {loading ? '...' : t('myAgents.disable')}
-      </button>
+      {agent.status === 'active' && (
+        <button
+          onClick={() => setStatus('suspend')}
+          disabled={loading}
+          className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
+          style={{ color: '#f97316', borderColor: 'rgba(249,115,22,0.3)', backgroundColor: 'rgba(249,115,22,0.06)' }}
+        >
+          {loading ? '...' : t('myAgents.disable')}
+        </button>
+      )}
+      {agent.status === 'suspended' && (
+        <button
+          onClick={() => setStatus('resume')}
+          disabled={loading}
+          title={t('myAgents.enableTitle')}
+          className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
+          style={{ color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)', backgroundColor: 'rgba(74,222,128,0.06)' }}
+        >
+          {loading ? '...' : t('myAgents.enable')}
+        </button>
+      )}
+      {/* Revoked is terminal — say so instead of showing a button that would
+          fail, so the member's next step ("create a new one") is explicit
+          rather than something they discover by clicking. */}
+      {agent.status === 'revoked' && (
+        <span className="text-[10px] font-mono whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>
+          {t('myAgents.revokedTerminal')}
+        </span>
+      )}
       {confirmRotate && (
         <RotateConfirmModal agent={agent} busy={rotating} onConfirm={rotate} onClose={() => setConfirmRotate(false)} />
       )}
@@ -789,8 +835,15 @@ export default function MyAgentsPage() {
   };
 
   return (
-    <div className="vault-page p-6 space-y-6">
+    <>
+      {/* OUTSIDE the space-y-6 container on purpose: Tailwind's space-y-* adds
+          margin-top to every child except the first, and a <style> element —
+          invisible but still an element — occupied that first slot, silently
+          pushing the real first row (the page title) down by an extra 24px.
+          User report 2026-07-29: "Agents 页面顶部间距太大" — measured exactly
+          +24px vs every PageHeader page. Keep style tags out of spacing scopes. */}
       <style>{KEYS_PAGE_CSS}</style>
+      <div className="vault-page p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-mono font-bold tracking-widest" style={{ color: 'var(--foreground)' }}>{t('myAgents.title')}</h1>
@@ -879,7 +932,7 @@ export default function MyAgentsPage() {
                   </td>
                   <td className="px-5 py-4">{sourceBadge(agent.source, t)}</td>
                   <td className="px-5 py-4">
-                    <span className={`badge ${agent.status === 'active' ? 'badge-active' : 'badge-neutral'}`}>{agent.status}</span>
+                    <span className={`badge ${agent.status === 'active' ? 'badge-active' : 'badge-neutral'}`}>{statusLabel(agent.status, t)}</span>
                   </td>
                   <td className="px-5 py-4"><PoolReadinessBadge agent={agent} linkToOauth /></td>
                   <td className="px-5 py-4"><RoutingCell agent={agent} onOpen={() => setRoutingAgent(agent)} /></td>
@@ -900,5 +953,6 @@ export default function MyAgentsPage() {
       <CreateAgentModal open={createOpen} onClose={() => setCreateOpen(false)} agents={agents ?? []} />
       <AgentRoutingDrawer agent={routingAgent} onClose={() => setRoutingAgent(null)} />
     </div>
+    </>
   );
 }

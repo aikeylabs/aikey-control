@@ -98,7 +98,7 @@
     "navImport": "导入",
     "navTeamKeys": "团队密钥",
     "navOauthContribute": "团队OAuth",
-    "navSwitchLog": "切换日志",
+    "navSwitchLog": "调度日志",
     "navUsage": "用量",
     "navUsageDetail": "用量明细",
     "navTeamUsage": "团队用量",
@@ -1815,8 +1815,6 @@
     "issueKey": "签发密钥",
     "pageTitle": "虚拟密钥",
     "orgDescription": "组织 · {{orgId}}",
-    "searchAliasPlaceholder": "搜索别名…",
-    "allStatuses": "全部状态",
     "recordCount": "{{count}} 条记录",
     "columnAlias": "别名",
     "columnStatus": "状态",
@@ -1853,7 +1851,9 @@
     "confirmRotate": "确认轮换",
     "rotatedNewToken": "已轮换 — 新令牌",
     "newVirtualKeyToken": "新的虚拟密钥令牌",
-    "revisionLabel": "修订版本："
+    "revisionLabel": "修订版本：",
+    "dimTag": "批次标签",
+    "reset": "重置"
   },
   "bindings": {
     "createTitle": "创建协议通道",
@@ -1887,9 +1887,6 @@
     "pageTitle": "协议通道",
     "pageDescription": "虚拟密钥协议级访问配置",
     "newChannel": "新建通道",
-    "searchPlaceholder": "搜索通道名称 / 虚拟密钥 / 凭据...",
-    "allProtocols": "全部协议",
-    "allProviders": "全部供应商",
     "reset": "重置",
     "batchSwitchCredential": "批量切换凭据",
     "clearSelection": "清除选择",
@@ -1924,7 +1921,11 @@
     "priorityNum": "优先级 #{{priority}}",
     "drawerStatus": "状态",
     "drawerLastUpdated": "最后更新",
-    "drawerUpdatedBy": "更新者"
+    "drawerUpdatedBy": "更新者",
+    "dimCredential": "凭据",
+    "dimVirtualKey": "虚拟密钥",
+    "dimProvider": "供应商",
+    "dimProtocol": "协议"
   },
   "providerAccounts": {
     "addDialogTitle": "添加供应商凭据",
@@ -2540,8 +2541,8 @@
     "platformNote": "Windows / 其他浏览器：思路相同，用独立的 profile 目录即可，例如 chrome.exe --user-data-dir=\"C:\\\\chrome\\\\isolate_2\"。"
   },
   "switchLog": {
-    "entryButton": "切换日志",
-    "pageTitle": "账号切换日志",
+    "entryButton": "调度日志",
+    "pageTitle": "账号调度日志",
     "pageDescription": "账号分配引擎的决策流水——你的账号与 Agent 池的自动切换、补位与保护决策。",
     "backButton": "团队OAuth",
     "scopeAria": "范围筛选",
@@ -2784,6 +2785,14 @@
     "actionFailed": "操作失败，请重试。",
     "empty": "还没有 Agent。新建一个，把团队 OAuth 虚拟密钥开放给第三方 Agent 使用。",
     "disable": "停用",
+    "enable": "启用",
+    "enableTitle": "恢复该 Agent。原有虚拟密钥继续有效，第三方 Agent 无需重新配置。",
+    "revokedTerminal": "已吊销，请新建",
+    "status": {
+      "active": "启用中",
+      "suspended": "已停用",
+      "revoked": "已吊销"
+    },
     "myPool": "我的账号池",
     "copy": "复制",
     "copied": "已复制",
@@ -2888,6 +2897,9 @@
     "remove": "移除筛选",
     "valueSearchHint": "输入以过滤{{dim}}…",
     "hints": "↑↓ 选择 · Enter 确认 · Backspace 删除条件",
-    "browseHint": "直接输入跨维度搜索 · 点击左侧维度可定向过滤"
+    "keywordLabel": "搜索",
+    "fuzzyApply": "模糊搜索 \"{{value}}\"",
+    "editToken": "点击调整该筛选条件",
+    "close": "关闭"
   }
 }

@@ -538,7 +538,7 @@ export default function OAuthContributePage() {
               </div>
               <div className="overflow-x-auto">
                 {(g.accounts?.length ?? 0) === 0 ? (
-                  <EmptyState message={t('oauthContribute.ownerPoolEmpty')} />
+                  <EmptyState compact message={t('oauthContribute.ownerPoolEmpty')} />
                 ) : (
                   <table className="vault">
                     <thead>
@@ -1708,11 +1708,15 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
 function EmptyState({
   message,
   tone,
+  compact,
   onRetry,
   retryLabel,
 }: {
   message: string;
   tone?: 'error';
+  /** ~3-text-lines tall instead of the roomy default (2026-07-29 user
+   *  request: a per-pool empty notice shouldn't occupy a full panel). */
+  compact?: boolean;
   onRetry?: () => void;
   retryLabel?: string;
 }) {
@@ -1721,7 +1725,7 @@ function EmptyState({
     <div
       role={isError ? 'alert' : undefined}
       aria-live={isError ? 'assertive' : undefined}
-      className="text-center py-16 px-4"
+      className={`text-center px-4 ${compact ? 'py-5' : 'py-16'}`}
       style={isError
         ? { color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.38)' }
         : { color: 'var(--muted-foreground)' }}

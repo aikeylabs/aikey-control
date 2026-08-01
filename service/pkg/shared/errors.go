@@ -136,6 +136,9 @@ var zhMessages = map[string]string{
 	CodeBizSeatEmailTaken:     "邮箱 {{email}} 的席位已存在于组织 {{org_id}} 中",
 	CodeBizSeatAlreadyClaimed: "席位已被认领",
 
+	// BIZ — Agent lifecycle
+	CodeBizAgentStatusConflict: "该 Agent 当前状态无法执行此操作（当前状态：{{current_status}}）。已停用的 Agent 可以启用；已吊销的 Agent 不可恢复，请新建一个 Agent。",
+
 	// BIZ — Virtual Key
 	CodeBizKeyNotFound:          "虚拟密钥 {{id}} 不存在",
 	CodeBizKeyNotActive:         "虚拟密钥不处于激活状态",
@@ -359,6 +362,13 @@ const (
 	CodeBizAgentGroupNotMember     = "BIZ_AGENT_GROUP_NOT_MEMBER"
 	CodeBizAgentPoolNotOwner       = "BIZ_AGENT_POOL_NOT_OWNER"
 	CodeBizAgentParentSeatRequired = "BIZ_AGENT_PARENT_SEAT_REQUIRED"
+	// CodeBizAgentStatusConflict — a suspend/resume was asked for from a state
+	// that cannot make it (2026-07-31, OA5b). Its own code rather than the
+	// generic BizSeatStatusConflict, because that one carries
+	// CodeBizSeatAlreadyClaimed, whose message is 「席位已被认领」 — a member who
+	// tried to re-enable a revoked Agent would be told their seat was claimed,
+	// which is neither what happened nor a hint at what to do next.
+	CodeBizAgentStatusConflict = "BIZ_AGENT_STATUS_CONFLICT"
 	// CodeBizBindTargetInvalid: a binding must target exactly one of credential /
 	// oauth_group, and an issuance can't mix credential + group (or two groups). 422.
 	CodeBizBindTargetInvalid = "BIZ_BIND_TARGET_INVALID"
@@ -525,6 +535,18 @@ func BizSeatAlreadyClaimed() *DomainError {
 }
 func BizSeatStatusConflict(msg string) *DomainError {
 	return &DomainError{Code: CodeBizSeatAlreadyClaimed, Message: msg}
+}
+
+// BizAgentStatusConflict refuses a suspend/resume that the agent's current state
+// cannot satisfy, and names BOTH the state it is in and the way out — a refusal
+// that only says "conflict" leaves the member with no next step (异常定义:
+// 前提条件不足时必须提示用户下一步可以做什么).
+func BizAgentStatusConflict(agentSeatID, currentStatus, wantAction string) *DomainError {
+	return &DomainError{Code: CodeBizAgentStatusConflict,
+		Message: fmt.Sprintf("cannot %s agent seat %q from status %q: only a suspended agent can be resumed, "+
+			"and a revoked agent cannot be restored — create a new agent instead",
+			wantAction, agentSeatID, currentStatus),
+		Meta: map[string]any{"agent_seat_id": agentSeatID, "current_status": currentStatus, "action": wantAction}}
 }
 
 func BizKeyNotFound(id string) *DomainError {
