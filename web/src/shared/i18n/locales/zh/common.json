@@ -372,6 +372,10 @@
     "statusNeedsLogin": "待登录",
     "statusPendingDownload": "待下载",
     "pendingDownloadTitle": "密钥材料尚未下载到本机 — 在终端执行 `aikey key sync` 获取（或解锁保管库后刷新本页自动同步）",
+    "statusUndecryptable": "解密失败",
+    "undecryptableTitle": "这条记录保存的密文无法用当前主密码解密，因此无法再用于路由，并且会导致 `aikey change-password` 整体失败。修复方式：用 `aikey update <alias>` 覆盖写入正确的密钥，或直接删除该条目。",
+    "undecryptableFixHint": "执行该命令覆盖写入损坏的密钥",
+    "undecryptableSecret": "无法用当前主密码解密",
     "loginCta": "登录",
     "needsLoginCtaTitle": "登录当前路由到的池账号即可启用（前往 团队OAuth）",
     "deleteForever": "永久删除？",
@@ -681,7 +685,8 @@
     "errRequestRejectedDetail": "aikey-local-server 拒绝了这把密钥的检测请求。通常是因为页面上显示的这条密钥记录与保管库里的实际内容已不一致——它可能已被吊销、重新下发，或在其他窗口中被删除。",
     "errRequestRejectedAction": "刷新列表（右上角按钮）后重新检测。如果是团队密钥，请先重新同步：",
     "errFallbackTitle": "检测无法运行",
-    "providerSearchPlaceholder": "搜索或输入供应商…"
+    "providerSearchPlaceholder": "搜索或输入供应商…",
+    "accountPoolPrefix": "账号池"
   },
   "import": {
     "errTextTooLarge": "粘贴的文本过大 —— 请拆分为更小的片段（≤ 1 MiB）。",
@@ -1853,7 +1858,10 @@
     "newVirtualKeyToken": "新的虚拟密钥令牌",
     "revisionLabel": "修订版本：",
     "dimTag": "批次标签",
-    "reset": "重置"
+    "reset": "重置",
+    "kindPool": "账号池密钥",
+    "kindDirect": "直连凭据密钥",
+    "kindUnbound": "未绑定通道 — 无法路由"
   },
   "bindings": {
     "createTitle": "创建协议通道",
@@ -2005,7 +2013,10 @@
     "migrateError": "迁移失败。请检查目标凭据。",
     "targetCredentialLabel": "目标凭据 *",
     "migrating": "迁移中…",
-    "confirmMigrate": "确认迁移"
+    "confirmMigrate": "确认迁移",
+    "kindOfficial": "官方凭据",
+    "kindThirdParty": "第三方凭据",
+    "kindOAuth": "OAuth 账号"
   },
   "controlEvents": {
     "eventTypeKeyIssued": "签发密钥",
@@ -2105,6 +2116,7 @@
     "colExpires": "过期",
     "colActions": "操作",
     "kindTeam": "团队",
+    "kindTeamOAuth": "团队 OAuth",
     "oauthGroupShared": "OAuth 组",
     "oauthGroupDefaultAccount": "默认路由账号（静态）",
     "oauthGroupGroupAccounts": "池账号",

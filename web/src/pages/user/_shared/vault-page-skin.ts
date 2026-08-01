@@ -194,4 +194,26 @@ export const VAULT_PAGE_SKIN_V1 = `
 .vault-page.vault-skin-v1 table.vault tbody tr.in-use:hover {
   box-shadow: inset 2px 0 0 0 rgba(250, 204, 21, 0.92);
 }
+/* In-use identity recolor (green kind glyph + green alias) lives in the
+   shared KEYS_PAGE_CSS — virtual-keys marks tr.in-use the same way
+   (2026-08-01). Only the amber row wash above is vault-skin-specific. */
+
+/* ── V2 list-layout utilities (.kind-tile / .alias-name ellipsis /
+   .cell-empty / .action-rail / .action-slot) moved to the shared
+   KEYS_PAGE_CSS on 2026-08-01 when virtual-keys adopted the same
+   layout — single source, opt-in classes. Only the vault-specific
+   truncation overrides below stay in this skin. */
+
+/* ── V2 alias truncation — SUPERSEDES the 2026-07-22 wrap decision,
+   vault-skin-v1 scope ONLY. Old rationale: the alias is typed into
+   aikey commands, so a clipped tail costs more than a taller row.
+   V2 trade (user-picked 2026-08-01): uniform row heights win for
+   scanability; the full value stays one hover away (title attr) and
+   in the drawer, and inline rename autofills it — nobody actually
+   retypes a 40-char machine name. Sibling pages keep wrapping.
+   (.alias-name ellipsis itself lives in KEYS_PAGE_CSS.) */
+.vault-page.vault-skin-v1 .alias-main { flex-wrap: nowrap; min-width: 0; }
+.vault-page.vault-skin-v1 .alias-sub {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 `;

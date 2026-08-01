@@ -372,6 +372,10 @@
     "statusNeedsLogin": "NEEDS LOGIN",
     "statusPendingDownload": "PENDING DOWNLOAD",
     "pendingDownloadTitle": "Key material hasn't been downloaded to this machine yet — run `aikey key sync` in a terminal (or unlock the vault and reload this page to sync automatically)",
+    "statusUndecryptable": "DECRYPT FAILED",
+    "undecryptableTitle": "This key's stored ciphertext cannot be decrypted with the current master password, so it can no longer route and it blocks `aikey change-password`. Fix it by overwriting the secret with `aikey update <alias>`, or delete the entry.",
+    "undecryptableFixHint": "run to overwrite the broken secret",
+    "undecryptableSecret": "cannot decrypt with the current master password",
     "loginCta": "Log in",
     "needsLoginCtaTitle": "Log in to the currently-routed pool account to enable (go to Team OAuth)",
     "deleteForever": "Delete forever?",
@@ -681,7 +685,8 @@
     "errRequestRejectedDetail": "aikey-local-server rejected the probe request for this key. Usually the key row the page is showing no longer matches the vault — it was revoked, re-delivered, or removed in another window.",
     "errRequestRejectedAction": "Refresh the list (top-right button) and re-run the test. For a team key, re-sync it first: ",
     "errFallbackTitle": "Probe could not run",
-    "providerSearchPlaceholder": "Search or type a provider…"
+    "providerSearchPlaceholder": "Search or type a provider…",
+    "accountPoolPrefix": "Account Pool"
   },
   "import": {
     "errTextTooLarge": "Pasted text is too large — split into smaller chunks (≤ 1 MiB).",
@@ -1853,7 +1858,10 @@
     "newVirtualKeyToken": "New Virtual Key Token",
     "revisionLabel": "Revision: ",
     "dimTag": "Batch Tag",
-    "reset": "Reset"
+    "reset": "Reset",
+    "kindPool": "Account-pool key",
+    "kindDirect": "Direct-credential key",
+    "kindUnbound": "No channels bound — cannot route"
   },
   "bindings": {
     "createTitle": "Create Protocol Channel",
@@ -2005,7 +2013,10 @@
     "migrateError": "Migration failed. Please check the target credential.",
     "targetCredentialLabel": "Target Credential *",
     "migrating": "Migrating...",
-    "confirmMigrate": "Confirm Migrate"
+    "confirmMigrate": "Confirm Migrate",
+    "kindOfficial": "Official credential",
+    "kindThirdParty": "Third-party credential",
+    "kindOAuth": "OAuth account"
   },
   "controlEvents": {
     "eventTypeKeyIssued": "Key Issued",
@@ -2105,6 +2116,7 @@
     "colExpires": "Expires",
     "colActions": "Actions",
     "kindTeam": "TEAM",
+    "kindTeamOAuth": "TEAM-OAUTH",
     "oauthGroupShared": "OAuth group",
     "oauthGroupDefaultAccount": "Default routed account (static)",
     "oauthGroupGroupAccounts": "Pool accounts",

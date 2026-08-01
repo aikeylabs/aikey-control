@@ -76,7 +76,23 @@ export interface PersonalVaultRecord {
   route_url?: string | null;
   supported_providers: string[];
   created_at: number;               // unix seconds
-  status: 'active';                 // entries has no enabled column — always active
+  /**
+   * `entries` has no enabled column, so a row that decrypts is by definition
+   * usable — 'active' is the normal value.
+   *
+   * 'undecryptable' (2026-08-01): the unlocked list could not decrypt this
+   * row's ciphertext with the current master key. The CLI used to drop such
+   * rows, which made keys disappear from this page the moment the user
+   * unlocked the vault. They are now returned with this status plus
+   * `error_code`, so the page can show an explicit failure and — critically —
+   * keep Delete reachable, the user's only way to clear the entry.
+   */
+  status: 'active' | 'undecryptable';
+  /**
+   * Present only on a failed row (currently `I_ENTRY_DECRYPT_FAILED`).
+   * Absent on healthy rows — branch on presence, not on value.
+   */
+  error_code?: string;
   /**
    * Stable public identifier (`aikey_vk_...`) stored alongside the entry.
    * Rendered as a secondary line under the alias ("vk_9f2a…a7e3") so the

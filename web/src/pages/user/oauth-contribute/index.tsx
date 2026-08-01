@@ -56,7 +56,7 @@ import { copyText } from '@/shared/utils/clipboard';
 // classes below render unstyled (the page looked "messy"). Same opt-in as the
 // virtual-keys / vault pages.
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
-import { providerBrandColor } from '../_shared/provider-brand';
+import { ToolGlyph } from '../_shared/tool-glyph';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
 // Provider display profile only. Login provider + flow are intentionally absent:
@@ -72,22 +72,25 @@ const PROVIDER_DISPLAY: ProviderDisplayProfile[] = [
   { code: 'openai', brandSlug: 'codex', labelKey: 'oauthContribute.providerCodex' },
   // Future: { code: 'kimi_code', brandSlug: 'kimi', labelKey: 'oauthContribute.providerKimi' },
 ];
-function displayProfile(providerCode?: string): ProviderDisplayProfile {
-  return PROVIDER_DISPLAY.find((p) => p.code === providerCode) ?? PROVIDER_DISPLAY[0];
-}
 /** Providers a member can self-contribute accounts for — derived from the display
  * table (matches the server-side pool-supported gate). value = provider CODE. */
 const ADDABLE_PROVIDERS = PROVIDER_DISPLAY.map((p) => ({ code: p.code, labelKey: p.labelKey }));
 
-/** Display label key for an account's provider (2026-07-19 user request: the
- * account list must SHOW which provider/protocol each pool account serves —
- * multi-pool members otherwise can't tell a Claude slot from a Codex slot).
- * Reuses the SAME labels as the Add form / master 账号池 page (名词一致:
- * "Claude (Anthropic)" / "Codex (OpenAI / ChatGPT)"). Unlike displayProfile()
- * this does NOT fall back to Claude for a missing code: a wrong label is
- * misinformation. Unknown/absent codes render no chip at the call site. */
-function providerLabelKey(providerCode?: string): string | undefined {
-  return PROVIDER_DISPLAY.find((p) => p.code === providerCode)?.labelKey;
+/** Resolve the account's tool glyph (ToolGlyph itself lives in
+ * ../_shared/tool-glyph — shared with the vault group headers, byte-identical
+ * to master's oauth-groups marks). Known provider brands map directly
+ * (anthropic→claude, openai→codex) with the full provider label as tooltip.
+ * Otherwise (mock / unknown brands serve BOTH protocols) fall back to the
+ * PROTOCOL axis (2026-08-01 user request — the pool's protocol still says which
+ * tool the account drives): anthropic→claude, openai*→codex, tooltip = the bare
+ * tool slug (NOT the provider label — calling a mock account "Claude
+ * (Anthropic)" would be misinformation). No glyph when both axes are absent. */
+function glyphFor(providerCode?: string, protocolType?: string): { slug: string; labelKey?: string } | null {
+  const p = PROVIDER_DISPLAY.find((x) => x.code === providerCode);
+  if (p) return { slug: p.brandSlug, labelKey: p.labelKey };
+  if (protocolType === 'anthropic') return { slug: 'claude' };
+  if (protocolType === 'openai' || protocolType === 'openai_compatible') return { slug: 'codex' };
+  return null;
 }
 
 // exitIPEcho is the browser-side exit-IP echo (2026-07-19, P1=A). ping0.cc sends
@@ -566,6 +569,7 @@ export default function OAuthContributePage() {
                             oauth_group_id: g.oauth_group_id,
                             group_alias: g.alias,
                             provider_code: oa.provider_code,
+                            protocol_type: oa.protocol_type,
                             has_egress: oa.has_egress,
                           }}
                           expanded={expandedCred === oa.credential_id}
@@ -695,30 +699,17 @@ function AccountRow({
       >
         <td>
           <div className="alias-main" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Tool glyph BEFORE the email (2026-08-01 user request — supersedes
+                the 2026-07-19 "brand chip after the email" decision): muted
+                claude/codex line icon, aligned with master's oauth-groups pool
+                list so the two surfaces speak one icon language. Mock/unknown
+                brands resolve via the account's protocol axis (glyphFor);
+                nothing renders when both axes are absent. */}
+            {(() => {
+              const g = glyphFor(account.provider_code, account.protocol_type);
+              return g ? <ToolGlyph slug={g.slug} title={g.labelKey ? t(g.labelKey) : g.slug} /> : null;
+            })()}
             <span style={{ wordBreak: 'break-all' }}>{account.identity || account.credential_id}</span>
-            {/* Provider short-brand chip ("claude" / "codex") after the email —
-                user decisions 2026-07-19: chip not column; short slug not full
-                label; beside the EMAIL not the pool name. Full label stays in
-                the tooltip. No chip for absent/unknown provider_code (older
-                server) — a wrong label misleads (no claude fallback here).
-                The former 当前 chip was removed the same round: the routed-row
-                highlight (green bg + left accent) + the hint line above the
-                table already carry that state, and owner-pool rows (is_routed
-                on every row) wrongly showed 当前 on all of them. */}
-            {account.provider_code && providerLabelKey(account.provider_code) && (
-              // Same chip system as the vault page's provider group chip
-              // (user decision 2026-07-19 四轮: 与保管库一致): shared
-              // `.gr-chip` class + providerBrandColor brand background,
-                // white lowercase label. brandSlug ('claude'/'codex') maps
-              // to the right brand color by substring.
-              <span
-                className="gr-chip"
-                style={{ background: providerBrandColor(displayProfile(account.provider_code).brandSlug) }}
-                title={t(providerLabelKey(account.provider_code)!)}
-              >
-                {displayProfile(account.provider_code).brandSlug}
-              </span>
-            )}
             {/* Egress presence chip (2026-07-19): this account exits through a
                 configured egress line (admin per-account override OR inherited
                 group default, R46 effective egress). PRESENCE ONLY — the URL is

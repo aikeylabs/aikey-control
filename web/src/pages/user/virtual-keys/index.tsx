@@ -41,7 +41,8 @@ import {
   familyOfProviderCode,
 } from '@/shared/api/user/protocolFamily';
 import { protocolsOf } from '../_shared/protocol-axis';
-import { ENTRY_BY_CODE } from '@/shared/generated/provider-registry';
+import { ENTRY_BY_CODE, ENTRY_BY_FAMILY } from '@/shared/generated/provider-registry';
+import { ToolGlyph } from '../_shared/tool-glyph';
 import { providerAxisLabel } from '../_shared/provider-axis-label';
 import { providerEmphasis } from '../_shared/provider-emphasis';
 import {
@@ -72,6 +73,10 @@ type LocalTeamRecord = {
   route_url?: string;
   route_token?: string | null;
   group_accounts?: GroupAccountRef[] | null;
+  /** Per-provider in-use codes from the CLI vault emit (same field the vault
+   * page consumes via recordInUseForGroup). Drives the green identity recolor
+   * on the row currently routing (2026-08-01). */
+  in_use_for?: string[] | null;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -353,7 +358,7 @@ export default function UserVirtualKeysPage() {
       try {
         const r = await vaultCrossClient.get<{ status: string; data?: { records?: Array<{
           target?: string; virtual_key_id?: string; route_url?: string; route_token?: string | null;
-          group_accounts?: GroupAccountRef[] | null;
+          group_accounts?: GroupAccountRef[] | null; in_use_for?: string[] | null;
         }> } }>('/api/user/vault/list');
         const records = r.data?.data?.records ?? [];
         const map: Record<string, LocalTeamRecord> = {};
@@ -374,6 +379,7 @@ export default function UserVirtualKeysPage() {
               route_url: rec.route_url,
               route_token: rec.route_token ?? `aikey_team_${rec.virtual_key_id}`,
               group_accounts: rec.group_accounts,
+              in_use_for: rec.in_use_for,
             };
           }
         }
@@ -822,6 +828,17 @@ function GroupHeaderRow({ clientRoute, color, totalCount }: {
             style={{ background: color }}
             aria-hidden="false"
           >
+            {/* Claude/codex tool glyph INSIDE the chip before the label
+                (2026-08-01, same treatment as the vault group headers) —
+                white via inheritColor; alias-less families render
+                label-only (ToolGlyph returns null for unknown slugs). */}
+            {ENTRY_BY_FAMILY.get(clientRoute)?.displayAlias && (
+              <ToolGlyph
+                slug={ENTRY_BY_FAMILY.get(clientRoute)!.displayAlias!}
+                className="w-3.5 h-3.5"
+                inheritColor
+              />
+            )}
             {clientRoute}
           </span>
           <span className="gr-meta">
@@ -866,10 +883,19 @@ const Row = React.memo(function Row(props: {
   const r = props.record;
   const status = statusMeta(r.key_status, t);
   const expiresStr = formatExpiresAt(r.expires_at, t);
+  // In-use = the CLI locally routes THIS provider family through this VK
+  // (2026-08-01, aligned with /user/vault): in_use_for comes from the same
+  // vault-list emit the vault page reads, matched against this row's family
+  // group with the same code-or-family rule as recordInUseForGroup. The
+  // signal recolors the kind glyph + alias green (tr.in-use, KEYS_PAGE_CSS).
+  const inUse = (props.localRoute?.in_use_for ?? []).some(
+    (code) => code === props.clientRoute || familyOfProviderCode(code) === props.clientRoute,
+  );
   const trClasses = [
     'group-child',
     'row-clickable',
     props.isLastInGroup ? 'last-in-group' : '',
+    inUse ? 'in-use' : '',
   ].filter(Boolean).join(' ');
 
   const onRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
@@ -881,7 +907,27 @@ const Row = React.memo(function Row(props: {
   return (
     <tr className={trClasses} onClick={onRowClick}>
       <td>
-        <div className="alias-main">{r.alias || t('teamKeys.unnamed')}</div>
+        <div className="alias-main">
+          {/* V2 kind glyph (2026-08-01, aligned with /user/vault): bare
+              colorless icon — users=direct team key, fingerprint=OAuth pool
+              VK — replaces the provider cell's 团队 kind pill. Tooltip keeps
+              the full type wording. .alias-name adds ellipsis + hover title
+              for long machine aliases. */}
+          {/* w-4 (16px) matches vault + team-oauth glyph scale (2026-08-01). */}
+          <span
+            className={`kind-tile ${r.oauth_group_id ? 'oauth' : 'team'}`}
+            title={r.oauth_group_id ? t('teamKeys.kindTeamOAuth') : t('teamKeys.kindTeam')}
+          >
+            {r.oauth_group_id ? (
+              <FingerprintIcon className="w-4 h-4" />
+            ) : (
+              <UsersIcon className="w-4 h-4" />
+            )}
+          </span>
+          <span className="alias-name" title={r.alias || undefined}>
+            {r.alias || t('teamKeys.unnamed')}
+          </span>
+        </div>
         <div className="alias-sub">
           <span className="font-mono" title={r.virtual_key_id}>{shortVk(r.virtual_key_id)}</span>
           {/* OAuth group marker + current local proxy route. Legacy snapshots
@@ -918,7 +964,8 @@ const Row = React.memo(function Row(props: {
         <span className="provider-cell">
           <span className="prov-dot" style={{ background: providerBrandColor(keyProviderFamily(r, props.clientRoute)) }} aria-hidden="true" />
           <span className="name">{providerDisplay(r, props.clientRoute)}</span>
-          <span className="kind-pill team">{t('teamKeys.kindTeam')}</span>
+          {/* 团队 kind pill removed (2026-08-01, aligned with /user/vault):
+              the type axis is carried by the alias cell's kind glyph. */}
         </span>
       </td>
 
@@ -937,7 +984,9 @@ const Row = React.memo(function Row(props: {
       {/* usage / limit — one progress bar per seat quota rule (used vs limit). */}
       <td>
         {!r.seat_quota || r.seat_quota.length === 0 ? (
-          <span className="text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>—</span>
+          // V2 empty-cell treatment (2026-08-01, aligned with /user/vault):
+          // centered + dimmed dash reads as "no quota rule", not missing data.
+          <span className="cell-empty text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>—</span>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {r.seat_quota.map((q, i) => (
@@ -948,11 +997,17 @@ const Row = React.memo(function Row(props: {
       </td>
 
       <td className="font-mono text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>
-        {expiresStr ?? '—'}
+        {expiresStr ?? <span className="cell-empty">—</span>}
       </td>
 
       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
         <div className="row-actions" style={{ whiteSpace: 'nowrap' }}>
+          {/* V2 fixed slots (2026-08-01, aligned with /user/vault): the primary
+              action (领取 / 使用 / none) sits in a constant-width .action-rail
+              so the eye icon forms a clean vertical rail across rows. The old
+              "—" placeholder for actionless rows is dropped — an empty rail
+              carries the same meaning without a fake-looking value. */}
+          <span className="action-rail">
           {r.share_status === 'pending_claim' ? (
             <button
               type="button"
@@ -993,9 +1048,8 @@ const Row = React.memo(function Row(props: {
                 {t('teamKeys.use')}
               </button>
             )
-          ) : (
-            <span className="text-[11px]" style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>—</span>
-          )}
+          ) : null}
+          </span>
           <button className="icon-btn" title={t('teamKeys.viewDetails')} onClick={(e) => { e.stopPropagation(); props.onOpenDrawer(); }}>
             <EyeIcon className="w-3.5 h-3.5" />
           </button>
@@ -1580,6 +1634,13 @@ const ICON_NETWORK = 'M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16
 const ICON_ZAP = 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z';
 const ICON_INFO = 'M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z';
 const ICON_WRENCH = 'M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z';
+// V2 kind glyphs (2026-08-01): byte-identical paths to the vault page's kind
+// tile — users=team key, fingerprint=OAuth-flavored — so the two keys-family
+// lists speak one icon language.
+const ICON_USERS =
+  'M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z';
+const ICON_FINGERPRINT =
+  'M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4 M14 13.12c0 2.38 0 6.38-1 8.88 M17.29 21.02c.12-.6.43-2.3.5-3.02 M2 12a10 10 0 0 1 18-6 M2 16h.01 M21.8 16c.2-2 .131-5.354 0-6 M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2 M8.65 22c.21-.66.45-1.32.57-2 M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2';
 
 function KeyRoundIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_KEY_ROUND} {...p} />; }
 function SearchIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_SEARCH} {...p} />; }
@@ -1591,3 +1652,5 @@ function NetworkIcon(p: { className?: string; style?: React.CSSProperties }) { r
 function ZapIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_ZAP} {...p} />; }
 function InfoIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_INFO} {...p} />; }
 function WrenchIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_WRENCH} {...p} />; }
+function UsersIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_USERS} {...p} />; }
+function FingerprintIcon(p: { className?: string; style?: React.CSSProperties }) { return <SvgIcon d={ICON_FINGERPRINT} {...p} />; }
