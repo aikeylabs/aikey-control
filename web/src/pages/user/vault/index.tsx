@@ -3798,23 +3798,6 @@ function PageFooter() {
       className="flex flex-col gap-2 text-[12px] font-mono pt-1 pb-6"
       style={{ color: 'var(--muted-foreground)' }}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <a href="/user/cli-guide" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
-            <BookOpenIcon className="w-3 h-3" />
-            {t('vault.footerDocs')}
-          </a>
-          <a href="#" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
-            <LifeBuoyIcon className="w-3 h-3" />
-            {t('vault.footerSupport')}
-          </a>
-          <a href="#" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
-            <ShieldCheckIcon className="w-3 h-3" />
-            {t('vault.footerSecurity')}
-          </a>
-        </div>
-        <span>{t('vault.controlVault')}</span>
-      </div>
       {/*
         Why a footer encryption disclosure on the vault page (2026-04-22):
         Users land here after typing their master password and reasonably ask
@@ -3833,6 +3816,10 @@ function PageFooter() {
         "key derivation", "defense-in-depth") signal authority while
         staying technically faithful — exact params are still discoverable
         in VAULT_SPEC.md and the storage module for security reviewers.
+
+        Order (2026-08-01 user request): the security disclosure line sits
+        ABOVE the docs/support/security links row — the assurance reads as
+        the footer's headline, the nav links as the fine print.
       */}
       <div className="flex items-center gap-1.5 text-[11px] opacity-80">
         <LockIcon className="w-3 h-3" />
@@ -3841,6 +3828,23 @@ function PageFooter() {
           <span style={{ color: 'var(--foreground)' }}>AES-256-GCM</span>{t('vault.authenticatedEncryption')}
           <span style={{ color: 'var(--foreground)' }}>Argon2id</span>{t('vault.keyDerivationTail')}
         </span>
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <a href="/user/cli-guide" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
+            <BookOpenIcon className="w-3 h-3" />
+            {t('vault.footerDocs')}
+          </a>
+          <a href="#" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
+            <LifeBuoyIcon className="w-3 h-3" />
+            {t('vault.footerSupport')}
+          </a>
+          <a href="#" className="hover:text-[color:var(--foreground)] flex items-center gap-1.5">
+            <ShieldCheckIcon className="w-3 h-3" />
+            {t('vault.footerSecurity')}
+          </a>
+        </div>
+        <span>{t('vault.controlVault')}</span>
       </div>
     </section>
   );

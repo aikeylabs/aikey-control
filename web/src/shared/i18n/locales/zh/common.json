@@ -271,7 +271,6 @@
     "passwordsDoNotMatch": "两次输入的密码不一致",
     "aliasLabel": "别名 ",
     "aliasEditableHint": "可编辑",
-    "colProtocols": "协议",
     "protocolMore": "（+{{count}}）",
     "colStatus": "状态",
     "colCreated": "创建时间",
@@ -349,7 +348,6 @@
     "toggleGroupAria": "展开/收起 {{provider}} 分组",
     "unnamed": "(未命名)",
     "currentlyRouting": "当前路由中",
-    "teamKeyPrefix": "团队密钥 · ",
     "oauthGroupShared": "OAuth 组",
     "oauthGroupName": "OAuth 组",
     "teamOAuthProvider": "团队-OAuth",
@@ -685,8 +683,7 @@
     "errRequestRejectedDetail": "aikey-local-server 拒绝了这把密钥的检测请求。通常是因为页面上显示的这条密钥记录与保管库里的实际内容已不一致——它可能已被吊销、重新下发，或在其他窗口中被删除。",
     "errRequestRejectedAction": "刷新列表（右上角按钮）后重新检测。如果是团队密钥，请先重新同步：",
     "errFallbackTitle": "检测无法运行",
-    "providerSearchPlaceholder": "搜索或输入供应商…",
-    "accountPoolPrefix": "账号池"
+    "providerSearchPlaceholder": "搜索或输入供应商…"
   },
   "import": {
     "errTextTooLarge": "粘贴的文本过大 —— 请拆分为更小的片段（≤ 1 MiB）。",
@@ -1902,7 +1899,6 @@
     "colChannelName": "通道名称",
     "colVirtualKey": "虚拟密钥",
     "colProtocol": "协议",
-    "colCredential": "凭据",
     "colProvider": "供应商",
     "colRole": "角色",
     "colStatus": "状态",
@@ -1923,7 +1919,6 @@
     "drawerVirtualKey": "虚拟密钥",
     "drawerOwner": "所有者：{{email}}",
     "orgTemplate": "组织模板",
-    "drawerCredential": "凭据",
     "drawerProvider": "供应商",
     "drawerRolePriority": "角色 / 优先级",
     "priorityNum": "优先级 #{{priority}}",

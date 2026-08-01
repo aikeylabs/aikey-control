@@ -271,7 +271,6 @@
     "passwordsDoNotMatch": "Passwords do not match",
     "aliasLabel": "Alias ",
     "aliasEditableHint": "editable",
-    "colProtocols": "Protocols",
     "protocolMore": "(+{{count}} more)",
     "colStatus": "Status",
     "colCreated": "Created",
@@ -349,7 +348,6 @@
     "toggleGroupAria": "Toggle {{provider}} group",
     "unnamed": "(unnamed)",
     "currentlyRouting": "Currently routing",
-    "teamKeyPrefix": "Team key · ",
     "oauthGroupShared": "OAuth group",
     "oauthGroupName": "OAuth group",
     "teamOAuthProvider": "Team-OAuth",
@@ -685,8 +683,7 @@
     "errRequestRejectedDetail": "aikey-local-server rejected the probe request for this key. Usually the key row the page is showing no longer matches the vault — it was revoked, re-delivered, or removed in another window.",
     "errRequestRejectedAction": "Refresh the list (top-right button) and re-run the test. For a team key, re-sync it first: ",
     "errFallbackTitle": "Probe could not run",
-    "providerSearchPlaceholder": "Search or type a provider…",
-    "accountPoolPrefix": "Account Pool"
+    "providerSearchPlaceholder": "Search or type a provider…"
   },
   "import": {
     "errTextTooLarge": "Pasted text is too large — split into smaller chunks (≤ 1 MiB).",
@@ -1902,7 +1899,6 @@
     "colChannelName": "Channel Name",
     "colVirtualKey": "Virtual Key",
     "colProtocol": "Protocol",
-    "colCredential": "Credential",
     "colProvider": "Provider",
     "colRole": "Role",
     "colStatus": "Status",
@@ -1923,7 +1919,6 @@
     "drawerVirtualKey": "Virtual Key",
     "drawerOwner": "Owner: {{email}}",
     "orgTemplate": "Org Template",
-    "drawerCredential": "Credential",
     "drawerProvider": "Provider",
     "drawerRolePriority": "Role / Priority",
     "priorityNum": "Priority #{{priority}}",

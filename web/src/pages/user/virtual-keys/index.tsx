@@ -828,17 +828,18 @@ function GroupHeaderRow({ clientRoute, color, totalCount }: {
             style={{ background: color }}
             aria-hidden="false"
           >
-            {/* Claude/codex tool glyph INSIDE the chip before the label
-                (2026-08-01, same treatment as the vault group headers) —
-                white via inheritColor; alias-less families render
-                label-only (ToolGlyph returns null for unknown slugs). */}
-            {ENTRY_BY_FAMILY.get(clientRoute)?.displayAlias && (
-              <ToolGlyph
-                slug={ENTRY_BY_FAMILY.get(clientRoute)!.displayAlias!}
-                className="w-3.5 h-3.5"
-                inheritColor
-              />
-            )}
+            {/* Tool glyph INSIDE the chip before the label (2026-08-01, same
+                treatment as the vault group headers) — white via inheritColor.
+                Slug falls back to the FAMILY name for alias-less families
+                (mirrors vault: kimi has no display alias but TOOL_GLYPH now
+                carries a family-keyed crescent); families with no glyph at
+                all still render label-only (ToolGlyph returns null for
+                unknown slugs on purpose). */}
+            <ToolGlyph
+              slug={ENTRY_BY_FAMILY.get(clientRoute)?.displayAlias ?? clientRoute}
+              className="w-3.5 h-3.5"
+              inheritColor
+            />
             {clientRoute}
           </span>
           <span className="gr-meta">
