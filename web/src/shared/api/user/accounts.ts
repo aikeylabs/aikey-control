@@ -204,6 +204,22 @@ export const userAccountsApi = {
     if (isTeamFetchError(res)) throw new Error(`delete agent failed: ${res.kind}`);
   },
 
+  // setAgentStatus — REVERSIBLE pause/resume (2026-07-31 fix). "suspend" parks an
+  // agent, "resume" brings it back.
+  //
+  // 🔴 Why this is NOT deleteAgent: the row's "停用" button used to call DELETE,
+  // which revokes TERMINALLY — the member had no way back and no warning that the
+  // word "停用" meant "吊销". Suspend/resume moves only `seat_status`; the agent's
+  // team OAuth VK row stays active, so resuming restores the SAME key the member
+  // already pasted into their third-party agent (no re-mint, no re-keying). Both
+  // enforcement points — the ingress resolve and the key-delivery projection —
+  // gate on seat status alone, which is what makes that true.
+  setAgentStatus: async (seatId: string, action: 'suspend' | 'resume'): Promise<void> => {
+    const res = await teamPostJSON<{ status: string }>(`/accounts/me/agents/${seatId}/status`, { action });
+    if (isTeamWriteError(res)) throw new Error(res.message);
+    if (isTeamFetchError(res)) throw new Error(`${action} agent failed: ${res.kind}`);
+  },
+
   // getAgentVK — NON-destructive "get VK" (reuse-first, 2026-07-19). First-issues
   // the VK when the agent has none yet (returns the plaintext once); if a VK
   // already exists it is a no-op that reveals NOTHING new (returns vk_hint only, no

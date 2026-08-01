@@ -136,6 +136,9 @@ var zhMessages = map[string]string{
 	CodeBizSeatEmailTaken:     "邮箱 {{email}} 的席位已存在于组织 {{org_id}} 中",
 	CodeBizSeatAlreadyClaimed: "席位已被认领",
 
+	// BIZ — Agent lifecycle
+	CodeBizAgentStatusConflict: "该 Agent 当前状态无法执行此操作（当前状态：{{current_status}}）。已停用的 Agent 可以启用；已吊销的 Agent 不可恢复，请新建一个 Agent。",
+
 	// BIZ — Virtual Key
 	CodeBizKeyNotFound:          "虚拟密钥 {{id}} 不存在",
 	CodeBizKeyNotActive:         "虚拟密钥不处于激活状态",
@@ -199,11 +202,13 @@ var zhMessages = map[string]string{
 	CodeExtProviderAuthFailure: "供应商 {{provider}} 拒绝了凭据，API 密钥可能无效或已吊销",
 	CodeExtProviderRateLimited: "供应商 {{provider}} 正在限流，请稍后重试",
 	CodeExtProviderUnavailable: "供应商 {{provider}} 不可用或无法连接",
+	CodeExtMailSendFailed:      "登录邮件发送失败（SMTP 错误），请稍后重试或联系管理员",
 
 	// SYS — system / infrastructure
-	CodeSysInternal: "发生未预期的错误",
-	CodeSysDB:       "发生数据库错误",
-	CodeSysConfig:   "服务配置错误",
+	CodeSysInternal:          "发生未预期的错误",
+	CodeSysDB:                "发生数据库错误",
+	CodeSysConfig:            "服务配置错误",
+	CodeSysMailNotConfigured: "邮件服务未配置，登录邮件未发送。请联系管理员配置 SMTP",
 }
 
 // ── Error code constants ───────────────────────────────────────────────────────
@@ -361,6 +366,13 @@ const (
 	CodeBizAgentGroupNotMember     = "BIZ_AGENT_GROUP_NOT_MEMBER"
 	CodeBizAgentPoolNotOwner       = "BIZ_AGENT_POOL_NOT_OWNER"
 	CodeBizAgentParentSeatRequired = "BIZ_AGENT_PARENT_SEAT_REQUIRED"
+	// CodeBizAgentStatusConflict — a suspend/resume was asked for from a state
+	// that cannot make it (2026-07-31, OA5b). Its own code rather than the
+	// generic BizSeatStatusConflict, because that one carries
+	// CodeBizSeatAlreadyClaimed, whose message is 「席位已被认领」 — a member who
+	// tried to re-enable a revoked Agent would be told their seat was claimed,
+	// which is neither what happened nor a hint at what to do next.
+	CodeBizAgentStatusConflict = "BIZ_AGENT_STATUS_CONFLICT"
 	// CodeBizBindTargetInvalid: a binding must target exactly one of credential /
 	// oauth_group, and an issuance can't mix credential + group (or two groups). 422.
 	CodeBizBindTargetInvalid = "BIZ_BIND_TARGET_INVALID"
@@ -436,11 +448,22 @@ const (
 	CodeExtProviderAuthFailure = "EXT_PROVIDER_AUTH_FAILURE"
 	CodeExtProviderRateLimited = "EXT_PROVIDER_RATE_LIMITED"
 	CodeExtProviderUnavailable = "EXT_PROVIDER_UNAVAILABLE"
+	// CodeExtMailSendFailed means the SMTP relay rejected or failed the send.
+	// Introduced 2026-07-31: activation-email failures were previously
+	// swallowed (WARN only) and the login page showed a false "sent" state.
+	CodeExtMailSendFailed = "EXT_MAIL_SEND_FAILED"
 
 	// SYS — system / infrastructure (details logged, never exposed)
 	CodeSysInternal = "SYS_INTERNAL"
 	CodeSysDB       = "SYS_DB"
 	CodeSysConfig   = "SYS_CONFIG"
+	// CodeSysMailNotConfigured means the server has no SMTP credentials wired
+	// (LogMailer fallback) — email delivery is impossible, not merely failing.
+	CodeSysMailNotConfigured = "SYS_MAIL_NOT_CONFIGURED"
+	// CodeSysAgentVKInvalidationUnavailable means Control could not fence the
+	// previous Agent VK at the public ingress. Rotation is refused so a success
+	// response can never coexist with a still-usable old credential.
+	CodeSysAgentVKInvalidationUnavailable = "SYS_AGENT_VK_INVALIDATION_UNAVAILABLE"
 )
 
 // ── BIZ constructors ──────────────────────────────────────────────────────────
@@ -516,6 +539,18 @@ func BizSeatAlreadyClaimed() *DomainError {
 }
 func BizSeatStatusConflict(msg string) *DomainError {
 	return &DomainError{Code: CodeBizSeatAlreadyClaimed, Message: msg}
+}
+
+// BizAgentStatusConflict refuses a suspend/resume that the agent's current state
+// cannot satisfy, and names BOTH the state it is in and the way out — a refusal
+// that only says "conflict" leaves the member with no next step (异常定义:
+// 前提条件不足时必须提示用户下一步可以做什么).
+func BizAgentStatusConflict(agentSeatID, currentStatus, wantAction string) *DomainError {
+	return &DomainError{Code: CodeBizAgentStatusConflict,
+		Message: fmt.Sprintf("cannot %s agent seat %q from status %q: only a suspended agent can be resumed, "+
+			"and a revoked agent cannot be restored — create a new agent instead",
+			wantAction, agentSeatID, currentStatus),
+		Meta: map[string]any{"agent_seat_id": agentSeatID, "current_status": currentStatus, "action": wantAction}}
 }
 
 func BizKeyNotFound(id string) *DomainError {
@@ -987,6 +1022,14 @@ func ExtProviderUnavailable(provider string) *DomainError {
 		Meta:    map[string]any{"provider": provider}}
 }
 
+// ExtMailSendFailed indicates SMTP delivery of a login email failed.
+// The raw SMTP error is deliberately NOT included — callers must WARN-log it
+// before returning this (transport details can leak credentials/hosts).
+func ExtMailSendFailed() *DomainError {
+	return &DomainError{Code: CodeExtMailSendFailed,
+		Message: "the login email could not be sent (SMTP error) — retry later or contact your administrator"}
+}
+
 // ── SYS constructors ──────────────────────────────────────────────────────────
 
 // SysInternal returns a sanitised internal-error response.
@@ -1003,4 +1046,14 @@ func SysDB() *DomainError {
 // SysConfig returns a sanitised configuration-error response.
 func SysConfig() *DomainError {
 	return &DomainError{Code: CodeSysConfig, Message: "service configuration error"}
+}
+
+// SysMailNotConfigured indicates the server is running with the LogMailer
+// fallback (no SMTP credentials), so login emails are never delivered.
+// Why a distinct code from SysConfig: this is the #1 silent-failure cause of
+// "magic link never arrives" and must be diagnosable from the client side
+// without server-log access (see bugfix 20260731-cli-login-email-silent-success).
+func SysMailNotConfigured() *DomainError {
+	return &DomainError{Code: CodeSysMailNotConfigured,
+		Message: "email delivery is not configured on this server — the login email was NOT sent; ask your administrator to configure SMTP"}
 }

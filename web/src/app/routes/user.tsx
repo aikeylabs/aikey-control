@@ -33,6 +33,9 @@ import UserTrustCheckPage from '../../pages/user/trust-check';
 // the Quality group; reads the user's own events from local-server control.db.
 import UserCompliancePage from '../../pages/user/compliance';
 import UserOAuthContributePage from '../../pages/user/oauth-contribute';
+// 2026-07-31: allocation-engine switch log. Drill-down from the Team OAuth
+// page's header button — no sidebar menu item (usage-detail pattern).
+import UserSwitchLogPage from '../../pages/user/switch-log';
 // Phase 4 阶段 3 (2026-05-21): third-party Agent management UI.
 // Lives under /user/apps (list) + /user/apps/:slug (detail). Calls
 // /api/user/apps/* (前置 2 — pkg/userapi/app), which subprocess-bridges
@@ -110,6 +113,9 @@ export function buildUserRoutes(): RouteObject[] {
         { path: 'trust-check', element: <UserTrustCheckPage /> },
         { path: 'compliance', element: <UserCompliancePage /> },
         { path: 'team-oauth', element: <UserOAuthContributePage /> },
+        // Third-level drill-down (flat sibling path, like apps/:slug):
+        // the engine's account-switch decision trail for this member.
+        { path: 'team-oauth/switch-log', element: <UserSwitchLogPage /> },
         // Phase 4 阶段 3 — third-party Agent management.
         // List shows all registered apps; Detail shows binding + usage + audit.
         // Registration itself happens via CLI (`aikey app register`) — no

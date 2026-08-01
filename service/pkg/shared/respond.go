@@ -102,7 +102,7 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
 		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
 		CodeBizAgentLimitReached, CodeBizAgentNonClusterOrg,
-		CodeBizAgentParentSeatRequired,
+		CodeBizAgentParentSeatRequired, CodeBizAgentStatusConflict,
 		CodeBizOauthLoginBindingChanged,
 		CodeBizOauthLoginContextUnavailable,
 		CodeBizOauthRoutedAccountAmbiguous,
@@ -137,11 +137,16 @@ func DomainErrorHTTPStatus(code string) int {
 
 	// ── 502 Bad Gateway ───────────────────────────────────────────────────────
 	case CodeExtProviderUpstream, CodeExtProviderAuthFailure,
-		CodeBizSSOExchangeFailed:
+		CodeBizSSOExchangeFailed,
+		CodeExtMailSendFailed:
 		return http.StatusBadGateway
 
 	// ── 503 Service Unavailable ───────────────────────────────────────────────
-	case CodeExtProviderUnavailable, CodeSysAllocationEngineUnavailable:
+	// CodeSysMailNotConfigured: 503 (not 500) — the feature is unavailable by
+	// deployment state, not broken by a bug; retrying without an operator fix
+	// cannot succeed.
+	case CodeExtProviderUnavailable, CodeSysAllocationEngineUnavailable,
+		CodeSysMailNotConfigured, CodeSysAgentVKInvalidationUnavailable:
 		return http.StatusServiceUnavailable
 
 	// ── 500 Internal Server Error (default) ──────────────────────────────────

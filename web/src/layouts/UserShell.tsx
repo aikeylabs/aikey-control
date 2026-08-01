@@ -386,6 +386,10 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   account:        { label: 'Account',    originName: 'My Account' },
   'virtual-keys': { label: 'Team Keys',  originName: 'Virtual Keys' },
   'team-oauth': { label: 'Team OAuth' },
+  // 2026-07-31: allocation-engine switch log — a drill-down of Team OAuth
+  // (header button entry, no sidebar item). Breadcrumb nests like Import →
+  // Vault: 用户 / 团队OAuth / 切换日志.
+  'switch-log':   { label: 'Switch Log', parent: 'team-oauth' },
   vault:          { label: 'Vault',      originName: 'My Vault' },
   'usage-ledger': { label: 'Usage',      originName: 'Usage Ledger' },
   // 2026-07-08: team-usage-ledger + performance were absent here, so the
@@ -461,6 +465,7 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
   Import: 'navImport',
   'Team Keys': 'navTeamKeys',
   'Team OAuth': 'navOauthContribute',
+  'Switch Log': 'navSwitchLog',
   Usage: 'navUsage',
   'Usage Detail': 'navUsageDetail',
   'Team Usage': 'navTeamUsage',
