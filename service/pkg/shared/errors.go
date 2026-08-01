@@ -687,10 +687,15 @@ func BizRouteGroupOriginConflict(msg string) *DomainError {
 func BizRouteGroupProtocolMismatch(credentialID, credProtocol, groupProtocol string) *DomainError {
 	return &DomainError{
 		Code: CodeBizRouteGroupProtocolMismatch,
+		// 🔴 No indefinite article before a protocol name. The name is a
+		// variable — "a anthropic" and "an openai_compatible" are both reachable
+		// from the same format string, and picking one is wrong half the time.
+		// Observed on a live run; a unit test asserting substrings never sees it.
 		Message: fmt.Sprintf(
 			"credential %s speaks %s, but this route group is %s. "+
 				"Every hop of a chain has to speak the protocol the chain is declared for — "+
-				"pick a %s credential, or build the chain in a %s route group",
+				"pick a credential that speaks %s, or build this chain in a route group "+
+				"declared for %s",
 			credentialID, credProtocol, groupProtocol, groupProtocol, credProtocol),
 		Meta: map[string]any{
 			"credential_id":      credentialID,
