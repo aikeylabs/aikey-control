@@ -45,9 +45,18 @@ import type { Plugin } from 'vite';
  */
 export function renderBlockingEntry(): Plugin {
   let applied = false;
+  // A failed build never reaches transformIndexHtml, so without this the
+  // assertion below fires on EVERY failure and replaces the real error with a
+  // misleading one about a missing attribute (2026-08-01: it masked a
+  // `Could not load .../account-decisions` module-resolution failure in the
+  // Trial composer, and the reported cause was nowhere near the actual one).
+  let buildFailed = false;
   return {
     name: 'aikey:render-blocking-entry',
     apply: 'build',
+    buildEnd(err) {
+      buildFailed = Boolean(err);
+    },
     transformIndexHtml: {
       order: 'post', // after Vite has rewritten the entry to the hashed asset
       handler(html) {
@@ -63,7 +72,7 @@ export function renderBlockingEntry(): Plugin {
       // Fail loudly rather than silently shipping the flash back: if Vite ever
       // changes how it emits the entry tag, this plugin becomes a no-op and the
       // only symptom would be a UI regression nobody connects to a build change.
-      if (!applied) {
+      if (!applied && !buildFailed) {
         this.error(
           'aikey:render-blocking-entry did not match the entry <script type="module"> in index.html. ' +
             'The cross-document view-transition fix depends on that attribute — see this plugin\'s doc comment.',
