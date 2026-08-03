@@ -45,6 +45,7 @@ import { ENTRY_BY_CODE, ENTRY_BY_FAMILY } from '@/shared/generated/provider-regi
 import { ToolGlyph } from '../_shared/tool-glyph';
 import { providerAxisLabel } from '../_shared/provider-axis-label';
 import { providerEmphasis } from '../_shared/provider-emphasis';
+import { providerCells } from '../_shared/provider-order';
 import {
   HookWireRcModal,
   useHookWireRcModal,
@@ -892,6 +893,9 @@ const Row = React.memo(function Row(props: {
   const inUse = (props.localRoute?.in_use_for ?? []).some(
     (code) => code === props.clientRoute || familyOfProviderCode(code) === props.clientRoute,
   );
+  // The lane's chain, in try-order, with each hop's role. Empty for legacy
+  // payloads that carry no `bindings` — the cell falls back to the flat label.
+  const cells = providerCells(r.bindings, props.clientRoute);
   const trClasses = [
     'group-child',
     'row-clickable',
@@ -961,10 +965,46 @@ const Row = React.memo(function Row(props: {
 
       <td>
           {/* Provider axis: Mock is a supplier shown inside an anthropic/openai
-              Client Route, never promoted to a client or protocol group. */}
+              Client Route, never promoted to a client or protocol group.
+
+              🔴 ORDER axis on top of it (2026-08-02, damon): the providers behind
+              one Client Route are a CHAIN, not a set, and the joined
+              "openai(codex), zhipu(GLM), deepseek" gave no way to tell which one
+              is serving traffic — the reader had to open the drawer, per key. The
+              chips carry the same fact the drawer's meta line already carried, in
+              the same vocabulary. A hop the server told us nothing about gets NO
+              chip; two hops sharing a priority get the tie, never a made-up first. */}
         <span className="provider-cell">
           <span className="prov-dot" style={{ background: providerBrandColor(keyProviderFamily(r, props.clientRoute)) }} aria-hidden="true" />
-          <span className="name">{providerDisplay(r, props.clientRoute)}</span>
+          {cells.length > 0 ? (
+            <span className="name provider-chain">
+              {cells.map((c, i) => (
+                <span key={c.label} className="provider-hop">
+                  {i > 0 && <span className="hop-arrow" aria-hidden="true">→</span>}
+                  {c.label}
+                  {c.role === 'primary' && (
+                    <span className="role-pill primary" title={t('teamKeys.role_primary')}>
+                      {t('teamKeys.roleShortPrimary')}
+                    </span>
+                  )}
+                  {c.role === 'fallback' && (
+                    <span className="role-pill" title={t('teamKeys.role_fallback')}>
+                      {t('teamKeys.roleShortFallbackN', { n: c.fallbackIndex })}
+                    </span>
+                  )}
+                  {c.role === 'tied' && (
+                    <span className="role-pill tied" title={t('teamKeys.role_tied')}>
+                      {t('teamKeys.roleShortTied')}
+                    </span>
+                  )}
+                </span>
+              ))}
+            </span>
+          ) : (
+            /* Legacy payloads with no bindings at all keep the old single label
+               rather than emptying the cell. */
+            <span className="name">{providerDisplay(r, props.clientRoute)}</span>
+          )}
           {/* 团队 kind pill removed (2026-08-01, aligned with /user/vault):
               the type axis is carried by the alias cell's kind glyph. */}
         </span>
