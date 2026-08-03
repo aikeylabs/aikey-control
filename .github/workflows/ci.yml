@@ -29,3 +29,75 @@ jobs:
         run: go vet ./...
       - name: go test
         run: go test ./... -count=1
+
+  # 2026-08-02 (provider-credential-cascade). This repo owns
+  # web/scripts/generate-provider-registry.mjs — the build-time codegen that
+  # turns aikey-cli/data/*.yaml into the module BOTH SPAs import for the
+  # credential dialog's provider list, protocol catalogue and Base URLs.
+  #
+  # Until now that script had no CI at all: it only ran as a prebuild hook, so a
+  # change to it was executed but never CHECKED. The dialog's hand-written
+  # provider list had drifted nine entries from the routing table and offered a
+  # protocol value the backend rejects — for months, under a fully green CI —
+  # precisely because nothing compared the generated output to anything.
+  codegen:
+    name: Provider-registry codegen (vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # The repo is checked out under aikey-control/ so aikey-cli can sit
+        # beside it — the generator resolves its YAML through `../../aikey-cli`.
+        working-directory: aikey-control/web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: aikey-control
+
+      # The generator reads aikey-cli/data/{provider_registry,provider_fingerprint}.yaml
+      # from the sibling checkout. Without it the script cannot run at all.
+      - name: Check out aikey-cli (yaml source of truth)
+        working-directory: ${{ github.workspace }}
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          TOKEN: ${{ secrets.AIKEY_CI_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::AIKEY_CI_TOKEN is not configured. The provider-registry" \
+                 "codegen reads its YAML source of truth from the private sibling" \
+                 "aikey-cli. Refusing to run a job that would silently check nothing."
+            exit 1
+          fi
+          url="https://x-access-token:${TOKEN}@github.com/AiKeyLabs/aikey-cli.git"
+          if git ls-remote --exit-code --heads "$url" "$BRANCH" >/dev/null 2>&1; then
+            git clone --depth 1 --branch "$BRANCH" "$url" aikey-cli
+          else
+            git clone --depth 1 "$url" aikey-cli
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        run: npm ci
+
+      # Drives the real script over fixture YAMLs, including the cases that must
+      # make it EXIT NON-ZERO (a routed provider with no display identity) and
+      # the four-stage default-endpoint decision.
+      - name: test
+        run: npm test
+
+      # I-8: the generated module is checked into git, so it can go stale — and a
+      # stale copy is invisible, because `tsc` and `vite build` both succeed
+      # against it. Regenerating and diffing is the only thing that notices.
+      - name: Generated registry must not be stale (I-8)
+        run: |
+          set -euo pipefail
+          npm run gen:provider-registry
+          if ! git diff --exit-code -- src/shared/generated/provider-registry.ts; then
+            echo "::error::web/src/shared/generated/provider-registry.ts is stale." \
+                 "Run 'npm run gen:provider-registry' and commit the result. The YAML is" \
+                 "the source of truth; the checked-in TS is a build artifact that must match it."
+            exit 1
+          fi
