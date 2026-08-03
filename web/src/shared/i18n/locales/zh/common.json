@@ -1936,8 +1936,6 @@
     "modeThirdParty": "第三方供应商",
     "providerLabel": "供应商 *",
     "selectPlaceholder": "请选择…",
-    "quickSelectLabel": "快速选择（可选）",
-    "quickSelectPlaceholder": "— 手动填写或选择预设 —",
     "providerCodeLabel": "供应商代码 *",
     "providerCodePlaceholder": "例如 my-llm-service",
     "providerNameLabel": "供应商名称 *",
