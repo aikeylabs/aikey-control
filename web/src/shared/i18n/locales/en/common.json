@@ -1936,8 +1936,6 @@
     "modeThirdParty": "Third-party Provider",
     "providerLabel": "Provider *",
     "selectPlaceholder": "Select...",
-    "quickSelectLabel": "Quick Select (optional)",
-    "quickSelectPlaceholder": "— Fill manually or pick a preset —",
     "providerCodeLabel": "Provider Code *",
     "providerCodePlaceholder": "e.g. my-llm-service",
     "providerNameLabel": "Provider Name *",
