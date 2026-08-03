@@ -125,6 +125,13 @@ export const KEYS_PAGE_CSS = `
   border: 1px solid var(--border);
   color: var(--muted-foreground);
   letter-spacing: 0.04em;
+  /* 2026-08-03 (user report: status chips squeezed): a chip never wraps its
+     label and never shrinks below its content — a narrow status column used
+     to fold 活跃/不可用 onto two lines. Overflow belongs to the table's
+     horizontal scroll. Same rule the console-side .badge carries in
+     index.css, kept in sync deliberately. */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .vault-page .chip.success { color: rgba(134,239,172,0.65); background: rgba(74,222,128,0.04);  border-color: rgba(74,222,128,0.16); }
 .vault-page .chip.warning { color: var(--warning); background: rgba(249,115,22,0.09);  border-color: rgba(249,115,22,0.32); }

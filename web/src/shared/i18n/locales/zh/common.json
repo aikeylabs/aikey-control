@@ -1644,7 +1644,9 @@
     "chartProtocolDistribution": "协议通道分布",
     "chartUserUsageHeatmap": "今日 · 用户用量热力图",
     "heatmapCellTooltip_one": "{{label}} @ {{hour}} — {{count}} 次请求，{{tokens}} tokens",
-    "heatmapCellTooltip_other": "{{label}} @ {{hour}} — {{count}} 次请求，{{tokens}} tokens"
+    "heatmapCellTooltip_other": "{{label}} @ {{hour}} — {{count}} 次请求，{{tokens}} tokens",
+    "protocolMore": "另有 {{count}} 个协议",
+    "protocolViewLedger": "用量台账"
   },
   "masterLogin": {
     "rememberMe": "记住我",

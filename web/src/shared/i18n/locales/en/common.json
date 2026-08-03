@@ -1644,7 +1644,9 @@
     "chartProtocolDistribution": "PROTOCOL_DISTRIBUTION",
     "chartUserUsageHeatmap": "TODAY · USER USAGE HEATMAP",
     "heatmapCellTooltip_one": "{{label}} @ {{hour}} — {{count}} request, {{tokens}} tokens",
-    "heatmapCellTooltip_other": "{{label}} @ {{hour}} — {{count}} requests, {{tokens}} tokens"
+    "heatmapCellTooltip_other": "{{label}} @ {{hour}} — {{count}} requests, {{tokens}} tokens",
+    "protocolMore": "+{{count}} more protocols",
+    "protocolViewLedger": "Usage ledger"
   },
   "masterLogin": {
     "rememberMe": "Remember Me",
