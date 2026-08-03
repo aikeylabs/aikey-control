@@ -41,6 +41,16 @@ export interface ProtocolProviderBinding {
   protocol?: string | null;
   provider?: string | null;
   provider_display_alias?: string | null;
+  /** ORDER axis (I19) — which hop of its lane this binding is. Both fields come
+   *  straight off the binding row.
+   *
+   *  🔴 Optional, and absent is NOT 1/"primary": a control plane predating them
+   *  sends neither, and the key list renders no role chip at all rather than
+   *  inventing a primary. `priority` ships next to the role because two hops at
+   *  the same priority is a reachable state in which no hop is first — a fact
+   *  only two equal numbers can report. */
+  priority?: number | null;
+  fallback_role?: string | null;
 }
 
 /**

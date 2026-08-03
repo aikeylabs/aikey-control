@@ -287,6 +287,31 @@ export const KEYS_PAGE_CSS = `
   border-color: rgba(45,212,191,0.35);
   background: rgba(45,212,191,0.06);
 }
+/* Two hops at one priority: no upstream is first, and the chip says so rather
+   than letting the row imply an order the runtime does not have. Warning, not
+   destructive — the key works, it is the ORDER that is undefined. */
+.vault-page .role-pill.tied {
+  color: var(--warning);
+  border-color: rgba(249,115,22,0.35);
+  background: rgba(249,115,22,0.06);
+}
+
+/* The provider cell as a CHAIN (2026-08-02). The arrow is what turns a list back
+   into an order at a glance; it wraps with the hops rather than forcing the cell
+   wide, because the column is 20% and a long chain must not squeeze the actions
+   rail. */
+.vault-page .provider-chain {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px 5px;
+}
+.vault-page .provider-hop {
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.vault-page .provider-hop .hop-arrow {
+  color: var(--muted-foreground);
+  opacity: 0.45;
+  font-size: 10px;
+  margin-right: 1px;
+}
 
 .vault-page .prov-chip {
   display: inline-flex; align-items: center; gap: 4px;
