@@ -110,6 +110,14 @@ func DomainErrorHTTPStatus(code string) int {
 		// conflict the admin resolves (migrate channels / detach from group).
 		CodeBizCredHasActiveRefs,
 		CodeBizLoginSessionTerminated, CodeBizSSOIdentityConflict,
+		// The virtual key ALREADY has an active binding for this
+		// (protocol_type, provider_id) pair. Like the R39 guard above this is a
+		// conflict with state that already exists, not a malformed request —
+		// 🚫 not CodeBizKeyDuplicateProtocol's 422, which is about a duplicate
+		// inside the submitted binding LIST. Unmapped until 2026-08-04, so
+		// applying a route group twice answered 500 and the console showed
+		// "an unexpected error occurred" instead of the reason it had computed.
+		CodeBizBindDuplicateTarget,
 		// 2026-07-03 (owner-approved delivery-family contract unification): "no
 		// active / not-deliverable binding" is a RESOURCE-STATE conflict an admin
 		// resolves by configuring the binding — not a service outage. As 503s these
@@ -125,6 +133,11 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
 		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,
 		CodeBizVKGroupExclusive, CodeBizSSOProviderDisabled,
+		// Same family as CodeBizVKGroupExclusive directly above: an OAuth account
+		// credential is not bindable to a seat at all, so the request cannot be
+		// processed as asked. Also unmapped until 2026-08-04 (found by the
+		// class fence below, not by a report) — it too answered 500.
+		CodeBizBindOAuthDirect,
 		CodeBizProviderProtocolUnsupported,
 		CodeBizOauthGroupProviderUnsupported, CodeBizOauthGroupProviderMixed,
 		CodeBizOauthGroupProtocolMixed, CodeBizOauthGroupProtocolInvalid,
