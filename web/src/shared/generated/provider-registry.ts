@@ -189,6 +189,14 @@ export const PROVIDER_CATALOG: readonly ProviderRegistryEntry[] = [
     picker: true,
   },
   {
+    code: "github_models",
+    family: "github_models",
+    display: "github_models",
+    displayAlias: "GitHub Models",
+    oauthAliases: ["githubmodels"],
+    picker: true,
+  },
+  {
     code: "vercel_gateway",
     family: "vercel_gateway",
     display: "vercel_gateway",
@@ -403,6 +411,14 @@ export const PROVIDER_REGISTRY: readonly ProviderRegistryEntry[] = [
     picker: true,
   },
   {
+    code: "github_models",
+    family: "github_models",
+    display: "github_models",
+    displayAlias: "GitHub Models",
+    oauthAliases: ["githubmodels"],
+    picker: true,
+  },
+  {
     code: "vercel_gateway",
     family: "vercel_gateway",
     display: "vercel_gateway",
@@ -510,6 +526,7 @@ export const PROVIDER_PROTOCOL_MATRIX: ReadonlyMap<string, readonly string[]> = 
   ["deepseek", ["anthropic","openai_compatible"]],
   ["doubao", ["anthropic","openai_compatible"]],
   ["fireworks", ["openai_compatible"]],
+  ["github_models", ["openai_compatible"]],
   ["google", ["gemini"]],
   ["groq", ["openai_compatible"]],
   ["huggingface", ["openai_compatible"]],
@@ -595,6 +612,7 @@ export const PROVIDER_ENDPOINTS: ReadonlyMap<string, readonly ProviderEndpoint[]
   ["doubao|anthropic", [{"url":"https://ark.cn-beijing.volces.com/api/coding/v1","host":"ark.cn-beijing.volces.com","pathPrefix":"/api/coding","isDefault":false}]],
   ["doubao|openai_compatible", [{"url":"https://ark.cn-beijing.volces.com/api/v3","host":"ark.cn-beijing.volces.com","pathPrefix":"","isDefault":false},{"url":"https://ark.cn-beijing.volces.com/api/coding/v3","host":"ark.cn-beijing.volces.com","pathPrefix":"/api/coding/v3","isDefault":false}]],
   ["fireworks|openai_compatible", [{"url":"https://api.fireworks.ai/inference/v1","host":"api.fireworks.ai","pathPrefix":"","isDefault":false}]],
+  ["github_models|openai_compatible", [{"url":"https://models.github.ai/inference","host":"models.github.ai","pathPrefix":"","isDefault":false}]],
   ["google|gemini", [{"url":"https://generativelanguage.googleapis.com/v1beta","host":"generativelanguage.googleapis.com","pathPrefix":"","isDefault":false}]],
   ["groq|openai_compatible", [{"url":"https://api.groq.com/openai/v1","host":"api.groq.com","pathPrefix":"","isDefault":false}]],
   ["huggingface|openai_compatible", [{"url":"https://api-inference.huggingface.co/v1","host":"api-inference.huggingface.co","pathPrefix":"","isDefault":false}]],
@@ -622,7 +640,7 @@ export const PROVIDER_ENDPOINTS: ReadonlyMap<string, readonly ProviderEndpoint[]
   ["yunwu|openai_compatible", [{"url":"https://yunwu.ai/v1","host":"yunwu.ai","pathPrefix":"","isDefault":false}]],
   ["zeroeleven|openai_compatible", [{"url":"https://aicoding.2233.ai/v1","host":"aicoding.2233.ai","pathPrefix":"","isDefault":false}]],
   ["zhipu|anthropic", [{"url":"https://open.bigmodel.cn/api/anthropic/v1","host":"open.bigmodel.cn","pathPrefix":"/api/anthropic","isDefault":true},{"url":"https://api.z.ai/api/anthropic/v1","host":"api.z.ai","pathPrefix":"/api/anthropic","isDefault":false}]],
-  ["zhipu|openai_compatible", [{"url":"https://open.bigmodel.cn/api/paas/v4","host":"open.bigmodel.cn","pathPrefix":"","isDefault":false},{"url":"https://open.bigmodel.cn/api/coding/paas/v4","host":"open.bigmodel.cn","pathPrefix":"/api/coding/paas/v4","isDefault":false},{"url":"https://api.z.ai/api/paas/v4","host":"api.z.ai","pathPrefix":"/api/paas","isDefault":false,"tier":"b"}]],
+  ["zhipu|openai_compatible", [{"url":"https://open.bigmodel.cn/api/paas","host":"open.bigmodel.cn","pathPrefix":"","isDefault":false},{"url":"https://open.bigmodel.cn/api/coding/paas/v4","host":"open.bigmodel.cn","pathPrefix":"/api/coding/paas/v4","isDefault":false},{"url":"https://api.z.ai/api/paas/v4","host":"api.z.ai","pathPrefix":"/api/paas","isDefault":false,"tier":"b"}]],
 ]);
 
 /** Protocols the credential dialog may offer, with how many providers speak each.
@@ -639,7 +657,7 @@ export const PROTOCOL_CATALOG: readonly { value: string; providerCount: number }
   },
   {
     "value": "openai_compatible",
-    "providerCount": 27
+    "providerCount": 28
   }
 ];
 
