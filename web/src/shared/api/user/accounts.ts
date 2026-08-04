@@ -61,6 +61,15 @@ export interface AgentPoolStatusDTO {
   binding: AgentRoutingSummaryDTO;
   accounts: GroupAccountRef[];
   accounts_state: 'available' | 'unavailable';
+  runtime: {
+    state: 'available' | 'not_reported' | 'unavailable';
+    node_id?: string;
+    node_liveness?: string;
+    updated_at?: number;
+    total_accounts: number;
+    schedulable_accounts: number;
+    earliest_retry_at?: number;
+  };
 }
 
 export interface AgentLastServedStatusDTO {

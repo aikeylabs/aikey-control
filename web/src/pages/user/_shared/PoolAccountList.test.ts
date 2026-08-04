@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import en from '@/shared/i18n/locales/en/common.json';
+import zh from '@/shared/i18n/locales/zh/common.json';
+
 import { poolAccountTone, quotaPercent, retryTimeState, showRetryTime } from './pool-account-state';
 
 describe('PoolAccountList display derivations', () => {
@@ -10,6 +13,17 @@ describe('PoolAccountList display derivations', () => {
     expect(poolAccountTone('window_protected')).toBe('warning');
     expect(poolAccountTone('upstream_unavailable')).toBe('warning');
     expect(poolAccountTone()).toBe('muted');
+  });
+
+  it('renders auth_failed as an actionable re-login state in both locales', () => {
+    expect(en.poolAccount.routeStatus.auth_failed).toBe('Sign in again');
+    expect(en.poolAccount.loginStatus.auth_failed).toBe('Sign in again');
+    expect(en.oauthContribute.status.auth_failed).toBe('Sign in again');
+    expect(en.vault.oauthLoginStatus.auth_failed).toBe('Sign in again');
+    expect(zh.poolAccount.routeStatus.auth_failed).toBe('需要重新登录');
+    expect(zh.poolAccount.loginStatus.auth_failed).toBe('需要重新登录');
+    expect(zh.oauthContribute.status.auth_failed).toBe('需要重新登录');
+    expect(zh.vault.oauthLoginStatus.auth_failed).toBe('需要重新登录');
   });
 
   it('preserves unknown utilization and renders an observed zero honestly', () => {

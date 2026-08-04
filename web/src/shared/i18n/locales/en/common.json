@@ -16,6 +16,12 @@
     "oauth": "OAuth",
     "apiKey": "API KEY",
     "priority": "Priority {{priority}}",
+    "workerNode": "Worker · {{node}}",
+    "workerNodeUnavailable": "Worker · {{node}} · unavailable",
+    "workerNodeNotReported": "Worker · {{node}} · status not reported",
+    "workerNodeTitle": "Hub currently routes this account to Worker {{node}}",
+    "workerUnavailable": "Worker unavailable",
+    "workerNotReported": "Worker status not reported",
     "login": "Log in",
     "util5h": "5h used",
     "util7d": "7d used",
@@ -30,13 +36,19 @@
       "window_exhausted": "Quota window exhausted",
       "window_protected": "Quota protection switched",
       "rate_limited": "Temporarily rate limited",
-      "auth_failed": "Authentication failed",
+      "auth_failed": "Sign in again",
       "upstream_unavailable": "Upstream unavailable"
     },
+	"routeHelp": {
+	  "rate_limited": "No action required — this Worker will re-admit the account automatically.",
+	  "window_exhausted": "This account will be probed again automatically at its retry boundary.",
+	  "auth_failed": "Waiting will not repair a revoked token. Sign in again or replace this account.",
+	  "upstream_unavailable": "Check this account's egress and the Worker's upstream connectivity."
+	},
     "loginStatus": {
       "logged_in": "Signed in",
       "needs_login": "Sign-in needed",
-      "auth_failed": "Auth failed",
+      "auth_failed": "Sign in again",
       "revoked": "Revoked"
     }
   },
@@ -359,7 +371,7 @@
     "oauthLoginStatus": {
       "logged_in": "Signed in",
       "needs_login": "Sign-in needed",
-      "auth_failed": "Auth failed",
+      "auth_failed": "Sign in again",
       "revoked": "Revoked"
     },
     "oauthGroupDefaultHint": "\"Default\" is the team admin's static pick; the actual routed account is decided live by the scheduling engine service.",
@@ -2658,7 +2670,7 @@
     "status": {
       "logged_in": "Logged in",
       "needs_login": "Needs login",
-      "auth_failed": "Auth failed",
+      "auth_failed": "Sign in again",
       "revoked": "Revoked"
     },
     "addButton": "Enroll OAuth account",
@@ -2834,7 +2846,13 @@
       "poolLoadError": "The account-pool status could not be loaded. Agent traffic is not blocked by this display failure.",
       "emptyPool": "This account pool has no enabled accounts.",
       "ingressBindingBadge": "Ingress binding",
-      "lastServedBadge": "Last served"
+      "lastServedBadge": "Last served",
+      "runtimeScheduling": "Worker runtime scheduling",
+      "runtimeCount": "{{ready}} / {{total}} accounts schedulable",
+      "runtimeEarliestRetry": "Earliest automatic retry {{time}}",
+      "runtimeUpdated": "Worker status updated {{time}}",
+      "runtimeNotReported": "This Worker version does not report account scheduling state.",
+      "runtimeUnavailable": "Worker scheduling status is unavailable; this does not change the Ingress binding."
     },
     "create": {
       "titleNew": "CREATE AGENT",

@@ -20,7 +20,7 @@ import { ToolGlyph, toolGlyphLabel } from '@/shared/ui/ToolGlyph';
 import { DetailDrawer } from '@/shared/ui/DetailDrawer';
 import { ModalPortal } from '@/shared/ui/ModalShell';
 import { copyText } from '@/shared/utils/clipboard';
-import { formatDate, formatDateTime } from '@/shared/utils/datetime-intl';
+import { formatDate, formatDateTime, formatRelativeTime } from '@/shared/utils/datetime-intl';
 // Shared keys-family table skin (same one virtual-keys / team-oauth / vault
 // inject): mono uppercase thead, row rhythm, borders. Scoped under
 // `.vault-page` + `table.vault`, so injecting it is inert until both classes
@@ -83,6 +83,7 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
     enabled: Boolean(agent?.seat_id),
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
+    refetchInterval: agent?.seat_id ? 5_000 : false,
   });
   const latestQuery = useQuery({
     queryKey: ['my-agent-last-route', agent?.seat_id],
@@ -92,6 +93,7 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
     refetchOnReconnect: true,
   });
   const lastRoute = latestQuery.data?.last_served;
+  const runtime = poolQuery.data?.runtime;
   const binding = poolQuery.data?.binding ?? agent?.routing_summary;
   const bindingLabel = binding?.state === 'bound'
     ? (binding.identity || binding.account_id || t('myAgents.routing.bound'))
@@ -144,6 +146,36 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
               </p>
             ) : null}
           </div>
+        </section>
+
+        <section className="card p-4" aria-label={t('myAgents.routing.runtimeScheduling')}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.runtimeScheduling')}</p>
+              <p className="mt-2 text-sm" style={{ color: runtime?.state === 'available' && runtime.schedulable_accounts === 0 ? '#fbbf24' : 'var(--foreground)' }}>
+                {poolQuery.isLoading
+                  ? t('myAgents.routing.loading')
+                  : runtime?.state === 'available'
+                    ? t('myAgents.routing.runtimeCount', { ready: runtime.schedulable_accounts, total: runtime.total_accounts })
+                    : runtime?.state === 'not_reported'
+                      ? t('myAgents.routing.runtimeNotReported')
+                      : t('myAgents.routing.runtimeUnavailable')}
+              </p>
+              {runtime?.state === 'available' && runtime.earliest_retry_at ? (
+                <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+                  {t('myAgents.routing.runtimeEarliestRetry', {
+                    time: formatRelativeTime(runtime.earliest_retry_at * 1000) || formatDateTime(runtime.earliest_retry_at * 1000),
+                  })}
+                </p>
+              ) : null}
+            </div>
+            {runtime?.node_id ? <span className="chip">{runtime.node_id}</span> : null}
+          </div>
+          {runtime?.updated_at ? (
+            <p className="mt-2 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+              {t('myAgents.routing.runtimeUpdated', { time: formatRelativeTime(runtime.updated_at * 1000) || formatDateTime(runtime.updated_at * 1000) })}
+            </p>
+          ) : null}
         </section>
 
         {diverged && (

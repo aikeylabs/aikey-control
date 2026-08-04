@@ -58,6 +58,11 @@ export interface GroupAccountRef {
   // that determines current_routed; they never drive routing in the browser.
   route_status?: 'window_exhausted' | 'window_protected' | 'rate_limited' | 'auth_failed' | 'upstream_unavailable' | string;
   route_retry_at?: number; // unix seconds
+  // Hub-resolved runtime placement. Display-only: the browser never derives
+  // Worker assignment from credential/account IDs.
+  node_id?: string;
+  node_liveness?: string;
+  runtime_state?: 'available' | 'not_reported' | 'unavailable' | string;
   // Provider quota observations delivered through the existing group-runtime
   // rail. Fractions are 0..1. Absent means unknown — never treat it as 0%.
   util_5h?: number;

@@ -16,6 +16,12 @@
     "oauth": "OAuth",
     "apiKey": "API KEY",
     "priority": "优先级 {{priority}}",
+    "workerNode": "Worker · {{node}}",
+    "workerNodeUnavailable": "Worker · {{node}} · 不可用",
+    "workerNodeNotReported": "Worker · {{node}} · 未上报状态",
+    "workerNodeTitle": "Hub 当前将该账号路由到 Worker {{node}}",
+    "workerUnavailable": "Worker 不可用",
+    "workerNotReported": "Worker 未上报状态",
     "login": "登录",
     "util5h": "5h 已用",
     "util7d": "7d 已用",
@@ -30,13 +36,19 @@
       "window_exhausted": "额度窗口已耗尽",
       "window_protected": "额度保护切换",
       "rate_limited": "临时限流",
-      "auth_failed": "认证失败",
+      "auth_failed": "需要重新登录",
       "upstream_unavailable": "上游暂不可用"
     },
+	"routeHelp": {
+	  "rate_limited": "无需人工清理；该 Worker 会在冷却到期后自动重新接纳账号。",
+	  "window_exhausted": "系统会在重试边界到达后自动重新探测该账号。",
+	  "auth_failed": "已吊销的 Token 无法靠等待恢复；请重新登录或更换账号。",
+	  "upstream_unavailable": "请检查该账号出口以及 Worker 到上游的连通性。"
+	},
     "loginStatus": {
       "logged_in": "已登录",
       "needs_login": "待登录",
-      "auth_failed": "认证失败",
+      "auth_failed": "需要重新登录",
       "revoked": "已吊销"
     }
   },
@@ -359,7 +371,7 @@
     "oauthLoginStatus": {
       "logged_in": "已登录",
       "needs_login": "待登录",
-      "auth_failed": "认证失败",
+      "auth_failed": "需要重新登录",
       "revoked": "已吊销"
     },
     "oauthGroupDefaultHint": "「默认」是团队管理员的静态首选；实际路由账号由调度引擎服务实时决定。",
@@ -2658,7 +2670,7 @@
     "status": {
       "logged_in": "已登录",
       "needs_login": "待登录",
-      "auth_failed": "认证失败",
+      "auth_failed": "需要重新登录",
       "revoked": "已吊销"
     },
     "addButton": "录入 OAuth 账号",
@@ -2834,7 +2846,13 @@
       "poolLoadError": "暂时无法加载账号池状态。这个展示故障不会阻断 Agent 调用。",
       "emptyPool": "该账号池没有启用中的账号。",
       "ingressBindingBadge": "Ingress 绑定",
-      "lastServedBadge": "最近服务"
+      "lastServedBadge": "最近服务",
+      "runtimeScheduling": "Worker 运行时调度",
+      "runtimeCount": "{{ready}} / {{total}} 个账号当前可调度",
+      "runtimeEarliestRetry": "最早自动重试 {{time}}",
+      "runtimeUpdated": "Worker 状态更新于 {{time}}",
+      "runtimeNotReported": "当前 Worker 版本尚未上报账号调度状态。",
+      "runtimeUnavailable": "暂时无法读取 Worker 调度状态；这不会改变 Ingress 名义绑定。"
     },
     "create": {
       "titleNew": "新建 AGENT",

@@ -22,7 +22,19 @@ describe('My Agents routing and account-pool observability', () => {
     expect(ACCOUNTS_API).toContain('teamGetJSON<AgentPoolStatusDTO>');
     expect(PAGE).toContain("queryKey: ['my-agent-pool-status', agent?.seat_id]");
     expect(PAGE).toContain('enabled: Boolean(agent?.seat_id)');
+		expect(PAGE).toContain('refetchInterval: agent?.seat_id ? 5_000 : false');
   });
+
+	it('keeps selected-Worker runtime scheduling distinct from the Ingress binding', () => {
+		expect(ACCOUNTS_API).toContain("state: 'available' | 'not_reported' | 'unavailable'");
+		expect(ACCOUNTS_API).toContain('schedulable_accounts: number');
+		expect(PAGE).toContain("t('myAgents.routing.runtimeScheduling')");
+		expect(PAGE).toContain('runtime?.node_id');
+		expect(PAGE).toContain('runtime.earliest_retry_at');
+		expect(POOL_LIST).toContain('account.node_id');
+		expect(POOL_LIST).toContain("t('poolAccount.workerNode'");
+		expect(POOL_LIST).toContain("account.runtime_state === 'unavailable'");
+	});
 
   it('receives latest actual account through the ownership-scoped Control model', () => {
     expect(ACCOUNTS_API).toContain("state: 'available' | 'no_data' | 'unavailable'");

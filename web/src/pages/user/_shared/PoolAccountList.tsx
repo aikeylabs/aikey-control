@@ -78,6 +78,15 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel, s
       default: return status;
     }
   };
+  const routeStatusHelp = (status?: string): string | undefined => {
+    switch (status) {
+      case 'rate_limited': return t('poolAccount.routeHelp.rate_limited');
+      case 'window_exhausted': return t('poolAccount.routeHelp.window_exhausted');
+      case 'auth_failed': return t('poolAccount.routeHelp.auth_failed');
+      case 'upstream_unavailable': return t('poolAccount.routeHelp.upstream_unavailable');
+      default: return undefined;
+    }
+  };
 
   return (
     <>
@@ -92,6 +101,7 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel, s
         const retryAt = account.route_retry_at ?? account.window_reset_at;
         const retryState = retryTimeState(retryAt);
         const retryVisible = showRetryTime(account.route_status, retryState);
+        const helpText = routeStatusHelp(account.route_status);
 
         return (
           <div
@@ -103,6 +113,22 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel, s
               {account.assigned && (selection?.showDefaultBadge ?? true) && <span className="chip">{t('poolAccount.default')}</span>}
               {isRouted && <span className="chip info">{selection?.primaryLabel ?? t('poolAccount.currentRouted')}</span>}
               {isSecondary && !isRouted && <span className="chip">{selection?.secondaryLabel}</span>}
+              {account.node_id ? (
+                <span
+                  className={`chip ${account.runtime_state === 'unavailable' ? 'danger' : account.runtime_state === 'not_reported' ? 'warning' : ''}`}
+                  title={t('poolAccount.workerNodeTitle', { node: account.node_id })}
+                >
+                  {account.runtime_state === 'unavailable'
+                    ? t('poolAccount.workerNodeUnavailable', { node: account.node_id })
+                    : account.runtime_state === 'not_reported'
+                      ? t('poolAccount.workerNodeNotReported', { node: account.node_id })
+                      : t('poolAccount.workerNode', { node: account.node_id })}
+                </span>
+              ) : account.runtime_state === 'unavailable' ? (
+                <span className="chip danger">{t('poolAccount.workerUnavailable')}</span>
+              ) : account.runtime_state === 'not_reported' ? (
+                <span className="chip warning">{t('poolAccount.workerNotReported')}</span>
+              ) : null}
               {account.route_status && (
                 <span className={`chip ${tone === 'muted' ? '' : tone}`}>
                   {routeStatusLabel(account.route_status)}
@@ -153,6 +179,7 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel, s
               )}
 
               <div className="pool-account-observation">
+                {helpText && <span>{helpText}</span>}
                 {account.util_observed_at != null && (
                   <span>{t('poolAccount.observed', { time: formatRelativeTime(account.util_observed_at * 1000) || formatDateTime(account.util_observed_at * 1000) })}</span>
                 )}
