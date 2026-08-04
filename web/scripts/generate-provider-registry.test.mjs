@@ -115,8 +115,9 @@ describe('provider-registry codegen', () => {
       },
     ]);
     // 🔴 The empty-version case. Appending "/v1" here would invent an address
-    // that does not exist — the real table has two such rows (perplexity,
-    // github_models) and a naive concatenation breaks both.
+    // that does not exist — the real table has one such row (perplexity) and a
+    // naive concatenation breaks it. (github_models was the second until
+    // 2026-08-03, when the vendor retired the endpoint and the row was deleted.)
     expect(endpointsOf(output, 'beta|openai_compatible')).toEqual([
       {
         url: 'https://api.beta.example/inference',
