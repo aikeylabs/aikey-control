@@ -35,8 +35,23 @@ import (
 // SYS_/EXT_ rather than adding an exemption here.
 func TestEveryBizCodeHasAnExplicitStatus(t *testing.T) {
 	var unmapped []string
-	// zhMessages is the registry every user-visible domain error must appear in,
-	// so it is the honest enumeration of "codes that can reach a client".
+	// ⚠️ CORRECTION (2026-08-06). This line used to read "zhMessages is the
+	// registry every user-visible domain error must appear in, so it is the
+	// honest enumeration of codes that can reach a client". That was FALSE, and
+	// the comment above errors.go's own `zhMessages` says the opposite: codes
+	// absent from the map fall back to the English message automatically. It is
+	// OPTIONAL, so 23 of the 82 declared BIZ_ codes are not in it — and this loop
+	// cannot see a single one of them.
+	//
+	// 🔴 A fence whose enumeration is an optional registry inherits that
+	// registry's omissions. Worse here, the two gaps line up: the codes least
+	// likely to have zh copy are the newest, which are also the likeliest to have
+	// been missed in the status switch.
+	//
+	// This test is KEPT — it is cheap, and it does pin the zh-copied subset — but
+	// it is no longer the fence. TestEveryDeclaredBizCodeHasAnExplicitStatus in
+	// respond_biz_status_sourcescan_test.go enumerates the declarations
+	// themselves, which cannot be incomplete.
 	for code := range zhMessages {
 		if !strings.HasPrefix(code, "BIZ_") {
 			continue
@@ -72,6 +87,27 @@ func TestDomainErrorStatus_BindingConflictCodes(t *testing.T) {
 		// submitted list is a bad request body, not a state conflict.
 		{CodeBizKeyDuplicateProtocol, http.StatusUnprocessableEntity,
 			"duplicate protocol inside the submitted binding list — a body problem"},
+
+		// 2026-08-06, found the same way: driving the real endpoints and reading
+		// the status the CLIENT receives. Both were introduced in the same window
+		// as the route-group feature and both fell through to 500 — and neither
+		// was in zhMessages, so the class fence above could not see them either.
+		{CodeBizRouteGroupNotFound, http.StatusNotFound,
+			"a template the org does not have — the same fact as CodeBizOauthGroupNotFound about a different object"},
+		{CodeBizRouteGroupOriginConflict, http.StatusConflict,
+			"the chain that already exists came from another origin — resource state, like CodeBizBindDuplicateTarget"},
+		// The neighbour these must NOT be confused with: choosing a credential
+		// that does not speak the template's protocol is a bad choice, not a
+		// conflict with existing state.
+		{CodeBizRouteGroupProtocolMismatch, http.StatusUnprocessableEntity,
+			"the chosen credential cannot speak the template's protocol — the choice itself cannot work"},
+
+		// The remaining two refusals of the same function, typed in the same pass
+		// after auditing it whole rather than patching the reported lines.
+		{CodeBizRouteGroupArchived, http.StatusUnprocessableEntity,
+			"the chosen template is archived — an unusable object, like CodeBizCredInactive"},
+		{CodeBizRouteGroupEmpty, http.StatusUnprocessableEntity,
+			"the chosen template has no upstreams to generate hops from"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code, func(t *testing.T) {
