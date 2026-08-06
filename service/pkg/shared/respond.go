@@ -94,6 +94,14 @@ func DomainErrorHTTPStatus(code string) int {
 	case CodeBizOrgNotFound, CodeBizSeatNotFound, CodeBizKeyNotFound,
 		CodeBizBindNotFound, CodeBizCredNotFound, CodeBizProvNotFound,
 		CodeBizOauthGroupNotFound, CodeBizOauthLoginCredNotProvisioned,
+		// An upstream-fallback template the organization does not have. Beside
+		// CodeBizOauthGroupNotFound because it is the same fact about a different
+		// object — and deliberately not sharing its code, since the next action
+		// differs ("create a route group" vs "create an account pool").
+		// Unmapped until 2026-08-06: naming a template that does not exist
+		// answered 500, and the code never reached the client at all (the apply
+		// path returned a bare error, so HandleDomainErr emitted SYS_INTERNAL).
+		CodeBizRouteGroupNotFound,
 		CodeBizReferencedNotFound:
 		return http.StatusNotFound
 
@@ -118,6 +126,18 @@ func DomainErrorHTTPStatus(code string) int {
 		// applying a route group twice answered 500 and the console showed
 		// "an unexpected error occurred" instead of the reason it had computed.
 		CodeBizBindDuplicateTarget,
+		// 0b.9d: this (key, protocol) already has a chain from a DIFFERENT origin
+		// — an ungrouped hop, or another template. Same shape as the two above:
+		// the request is well formed and the administrator's intent is
+		// achievable, it is the state that already exists which conflicts, and
+		// the remedy is to detach that chain first. 🚫 Not 422 — nothing about
+		// the submitted body is wrong.
+		//
+		// Unmapped until 2026-08-06, which made the refusal self-defeating: its
+		// own doc comment says it was made a typed error precisely so it would
+		// stop arriving as a 500, and it went on arriving as a 500 because
+		// nobody added it here.
+		CodeBizRouteGroupOriginConflict,
 		// 2026-07-03 (owner-approved delivery-family contract unification): "no
 		// active / not-deliverable binding" is a RESOURCE-STATE conflict an admin
 		// resolves by configuring the binding — not a service outage. As 503s these
@@ -141,7 +161,17 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizProviderProtocolUnsupported,
 		CodeBizOauthGroupProviderUnsupported, CodeBizOauthGroupProviderMixed,
 		CodeBizOauthGroupProtocolMixed, CodeBizOauthGroupProtocolInvalid,
-		CodeBizOauthGroupBotSeat, CodeBizRouteGroupProtocolMismatch:
+		CodeBizOauthGroupBotSeat, CodeBizRouteGroupProtocolMismatch,
+		// The template the admin chose cannot be applied as asked — it is
+		// archived, or it has no upstreams to generate hops from. Same shape as
+		// CodeBizCredInactive above: the chosen OBJECT is unusable, and the
+		// remedy is to choose another or to fix that one. 🚫 Not 409: nothing
+		// about the KEY's current state is in the way.
+		//
+		// Both were bare errors until 2026-08-06, so both answered 500 — found by
+		// auditing the whole function after two of its siblings were reported,
+		// which is the same move that turned one BIZ_BIND report into two defects.
+		CodeBizRouteGroupArchived, CodeBizRouteGroupEmpty:
 		return http.StatusUnprocessableEntity
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────
