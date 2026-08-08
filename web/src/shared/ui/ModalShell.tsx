@@ -57,6 +57,7 @@ export const DIALOG_LAYER = {
   confirm: 70,
 } as const;
 import { useTranslation } from 'react-i18next';
+import { ModalErrorBoundary } from './RouteErrorBoundary';
 
 /** Thin portal: mounts children on document.body, nothing else. */
 export function ModalPortal({
@@ -69,8 +70,13 @@ export function ModalPortal({
    *  contents` keeps the children's fixed positioning untouched. */
   scopeClassName?: string;
 }) {
+  // 🔴 ModalPortal owns no chrome and gets no onClose, so its fallback cannot
+  // offer "close" — the caller draws its own overlay and buttons. Containing the
+  // crash here still beats the route boundary (the page beneath is untouched);
+  // the fallback carries the detail + a reload as the only honest exits.
+  const guarded = <ModalErrorBoundary>{children}</ModalErrorBoundary>;
   return createPortal(
-    scopeClassName ? <div className={scopeClassName} style={{ display: 'contents' }}>{children}</div> : <>{children}</>,
+    scopeClassName ? <div className={scopeClassName} style={{ display: 'contents' }}>{guarded}</div> : guarded,
     document.body,
   );
 }
@@ -109,7 +115,13 @@ export function ModalShell({
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        <div className="px-6 py-5 space-y-4">{children}</div>
+        {/* 🔴 Contain a crash to the dialog BODY: the header (with its close X)
+            and the footer survive, so the operator dismisses with the control
+            they already know instead of losing the whole page to the route
+            boundary. Owner decision A, 2026-07-30. */}
+        <div className="px-6 py-5 space-y-4">
+          <ModalErrorBoundary>{children}</ModalErrorBoundary>
+        </div>
         <div className="px-6 py-4 flex items-center justify-end gap-2" style={{ borderTop: '1px solid var(--border)' }}>
           {footer}
         </div>

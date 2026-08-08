@@ -20,6 +20,7 @@ const (
 	EventControlOAuthGroupEnableMemberListFailed           = "control.oauth_group.enable_member_list_failed"
 	EventControlSnapshotOAuthGroupResolveFailed            = "control.snapshot.oauth_group_resolve_failed"
 	EventControlSnapshotOAuthGroupBumpFailed               = "control.snapshot.oauth_group_bump_failed"
+	EventControlOrgDeliveryAssignmentReadFailed            = "control.org_delivery.assignment_read_failed"
 	EventControlUsageReportingTimeZoneReadFailed           = "control.usage.reporting_time_zone_read_failed"
 	EventControlUsageReportingTimeZoneInvalid              = "control.usage.reporting_time_zone_invalid"
 	// EventControlConvAuditSeatSearchFailed fires when the usage facade cannot

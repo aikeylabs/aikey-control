@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { RouteErrorBoundary } from '@/shared/ui/RouteErrorBoundary';
 
 import { useUserAuthStore } from '@/store';
 import { runtimeConfig } from '@/app/config/runtime';
@@ -575,6 +576,10 @@ const SIDEBAR_COLLAPSED_STORAGE_KEY = 'aikey:sidebar-collapsed:v1';
 
 export function UserShell() {
   const { t } = useTranslation();
+  // Route identity for RouteErrorBoundary: the ROUTER's location, not
+  // window.location — the boundary must reset as part of the same render pass
+  // the navigation triggers.
+  const { pathname: shellPathname } = useLocation();
   // Translate a nav label / group title at the render boundary. The raw
   // English string stays in the data (it doubles as a logic anchor — see
   // NAV_LABEL_I18N_KEY note); unmapped strings (cross-app wire labels) pass
@@ -1652,7 +1657,13 @@ export function UserShell() {
               precise message; this layer is the one that doesn't depend on a
               page author remembering. */}
           <DataFetchErrorBanner />
-          <Outlet />
+          {/* 🔴 One page's render crash must not take the console down
+              (2026-07-30 seats incident). The boundary sits INSIDE the shell, so
+              nav survives and the operator can move to a working page; keyed on
+              the pathname so navigating away clears the fallback. */}
+          <RouteErrorBoundary resetKey={shellPathname}>
+            <Outlet />
+          </RouteErrorBoundary>
         </div>
       </main>
     </div>
