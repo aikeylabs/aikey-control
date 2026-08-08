@@ -154,6 +154,17 @@ var zhMessages = map[string]string{
 	CodeBizBindNoActive:         "未找到该令牌的激活协议绑定",
 	CodeBizBindNotDelivered:     "绑定已存在，但无法下发至代理",
 
+	// BIZ — Route Group（上游 fallback 链路模板）
+	//
+	// 🔴 这两条不只是文案。TestEveryBizCodeHasAnExplicitStatus 以本表为枚举源，
+	// 所以**不在本表里的 BIZ_ 码，围栏看不见** —— 而它们同时也漏掉了
+	// DomainErrorHTTPStatus 的分支、落进 default 的 500。两者恰好都是本窗口新增
+	// 的码，也就是最可能出错的那一批。登记在此，是让围栏从此能看住它们。
+	CodeBizRouteGroupNotFound:       "路由组 {{id}} 不存在",
+	CodeBizRouteGroupOriginConflict: "该虚拟密钥的这一协议链路已有来源（某个路由组模板，或一条未成组的直连跳），不能再套用另一个来源；请先解除现有链路，再套用模板",
+	CodeBizRouteGroupArchived:       "路由组 {{id}} 已归档（当前状态 {{status}}），不能套用；请先恢复该路由组，或改选一个启用中的",
+	CodeBizRouteGroupEmpty:          "路由组 {{name}} 没有任何启用中的成员，套用后这把密钥将没有可用上游；请先给该路由组添加上游",
+
 	// BIZ — Login Session / OAuth
 	CodeBizLoginSessionNotFound:         "登录会话 {{id}} 不存在",
 	CodeBizLoginSessionExpired:          "登录会话已过期，请重新运行 aikey login",
@@ -290,12 +301,20 @@ const (
 	CodeBizRefreshTokenRevoked = "BIZ_REFRESH_TOKEN_REVOKED"
 
 	// BIZ — Member SSO
-	CodeBizSSOProviderDisabled    = "BIZ_SSO_PROVIDER_DISABLED"
-	CodeBizSSOStateInvalid        = "BIZ_SSO_STATE_INVALID"
-	CodeBizSSOExchangeFailed      = "BIZ_SSO_EXCHANGE_FAILED"
-	CodeBizSSOTenantMismatch      = "BIZ_SSO_TENANT_MISMATCH"
-	CodeBizSSOIdentityConflict    = "BIZ_SSO_IDENTITY_CONFLICT"
-	CodeBizSSOUserInfoIncomplete  = "BIZ_SSO_USERINFO_INCOMPLETE"
+	CodeBizSSOProviderDisabled = "BIZ_SSO_PROVIDER_DISABLED"
+	CodeBizSSOStateInvalid     = "BIZ_SSO_STATE_INVALID"
+	CodeBizSSOExchangeFailed   = "BIZ_SSO_EXCHANGE_FAILED"
+	CodeBizSSOTenantMismatch   = "BIZ_SSO_TENANT_MISMATCH"
+	CodeBizSSOIdentityConflict = "BIZ_SSO_IDENTITY_CONFLICT"
+	// Log-only code: the IdP's userinfo omitted a mapped email or display name.
+	// The login CONTINUES either way — at Feishu the address is optional, and its
+	// absence only decides where the seat comes from — so this is stamped on a
+	// WARN and never returned. It therefore has no HTTP status, by construction.
+	CodeBizSSOUserInfoIncomplete = "BIZ_SSO_USERINFO_INCOMPLETE"
+	// Log-only code: a display-name refresh or seat-alias backfill failed. Alias
+	// is display-only and deliberately kept off the login main path — a failure
+	// here must not cost the member a login — so it is stamped on a WARN and
+	// never returned.
 	CodeBizSSOAliasBackfillFailed = "BIZ_SSO_ALIAS_BACKFILL_FAILED"
 
 	// BIZ — unique-conflict specialisations
@@ -328,9 +347,23 @@ const (
 	CodeBizProviderProtocolUnsupported = "PROVIDER_PROTOCOL_UNSUPPORTED"
 
 	// BIZ — Seat Group (通用凭证共享组 / oauth_group)
-	CodeBizOauthGroupNotFound         = "BIZ_OAUTH_GROUP_NOT_FOUND"
-	CodeBizRouteGroupNotFound         = "BIZ_ROUTE_GROUP_NOT_FOUND"
-	CodeBizRouteGroupOriginConflict   = "BIZ_ROUTE_GROUP_ORIGIN_CONFLICT"
+	CodeBizOauthGroupNotFound       = "BIZ_OAUTH_GROUP_NOT_FOUND"
+	CodeBizRouteGroupNotFound       = "BIZ_ROUTE_GROUP_NOT_FOUND"
+	CodeBizRouteGroupOriginConflict = "BIZ_ROUTE_GROUP_ORIGIN_CONFLICT"
+	// CodeBizRouteGroupArchived: the template exists in this organization but has
+	// been archived. 422 — the same shape as CodeBizCredInactive: the OBJECT the
+	// admin chose cannot be used, and they fix it by choosing an active template
+	// or restoring this one. 🚫 Not 404: pretending an archived template is
+	// absent would send the admin to create a duplicate of one they still have.
+	CodeBizRouteGroupArchived = "BIZ_ROUTE_GROUP_ARCHIVED"
+	// CodeBizRouteGroupEmpty: the template is active but has no members, so
+	// applying it would generate a chain with zero hops. 422, same family — the
+	// remedy is to add upstreams to the template.
+	//
+	// 🔴 Refused rather than quietly producing a zero-hop chain: a key with no
+	// bindings cannot serve traffic, and the failure would surface far from here
+	// as "my key stopped working".
+	CodeBizRouteGroupEmpty = "BIZ_ROUTE_GROUP_EMPTY"
 	// CodeBizRouteGroupProtocolMismatch: a member credential does not speak the
 	// template's protocol (P0a rev10 task 4.50). 422 — a validation the admin
 	// fixes by choosing a different credential.
@@ -669,6 +702,28 @@ func BizRouteGroupOriginConflict(msg string) *DomainError {
 	return &DomainError{Code: CodeBizRouteGroupOriginConflict, Message: msg}
 }
 
+// BizRouteGroupArchived — the template exists and belongs to this organization,
+// but has been archived (2026-08-06).
+//
+// 🔴 Archive marks inactive and never deletes, because keys generated from a
+// template keep its id and an audit record referencing a vanished row becomes an
+// unexplained identifier. That design is what makes this a DISTINCT refusal from
+// "not found": the admin still has the template, and the action available to
+// them is to restore it or pick another — not to create a new one.
+func BizRouteGroupArchived(id, status string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupArchived,
+		Message: fmt.Sprintf("route group %q is %s, not active", id, status),
+		Meta:    map[string]any{"id": id, "status": status}}
+}
+
+// BizRouteGroupEmpty — the template has no active members, so applying it would
+// produce a chain with no hops (2026-08-06).
+func BizRouteGroupEmpty(name string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupEmpty,
+		Message: fmt.Sprintf("route group %q has no active members, so applying it would leave the key with no upstream to call", name),
+		Meta:    map[string]any{"name": name}}
+}
+
 // BizRouteGroupProtocolMismatch — a credential was chosen as a hop of a template
 // whose protocol it does not speak (P0a rev10, task 4.50).
 //
@@ -698,9 +753,9 @@ func BizRouteGroupProtocolMismatch(credentialID, credProtocol, groupProtocol str
 				"declared for %s",
 			credentialID, credProtocol, groupProtocol, groupProtocol, credProtocol),
 		Meta: map[string]any{
-			"credential_id":      credentialID,
+			"credential_id":       credentialID,
 			"credential_protocol": credProtocol,
-			"group_protocol":     groupProtocol,
+			"group_protocol":      groupProtocol,
 		},
 	}
 }
