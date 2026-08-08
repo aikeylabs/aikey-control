@@ -22,6 +22,9 @@ import { Badge } from '@/shared/ui/Badge';
 import { PageHeader } from '@/shared/ui/PageHeader';
 import { Pagination, useStoredPageSize } from '@/shared/ui/Pagination';
 import { formatDateTime } from '@/shared/utils/datetime-intl';
+// Mask-token highlighting is shared with the master audit + triage drawers —
+// one regex, three pages (see mask-highlight.tsx for why).
+import { renderMaskedSnippet } from '@/shared/utils/mask-highlight';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterBar } from '@/shared/ui/FilterBar';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
@@ -54,32 +57,6 @@ function topSeverity(e: ComplianceEventDTO): string {
     if (top === '' || (SEV_RANK[f.severity] ?? -1) > (SEV_RANK[top] ?? -1)) top = f.severity;
   }
   return top;
-}
-
-// Highlight planner mask tokens in the audit snippet so the redacted spans
-// (***PHONE*** / ***18*** / [password-redacted] / [违规话术] / [prompt-injection] …)
-// stand out from the surrounding context. Uses --primary (distinct from the
-// orange MASK/severity badges); no new colors.
-const MASK_SPLIT = /(\*\*\*[^*\s]{1,20}\*\*\*|\[[^\]\n]{1,24}\])/g;
-const MASK_TEST = /^(\*\*\*[^*\s]{1,20}\*\*\*|\[[^\]\n]{1,24}\])$/;
-function renderMaskedSnippet(text: string) {
-  return text.split(MASK_SPLIT).filter((p) => p !== '').map((part, i) =>
-    MASK_TEST.test(part) ? (
-      // 2026-06-06: dimmed from var(--primary) #facc15 → var(--primary-dim)
-      // #ca8a04 (yellow-600) and bg 0.12 → 0.08. The audit table renders
-      // ~15 rows × 2 mask markers each = 30+ amber patches on screen
-      // simultaneously; at the previous yellow-400 + 12% alpha those
-      // tiny tokens summed to a "刺眼" amber speckle that overwhelmed
-      // the row text. yellow-600 stays warm and still reads as a
-      // masked-token highlight, but no longer competes with the page's
-      // real CTAs (生效合规包 button, 4893 条记录 chip) which still use
-      // the bright --primary and visually outrank the noisy in-cell
-      // highlights now.
-      <span key={i} className="font-bold" style={{ color: 'var(--primary-dim)', backgroundColor: 'rgba(202,138,4,0.08)', borderRadius: 2, padding: '0 2px' }}>{part}</span>
-    ) : (
-      <span key={i}>{part}</span>
-    ),
-  );
 }
 
 // Locked timestamp (YYYY-MM-DD HH:mm:ss) so the audit time reads the same
