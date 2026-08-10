@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-const PAGE = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/user/my-agents/index.tsx'), 'utf-8');
+const PAGE = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/user/access-tokens/index.tsx'), 'utf-8');
 const ACCOUNTS_API = fs.readFileSync(path.resolve(process.cwd(), 'src/shared/api/user/accounts.ts'), 'utf-8');
 const ZH = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'src/shared/i18n/locales/zh/common.json'), 'utf-8'));
 const EN = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'src/shared/i18n/locales/en/common.json'), 'utf-8'));
@@ -18,13 +18,26 @@ const EN = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'src/shared/i1
 // The fix splits the two actions the requirement spec always described
 // separately (OA5 治理三层: 可见 + 停用 + 独立归因 + 吊销):
 //   停用 → suspend (reversible; the VK survives)
-//   吊销 → revoke  (terminal; no member-plane entry point)
+//   吊销 → revoke  (terminal)
+//
+// 2026-08-10: the member plane DID gain a revoke entry — in the detail DRAWER,
+// behind a confirmation (user report: at the token cap, 停用 freed nothing and
+// there was no other action, so the member was stuck). This fence therefore
+// pins WHERE deleteAgent may be called, not that it is never called: the
+// original assertion was `not.toContain('userAccountsApi.deleteAgent')`, which
+// states more than the regression it guards and would have blocked the fix.
 describe('My Agents disable/enable is reversible', () => {
   it('routes 停用 through the reversible status endpoint, NOT the terminal delete', () => {
-    expect(ACCOUNTS_API).toContain('/accounts/me/agents/${seatId}/status');
+    expect(ACCOUNTS_API).toContain('/accounts/me/access-tokens/${seatId}/status');
     expect(ACCOUNTS_API).toContain("setAgentStatus: async (seatId: string, action: 'suspend' | 'resume')");
-    // 🔴 The actual regression: the disable button calling deleteAgent.
-    expect(PAGE).not.toContain('userAccountsApi.deleteAgent');
+    // 🔴 The actual regression: the disable button calling deleteAgent. Pinned by
+    // WHERE the single call lives — inside the drawer's revoke confirmation —
+    // rather than by forbidding the call outright.
+    const deleteCalls = PAGE.match(/userAccountsApi\.deleteAgent/g) ?? [];
+    expect(deleteCalls, 'revoke must have exactly one call site').toHaveLength(1);
+    const revokeFlow = PAGE.slice(PAGE.indexOf('<RevokeConfirmModal'));
+    expect(revokeFlow, 'the only deleteAgent call must sit in the revoke confirm flow, not on a row button')
+      .toContain('userAccountsApi.deleteAgent');
     expect(PAGE).toContain("userAccountsApi.setAgentStatus(agent.seat_id, action)");
   });
 
@@ -32,12 +45,12 @@ describe('My Agents disable/enable is reversible', () => {
     expect(PAGE).toContain("setStatus('suspend')");
     expect(PAGE).toContain("setStatus('resume')");
     expect(PAGE).toContain("{agent.status === 'suspended' && (");
-    expect(PAGE).toContain("t('myAgents.enable')");
+    expect(PAGE).toContain("t('accessTokens.enable')");
   });
 
   it('tells the member revoked is terminal instead of offering a button that fails', () => {
     expect(PAGE).toContain("{agent.status === 'revoked' && (");
-    expect(PAGE).toContain("t('myAgents.revokedTerminal')");
+    expect(PAGE).toContain("t('accessTokens.revokedTerminal')");
     // No un-revoke affordance: `revoked` is also what the orphan reconcile
     // writes (OA5/INV-B), so the member plane must not undo it.
     expect(PAGE).not.toContain("setStatus('unrevoke')");
@@ -53,16 +66,16 @@ describe('My Agents disable/enable is reversible', () => {
 
   it('defines every new key in BOTH catalogs (i18n dangling-key guard)', () => {
     for (const [lang, cat] of [['zh', ZH], ['en', EN]] as const) {
-      expect(cat.myAgents.enable, `${lang}.myAgents.enable`).toBeTruthy();
-      expect(cat.myAgents.enableTitle, `${lang}.myAgents.enableTitle`).toBeTruthy();
-      expect(cat.myAgents.revokedTerminal, `${lang}.myAgents.revokedTerminal`).toBeTruthy();
-      expect(cat.myAgents.status.active, `${lang}.myAgents.status.active`).toBeTruthy();
-      expect(cat.myAgents.status.suspended, `${lang}.myAgents.status.suspended`).toBeTruthy();
-      expect(cat.myAgents.status.revoked, `${lang}.myAgents.status.revoked`).toBeTruthy();
+      expect(cat.accessTokens.enable, `${lang}.accessTokens.enable`).toBeTruthy();
+      expect(cat.accessTokens.enableTitle, `${lang}.accessTokens.enableTitle`).toBeTruthy();
+      expect(cat.accessTokens.revokedTerminal, `${lang}.accessTokens.revokedTerminal`).toBeTruthy();
+      expect(cat.accessTokens.status.active, `${lang}.accessTokens.status.active`).toBeTruthy();
+      expect(cat.accessTokens.status.suspended, `${lang}.accessTokens.status.suspended`).toBeTruthy();
+      expect(cat.accessTokens.status.revoked, `${lang}.accessTokens.status.revoked`).toBeTruthy();
     }
     // 停用/启用 must read the same here as on the master Agents page and in the
     // header chips — one word per concept across the whole console.
-    expect(ZH.myAgents.disable).toBe('停用');
-    expect(ZH.myAgents.enable).toBe('启用');
+    expect(ZH.accessTokens.disable).toBe('停用');
+    expect(ZH.accessTokens.enable).toBe('启用');
   });
 });

@@ -13,7 +13,7 @@ import UserLoginPage from '../../pages/user/login';
 import SessionExpiredPage from '../../pages/user/session-expired';
 import UserOverviewPage from '../../pages/user/overview';
 import MyAccountPage from '../../pages/user/account';
-import MyAgentsPage from '../../pages/user/my-agents';
+import AccessTokensPage from '../../pages/user/access-tokens';
 // NOTE: pages/user/virtual-keys/index.tsx is intentionally NOT routed here
 // (Phase 3B R7, 2026-05-11). The Team Keys experience canonically lives on
 // the team server (B side); A's stub showed an empty state because A's
@@ -90,7 +90,12 @@ export function buildUserRoutes(): RouteObject[] {
         { index: true, element: <Navigate to="/user/overview" replace /> },
         { path: 'overview', element: <UserOverviewPage /> },
         { path: 'account', element: <MyAccountPage /> },
-        { path: 'my-agents', element: <MyAgentsPage /> },
+        { path: 'access-tokens', element: <AccessTokensPage /> },
+        // Legacy URL kept as a redirect (2026-08-10 rename Agents → Access Token).
+        // Same treatment /user/cost got when it became /user/performance: members
+        // have this bookmarked, the customer guide links it, and an older peer's
+        // cross-app menu still publishes the old path — none of those should 404.
+        { path: 'my-agents', element: <Navigate to="/user/access-tokens" replace /> },
         // /user/virtual-keys removed from A's routes — see import-block
         // comment above. Users who type the URL get the AuthGuard's
         // 404-or-redirect behavior; sidebar Team Keys link points at the

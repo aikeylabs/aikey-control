@@ -1,5 +1,5 @@
 /**
- * My Agents — /user/my-agents  (alpha.5 online-agent, member self-service)
+ * Access Token — /user/access-tokens  (alpha.5 online-agent, member self-service)
  *
  * The agents this member owns (parent = my seat). A member creates an agent,
  * points a third-party agent product at its base_url + team OAuth VK, and the
@@ -39,21 +39,21 @@ import { PoolAccountList } from '../_shared/PoolAccountList';
 // chip already calling that state 停用 (统一名词字典).
 function statusLabel(status: string, t: (key: string) => string): string {
   switch (status) {
-    case 'active': return t('myAgents.status.active');
-    case 'suspended': return t('myAgents.status.suspended');
-    case 'revoked': return t('myAgents.status.revoked');
+    case 'active': return t('accessTokens.status.active');
+    case 'suspended': return t('accessTokens.status.suspended');
+    case 'revoked': return t('accessTokens.status.revoked');
     default: return status; // unknown future status: show it rather than hide it
   }
 }
 
 function routingStateLabel(summary: AgentRoutingSummaryDTO | undefined, t: (key: string) => string): string {
   switch (summary?.state) {
-    case 'bound': return t('myAgents.routing.bound');
-    case 'binding_pending': return t('myAgents.routing.bindingPending');
-    case 'unbound': return t('myAgents.routing.unbound');
-    case 'binding_stale': return t('myAgents.routing.bindingStale');
-    case 'source_unavailable': return t('myAgents.routing.sourceUnavailable');
-    default: return t('myAgents.routing.unavailable');
+    case 'bound': return t('accessTokens.routing.bound');
+    case 'binding_pending': return t('accessTokens.routing.bindingPending');
+    case 'unbound': return t('accessTokens.routing.unbound');
+    case 'binding_stale': return t('accessTokens.routing.bindingStale');
+    case 'source_unavailable': return t('accessTokens.routing.sourceUnavailable');
+    default: return t('accessTokens.routing.unavailable');
   }
 }
 
@@ -68,7 +68,7 @@ function RoutingCell({ agent, onOpen }: { agent: MyAgentDTO; onOpen: () => void 
       type="button"
       className="row-use-btn max-w-[220px] truncate"
       onClick={onOpen}
-      title={t('myAgents.routing.openTitle', { account: label })}
+      title={t('accessTokens.routing.openTitle', { account: label })}
     >
       {label}
     </button>
@@ -77,6 +77,10 @@ function RoutingCell({ agent, onOpen }: { agent: MyAgentDTO; onOpen: () => void 
 
 function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onClose: () => void }) {
   const { t } = useTranslation();
+  const qc = useQueryClient();
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+  const [revokeErr, setRevokeErr] = useState('');
   const poolQuery = useQuery({
     queryKey: ['my-agent-pool-status', agent?.seat_id],
     queryFn: () => userAccountsApi.agentPoolStatus(agent!.seat_id),
@@ -96,7 +100,7 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
   const runtime = poolQuery.data?.runtime;
   const binding = poolQuery.data?.binding ?? agent?.routing_summary;
   const bindingLabel = binding?.state === 'bound'
-    ? (binding.identity || binding.account_id || t('myAgents.routing.bound'))
+    ? (binding.identity || binding.account_id || t('accessTokens.routing.bound'))
     : routingStateLabel(binding, t);
   const lastLabel = lastRoute?.identity || lastRoute?.account_id;
   const diverged = Boolean(
@@ -113,8 +117,8 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
     <DetailDrawer
       open
       onClose={onClose}
-      title={t('myAgents.routing.drawerTitle', { name: agent?.alias ?? '' })}
-      subtitle={t('myAgents.routing.drawerSubtitle')}
+      title={t('accessTokens.routing.drawerTitle', { name: agent?.alias ?? '' })}
+      subtitle={t('accessTokens.routing.drawerSubtitle')}
     >
       {/* DetailDrawer portals to document.body, outside the page-level
           .vault-page scope. Re-establish that shared skin scope here so the
@@ -123,47 +127,47 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
       <div className="vault-page space-y-5 font-mono">
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="card p-4">
-            <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.ingressBinding')}</p>
+            <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.routing.ingressBinding')}</p>
             <p className="mt-2 text-sm break-all" style={{ color: 'var(--foreground)' }}>{bindingLabel}</p>
             {binding?.binding_updated_at ? (
               <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-                {t('myAgents.routing.bindingUpdated', { time: formatDateTime(binding.binding_updated_at * 1000) })}
+                {t('accessTokens.routing.bindingUpdated', { time: formatDateTime(binding.binding_updated_at * 1000) })}
               </p>
             ) : null}
           </div>
           <div className="card p-4">
-            <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.lastServed')}</p>
+            <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.routing.lastServed')}</p>
             <p className="mt-2 text-sm break-all" style={{ color: 'var(--foreground)' }}>
               {latestQuery.isLoading
-                ? t('myAgents.routing.loading')
+                ? t('accessTokens.routing.loading')
                 : latestQuery.isError || latestQuery.data?.state === 'unavailable'
-                  ? t('myAgents.routing.lastUnavailable')
-                  : lastLabel || t('myAgents.routing.noRequests')}
+                  ? t('accessTokens.routing.lastUnavailable')
+                  : lastLabel || t('accessTokens.routing.noRequests')}
             </p>
             {lastRoute?.request_at_ms ? (
               <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-                {t('myAgents.routing.lastRequestAt', { time: formatDateTime(lastRoute.request_at_ms) })}
+                {t('accessTokens.routing.lastRequestAt', { time: formatDateTime(lastRoute.request_at_ms) })}
               </p>
             ) : null}
           </div>
         </section>
 
-        <section className="card p-4" aria-label={t('myAgents.routing.runtimeScheduling')}>
+        <section className="card p-4" aria-label={t('accessTokens.routing.runtimeScheduling')}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.runtimeScheduling')}</p>
+              <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.routing.runtimeScheduling')}</p>
               <p className="mt-2 text-sm" style={{ color: runtime?.state === 'available' && runtime.schedulable_accounts === 0 ? '#fbbf24' : 'var(--foreground)' }}>
                 {poolQuery.isLoading
-                  ? t('myAgents.routing.loading')
+                  ? t('accessTokens.routing.loading')
                   : runtime?.state === 'available'
-                    ? t('myAgents.routing.runtimeCount', { ready: runtime.schedulable_accounts, total: runtime.total_accounts })
+                    ? t('accessTokens.routing.runtimeCount', { ready: runtime.schedulable_accounts, total: runtime.total_accounts })
                     : runtime?.state === 'not_reported'
-                      ? t('myAgents.routing.runtimeNotReported')
-                      : t('myAgents.routing.runtimeUnavailable')}
+                      ? t('accessTokens.routing.runtimeNotReported')
+                      : t('accessTokens.routing.runtimeUnavailable')}
               </p>
               {runtime?.state === 'available' && runtime.earliest_retry_at ? (
                 <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-                  {t('myAgents.routing.runtimeEarliestRetry', {
+                  {t('accessTokens.routing.runtimeEarliestRetry', {
                     time: formatRelativeTime(runtime.earliest_retry_at * 1000) || formatDateTime(runtime.earliest_retry_at * 1000),
                   })}
                 </p>
@@ -173,63 +177,120 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
           </div>
           {runtime?.updated_at ? (
             <p className="mt-2 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-              {t('myAgents.routing.runtimeUpdated', { time: formatRelativeTime(runtime.updated_at * 1000) || formatDateTime(runtime.updated_at * 1000) })}
+              {t('accessTokens.routing.runtimeUpdated', { time: formatRelativeTime(runtime.updated_at * 1000) || formatDateTime(runtime.updated_at * 1000) })}
             </p>
           ) : null}
         </section>
 
         {diverged && (
           <div role="status" className="rounded px-3 py-2 text-xs" style={{ color: '#fbbf24', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(251,191,36,0.07)' }}>
-            {t('myAgents.routing.failoverNotice')}
+            {t('accessTokens.routing.failoverNotice')}
           </div>
         )}
 
         <section>
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-xs font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('myAgents.routing.poolAccounts')}</h3>
-              <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.poolAccountsHint')}</p>
+              <h3 className="text-xs font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('accessTokens.routing.poolAccounts')}</h3>
+              <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.routing.poolAccountsHint')}</p>
             </div>
             <Link
               to={agent?.source.oauth_group_id ? `/user/team-oauth?group=${encodeURIComponent(agent.source.oauth_group_id)}` : '/user/team-oauth'}
               className="row-use-btn whitespace-nowrap"
               onClick={onClose}
             >
-              {t('myAgents.routing.manageAccounts')}
+              {t('accessTokens.routing.manageAccounts')}
             </Link>
           </div>
 
-          {poolQuery.isLoading && <div className="card p-4 text-xs" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.loading')}</div>}
+          {poolQuery.isLoading && <div className="card p-4 text-xs" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.routing.loading')}</div>}
           {poolQuery.isError && (
             <div role="alert" className="card p-4 text-xs" style={{ color: '#fca5a5' }}>
-              <p>{t('myAgents.routing.poolLoadError')}</p>
-              <button type="button" className="row-use-btn mt-3" onClick={() => void poolQuery.refetch()}>{t('myAgents.retry')}</button>
+              <p>{t('accessTokens.routing.poolLoadError')}</p>
+              <button type="button" className="row-use-btn mt-3" onClick={() => void poolQuery.refetch()}>{t('accessTokens.retry')}</button>
             </div>
           )}
           {poolQuery.data?.accounts_state === 'unavailable' && (
             <div role="alert" className="card p-4 text-xs" style={{ color: '#fca5a5' }}>
-              <p>{t('myAgents.routing.poolLoadError')}</p>
-              <button type="button" className="row-use-btn mt-3" onClick={() => void poolQuery.refetch()}>{t('myAgents.retry')}</button>
+              <p>{t('accessTokens.routing.poolLoadError')}</p>
+              <button type="button" className="row-use-btn mt-3" onClick={() => void poolQuery.refetch()}>{t('accessTokens.retry')}</button>
             </div>
           )}
           {poolQuery.data?.accounts_state !== 'unavailable' && poolQuery.data && poolQuery.data.accounts.length === 0 && (
-            <div className="card p-4 text-xs" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.routing.emptyPool')}</div>
+            <div className="card p-4 text-xs" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.routing.emptyPool')}</div>
           )}
           {poolQuery.data?.accounts_state !== 'unavailable' && poolQuery.data && poolQuery.data.accounts.length > 0 && (
             <PoolAccountList
               accounts={poolQuery.data.accounts}
               selection={{
                 primaryAccountId: binding?.state === 'bound' ? binding.account_id : undefined,
-                primaryLabel: t('myAgents.routing.ingressBindingBadge'),
+                primaryLabel: t('accessTokens.routing.ingressBindingBadge'),
                 secondaryAccountId: lastRoute?.account_id,
-                secondaryLabel: t('myAgents.routing.lastServedBadge'),
+                secondaryLabel: t('accessTokens.routing.lastServedBadge'),
                 showDefaultBadge: false,
               }}
               showRemaining
             />
           )}
         </section>
+
+        {/* Revoke — the ONLY member-side way to free a slot against
+            agent_limit_per_member. 停用 deliberately keeps consuming the quota
+            (OA5b: if it freed the slot, a member could suspend five, create five,
+            and then be unable to resume any of the old ones). Before 2026-08-10
+            the member console had no revoke entry at all, so a member at the cap
+            was stuck: the only button available was 停用, which changes nothing
+            about the count, while the error told them to "remove an agent".
+
+            🔴 In the DRAWER, not the row (user decision 2026-08-10): this is
+            terminal and unsafe — a row button sits one mis-click from 停用. */}
+        {agent.status !== 'revoked' && (
+          <section className="card p-4" style={{ borderColor: 'rgba(239,68,68,0.35)' }}>
+            <p className="text-[10px] uppercase tracking-wider" style={{ color: '#f87171' }}>
+              {t('accessTokens.revoke.sectionTitle')}
+            </p>
+            <p className="mt-2 text-[10px] leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+              {t('accessTokens.revoke.explain')}
+            </p>
+            {revokeErr && (
+              <div role="alert" className="mt-2 text-[10px] rounded px-2 py-1" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)' }}>
+                {revokeErr}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setConfirmRevoke(true)}
+              disabled={revoking}
+              className="mt-3 text-[10px] font-mono px-2.5 py-1 rounded border disabled:opacity-40"
+              style={{ color: '#f87171', borderColor: 'rgba(239,68,68,0.4)', backgroundColor: 'rgba(239,68,68,0.06)' }}
+            >
+              {revoking ? t('accessTokens.revoke.busy') : t('accessTokens.revoke.button')}
+            </button>
+          </section>
+        )}
       </div>
+
+      {confirmRevoke && agent && (
+        <RevokeConfirmModal
+          agent={agent}
+          busy={revoking}
+          onClose={() => setConfirmRevoke(false)}
+          onConfirm={async () => {
+            setRevoking(true);
+            try {
+              await userAccountsApi.deleteAgent(agent.seat_id);
+              qc.invalidateQueries({ queryKey: ['my-agents'] });
+              setConfirmRevoke(false);
+              onClose();
+            } catch (e) {
+              setRevokeErr(e instanceof Error ? e.message : t('accessTokens.actionFailed'));
+              setConfirmRevoke(false);
+            } finally {
+              setRevoking(false);
+            }
+          }}
+        />
+      )}
     </DetailDrawer>
   );
 }
@@ -245,7 +306,7 @@ function sourceBadge(src: MyAgentDTO['source'], t: (k: string) => string) {
       <span className="kind-tile" title={isApiKey ? 'API-KEY' : 'OAUTH'}>
         <KindGlyph kind={isApiKey ? 'key' : 'oauth'} />
       </span>
-      <span style={{ color: 'var(--muted-foreground)' }}>{src.name || (src.owner_pool ? t('myAgents.myPool') : '—')}</span>
+      <span style={{ color: 'var(--muted-foreground)' }}>{src.name || (src.owner_pool ? t('accessTokens.myPool') : '—')}</span>
     </span>
   );
 }
@@ -258,19 +319,19 @@ function readinessStatus(agent: MyAgentDTO): 'ready' | 'no_login' | 'degraded' {
 
 function readinessMessageKey(agent: MyAgentDTO): string {
   if (agent.pool_readiness_reason === 'read_failed' || agent.pool_readiness_reason === 'source_unavailable') {
-    return 'myAgents.readiness.readFailedDetail';
+    return 'accessTokens.readiness.readFailedDetail';
   }
-  if (agent.pool_readiness_reason === 'pool_disabled') return 'myAgents.readiness.disabledDetail';
-  if ((agent.pool_accounts_total ?? 0) === 0) return 'myAgents.readiness.emptyDetail';
-  if (readinessStatus(agent) === 'no_login') return 'myAgents.readiness.noLoginDetail';
-  if (readinessStatus(agent) === 'degraded') return 'myAgents.readiness.degradedDetail';
-  return 'myAgents.readiness.readyDetail';
+  if (agent.pool_readiness_reason === 'pool_disabled') return 'accessTokens.readiness.disabledDetail';
+  if ((agent.pool_accounts_total ?? 0) === 0) return 'accessTokens.readiness.emptyDetail';
+  if (readinessStatus(agent) === 'no_login') return 'accessTokens.readiness.noLoginDetail';
+  if (readinessStatus(agent) === 'degraded') return 'accessTokens.readiness.degradedDetail';
+  return 'accessTokens.readiness.readyDetail';
 }
 
 function readinessLabel(status: 'ready' | 'no_login' | 'degraded', t: (key: string) => string): string {
-  if (status === 'ready') return t('myAgents.readiness.ready');
-  if (status === 'no_login') return t('myAgents.readiness.no_login');
-  return t('myAgents.readiness.degraded');
+  if (status === 'ready') return t('accessTokens.readiness.ready');
+  if (status === 'no_login') return t('accessTokens.readiness.no_login');
+  return t('accessTokens.readiness.degraded');
 }
 
 function PoolReadinessBadge({ agent, linkToOauth }: { agent: MyAgentDTO; linkToOauth?: boolean }) {
@@ -308,7 +369,7 @@ function PoolReadinessBadge({ agent, linkToOauth }: { agent: MyAgentDTO; linkToO
         chip
       )}
       <div className="text-[9px]" style={{ color: 'var(--muted-foreground)' }}>
-        {t('myAgents.readiness.count', { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}
+        {t('accessTokens.readiness.count', { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}
       </div>
     </div>
   );
@@ -330,7 +391,7 @@ function PoolReadinessAlert({ agent }: { agent: MyAgentDTO }) {
         {t(readinessMessageKey(agent), { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}
       </p>
       <Link to="/user/team-oauth" className="inline-block font-bold" style={{ color: '#f59e0b', textDecoration: 'underline' }}>
-        {t('myAgents.create.vkPendingCta')}
+        {t('accessTokens.create.vkPendingCta')}
       </Link>
     </div>
   );
@@ -356,13 +417,13 @@ function ConnectionSelfCheck({ agent }: { agent: MyAgentDTO }) {
   return (
     <div className="rounded px-3 py-3 space-y-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
       <div className="text-[10px] font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
-        {t('myAgents.create.selfCheckTitle')}
+        {t('accessTokens.create.selfCheckTitle')}
       </div>
-      <SelfCheckRow ok={baseReady} label={t('myAgents.create.selfCheckBase')} detail={baseReady ? t('myAgents.create.selfCheckPassed') : t('myAgents.create.baseUrlBlocked')} />
-      <SelfCheckRow ok={vkReady} label={t('myAgents.create.selfCheckVK')} detail={vkReady ? t('myAgents.create.selfCheckPassed') : t('myAgents.create.selfCheckVKPending')} />
+      <SelfCheckRow ok={baseReady} label={t('accessTokens.create.selfCheckBase')} detail={baseReady ? t('accessTokens.create.selfCheckPassed') : t('accessTokens.create.baseUrlBlocked')} />
+      <SelfCheckRow ok={vkReady} label={t('accessTokens.create.selfCheckVK')} detail={vkReady ? t('accessTokens.create.selfCheckPassed') : t('accessTokens.create.selfCheckVKPending')} />
       <SelfCheckRow
         ok={poolReady}
-        label={t('myAgents.create.selfCheckPool')}
+        label={t('accessTokens.create.selfCheckPool')}
         detail={t(readinessMessageKey(agent), { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}
       />
     </div>
@@ -410,8 +471,8 @@ function CopyField({ label, value, secret = false }: { label: string; value: str
         {secret && (
           <button
             onClick={() => setRevealed(r => !r)}
-            title={revealed ? t('myAgents.hide') : t('myAgents.reveal')}
-            aria-label={revealed ? t('myAgents.hide') : t('myAgents.reveal')}
+            title={revealed ? t('accessTokens.hide') : t('accessTokens.reveal')}
+            aria-label={revealed ? t('accessTokens.hide') : t('accessTokens.reveal')}
             className="inline-flex items-center justify-center p-2 rounded border"
             style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
           >
@@ -423,7 +484,7 @@ function CopyField({ label, value, secret = false }: { label: string; value: str
           className="text-[10px] font-mono px-2.5 py-2 rounded border whitespace-nowrap"
           style={{ borderColor: copied ? 'rgba(74,222,128,0.4)' : 'var(--border)', color: copied ? '#4ade80' : 'var(--muted-foreground)' }}
         >
-          {copied ? t('myAgents.copied') : t('myAgents.copy')}
+          {copied ? t('accessTokens.copied') : t('accessTokens.copy')}
         </button>
       </div>
     </div>
@@ -443,46 +504,60 @@ function ConnectionReveal({ agent, onGetVK, gettingVK, onNavigate }: {
     <div className="space-y-4">
       {agent.base_url_blocked ? (
         <div className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
-          {t('myAgents.create.baseUrlBlocked')}
+          {t('accessTokens.create.baseUrlBlocked')}
         </div>
       ) : (
-        <CopyField label={t('myAgents.create.baseUrlLabel')} value={agent.base_url ?? ''} />
+        <CopyField label={t('accessTokens.create.baseUrlLabel')} value={agent.base_url ?? ''} />
       )}
       {agent.vk_pending ? (
         <div className="text-[10px] font-mono px-3 py-2 rounded space-y-2" style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}>
-          <p>{t('myAgents.create.vkPending')}</p>
+          <p>{t('accessTokens.create.vkPending')}</p>
           {/* Reuse the canonical add-account + login surface (Team OAuth pool-login)
               instead of duplicating it here. After adding an account, click "Get my
               VK" (below, or on the agent row in the list) to mint + reveal it. */}
           <Link to="/user/team-oauth" onClick={onNavigate} className="inline-block font-bold" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
-            {t('myAgents.create.vkPendingCta')}
+            {t('accessTokens.create.vkPendingCta')}
           </Link>
           {onGetVK && (
             <div>
               <button onClick={onGetVK} disabled={gettingVK} className="mt-1 text-[10px] font-mono px-2.5 py-1 rounded border disabled:opacity-40" style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.4)' }}>
-                {gettingVK ? t('myAgents.vk.getting') : t('myAgents.vk.getNow')}
+                {gettingVK ? t('accessTokens.vk.getting') : t('accessTokens.vk.getNow')}
               </button>
             </div>
           )}
         </div>
       ) : agent.vk ? (
         <>
-          <CopyField label={t('myAgents.create.vkLabel')} value={agent.vk} secret />
-          <p className="text-[10px] font-mono" style={{ color: '#f59e0b' }}>{t('myAgents.create.vkOnce')}</p>
+          <CopyField label={t('accessTokens.create.vkLabel')} value={agent.vk} secret />
+          {/* 2026-08-10: this used to warn "shown only once — it cannot be
+              retrieved later". That became FALSE when the member gained the
+              reveal path: agent VKs are minted with encrypted retention, so this
+              value is re-readable via 获取 VK. Telling a user to panic-copy a key
+              they can re-open is the kind of copy that trains them to distrust
+              the UI, so it says what is actually true. */}
+          <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.vk.revealedNote')}</p>
         </>
       ) : (
-        /* Reuse-first no-op (2026-07-19): an active VK already exists but its
-           plaintext is unrecoverable (hash-only), so we reveal NOTHING new — only
-           the masked hint so the member can confirm "this is the VK I hold". The
-           old key keeps working; Rotate is the explicit path to a fresh usable one. */
+        /* Nothing revealable: an active VK exists but predates encrypted
+           retention, so its plaintext genuinely does not exist anywhere. Show the
+           mask for identification; Rotate is the only path to a value that can be
+           displayed from then on. The old key keeps working until they rotate. */
         <div className="space-y-2">
-          {agent.vk_hint && (
+          {agent.vk_hint ? (
             <div className="space-y-1">
-              <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.vk.hintLabel')}</label>
+              <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.vk.hintLabel')}</label>
               <code className="block px-3 py-2 text-xs rounded truncate" style={{ background: 'var(--muted)', border: '1px solid var(--border)', color: 'var(--foreground)' }}>{agent.vk_hint}</code>
             </div>
+          ) : (
+            /* Pre-alpha.5 VK: issued before token_hint was populated, so there is
+               not even a mask. Without this branch the modal is a dead end —
+               2026-07-28 real-machine finding on staging (1 of 3 agent VKs had an
+               empty hint); the master console already carries the same branch. */
+            <div className="text-[10px] font-mono px-3 py-2 rounded leading-relaxed" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
+              {t('accessTokens.vk.noHint')}
+            </div>
           )}
-          <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.vk.existingHint')}</p>
+          <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.vk.existingHint')}</p>
         </div>
       )}
       {/* A minted VK does not imply the source pool can serve. Keep the
@@ -506,15 +581,15 @@ function VKRevealModal({ agent, onClose }: { agent: MyAgentDTO; onClose: () => v
         style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
       >
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
-          <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('myAgents.vk.title', { name: agent.alias })}</h3>
+          <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('accessTokens.vk.title', { name: agent.alias })}</h3>
           <button onClick={onClose} style={{ color: 'var(--muted-foreground)' }}>✕</button>
         </div>
         <div className="px-6 py-5 space-y-4">
-          <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.vk.hint')}</p>
+          <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.vk.hint')}</p>
           <ConnectionReveal agent={agent} onNavigate={onClose} />
         </div>
         <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
-          <button onClick={onClose} className="btn btn-primary text-xs px-6 py-2">{t('myAgents.create.done')}</button>
+          <button onClick={onClose} className="btn btn-primary text-xs px-6 py-2">{t('accessTokens.create.done')}</button>
         </div>
       </div>
     </ModalPortal>
@@ -554,7 +629,7 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
       setCreated(r); // reveals the VK inline (or stays pending if the pool is still empty)
       qc.invalidateQueries({ queryKey: ['my-agents'] });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : t('myAgents.create.getVKFailed'));
+      setErr(e instanceof Error ? e.message : t('accessTokens.create.getVKFailed'));
     } finally {
       setGettingVK(false);
     }
@@ -574,7 +649,7 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
       setCreated(agent); // → step 2: reveal base_url + VK
     } catch (e) {
       const anyE = e as { response?: { data?: { message?: string; error?: string } } };
-      setErr(anyE.response?.data?.message || anyE.response?.data?.error || (e instanceof Error ? e.message : t('myAgents.create.failed')));
+      setErr(anyE.response?.data?.message || anyE.response?.data?.error || (e instanceof Error ? e.message : t('accessTokens.create.failed')));
     } finally {
       setSubmitting(false);
     }
@@ -590,7 +665,7 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
       >
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
-            {created ? t('myAgents.create.titleCreated') : t('myAgents.create.titleNew')}
+            {created ? t('accessTokens.create.titleCreated') : t('accessTokens.create.titleNew')}
           </h3>
           <button onClick={close} disabled={submitting} style={{ color: 'var(--muted-foreground)' }}>✕</button>
         </div>
@@ -598,7 +673,7 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
         {!created ? (
           <>
             <div className="px-6 py-5 space-y-3">
-              <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.create.providerLabel')}</label>
+              <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.create.providerLabel')}</label>
               <div className="flex gap-2">
                 {([['anthropic', 'Claude'], ['openai', 'Codex']] as const).map(([code, label]) => (
                   <button
@@ -621,7 +696,7 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
                 style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}
               >
                 <div className="text-[10px] font-mono font-bold" style={{ color: 'var(--foreground)' }}>
-                  {t('myAgents.create.preflightTitle')}
+                  {t('accessTokens.create.preflightTitle')}
                 </div>
                 {existingProviderPool ? (
                   <div className="flex items-center justify-between gap-3">
@@ -635,26 +710,26 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
                   </div>
                 ) : (
                   <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                    {t('myAgents.create.preflightNewPool')}
+                    {t('accessTokens.create.preflightNewPool')}
                   </p>
                 )}
                 <p className="text-[9px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                  {t('myAgents.create.preflightNonBlocking')}
+                  {t('accessTokens.create.preflightNonBlocking')}
                 </p>
               </div>
-              <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.create.nameLabel')}</label>
+              <label className="block text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.create.nameLabel')}</label>
               <input className="w-full px-3 py-2 text-sm" placeholder="my-research-agent" value={alias} onChange={e => setAlias(e.target.value)} disabled={submitting} />
               <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
-                {t('myAgents.create.hint')}
+                {t('accessTokens.create.hint')}
               </p>
               {err && (
                 <div role="alert" aria-live="assertive" className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>{err}</div>
               )}
             </div>
             <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
-              <button onClick={close} className="px-4 py-2 text-xs font-mono font-bold rounded border" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>{t('myAgents.create.cancel')}</button>
+              <button onClick={close} className="px-4 py-2 text-xs font-mono font-bold rounded border" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>{t('accessTokens.create.cancel')}</button>
               <button onClick={submit} disabled={!alias.trim() || submitting} className="btn btn-primary text-xs px-4 py-2 disabled:opacity-40">
-                {submitting ? t('myAgents.create.submitting') : t('myAgents.create.submit')}
+                {submitting ? t('accessTokens.create.submitting') : t('accessTokens.create.submit')}
               </button>
             </div>
           </>
@@ -662,13 +737,13 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
           <>
             <div className="px-6 py-5 space-y-4">
               <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
-                {t('myAgents.create.connHint')}
+                {t('accessTokens.create.connHint')}
               </p>
               <ConnectionReveal agent={created} onNavigate={close} onGetVK={getVK} gettingVK={gettingVK} />
               <ConnectionSelfCheck agent={created} />
             </div>
             <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
-              <button onClick={close} className="btn btn-primary text-xs px-6 py-2">{t('myAgents.create.done')}</button>
+              <button onClick={close} className="btn btn-primary text-xs px-6 py-2">{t('accessTokens.create.done')}</button>
             </div>
           </>
         )}
@@ -681,6 +756,53 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
 // Rotation is the ONE destructive VK action: it re-mints the token and instantly
 // invalidates the current one. Gated behind an explicit confirm so a member can
 // never lose a working VK by reflex — the reuse-first "Get VK" is non-destructive.
+// Revoke is TERMINAL: seat_status goes to `revoked`, which nothing in the
+// product can move back (it is also what the orphan reconcile writes, so a
+// member-side "un-revoke" would let a member undo a governance action — OA5b).
+// The confirmation therefore has to state all three consequences, not just ask
+// "are you sure": the token stops routing immediately, the VK cannot be
+// recovered (hash-only storage), and the third-party agent must be re-pointed
+// at a NEW token.
+function RevokeConfirmModal({ agent, busy, onConfirm, onClose }: {
+  agent: MyAgentDTO; busy: boolean; onConfirm: () => void; onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <ModalPortal>
+      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={!busy ? onClose : undefined} />
+      <div
+        className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border"
+        style={{ backgroundColor: 'var(--card)', borderColor: 'rgba(239,68,68,0.4)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+      >
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: '#f87171' }}>
+            {t('accessTokens.revoke.confirmTitle', { name: agent.alias })}
+          </h3>
+          <button onClick={onClose} disabled={busy} style={{ color: 'var(--muted-foreground)' }}>✕</button>
+        </div>
+        <div className="px-6 py-5">
+          <p className="text-[11px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+            {t('accessTokens.revoke.confirmBody')}
+          </p>
+        </div>
+        <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
+          <button onClick={onClose} disabled={busy} className="px-4 py-2 text-xs font-mono font-bold rounded border disabled:opacity-40" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+            {t('accessTokens.vk.rotateConfirm.cancel')}
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className="px-4 py-2 text-xs font-mono font-bold rounded border disabled:opacity-40"
+            style={{ color: '#f87171', borderColor: 'rgba(239,68,68,0.5)', backgroundColor: 'rgba(239,68,68,0.1)' }}
+          >
+            {busy ? t('accessTokens.revoke.busy') : t('accessTokens.revoke.confirmAction')}
+          </button>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}
+
 function RotateConfirmModal({ agent, busy, onConfirm, onClose }: {
   agent: MyAgentDTO; busy: boolean; onConfirm: () => void; onClose: () => void;
 }) {
@@ -693,17 +815,17 @@ function RotateConfirmModal({ agent, busy, onConfirm, onClose }: {
         style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
       >
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
-          <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('myAgents.vk.rotateConfirm.title')}</h3>
+          <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('accessTokens.vk.rotateConfirm.title')}</h3>
           <button onClick={onClose} disabled={busy} style={{ color: 'var(--muted-foreground)' }}>✕</button>
         </div>
         <div className="px-6 py-5">
           <div className="text-[11px] font-mono leading-relaxed px-3 py-2 rounded" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
-            {t('myAgents.vk.rotateConfirm.body', { name: agent.alias })}
+            {t('accessTokens.vk.rotateConfirm.body', { name: agent.alias })}
           </div>
         </div>
         <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
           <button onClick={onClose} disabled={busy} className="px-4 py-2 text-xs font-mono font-bold rounded border disabled:opacity-40" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-            {t('myAgents.vk.rotateConfirm.cancel')}
+            {t('accessTokens.vk.rotateConfirm.cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -711,7 +833,7 @@ function RotateConfirmModal({ agent, busy, onConfirm, onClose }: {
             className="text-xs font-mono font-bold px-4 py-2 rounded border disabled:opacity-40"
             style={{ color: '#f59e0b', borderColor: 'rgba(245,158,11,0.5)', backgroundColor: 'rgba(245,158,11,0.1)' }}
           >
-            {busy ? t('myAgents.vk.rotating') : t('myAgents.vk.rotateConfirm.confirm')}
+            {busy ? t('accessTokens.vk.rotating') : t('accessTokens.vk.rotateConfirm.confirm')}
           </button>
         </div>
       </div>
@@ -747,22 +869,36 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
       setActionErr('');
       qc.invalidateQueries({ queryKey: ['my-agents'] });
     } catch (e) {
-      setActionErr(e instanceof Error ? e.message : t('myAgents.actionFailed'));
+      setActionErr(e instanceof Error ? e.message : t('accessTokens.actionFailed'));
     } finally {
       setLoading(false);
     }
   }
-  // Get VK — NON-destructive (reuse-first). First-issues when the agent has no VK
-  // yet; otherwise a no-op that reveals only the masked hint (plaintext is
-  // hash-only / unrecoverable). Safe to click repeatedly — never invalidates a
-  // VK already in use.
+  // Get VK — NON-destructive in every branch. Safe to click repeatedly; it can
+  // never invalidate a VK already pasted into a third-party agent.
+  //
+  // 2026-08-10: reveal FIRST. Agent VKs are minted with encrypted retention on,
+  // so the live plaintext is recoverable — before this the member's own console
+  // could only show them a mask while the master console could show the value
+  // (permission inversion, bugfix 2026-08-10-member-cannot-reveal-own-agent-vk).
+  //
+  // Fall back to ensure ONLY when there is genuinely nothing to reveal yet:
+  // `vk_pending && !pool_empty` means "the pool can mint but no VK exists", i.e.
+  // first issue. Reveal deliberately never mints (that invariant is fenced in
+  // onlineagent/reveal_mine_test.go), so the first-issue affordance has to live
+  // here rather than being folded into the server's reveal path.
   async function getVK() {
     setGetting(true);
     try {
-      setRevealed(await userAccountsApi.getAgentVK(agent.seat_id));
+      let r = await userAccountsApi.revealAgentVK(agent.seat_id);
+      if (r.vk_pending && !r.pool_empty) {
+        r = await userAccountsApi.getAgentVK(agent.seat_id);
+        qc.invalidateQueries({ queryKey: ['my-agents'] }); // a first issue changes the row's hint
+      }
+      setRevealed(r);
       setActionErr('');
     } catch (e) {
-      setActionErr(e instanceof Error ? e.message : t('myAgents.actionFailed'));
+      setActionErr(e instanceof Error ? e.message : t('accessTokens.actionFailed'));
     } finally {
       setGetting(false);
     }
@@ -778,7 +914,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
       setRevealed(r);
       qc.invalidateQueries({ queryKey: ['my-agents'] }); // refresh the list hint
     } catch (e) {
-      setActionErr(e instanceof Error ? e.message : t('myAgents.actionFailed'));
+      setActionErr(e instanceof Error ? e.message : t('accessTokens.actionFailed'));
     } finally {
       setRotating(false);
     }
@@ -799,7 +935,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
             className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
             style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.3)', backgroundColor: 'rgba(96,165,250,0.06)' }}
           >
-            {getting ? '...' : t('myAgents.vk.button')}
+            {getting ? '...' : t('accessTokens.vk.button')}
           </button>
           <button
             onClick={() => setConfirmRotate(true)}
@@ -807,7 +943,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
             className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
             style={{ color: '#f59e0b', borderColor: 'rgba(245,158,11,0.3)', backgroundColor: 'rgba(245,158,11,0.06)' }}
           >
-            {t('myAgents.vk.rotate')}
+            {t('accessTokens.vk.rotate')}
           </button>
         </>
       )}
@@ -818,18 +954,18 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
           className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
           style={{ color: '#f97316', borderColor: 'rgba(249,115,22,0.3)', backgroundColor: 'rgba(249,115,22,0.06)' }}
         >
-          {loading ? '...' : t('myAgents.disable')}
+          {loading ? '...' : t('accessTokens.disable')}
         </button>
       )}
       {agent.status === 'suspended' && (
         <button
           onClick={() => setStatus('resume')}
           disabled={loading}
-          title={t('myAgents.enableTitle')}
+          title={t('accessTokens.enableTitle')}
           className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
           style={{ color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)', backgroundColor: 'rgba(74,222,128,0.06)' }}
         >
-          {loading ? '...' : t('myAgents.enable')}
+          {loading ? '...' : t('accessTokens.enable')}
         </button>
       )}
       {/* Revoked is terminal — say so instead of showing a button that would
@@ -837,7 +973,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
           rather than something they discover by clicking. */}
       {agent.status === 'revoked' && (
         <span className="text-[10px] font-mono whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>
-          {t('myAgents.revokedTerminal')}
+          {t('accessTokens.revokedTerminal')}
         </span>
       )}
       {confirmRotate && (
@@ -885,10 +1021,10 @@ export default function MyAgentsPage() {
       <div className="vault-page p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-mono font-bold tracking-widest" style={{ color: 'var(--foreground)' }}>{t('myAgents.title')}</h1>
-          <p className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.subtitle')}</p>
+          <h1 className="text-lg font-mono font-bold tracking-widest" style={{ color: 'var(--foreground)' }}>{t('accessTokens.title')}</h1>
+          <p className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.subtitle')}</p>
         </div>
-        <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-primary-dim text-xs px-4 py-2">{t('myAgents.newAgent')}</button>
+        <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-primary-dim text-xs px-4 py-2">{t('accessTokens.newAgent')}</button>
       </div>
 
       <section className="card overflow-hidden">
@@ -896,27 +1032,27 @@ export default function MyAgentsPage() {
             (label + count chips), so the two tables read as one family. */}
         <div className="card-header flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
-            <span>{t('myAgents.cardAll')}</span>
+            <span>{t('accessTokens.cardAll')}</span>
             <span className="chip">
               <span className="status-dot idle" style={{ width: 5, height: 5 }} />
-              {t('myAgents.cardTotal', { count: counts.total })}
+              {t('accessTokens.cardTotal', { count: counts.total })}
             </span>
             {counts.active > 0 && (
               <span className="chip success">
                 <span className="status-dot" style={{ width: 5, height: 5 }} />
-                {t('myAgents.cardActive', { count: counts.active })}
+                {t('accessTokens.cardActive', { count: counts.active })}
               </span>
             )}
             {counts.suspended > 0 && (
               <span className="chip warning">
                 <span className="status-dot stale" style={{ width: 5, height: 5 }} />
-                {t('myAgents.cardSuspended', { count: counts.suspended })}
+                {t('accessTokens.cardSuspended', { count: counts.suspended })}
               </span>
             )}
             {counts.revoked > 0 && (
               <span className="chip danger">
                 <span className="status-dot error" style={{ width: 5, height: 5 }} />
-                {t('myAgents.cardRevoked', { count: counts.revoked })}
+                {t('accessTokens.cardRevoked', { count: counts.revoked })}
               </span>
             )}
           </div>
@@ -930,31 +1066,31 @@ export default function MyAgentsPage() {
                     uppercase). Actions header stays right-aligned inline —
                     the shared rule's text-align:left outranks a utility
                     class, so inline style is the reliable override. */}
-                <th>{t('myAgents.col.agent')}</th>
-                <th>{t('myAgents.col.source')}</th>
-                <th>{t('myAgents.col.status')}</th>
-                <th>{t('myAgents.col.availability')}</th>
-                <th>{t('myAgents.col.routing')}</th>
-                <th>{t('myAgents.col.created')}</th>
-                <th style={{ textAlign: 'right' }}>{t('myAgents.col.actions')}</th>
+                <th>{t('accessTokens.col.agent')}</th>
+                <th>{t('accessTokens.col.source')}</th>
+                <th>{t('accessTokens.col.status')}</th>
+                <th>{t('accessTokens.col.availability')}</th>
+                <th>{t('accessTokens.col.routing')}</th>
+                <th>{t('accessTokens.col.created')}</th>
+                <th style={{ textAlign: 'right' }}>{t('accessTokens.col.actions')}</th>
               </tr>
             </thead>
             <tbody className="font-mono text-xs">
               {isLoading && (
-                <tr><td colSpan={7} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.loading')}</td></tr>
+                <tr><td colSpan={7} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.loading')}</td></tr>
               )}
               {isError && (
                 <tr>
                   <td colSpan={7} className="px-5 py-8 text-center">
                     <div role="alert" aria-live="assertive" className="inline-flex items-center gap-3 rounded px-3 py-2" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.38)' }}>
-                      <span>{t('myAgents.loadError')}</span>
-                      <button type="button" className="row-use-btn" onClick={() => void refetch()}>{t('myAgents.retry')}</button>
+                      <span>{t('accessTokens.loadError')}</span>
+                      <button type="button" className="row-use-btn" onClick={() => void refetch()}>{t('accessTokens.retry')}</button>
                     </div>
                   </td>
                 </tr>
               )}
               {agents && agents.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('myAgents.empty')}</td></tr>
+                <tr><td colSpan={7} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.empty')}</td></tr>
               )}
               {agents?.map(agent => (
                 <tr key={agent.seat_id}>
@@ -969,8 +1105,8 @@ export default function MyAgentsPage() {
                         type="button"
                         className="alias-main mono cursor-pointer text-left hover:underline focus-visible:underline"
                         onClick={() => setRoutingAgent(agent)}
-                        title={t('myAgents.routing.openTitle', { account: agent.alias })}
-                        aria-label={t('myAgents.routing.openTitle', { account: agent.alias })}
+                        title={t('accessTokens.routing.openTitle', { account: agent.alias })}
+                        aria-label={t('accessTokens.routing.openTitle', { account: agent.alias })}
                       >
                         {agent.alias}
                       </button>

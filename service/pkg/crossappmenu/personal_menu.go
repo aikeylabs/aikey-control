@@ -58,22 +58,6 @@ var PersonalMenu = []Entry{
 		Visibility: VisibilityAlways,
 		Icon:       "cost",
 	},
-	// Online Agents (alpha.5). PEER of Apps (方案 A, 2026-07-16): an agent is a
-	// seat principal exposing a team OAuth VK, not a consuming app. team-logged-in
-	// — agents only exist in a cluster/team org. MUST match own-menu.ts
-	// (ts_drift_test asserts id+path parity).
-	// 2026-07-17: label "My Agents" → "Agents" (sidebar group display-renamed
-	// to "Agents & Apps"). ID unchanged — wire-contract identity.
-	// 2026-07-18 (user decision): Agents listed BEFORE Apps, matching the
-	// group title order ("Agents & Apps"). Keep in sync with own-menu.ts.
-	{
-		ID:         "personal-my-agents",
-		Group:      GroupApps,
-		Label:      "Agents",
-		Path:       "/user/my-agents",
-		Visibility: VisibilityTeamLoggedIn,
-		Icon:       "my-agents",
-	},
 	// Phase 4 阶段 3 (2026-05-21): Connected Apps. Same shape as the
 	// other personalOnly entries — published here so B's sidebar can
 	// surface a cross-app link back to A's /user/apps page.
@@ -131,6 +115,40 @@ var PersonalMenu = []Entry{
 		Visibility: VisibilityAlways,
 		Icon:       "oauth-contribute",
 	},
+	// Access Token (alpha.5, was "Online Agents"). A seat principal that exposes
+	// a team OAuth VK to a third-party agent product — the user-facing artifact
+	// is the token, not the seat. team-logged-in: it only exists in a
+	// cluster/team org. MUST match own-menu.ts (ts_drift_test asserts id+path
+	// parity).
+	//
+	// 2026-08-10 (user decision): renamed "Agents" → "Access Token" (zh 令牌管理)
+	// and MOVED from the APPS group to KEYS. Two reasons: (a) "Agent" was a pun —
+	// it meant both this seat and the third-party tool (Claude Code / Codex) that
+	// consumes it, and the rename resolves it in favour of the tool; (b) what this
+	// page manages is a credential, so it belongs beside Vault / Team Keys /
+	// Team OAuth. Placed AFTER Team OAuth because a token draws from that pool.
+	//
+	// 2026-08-10 (user decision 全量改名): ID, Path and Icon renamed too — unlike
+	// the Cost→Performance round, which kept "personal-cost" forever.
+	//
+	// Why that is safe HERE: the label a peer renders comes from THIS response,
+	// and the handler already localizes it by Accept-Language (personalMenuZhLabels).
+	// A peer on an older binary simply does not recognise the new id, so it falls
+	// through to the wire label — which is already the correct, localized string.
+	// The reconciliation key for slotting the entry into a local nav group is the
+	// PATH, not the id (UserShell: crossAppItems.find(e => e.path === item.path)).
+	//
+	// The PATH change is the one with a real window: an old peer publishes/expects
+	// /user/my-agents. Both web apps keep that URL as a Navigate redirect, so a
+	// stale cross-app trailer still lands on the right page instead of 404.
+	{
+		ID:         "personal-access-tokens",
+		Group:      GroupKeys,
+		Label:      "Access Token",
+		Path:       "/user/access-tokens",
+		Visibility: VisibilityTeamLoggedIn,
+		Icon:       "access-token",
+	},
 	// Phase 3B R16 (2026-05-11): Account intentionally NOT exposed via
 	// cross-app — both A and B have local /user/account routes showing
 	// side-relevant data. Each side renders its own Account NavLink
@@ -175,12 +193,15 @@ var personalMenuZhLabels = map[string]string{
 	"personal-usage":            "用量",
 	"personal-cost":             "性能", // Label "Performance"; ID kept for back-compat.
 	"personal-apps":             "应用",
-	// 2026-07-17 rename ("My Agents" → "Agents"): the zh label follows the
-	// same decision — "Agent" is a domain proper noun kept untranslated
-	// (naming dictionary), and the "my" prefix is redundant on the user-side
-	// console. Missing this map while the web-side key was renamed is exactly
-	// how zh consumers of /system/cross-app-menu kept showing the old name.
-	"personal-my-agents":        "Agents",
+	// 2026-08-10 rename ("Agents" → "Access Token"): unlike the 2026-07-17 round,
+	// the zh label is now TRANSLATED («令牌管理»). "Agent" was kept untranslated
+	// because it was a domain proper noun; "令牌" is deliberately NOT the
+	// transliteration "Token" — it keeps the credential sense clear of the
+	// billing-unit "token" (input_tokens / token 配额) that appears two menu
+	// items away under 用量. Missing this map while the web-side value was
+	// renamed is exactly how zh consumers of /system/cross-app-menu kept showing
+	// the old name.
+	"personal-access-tokens":   "访问令牌",
 	"personal-trust-check":      "置信度检测",
 	"personal-compliance":       "合规审计",
 	"personal-oauth-contribute": "团队OAuth",

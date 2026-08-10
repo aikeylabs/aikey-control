@@ -37,6 +37,20 @@ const (
 	// the actor, the target agent seat and the action are auditable. Never
 	// carries token material (the plaintext is returned to the caller only).
 	EventControlAdminAgentVKAction = "control.onlineagent.admin_vk_action"
+	// EventControlLegacyAPIPathUsed fires when a request arrives on a renamed
+	// endpoint's retired path (see HandleWithLegacyPath). It is the ONLY evidence
+	// that lets a later release delete the alias: zero occurrences across a
+	// release window means no shipped client still calls it. WARN, not INFO —
+	// it must survive default log levels, otherwise the evidence is missing
+	// exactly where it is needed (production).
+	EventControlLegacyAPIPathUsed = "control.api.legacy_path_used"
+	// EventControlMemberAgentVKAction is the member self-service twin of
+	// EventControlAdminAgentVKAction: the OWNER ensuring, rotating or revealing
+	// their own agent's VK. Kept as a separate name (rather than reusing the
+	// admin one with an actor field) so "someone acted on a credential that is
+	// not theirs" stays a distinct, alertable signal. Never carries token
+	// material.
+	EventControlMemberAgentVKAction = "control.onlineagent.member_vk_action"
 	// EventControlSSOStateRejected fires when a `state` handle is presented that
 	// was already consumed or was issued for another provider. A handle goes to
 	// the provider exactly once, so this is an attack signal — alert on it rather
@@ -68,4 +82,26 @@ const (
 	// Partial success is exactly the case that needs a log line — a total
 	// failure at least surfaces an error code to the user.
 	EventUserAPICliBridgeStderr = "userapi.cli_bridge.stderr"
+	// EventUserLocalComplianceWireDriftDetected fires when the Personal/Trial
+	// local compliance ingest decodes a payload carrying JSON fields this build
+	// does not know: the detector is ahead of the local-server and the extra
+	// fields were silently dropped into the void. Before 2026-08-10 this lane
+	// had NO strict check at all, so a wire addition on the detector side just
+	// evaporated — the event still landed, minus data, with zero evidence
+	// anywhere. The team lane surfaces the same drift as a 400 (it can afford
+	// to: aikey-proxy dead-letters and replays it); this lane cannot, so it
+	// keeps the event and raises the alarm instead.
+	//
+	// STATE, NOT STREAM: emitted only on the CLEAN → DRIFT transition. Drift is
+	// a standing condition — once the detector adds a field, EVERY batch trips
+	// it — so per-request logging would be a flood. See the paired _cleared
+	// name for the DRIFT → CLEAN edge, which carries the episode's damage total.
+	EventUserLocalComplianceWireDriftDetected = "userlocal.compliance_ingest.wire_drift_detected"
+	// EventUserLocalComplianceWireDriftCleared fires on the DRIFT → CLEAN edge
+	// (or when the drift signature changes), carrying how many requests were
+	// suppressed while the condition stood. Logged at WARN, not INFO, on
+	// purpose: it is the ONLY place the damage total appears, so an operator
+	// filtering on WARN must not be shown the start of an episode without its
+	// end. Bounded at one line per episode.
+	EventUserLocalComplianceWireDriftCleared = "userlocal.compliance_ingest.wire_drift_cleared"
 )

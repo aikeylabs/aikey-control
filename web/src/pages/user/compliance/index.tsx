@@ -4,8 +4,18 @@
  * Phase 3 (2026-06-02). The LOCAL counterpart to the master/team audit page:
  * shows the compliance events detected on THIS machine for the local user.
  * No tenant (single-user) — loads immediately. Filters: severity / category /
- * action. Row click → detail drawer with per-finding metadata + already-
- * redacted snippet (never the raw prompt — DC5). Offset pagination.
+ * action. Row click → detail drawer with per-finding metadata + snippet.
+ * Offset pagination.
+ *
+ * Snippet visibility (2026-08-09 用户拍板, reversing the 2026-06-03 decision):
+ * the list and the drawer show the MASKED snippet (`redacted_snippet`) by
+ * default; the un-redacted `context_snippet` sits behind a per-finding eye
+ * toggle. Rationale: on your OWN machine, a masked `***CN_NAME***` cannot tell
+ * you which of your own values tripped the rule, which is the entire point of a
+ * self-view. DC5 is 「原文不出本机」, not 「原文不可见」 — this data never left the
+ * box (local-server on 127.0.0.1) and is purged after 30 days. The detector
+ * populates `context_snippet` only on the local lane (cmd/detector
+ * mayCarryRawSnippet); the master intake wire has no such field at all.
  *
  * Structure mirrors aikey-control-master/web .../master/compliance/audit so the
  * two views stay visually consistent; the only differences are: no tenant
@@ -48,6 +58,30 @@ function actionVariant(a: string): 'red' | 'yellow' | 'green' | 'gray' {
     case 'warn': return 'gray';
     default: return 'green'; // allow
   }
+}
+
+// Reveal toggle — lucide "eye" / "eye-off", inlined with the SAME path data as
+// pages/user/access-tokens (this app's other reveal control) and the master
+// console's compliance-audit + orgs/agents twins. One glyph for "show me what is
+// hidden" everywhere in both consoles; no icon-library dep. Keep byte-identical.
+function EyeIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.06 12.35a1 1 0 010-.7 10.75 10.75 0 0119.88 0 1 1 0 010 .7 10.75 10.75 0 01-19.88 0z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.73 5.08a10.74 10.74 0 0111.21 6.57 1 1 0 010 .7 10.75 10.75 0 01-1.45 2.49" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.08 14.16a3 3 0 01-4.24-4.24" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17.48 17.5a10.75 10.75 0 01-15.42-5.15 1 1 0 010-.7 10.75 10.75 0 014.45-5.14" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2 2l20 20" />
+    </svg>
+  );
 }
 
 const SEV_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1, low: 0 };
@@ -116,6 +150,23 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   // doubles as the wire `limit`, so it must be part of the queryKey.
   const [pageSize, setPageSize] = useStoredPageSize(PAGE_SIZE);
   const [packsOpen, setPacksOpen] = useState(false);
+  // Per-finding "show the un-redacted text" toggles, keyed by finding_id.
+  // Deliberately NOT persisted and reset whenever the drawer opens another
+  // event: revealing raw text should be a per-look decision, never a sticky
+  // preference that quietly un-masks every event you open afterwards.
+  const [revealedFindings, setRevealedFindings] = useState<Set<string>>(new Set());
+  function toggleReveal(findingId: string) {
+    setRevealedFindings((prev) => {
+      const next = new Set(prev);
+      if (next.has(findingId)) next.delete(findingId);
+      else next.add(findingId);
+      return next;
+    });
+  }
+  function openEvent(e: ComplianceEventDTO | null) {
+    setRevealedFindings(new Set());
+    setSelected(e);
+  }
 
   // ── Compliance master switch (feature on/off) ────────────────────────────
   // Reuses the app filter enable/disable: filter_stages NULL = off, set = on;
@@ -445,7 +496,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                 <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.noEvents')}</td></tr>
               ) : (
                 events.map((e) => (
-                  <tr key={e.event_id} className="cursor-pointer transition-colors hover:bg-[rgba(250,204,21,0.045)]" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => setSelected(e)}>
+                  <tr key={e.event_id} className="cursor-pointer transition-colors hover:bg-[rgba(250,204,21,0.045)]" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => openEvent(e)}>
                     <td className="px-4 py-3.5 text-xs font-mono" style={{ color: 'var(--foreground)' }}>{fmtTime(e.created_at)}</td>
                     <td className="px-4 py-3.5"><Badge variant={actionVariant(e.action_taken)}>{e.action_taken.toUpperCase()}</Badge></td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
@@ -460,7 +511,14 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                     <td className="px-4 py-3.5">
                       {(() => {
                         const f0 = e.findings[0];
-                        const snip = (f0?.context_snippet || f0?.redacted_snippet || '').replace(/\s+/g, ' ').trim();
+                        // 🔴 MASKED form ONLY — never context_snippet. The invariant the
+                        // 2026-08-09 decision rests on is "raw text appears only behind
+                        // the eye", and the list has no per-row reveal control. Falling
+                        // back to context_snippet here would put raw values on screen
+                        // with no way to hide them again. A row whose finding has no
+                        // masked form shows the em-dash; its raw text is one click away
+                        // in the drawer.
+                        const snip = (f0?.redacted_snippet || '').replace(/\s+/g, ' ').trim();
                         return snip ? (
                           <div className="text-[11px] font-mono truncate" style={{ color: 'var(--muted-foreground)' }}>
                             {renderMaskedSnippet(snip)}
@@ -494,7 +552,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
 
       <DetailDrawer
         open={!!selected}
-        onClose={() => setSelected(null)}
+        onClose={() => openEvent(null)}
         title={t('compliancePage.drawerTitle')}
         subtitle={selected?.event_id?.slice(0, 12)}
       >
@@ -523,15 +581,57 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                       <span className="text-[10px] font-mono ml-auto whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>{f.category} · {f.confidence}</span>
                     </div>
                     {f.detector && <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.fieldDetector')}: {f.detector}</p>}
-                    {/* Local self-view shows the un-redacted matched text + context
-                        (context_snippet); falls back to the redacted placeholder if
-                        the detector didn't supply it. Local-only — never原文 on the
-                        team view. */}
-                    {(f.context_snippet || f.redacted_snippet) && (
-                      <div className="text-[11px] font-mono mt-2 break-all whitespace-pre-wrap rounded px-2 py-1.5 leading-relaxed" style={{ color: 'var(--foreground)', backgroundColor: 'rgba(0,0,0,0.28)', border: '1px solid var(--border)' }}>
-                        {renderMaskedSnippet(f.context_snippet || f.redacted_snippet || '')}
-                      </div>
-                    )}
+                    {/* Snippet + eye (2026-08-09 用户拍板 — see the file header).
+                        Default = masked. The eye renders ONLY when there IS raw text
+                        to reveal: a button that does nothing when clicked is worse
+                        than no button, and `context_snippet` is legitimately absent
+                        for events recorded between 2026-06-03 and this change, or by
+                        a detector that predates it. That absence gets its own note
+                        rather than a dead control. */}
+                    {(() => {
+                      const raw = f.context_snippet ?? '';
+                      const masked = f.redacted_snippet ?? '';
+                      const revealed = revealedFindings.has(f.finding_id);
+                      const shown = revealed && raw ? raw : masked;
+                      if (!raw && !masked) return null;
+                      return (
+                        <div className="mt-2 space-y-1.5">
+                          {shown && (
+                            <div
+                              className="text-[11px] font-mono break-all whitespace-pre-wrap rounded px-2 py-1.5 leading-relaxed"
+                              style={{
+                                color: 'var(--foreground)',
+                                backgroundColor: 'rgba(0,0,0,0.28)',
+                                // Revealed raw text gets a warm left edge so it is
+                                // obvious at a glance which cards are un-masked.
+                                border: '1px solid var(--border)',
+                                borderLeft: revealed && raw ? '2px solid var(--primary-dim)' : '1px solid var(--border)',
+                              }}
+                            >
+                              {renderMaskedSnippet(shown)}
+                            </div>
+                          )}
+                          {raw ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleReveal(f.finding_id)}
+                              title={revealed ? t('compliancePage.hideOriginal') : t('compliancePage.revealOriginal')}
+                              aria-label={revealed ? t('compliancePage.hideOriginal') : t('compliancePage.revealOriginal')}
+                              aria-expanded={revealed}
+                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded border text-[10px] font-mono"
+                              style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
+                            >
+                              {revealed ? <EyeOffIcon /> : <EyeIcon />}
+                              {revealed ? t('compliancePage.hideOriginal') : t('compliancePage.revealOriginal')}
+                            </button>
+                          ) : (
+                            <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+                              {t('compliancePage.originalUnavailable')}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>

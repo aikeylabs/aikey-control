@@ -203,10 +203,29 @@ function DollarIcon()      { return <NavIcon d={ICON_DOLLAR} />; }
 // canonical performance-profiling mark (lucide `gauge`). Replaces the dollar
 // sign, a leftover from the page's "Cost" era that no longer matches its
 // profiling identity.
+// Access Token nav glyph (2026-08-10 user request) — lucide-style TALLY SEAL — the
+// literal sense of 令牌 / 兵符: an object of authority split in two, one half
+// held by the issuer and one by the bearer, valid only when the halves match.
+// That is exactly this credential's relationship: the gateway holds the check,
+// the third-party agent holds the token it presents.
+//
+// Why not a key: the key marks belong to the OTHER route — Vault (shield),
+// Team Keys (three-person), Team OAuth (fingerprint) and the master console's
+// KeyIcon (虚拟密钥) all sit in the same group, and a fifth key-ish glyph would
+// make the very distinction this rename exists to draw invisible. The
+// perforation notch also reads at 16px, unlike a small key's bit.
+//
+// Replaces ICON_APPS, which Agents inherited from Connected Apps on 2026-08-01 —
+// an app-grid mark on a credential page. Path bytes must match the master
+// console's TokenTallyIcon (icons are mirrored console-wide).
+const ICON_TOKEN_TALLY =
+  'M12 2.8L19.6 7.2L19.6 16.8L12 21.2L4.4 16.8L4.4 7.2Z M12 2.8l2.2 4.6 -4.4 4.6 4.4 4.6 -2.2 4.6';
+
 const ICON_GAUGE = 'm12 14 4-4 M3.34 19a10 10 0 1 1 17.32 0';
 function GaugeIcon() { return <NavIcon d={ICON_GAUGE} />; }
 function UploadCloudIcon() { return <NavIcon d={ICON_UPLOAD_CLOUD} />; }
 function AppsIcon()        { return <NavIcon d={ICON_APPS} />; }
+function TokenTallyIcon() { return <NavIcon d={ICON_TOKEN_TALLY} />; }
 function BotIcon()         { return <NavIcon d={ICON_BOT} />; }
 function UserPlusIcon()    { return <NavIcon d={ICON_USER_PLUS} />; }
 function ShieldIcon()      { return <NavIcon d={ICON_SHIELD} />; }
@@ -345,7 +364,7 @@ function crossAppIconFor(iconName: string | undefined): React.ReactNode {
     case 'team-chart':   return <TeamUsageIcon />;
     case 'cost':         return <GaugeIcon />;
     case 'apps':         return <PuzzleIcon />;
-    case 'my-agents':    return <AppsIcon />;
+    case 'access-token': return <TokenTallyIcon />;
     case 'trust-check':  return <RadarIcon />;
     case 'compliance':   return <ScaleIcon />;
     // 2026-08-01: fingerprint (the vault OAuth-kind mark) — was ShareIcon;
@@ -427,10 +446,10 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   // breadcrumb fell back to the raw URL segment ("用户 / my-agents") instead
   // of the localized nav label. Label matches navGroups so tNavLabel resolves
   // the same i18n key (navMyAgents), present in en+zh.
-  // 2026-07-17: display rename "My Agents" → "Agents" (group header now
-  // reads "Agents & Apps", so the "My" prefix was redundant). originName
-  // keeps 'My Agents' so data-origin-name selectors stay stable.
-  'my-agents':    { label: 'Agents',      originName: 'My Agents' },
+  // 2026-08-10: display rename "Agents" → "Access Token" (zh 令牌管理).
+  // originName keeps 'My Agents' so data-origin-name selectors stay stable
+  // across BOTH renames — it is a test anchor, not a user-facing string.
+  'access-tokens': { label: 'Access Token', originName: 'My Agents' },
   invites:        { label: 'Invites' },
   'trust-check':  { label: 'Trust Check' },
   // Compliance Audit (G-series, 2026-06): user-side page; present in BOTH
@@ -491,7 +510,7 @@ const NAV_LABEL_I18N_KEY: Record<string, string> = {
   'Team Usage': 'navTeamUsage',
   Performance: 'navPerformance',
   Apps: 'navApps',
-  Agents: 'navMyAgents',
+  'Access Token': 'navMyAgents',
   'Trust Check': 'navTrustCheck',
   'Compliance Audit': 'navComplianceAudit',
   Account: 'navAccount',
@@ -556,7 +575,7 @@ const CROSS_APP_LABEL_I18N_KEY: Record<string, string> = {
   // a Personal entry now (was the team-side 'team-oauth-contribute'). Label =
   // the menu nav label ("团队OAuth" / "Team OAuth").
   'personal-oauth-contribute': 'userShell.navOauthContribute',
-  'personal-my-agents': 'userShell.navMyAgents',
+  'personal-access-tokens': 'userShell.navMyAgents',
 };
 
 /** Avatar initials for a DISPLAY LABEL (a name, a discriminator or an address —
@@ -1071,6 +1090,13 @@ export function UserShell() {
         // A's OWN_PERSONAL_MENU ('personal-oauth-contribute'). Same pattern as
         // Vault / Trust Check (local page + cross-app trailer on the other side).
         { path: '/user/team-oauth', icon: <FingerprintIcon />,   label: 'Team OAuth', personalOnly: true, requiresTeamLogin: true },
+        // Access Token (was "Agents", moved here from the APPS group 2026-08-10
+        // by user decision). A seat principal that exposes a team OAuth VK to a
+        // third-party agent product — the artifact the user copies is the token.
+        // Placed AFTER Team OAuth because a token draws from that pool.
+        // requiresTeamLogin: it only exists in a cluster/team org.
+        // Keep in sync with own-menu.ts + personal_menu.go (ts_drift_test).
+        { path: '/user/access-tokens', icon: <TokenTallyIcon />, label: 'Access Token', originName: 'My Agents', personalOnly: true, requiresTeamLogin: true },
       ],
     },
     {
@@ -1149,13 +1175,11 @@ export function UserShell() {
       // the new title back via TITLE_TO_GROUP_ALIASES.
       title: 'Agents & Apps',
       items: [
-        // Online Agents (alpha.5) — peer of Apps (方案 A). Local page (8090);
-        // requiresTeamLogin since agents only exist in a cluster/team org.
-        // 2026-07-17: label "My Agents" → "Agents" ("My" redundant on the
-        // user-side console); originName keeps 'My Agents' for selectors.
-        // 2026-07-18 (user decision): Agents listed BEFORE Apps, matching the
-        // group title order ("Agents & Apps").
-        { path: '/user/my-agents', icon: <AppsIcon />, label: 'Agents', originName: 'My Agents', personalOnly: true, requiresTeamLogin: true },
+        // 2026-08-10 (user decision): the Access Token item MOVED OUT of this
+        // group into KEYS — what it manages is a credential, so it belongs
+        // beside Vault / Team Keys / Team OAuth. The group TITLE was left as
+        // "Agents & Apps" on the user's explicit instruction; see the Keys group
+        // for the moved item.
         { path: '/user/apps', icon: <PuzzleIcon />, label: 'Apps', originName: 'Connected Apps', personalOnly: true },
       ],
     },

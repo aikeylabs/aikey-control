@@ -70,20 +70,6 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
   // distinct entry rather than merged into the Apps page. team-logged-in: agents
   // only exist in a cluster/team org (a Personal-only user can't create one), so
   // the entry is hidden until team context, like Team OAuth.
-  // 2026-07-17: label "My Agents" → "Agents" (group header display-renamed
-  // to "Agents & Apps"; "My" prefix redundant on the user-side console).
-  // id stays 'personal-my-agents' — wire-contract identity never changes.
-  // 2026-07-18 (user decision): Agents listed BEFORE Apps, matching the group
-  // title order ("Agents & Apps"). Keep in sync with UserShell navGroups +
-  // personal_menu.go.
-  {
-    id: 'personal-my-agents',
-    group: 'APPS',
-    label: 'Agents',
-    path: '/user/my-agents',
-    visibility: 'team-logged-in',
-    icon: 'my-agents',
-  },
   // Phase 4 阶段 3 (2026-05-21): Apps — surface A's local Connected
   // Apps list to B's sidebar. /api/user/apps/* lives on A's
   // local-server; B has no own /user/apps route.
@@ -139,6 +125,30 @@ export const OWN_PERSONAL_MENU: CrossAppMenuEntry[] = [
     path: '/user/team-oauth',
     visibility: 'always',
     icon: 'oauth-contribute',
+  },
+  // Access Token (alpha.5, was "Online Agents"). A seat principal that exposes a
+  // team OAuth VK to a third-party agent product; the user-facing artifact is the
+  // token, not the seat. team-logged-in: it only exists in a cluster/team org, so
+  // the entry stays hidden until team context, like Team OAuth.
+  //
+  // 2026-08-10 (user decision): renamed "Agents" → "Access Token" (zh 令牌管理)
+  // and MOVED APPS → KEYS. "Agent" was a pun (this seat vs the third-party tool
+  // consuming it); the rename gives the word back to the tool, and a credential
+  // belongs beside Vault / Team Keys / Team OAuth. Placed AFTER Team OAuth
+  // because a token draws from that pool.
+  //
+  // 2026-08-10 (user decision 全量改名): id / path / icon renamed. The old path
+  // stays reachable as a Navigate redirect in routes/user.tsx, so a peer still
+  // publishing /user/my-agents lands on the right page rather than a 404.
+  // Keep in sync with UserShell navGroups + personal_menu.go (ts_drift_test
+  // asserts id+path parity against the Go copy).
+  {
+    id: 'personal-access-tokens',
+    group: 'KEYS',
+    label: 'Access Token',
+    path: '/user/access-tokens',
+    visibility: 'team-logged-in',
+    icon: 'access-token',
   },
 
   // Phase 3B R16 (2026-05-11): Account intentionally NOT exposed via

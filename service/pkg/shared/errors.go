@@ -114,6 +114,12 @@ func interpolate(tmpl string, meta map[string]any) string {
 // 凭据=credential, 供应商=provider, 席位=seat, 组织=org, 绑定=binding,
 // 登录会话=login session, 令牌=token, 邮箱=email.
 var zhMessages = map[string]string{
+	// BIZ — Access Token
+	// 说清「停用不释放名额」：用户 2026-08-10 报障时正是按旧文案「Remove an
+	// agent first」去停用，结果什么也没释放（OA5b 有意让 suspended 继续占名额，
+	// 否则启用时会撞上限）。因此必须点名真正能腾名额的动作。
+	CodeBizAgentLimitReached: "已达访问令牌上限（{{owned}}/{{limit}}）。停用**不会**释放名额 —— 请在令牌详情抽屉里吊销一个，或联系管理员调高 {{setting}}",
+
 	// BIZ — Auth
 	CodeBizAuthEmailTaken:         "邮箱 {{email}} 已被注册",
 	CodeBizAuthInvalidCredentials: "邮箱或密码错误",
@@ -475,6 +481,20 @@ const (
 	CodeDataMissingField = "DATA_MISSING_FIELD"
 	CodeDataInvalidField = "DATA_INVALID_FIELD"
 	CodeDataInvalidEmail = "DATA_INVALID_EMAIL"
+	// CodeDataUnknownField means a decoded payload carried a JSON field this
+	// build does not know — i.e. the sender is ahead of this binary and the
+	// extra data was dropped.
+	//
+	// LOG-ONLY on the Personal local-compliance ingest lane: it is never put in
+	// a response there. That lane decodes leniently ON PURPOSE (see
+	// compliance_handlers.go), because a 4xx there is TERMINAL — the detector's
+	// uploader returns without retry on 4xx and then discards the in-memory
+	// batch, and unlike the team lane there is no dead-letter/replay to catch
+	// it. So the field is dropped (recoverable: one field) and this code is
+	// logged, rather than the whole event being rejected (unrecoverable: all
+	// events). Reused as a response code elsewhere only if a lane ever has a
+	// safe way to refuse.
+	CodeDataUnknownField = "DATA_UNKNOWN_FIELD"
 
 	// EXT — external / upstream service
 	CodeExtProviderUpstream    = "EXT_PROVIDER_UPSTREAM"

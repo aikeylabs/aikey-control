@@ -8,8 +8,16 @@ package userlocal
 // (aikey-control-master/service/internal/compliance/{handler.go,storage/audit.go})
 // MINUS the tenant dimension — this is a single-user local store.
 //
-// DC5: original prompt text never reaches here. The detector sends only
-// metadata + a redacted snippet; we store + serve exactly that, never原文.
+// DC5 「原文不出本机」 as it applies HERE: this store is on the user's own box
+// (local-server binds 127.0.0.1), so it is the ONE place the un-redacted matched
+// text is allowed to live. Each finding carries two snippets with different
+// jobs: `redacted_snippet` (masked — what the self-view shows by default) and
+// `context_snippet` (the raw matched text + context — revealed only when the
+// user clicks the eye in the drawer), purged after localComplianceRetentionDays.
+// The master/team store is the opposite: it has no context_snippet column and
+// its intake wire refuses the field outright. Reinstated 2026-08-09 after the
+// user reversed the 2026-06-03 "masked form only" decision — a masked
+// ***CN_NAME*** cannot tell you which of your own values tripped a rule.
 //
 // Ingest (POST /v1/compliance/events) is a machine endpoint — the local
 // detector POSTs to it. It is unauthenticated by design: the local-server
@@ -18,9 +26,11 @@ package userlocal
 // can't double-count.
 //
 // Read (GET /api/user/compliance/events) is a local_bypass browser endpoint
-// drained by the /user/compliance page; metadata + redacted snippet only.
+// drained by the /user/compliance page; serves metadata + BOTH snippets (the
+// page decides which one is on screen — masked by default, raw behind the eye).
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -31,6 +41,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AiKeyLabs/aikey-control/service/pkg/shared"
@@ -88,14 +99,163 @@ type complianceIngestResponse struct {
 	AcceptedIDs []string `json:"accepted_ids"`
 }
 
+// ── Wire-drift detection (lenient decode + loud WARN) ────────────────────
+//
+// WHY THIS EXISTS, AND WHY IT IS NOT `DisallowUnknownFields`
+//
+// The master/team ingest (aikey-control-master compliance/handler.go) decodes
+// with DisallowUnknownFields and answers 400. That gate is a PRIVACY gate: the
+// master's wire struct deliberately omits context_snippet, so the 400 is what
+// makes it physically impossible for un-redacted local text to reach the
+// master (DC5). This lane has the opposite requirement — the local self-view
+// is exactly where the un-redacted text belongs (migration v1.0.0-rc.10 added
+// local_compliance_findings.context_snippet for it) — so there is no privacy
+// reason to copy the gate here.
+//
+// The reason NOT to copy it is stronger than "no reason to": the master's 400
+// is SURVIVABLE and this lane's would be TERMINAL.
+//   - Team lane: aikey-proxy ships the event (filter_dispatch.go) and on
+//     failure writes it to dead_letter.jsonl, then auto-replays on recovery.
+//     A 400 there conserves the event until the version skew is fixed.
+//   - Local lane: the detector's own uploader posts to 127.0.0.1
+//     (ai-compliance-detector internal/intake/uploader.go). On 4xx it returns
+//     immediately — "retrying won't fix a contract bug" — and the flush path
+//     then does `batch = batch[:0]`. In-memory only: no spool, no WAL, no
+//     dead-letter (that machinery is keyed by RouteSource and structurally
+//     cannot address the local ingest).
+// So strict mode here would trade "one field is missing" for "100% of the
+// user's compliance history is permanently gone, and the page just looks
+// empty". The gate and the net were designed as a pair; taking the gate
+// without the net is worse than either. Hence: decode leniently, keep the
+// event, and make the drift LOUD instead of silent.
+//
+// The strict decoder is still used — as a DETECTOR ONLY, never to reject — so
+// that what this lane warns about is by construction exactly what the master
+// lane would have refused. No hand-maintained list of known field names (that
+// list would itself drift); encoding/json stays the single source of truth for
+// "unknown".
+
+// complianceWireDrift is the ingest decoder's drift state machine.
+//
+// FLOOD CONTROL: drift is a STANDING CONDITION, not an incident. The moment
+// the detector starts sending a field this build lacks, every single batch
+// trips the check — at per-turn cadence that is a log flood, and a flood is
+// just a different way of hiding the signal. Sampling (1-in-N) or rate
+// limiting (1-per-minute) would still emit an unbounded trickle forever and
+// would never tell the operator how much was actually affected.
+//
+// So this logs EDGES, not occurrences (the project's "只记状态转变" rule):
+// CLEAN → DRIFT emits one WARN; every identical repeat is counted, not logged;
+// DRIFT → CLEAN emits one WARN carrying the total. One episode = two lines,
+// regardless of whether it spanned 3 events or 3 million. A changed signature
+// counts as a new episode so a second, different drift can never hide behind
+// the first. Process-scoped: a restart re-announces, which is intentional
+// (fresh evidence per process lifetime).
+type complianceWireDrift struct {
+	mu sync.Mutex
+	// signature is the strict decoder's error text, e.g.
+	// `json: unknown field "trace_id"`. Empty means CLEAN.
+	signature  string
+	suppressed int64
+}
+
+// observe records one decode outcome and returns the log line to emit, if any.
+// Returning the decision instead of logging inline keeps the lock off the
+// logger and keeps the state machine unit-testable.
+func (d *complianceWireDrift) observe(signature string) (event string, prevSignature string, suppressed int64, emit bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if signature == d.signature {
+		if signature != "" {
+			d.suppressed++
+		}
+		return "", "", 0, false
+	}
+	prevSignature, suppressed = d.signature, d.suppressed
+	d.signature, d.suppressed = signature, 0
+	if signature == "" {
+		return shared.EventUserLocalComplianceWireDriftCleared, prevSignature, suppressed, true
+	}
+	return shared.EventUserLocalComplianceWireDriftDetected, prevSignature, suppressed, true
+}
+
+// detectComplianceWireDrift strictly re-decodes the SAME bytes that already
+// decoded leniently. Because the strict pass differs from the lenient one by
+// exactly one added constraint, and the lenient pass succeeded, any error here
+// is an unknown-field error — its text is returned verbatim as the signature.
+func detectComplianceWireDrift(raw []byte) string {
+	strict := json.NewDecoder(bytes.NewReader(raw))
+	strict.DisallowUnknownFields()
+	var probe complianceIntakeRequest
+	if err := strict.Decode(&probe); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// firstComplianceEventID returns the batch's first event id, the correlation
+// key an operator can look up in local_compliance_events. Empty for an empty
+// batch (an empty batch cannot drift on the event fields, but it can still
+// drift on the envelope, so the WARN must not depend on this being present).
+func firstComplianceEventID(events []complianceEventWire) string {
+	if len(events) == 0 {
+		return ""
+	}
+	return events[0].EventID
+}
+
 // complianceIngestHandler writes incoming events + findings to control.db.
+//
+// The drift tracker is created once per registration (handler.go registers
+// this endpoint once), so its state is process-scoped — which is what makes
+// "one WARN per drift episode" mean one per server lifetime, not one per
+// request.
 func complianceIngestHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
+	drift := &complianceWireDrift{}
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Read once: the bytes are needed twice (lenient decode + drift probe).
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err != nil {
+			logger.Warn("compliance ingest: read body failed", "error", err)
+			cmplErr(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
 		var req complianceIntakeRequest
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		// json.Decoder (not json.Unmarshal) preserves the pre-2026-08-10
+		// trailing-bytes tolerance exactly — this change must not make the
+		// happy path any stricter than it already was.
+		if err := json.NewDecoder(bytes.NewReader(raw)).Decode(&req); err != nil {
 			logger.Warn("compliance ingest: decode body failed", "error", err)
 			cmplErr(w, http.StatusBadRequest, "invalid JSON body")
 			return
+		}
+		// Drift probe. Never affects the response — the event is stored either
+		// way; see the block comment above for why.
+		signature := detectComplianceWireDrift(raw)
+		if event, prevSignature, suppressed, emit := drift.observe(signature); emit {
+			// Correlation: this lane has no request_id and no trace_id. There
+			// is no request-id middleware on the local-server, the detector's
+			// uploader sends only Content-Type, and trace_id is proxy-stamped
+			// on the TEAM path only (filter_dispatch.go injectTraceID) so it
+			// never reaches here. event_id is the correlation key that actually
+			// exists: it is the primary key of local_compliance_events, so the
+			// operator can go straight from this line to the affected rows.
+			attrs := []any{
+				"event.name", event,
+				"error.code", shared.CodeDataUnknownField,
+				"first_event_id", firstComplianceEventID(req.Events),
+				"event_count", len(req.Events),
+			}
+			if event == shared.EventUserLocalComplianceWireDriftCleared {
+				attrs = append(attrs, "resolved_drift", prevSignature, "suppressed_requests", suppressed)
+				logger.Warn("compliance ingest: wire drift cleared — the local-server now understands every field the detector sends", attrs...)
+			} else {
+				attrs = append(attrs, "drift", signature)
+				if prevSignature != "" {
+					attrs = append(attrs, "superseded_drift", prevSignature, "suppressed_requests", suppressed)
+				}
+				logger.Warn("compliance ingest: wire drift — the detector sent a field this local-server does not know; the event was stored WITHOUT it. Upgrade the local-server (or downgrade ai-compliance-detector) so the two agree.", attrs...)
+			}
 		}
 		accepted := make([]string, 0, len(req.Events))
 		for _, ev := range req.Events {

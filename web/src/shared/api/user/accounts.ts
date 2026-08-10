@@ -83,7 +83,7 @@ export interface AgentLastServedStatusDTO {
   };
 }
 
-// One online agent (GET /accounts/me/agents). The connection fields
+// One online agent (GET /accounts/me/access-tokens). The connection fields
 // (base_url / vk / *_blocked / vk_pending) are populated ONLY on the CREATE /
 // get-VK response — vk is the plaintext returned once at issue time (hash-only
 // storage; never recoverable later). On the list they are absent EXCEPT vk_hint.
@@ -173,12 +173,12 @@ export const userAccountsApi = {
   // Online agents this member owns (alpha.5). Agents are TEAM-PLANE entities
   // (seat principals in the org, created on the master), so they are fetched
   // BROWSER→MASTER via team-fetch (/system/team-url + /system/team-jwt →
-  // {teamUrl}/accounts/me/agents), NOT the local vault-bridge — the Personal
+  // {teamUrl}/accounts/me/access-tokens), NOT the local vault-bridge — the Personal
   // local-server serves /accounts/me/* as empty compatibility stubs and has no
   // agents domain (2026-07-16 fix: P4 wired these to the vault-bridge by mistake,
   // yielding a 404 on the standalone Personal web).
   myAgents: async (): Promise<MyAgentDTO[]> => {
-    const res = await teamGetJSON<{ agents: MyAgentDTO[] }>('/accounts/me/agents');
+    const res = await teamGetJSON<{ agents: MyAgentDTO[] }>('/accounts/me/access-tokens');
     if (isTeamFetchError(res)) {
       // Missing team auth is not a truthful empty list: the server has not said
       // there are zero agents. Throw every failure class so the page renders its
@@ -189,26 +189,26 @@ export const userAccountsApi = {
   },
 
   agentPoolStatus: async (seatId: string): Promise<AgentPoolStatusDTO> => {
-    const res = await teamGetJSON<AgentPoolStatusDTO>(`/accounts/me/agents/${seatId}/pool-status`);
+    const res = await teamGetJSON<AgentPoolStatusDTO>(`/accounts/me/access-tokens/${seatId}/pool-status`);
     if (isTeamFetchError(res)) throw new Error(`agent pool status unavailable: ${res.kind}`);
     return res;
   },
 
   agentLastRoute: async (seatId: string): Promise<AgentLastServedStatusDTO> => {
-    const res = await teamGetJSON<AgentLastServedStatusDTO>(`/accounts/me/agents/${seatId}/last-route`);
+    const res = await teamGetJSON<AgentLastServedStatusDTO>(`/accounts/me/access-tokens/${seatId}/last-route`);
     if (isTeamFetchError(res)) throw new Error(`agent last route unavailable: ${res.kind}`);
     return res;
   },
 
   createAgent: async (body: { alias: string; provider_code?: string; oauth_group_id?: string }): Promise<MyAgentDTO> => {
-    const res = await teamPostJSON<MyAgentDTO>('/accounts/me/agents', body);
+    const res = await teamPostJSON<MyAgentDTO>('/accounts/me/access-tokens', body);
     if (isTeamWriteError(res)) throw new Error(res.message);
     if (isTeamFetchError(res)) throw new Error(`create agent failed: ${res.kind}`);
     return res;
   },
 
   deleteAgent: async (seatId: string): Promise<void> => {
-    const res = await teamDeleteJSON(`/accounts/me/agents/${seatId}`);
+    const res = await teamDeleteJSON(`/accounts/me/access-tokens/${seatId}`);
     if (isTeamWriteError(res)) throw new Error(res.message);
     if (isTeamFetchError(res)) throw new Error(`delete agent failed: ${res.kind}`);
   },
@@ -224,7 +224,7 @@ export const userAccountsApi = {
   // enforcement points — the ingress resolve and the key-delivery projection —
   // gate on seat status alone, which is what makes that true.
   setAgentStatus: async (seatId: string, action: 'suspend' | 'resume'): Promise<void> => {
-    const res = await teamPostJSON<{ status: string }>(`/accounts/me/agents/${seatId}/status`, { action });
+    const res = await teamPostJSON<{ status: string }>(`/accounts/me/access-tokens/${seatId}/status`, { action });
     if (isTeamWriteError(res)) throw new Error(res.message);
     if (isTeamFetchError(res)) throw new Error(`${action} agent failed: ${res.kind}`);
   },
@@ -236,9 +236,34 @@ export const userAccountsApi = {
   // third-party agent. Same Agent shape as create. vk_pending when the pool still
   // has no enabled account.
   getAgentVK: async (seatId: string): Promise<MyAgentDTO> => {
-    const res = await teamPostJSON<MyAgentDTO>(`/accounts/me/agents/${seatId}/vk`, { action: 'ensure' });
+    const res = await teamPostJSON<MyAgentDTO>(`/accounts/me/access-tokens/${seatId}/vk`, { action: 'ensure' });
     if (isTeamWriteError(res)) throw new Error(res.message);
     if (isTeamFetchError(res)) throw new Error(`get agent VK failed: ${res.kind}`);
+    return res;
+  },
+
+  // revealAgentVK — NON-destructive read of the plaintext the agent is using RIGHT
+  // NOW (2026-08-10). Agent VKs are minted with `token_ciphertext` retention on, so
+  // unlike a member's team VK the live value is recoverable without re-minting.
+  //
+  // 🔴 Why this exists: the master console could already reveal a member's in-use
+  // agent VK while the member who OWNS it could not — a permission inversion whose
+  // only member-side workaround was rotation, which instantly breaks the
+  // third-party agent they already configured
+  // (bugfix 2026-08-10-member-cannot-reveal-own-agent-vk).
+  //
+  // Three outcomes, all non-errors — the caller must render each:
+  //   • vk set          → the live plaintext;
+  //   • vk_pending      → no VK yet (pool has no enabled account);
+  //   • neither, vk_hint→ pre-retention VK, plaintext genuinely gone; offer rotate.
+  //
+  // Back-compat: an older team server does not know `reveal` and falls through to
+  // its default `ensure` branch, which is also non-destructive — the member sees
+  // the masked hint instead of the plaintext, never a broken key.
+  revealAgentVK: async (seatId: string): Promise<MyAgentDTO> => {
+    const res = await teamPostJSON<MyAgentDTO>(`/accounts/me/access-tokens/${seatId}/vk`, { action: 'reveal' });
+    if (isTeamWriteError(res)) throw new Error(res.message);
+    if (isTeamFetchError(res)) throw new Error(`reveal agent VK failed: ${res.kind}`);
     return res;
   },
 
@@ -247,7 +272,7 @@ export const userAccountsApi = {
   // to reveal a usable VK again once the original is lost/leaked. The UI gates this
   // behind a confirmation because any agent using the old key must be re-keyed.
   rotateAgentVK: async (seatId: string): Promise<MyAgentDTO> => {
-    const res = await teamPostJSON<MyAgentDTO>(`/accounts/me/agents/${seatId}/vk`, { action: 'rotate' });
+    const res = await teamPostJSON<MyAgentDTO>(`/accounts/me/access-tokens/${seatId}/vk`, { action: 'rotate' });
     if (isTeamWriteError(res)) throw new Error(res.message);
     if (isTeamFetchError(res)) throw new Error(`rotate agent VK failed: ${res.kind}`);
     return res;
