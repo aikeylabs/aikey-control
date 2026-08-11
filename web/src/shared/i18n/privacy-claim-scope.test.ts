@@ -14,11 +14,18 @@ import * as path from 'node:path';
  * aikey moves user text along TWO independent lanes, and for years the copy
  * described the first one's property as the whole system's:
  *
- *   · COMPLIANCE lane (`compliance_findings`) — the matched original really
- *     does stay on the box. Three gates: the detector's raw `context_snippet`
- *     is not put on the intake wire (`mayCarryRawSnippet`), a team-routed event
- *     is not enqueued to the local uploader, and master's intake decodes with
- *     `DisallowUnknownFields` so a raw field would 400 rather than land.
+ *   · COMPLIANCE lane (`compliance_findings`) — 🔴 **as of 2026-08-11 this lane
+ *     ALSO uploads original text.** It used not to: `mayCarryRawSnippet` was
+ *     `LocalIntake && !team` and master's wire had no `context_snippet` field at
+ *     all. The user overturned that (three rulings: 原文可以出本机 · 合规事件可以
+ *     携带原文 · 出厂默认开启), so the gate is now TIERED —
+ *     `team === false → LocalIntake` (Personal, unchanged) and
+ *     `team === true → PrivacyTier >= 3`, where the tier is the server-pushed
+ *     org policy `organizations.compliance_privacy_tier`. A fresh Team/Cluster
+ *     install SEEDS tier 3, so out of the box an employee's matched original
+ *     (<=512 bytes, kept 90 days) lands on the org's own team server.
+ *     An UPGRADE keeps schema DEFAULT 1, so existing customers do not silently
+ *     start collecting. Both facts have to appear in the copy.
  *
  *   · CONVERSATION AUDIT lane (`conversation_records`) — when the org's capture
  *     switch is on (**the Cluster installer's default**, see
@@ -35,6 +42,23 @@ import * as path from 'node:path';
  * conversation-turn-join-key.md R7 claimed master "cannot read" a turn, which
  * its own §3 P2 contradicts). §7 of that file is now the copy contract.
  *
+ * ══ WHAT SURVIVED THE 2026-08-11 REVERSAL, AND WHAT DID NOT ════════════════
+ *
+ * The reversal narrows the promise; it does not delete it. Keep these apart:
+ *
+ *   ❌ VOID  「原文不出本机」/ "never leaves this machine"   — both lanes.
+ *   ❌ VOID  「命中原文不随合规事件上报」/ "never uploaded with the compliance
+ *            event" — this was the phrasing THIS FILE used to REQUIRE, on the
+ *            reasoning that scoping to the compliance lane made it safe. The
+ *            scope no longer saves it.
+ *   ✅ TRUE  「原文不出客户信任边界」 — the snippet lands on the CUSTOMER'S OWN
+ *            server and never on an AiKey one. This is the contract sentence.
+ *   ✅ TRUE  「检测在本机进行」 — detection genuinely runs in the local detector.
+ *   ✅ TRUE  「个人版原文只留在本机」 — the `team === false` branch is untouched.
+ *
+ * ⇒ The direction of every fix is "narrow toward the half that is still true",
+ *   never "delete the promise" and never "claim we upload everything".
+ *
  * ══ WHY A CATALOG-WIDE SCAN AND NOT FOUR STRING ASSERTIONS ═════════════════
  *
  * The concept is "any user-facing string asserting that something never leaves
@@ -49,6 +73,13 @@ import * as path from 'node:path';
  *   - put "原文不会离开本机" / "never leaves your device" back on
  *     compliancePage.pageDescription, settings.compliance.description, or any
  *     other key → red (not allowlisted).
+ *   - restore "命中原文不随合规事件上报" / "never uploaded with the compliance
+ *     event" anywhere → red (the 2026-08-11 assertions below). This is the one
+ *     that a well-meaning editor is most likely to "restore", because it reads
+ *     like a privacy improvement and it is what the older docs still say.
+ *   - drop the default-on disclosure from either compliance-lane string → red.
+ *     Shipping "we may upload" without "and a fresh install already does" is
+ *     the incomplete-notice failure this reversal is most likely to produce.
  *   - restore the unqualified "所有数据均保留在你的本机上 / All data stays on
  *     your machine" subject on the Trust Check disclaimer → red (the qualifier
  *     assertions below).
@@ -109,6 +140,19 @@ const CLAIM_PATTERNS: { id: string; re: RegExp }[] = [
   { id: 'en:does-not-leave-device', re: /does not leave (this|your|the) (device|machine|box|computer|host)/i },
   { id: 'en:all-data-stays', re: /all (of your |your )?data stays/i },
   { id: 'en:never-uploaded', re: /never uploaded|never sent to|is never sent|are never sent/i },
+  // 🔴 2026-08-11 — the blind spot that let the worst sentence in the tree ship.
+  // `complianceMy.originalNotRetained` read "a compliance event never carries the
+  // original text" / 「合规事件本身从不携带原文」 and NONE of the patterns above
+  // matched it: it says "carries", not "leaves" or "uploaded". The scan is
+  // supposed to cover the CONCEPT "asserts content does not go up", so a verb
+  // this file had not thought of is a hole in the concept, not a missing string.
+  { id: 'en:never-carries', re: /never carries|does not carry|carries no (original|raw|prompt)/i },
+  { id: 'zh:never-carries', re: /(从不|绝不|永不|不)携带原文/ },
+  // 🔴 2026-08-11 — the claim this very file used to REQUIRE. It is now false on
+  // Team/Cluster, so it must be swept like any other absolute claim; without
+  // this pattern, "restoring" it would go green.
+  { id: 'en:not-with-compliance-event', re: /(never|not) uploaded with the compliance event/i },
+  { id: 'zh:not-with-compliance-event', re: /不随合规事件上报/ },
   { id: 'zh:not-leave-host', re: /不出本机|不(会)?离开本机/ },
   { id: 'zh:all-data-local', re: /所有数据[^。；]{0,12}(本机|本地)/ },
   { id: 'zh:never-uploaded', re: /从不上传|绝不上传|不会上传|永不上传/ },
@@ -140,12 +184,12 @@ const ALLOWED: Allowed[] = [
   {
     key: 'compliancePage.pageDescription',
     why:
-      'Scoped to the compliance event: the matched original is never uploaded WITH THE COMPLIANCE EVENT (mayCarryRawSnippet keeps context_snippet off the intake wire; DisallowUnknownFields 400s it structurally). The sentence then states outright that this says nothing about another lane retaining the conversation text — needed because a Personal user can also be a team member whose proxy is capturing for conversation audit.',
+      '🔴 REWRITTEN 2026-08-11. The claim that survives here is scoped to the PERSONAL edition ("个人版：命中原文只留在本机"), where mayCarryRawSnippet still evaluates `ictx.LocalIntake` on the `team === false` branch and nothing uploads the raw text at all. The sentence no longer makes any claim for Team/Cluster — it states the opposite outright, including the 512-byte cap, the 90-day retention, the fact that a fresh install has this ON, and the one promise that did survive: the snippet reaches the org\'s OWN server and never an AiKey one. The previous rationale ("never uploaded WITH THE COMPLIANCE EVENT ... DisallowUnknownFields 400s it structurally") is void: the wire now has the field and master strips-by-policy instead of rejecting.',
   },
   {
     key: 'settings.compliance.description',
     why:
-      'Same compliance-lane scoping as compliancePage.pageDescription, plus the fact a reader of a TOGGLE needs: this switch does not govern the conversation-audit lane, so turning compliance detection off does not stop conversation capture.',
+      '🔴 REWRITTEN 2026-08-11. Same Personal-scoped surviving claim as compliancePage.pageDescription, plus the two things a reader of a TOGGLE specifically needs: (1) this switch does not govern the conversation-audit lane, so turning compliance detection off does not stop conversation capture; (2) turning it ON is what starts the snippet upload on Team/Cluster, and on a fresh install the org policy already permits it — a toggle whose copy hides its own default is the incomplete-notice failure mode.',
   },
   {
     key: 'vault.keyDerivationTail',
@@ -239,29 +283,54 @@ describe('the four sentences fixed on 2026-08-10c stay fixed', () => {
     expect(zhText).toMatch(/不含你与模型对话的正文/);
   });
 
-  it('🔴 the compliance self-view header scopes its claim to the compliance event', () => {
+  it('🔴 the compliance self-view header scopes its claim to the EDITION, not the lane', () => {
     const enText = en('compliancePage.pageDescription');
     const zhText = zh('compliancePage.pageDescription');
     expect(enText, 'the unqualified sentence must not come back')
       .not.toMatch(/never leaves your device/i);
     expect(zhText).not.toMatch(/原文不会离开本机/);
-    expect(enText, 'the claim must be tied to the compliance event').toMatch(/with the compliance event/i);
-    expect(zhText).toMatch(/不随合规事件上报/);
+    // 🔴 2026-08-11 — INVERTED. This pair used to be
+    //     expect(enText).toMatch(/with the compliance event/i)
+    //     expect(zhText).toMatch(/不随合规事件上报/)
+    // i.e. the fence REQUIRED the sentence that is now false. Deleting the pair
+    // outright would have lost the guard entirely, so it is inverted rather than
+    // removed: the exact claim the fence once mandated is now the one it forbids.
+    expect(enText, 'the compliance lane DOES upload a snippet on Team/Cluster now')
+      .not.toMatch(/never uploaded with the compliance event/i);
+    expect(zhText).not.toMatch(/不随合规事件上报/);
+    // What replaces it: the copy must actually SAY the upload happens, name the
+    // destination as the customer's own server (the promise that survived), and
+    // — the part most likely to be dropped — say a fresh install already does it.
+    expect(enText, 'must disclose that the snippet is uploaded').toMatch(/uploaded with the compliance event/i);
+    expect(zhText).toMatch(/随合规事件上传/);
+    expect(enText, 'must name the destination as the org\'s own server').toMatch(/own team server/i);
+    expect(zhText).toMatch(/组织自建的团队服务端/);
+    expect(enText, '🔴 default-on must be disclosed, not just "may"').toMatch(/by default/i);
+    expect(zhText).toMatch(/默认开启/);
+    // The surviving promise must still be stated, or the copy over-corrects into
+    // "we upload everything" — which is its own kind of false notice.
+    expect(enText, 'the trust-boundary promise must survive').toMatch(/never reaches any AiKey server/i);
+    expect(zhText).toMatch(/不会进入 AiKey/);
     // The reason this page in particular needed it: a Personal user can also be
     // a team member whose proxy is capturing, so silence here reads as a promise.
     expect(enText).toMatch(/conversation audit/i);
     expect(zhText).toMatch(/对话审计/);
   });
 
-  it('🔴 the compliance toggle says what it does NOT govern', () => {
+  it('🔴 the compliance toggle says what it does NOT govern, and what it defaults to', () => {
     // Only aikey-control ships this settings card; skip cleanly on the peer.
     const enText = en('settings.compliance.description');
     if (enText === undefined) return;
     const zhText = zh('settings.compliance.description');
     expect(enText).not.toMatch(/never leaves this machine/i);
     expect(zhText).not.toMatch(/原文不会离开本机/);
+    // 🔴 2026-08-11 — same inversion as above.
+    expect(enText).not.toMatch(/never uploaded with the compliance event/i);
+    expect(zhText).not.toMatch(/不随合规事件上报/);
     expect(enText, 'a toggle must say the other lane is not affected').toMatch(/conversation audit/i);
     expect(zhText).toMatch(/对话审计/);
+    expect(enText, '🔴 a toggle must disclose its own default').toMatch(/by default/i);
+    expect(zhText).toMatch(/默认开启/);
   });
 });
 

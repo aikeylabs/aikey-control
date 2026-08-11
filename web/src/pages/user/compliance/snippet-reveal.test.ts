@@ -114,15 +114,118 @@ describe('compliance self-view snippet reveal', () => {
       .toContain('return source.originalTurn ? source.originalTurn.canReveal(event) : !!finding.context_snippet;');
     expect(pageCode, 'the per-finding eye must go through that one function')
       .toContain('const canReveal = canRevealOriginal(source, selected, f);');
-    // The team lane must never substitute the fetched turn for the masked
-    // snippet in place: they are different spans, and swapping one for the other
-    // reads as "this is what that mask covered".
-    expect(pageCode).toContain('const shown = !teamOriginal && revealed && raw ? raw : masked;');
-    // The panel is the source's, and it only mounts while an eye is open — the
-    // team read is RECORDED, so it must happen on the click, not on drawer open.
-    expect(pageCode).toContain('{teamOriginal && revealed && <teamOriginal.Panel event={selected} />}');
     // Optional on the interface: the LOCAL lane must keep working without it.
     expect(pageCode).toContain('originalTurn?: ComplianceOriginalTurnSource;');
+  });
+
+  // ── R6 (2026-08-11): 原地替换 — one slot, two states ────────────────────────
+  // 用户: 「改成原地替换」. Until now the team lane APPENDED: the masked snippet
+  // stayed put and the fetched turn opened below it, so an expanded card showed
+  // the same content twice over and the reader had to work out which of the two
+  // blocks answered the question they clicked to ask. The stated reason for
+  // appending — "the snippet must survive as the anchor for the placeholder
+  // highlight" — does not survive the swap: expanded, the raw values are on
+  // screen and there is no placeholder left to point at (`focus` goes null).
+  //
+  // These rules pin the REPLACEMENT rather than merely dropping the old
+  // assertions. The failure mode is specific and easy to reintroduce: two
+  // sibling `&&` guards render BOTH blocks the moment the eye opens, and it
+  // looks correct in the collapsed state that most reviewers check.
+  //
+  // 能红 check: restore `{teamOriginal && revealed && <…Panel/>}` as a sibling of
+  // the snippet guard, and both assertions below fail.
+  describe('🔴 R6 — the eye replaces the snippet, it does not append to it', () => {
+    /** The reveal branch: the panel arm of the one ternary that owns the slot. */
+    const revealArm = (() => {
+      const at = pageCode.indexOf('{showOriginalInPlace ? (');
+      expect(at, 'the slot must be owned by ONE ternary, not two sibling guards')
+        .toBeGreaterThan(-1);
+      const end = pageCode.indexOf(') : shown ? (', at);
+      expect(end, 'the masked snippet must be the ELSE arm of that same ternary')
+        .toBeGreaterThan(at);
+      return pageCode.slice(at, end);
+    })();
+
+    it('mounts the fetched turn where the snippet would have been', () => {
+      // `.Panel` reached off the narrowed source, so the branch that renders it
+      // is the branch that proved the lane exists — no non-null assertion.
+      expect(revealArm).toContain('<showOriginalInPlace.Panel event={selected} />');
+    });
+
+    it('leaves the masked snippet unreachable while the turn is shown', () => {
+      // The snippet's own render must NOT appear inside the reveal arm: if it
+      // does, the ternary has been reopened into the append shape.
+      expect(revealArm, 'the snippet must not render alongside the revealed turn')
+        .not.toContain('renderMaskedSnippet');
+    });
+
+    it('the panel still mounts only while an eye is open (recorded read)', () => {
+      // The team read writes an access record, so it must be triggered by the
+      // click and not by the drawer opening. `revealed` is the only gate.
+      expect(pageCode)
+        .toContain('const showOriginalInPlace = revealed ? teamOriginal : undefined;');
+    });
+
+    it('the local lane swaps text inside the one box, same as before', () => {
+      // LOCAL was already in-place; the change must not have made it a lane
+      // special case. One expression, no `teamOriginal` in it.
+      expect(pageCode).toContain('const shown = revealed && raw ? raw : masked;');
+    });
+
+    it('🔴 masked and revealed are the SAME box, drawn from the shared source', () => {
+      // 2026-08-11 用户:「显示原文的样式，需要也有背景框框，和 mask 后的保持一致性
+      // 的样式」. The user's acceptance test is an overlay: put the collapsed and
+      // expanded screenshots side by side and the box outline must coincide,
+      // with only the text differing.
+      //
+      // 🔴 ONE render site, one style call. This lane has always used a single
+      // box for both states, so the way it regresses is not a second box — it is
+      // a second STYLE: someone adds `revealed ? {...} : {...}` inline and the
+      // two states drift. Asserting the shared symbols makes that impossible to
+      // do quietly, and keeps this lane in step with the admin drawer and the
+      // team panel, which now draw the same box from the same function.
+      //
+      // 能红 check: inline the old
+      // `borderLeft: revealed && raw ? '2px solid var(--primary-dim)' : …` and
+      // the literal scan below fails.
+      // 🔴 Scoped to the SLOT (the whole ternary), not the page: these literals
+      // legitimately appear on the table borders, the compliance switch and the
+      // sequence badge, and a page-wide scan would fail on code that has nothing
+      // to do with the snippet box.
+      const at = pageCode.indexOf('{showOriginalInPlace ? (');
+      const slot = pageCode.slice(at, pageCode.indexOf(') : null}', at));
+      expect(slot.length, 'the slot must terminate at the ternary, not run to EOF').toBeGreaterThan(0);
+      expect(slot).toContain('SNIPPET_BOX_CLASS');
+      expect(slot).toContain("snippetBoxStyle(revealed && raw ? 'raw' : 'masked')");
+      for (const literal of ['rgba(0,0,0,0.28)', '1px solid var(--border)', 'primary-dim']) {
+        expect(
+          slot.includes(literal),
+          `${literal}: the box is spelled in mask-highlight.tsx, not here — an inline copy is ` +
+            'how the masked and revealed outlines stop matching',
+        ).toBe(false);
+      }
+    });
+
+    it('🔴 the reveal arm mounts the panel and NOTHING else', () => {
+      // 2026-08-11 用户: 「这段话不需要了」+「能不能在原框框内显示，不要在下方！！！」.
+      // The team panel briefly rendered a heading and an audit notice above its
+      // text; both are gone (fenced at the panel itself in the master repo,
+      // .../user/compliance/original-turn-eye.test.ts §B). This page owns the
+      // SLOT, so the way the shape regresses HERE is different and needs its own
+      // rule: wrap the panel in a caption, a label row or a hint and the copy is
+      // back on screen without the panel's own fence noticing a thing.
+      //
+      // 能红 check: add `<p>{t('compliancePage.originalWholeTurn')}</p>` next to
+      // the panel inside this arm, and this fails on the t() count.
+      expect(
+        [...revealArm.matchAll(/\bt\(/g)].length,
+        'the reveal arm must render the injected panel bare — no caption, no notice',
+      ).toBe(0);
+      expect(
+        [...revealArm.matchAll(/<[A-Za-z]/g)].map((m) => m.index).length,
+        'exactly one element in the arm: the panel',
+      ).toBe(1);
+    });
   });
 
   // ── R3 (2026-08-10): the note must not hard-code the LOCAL reason ──────────

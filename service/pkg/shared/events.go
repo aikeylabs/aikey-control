@@ -28,6 +28,13 @@ const (
 	// request is answered with an explicit 500 (never silently forwarded
 	// unfiltered — a failed search must not masquerade as "everyone matched").
 	EventControlConvAuditSeatSearchFailed      = "control.conversation_audit.seat_search_failed"
+	// EventControlConvAuditSeatSearchNarrowed fires when a seat search resolved
+	// more keys than query-service accepts and the facade intersected them with
+	// the keys that actually carry conversation rows. INFO, not WARN: the search
+	// succeeded — this records that the payload was reduced, and by how much, so
+	// an operator seeing a surprising result count can tell narrowing apart from
+	// a genuinely empty match.
+	EventControlConvAuditSeatSearchNarrowed    = "control.conversation_audit.seat_search_narrowed"
 	EventControlAgentPoolStatusReadFailed      = "control.onlineagent.pool_status_read_failed"
 	EventControlAgentPoolUtilizationReadFailed = "control.onlineagent.pool_utilization_read_failed"
 	EventControlAgentLastRouteReadFailed       = "control.onlineagent.last_route_read_failed"

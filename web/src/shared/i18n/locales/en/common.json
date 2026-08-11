@@ -2387,7 +2387,7 @@
     },
     "compliance": {
       "title": "AI Compliance Detection",
-      "description": "Scan prompts for sensitive content (secrets, personal information, non-compliant sales language) before they are forwarded. Detection runs on this machine and the matched original text stays here — it is never uploaded with the compliance event. (Conversation Audit is a separate lane and this switch does not affect it.) Turning it off stops all scanning.",
+      "description": "Scan prompts for sensitive content (secrets, personal information, non-compliant sales language) before they are forwarded. Detection runs on this machine: on Personal the matched original text stays here; on Team and Cluster deployments, when your organization's compliance privacy policy allows it (on by default for a fresh install), a short window of the original around the match (at most 512 bytes) is uploaded with the compliance event to your organization's own team server and kept for 90 days. (Conversation Audit is a separate lane and this switch does not affect it.) Turning it off stops all scanning.",
       "toggleLabel": "Enable compliance detection",
       "statusOn": "On — prompts are scanned before forwarding.",
       "statusOff": "Off — no scanning.",
@@ -2500,7 +2500,7 @@
   },
   "compliancePage": {
     "pageTitle": "AI Compliance Audit",
-    "pageDescription": "Compliance events detected on this machine — your own view. Detection runs on this machine and the matched original text is never uploaded with the compliance event. That is true of the compliance lane only, and says nothing about whether another lane, such as Conversation Audit, retains your conversation text.",
+    "pageDescription": "Compliance events detected on this machine — your own view. Detection runs on this machine. On Personal, the matched original text stays here. On Team and Cluster deployments, when your organization's compliance privacy policy allows it (on by default for a fresh install), a short window of the original around the match (at most 512 bytes) is uploaded with the compliance event to your organization's own team server and kept for 90 days — it never reaches any AiKey server. Whether the full text of your conversations is retained is decided separately by the Conversation Audit lane.",
     "toggleLabel": "Compliance detection",
     "toggleLocked": "Vault locked — unlock before toggling",
     "toggleFailed": "Toggle failed",

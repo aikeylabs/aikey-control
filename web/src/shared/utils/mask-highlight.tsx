@@ -269,3 +269,67 @@ export function renderMaskedSnippet(text: string, focus?: SnippetFocus | null): 
     ),
   );
 }
+
+/**
+ * ── THE SNIPPET BOX — one box, three consoles, two states ────────────────────
+ *
+ * 2026-08-11 用户:「显示原文的样式，需要也有背景框框，和 mask 后的保持一致性的样式」.
+ *
+ * WHAT THIS SOLVES. A finding card has exactly ONE text block, and the eye swaps
+ * what is inside it: masked snippet ⇄ original text. Earlier passes treated the
+ * expanded state as a different KIND of thing and gave it different chrome — a
+ * second bordered panel below the snippet, then a frameless block standing in
+ * the snippet's place. Both read as "something else appeared", when the intended
+ * reading is "the same box, now showing the real values". The user's acceptance
+ * test is literal: put the collapsed and expanded screenshots side by side and
+ * the box outline must COINCIDE — only the text inside may differ.
+ *
+ * WHY IT LIVES HERE. The masked snippet is rendered by three surfaces that must
+ * not drift: the Personal self-view, the team member self-view (which reuses the
+ * Personal page and injects its own panel), and the admin audit drawer. This
+ * module is already the shared source for the trio's mask highlighting ("one
+ * regex, three pages"), so the box those spans sit in belongs beside it. Spelled
+ * inline it was three copies, and the expanded state had drifted in all three.
+ *
+ * WHY A VARIANT ENUM AND NOT THREE CONSTANTS. The variants are not independent
+ * styles — they are one style plus deltas, and the whole point is that the
+ * deltas may not touch the outline. Deriving them from a single base is what
+ * makes "the outline coincides" a property of the code rather than of three
+ * literals someone has to keep equal by hand. Fenced by
+ * aikey-control/web/src/pages/user/compliance/snippet-reveal.test.ts.
+ *
+ * 🔴 THE RAW MARKER IS INSET, AND THAT IS THE WHOLE POINT. Un-masked text still
+ * earns a warm left edge — it is the console-wide "these are real values" cue.
+ * Drawn as `borderLeft` (as it was) it replaces the box's own 1px left border
+ * with 2px, so the outline shifts by a pixel and the text reflows: the two
+ * states no longer line up, which is exactly what the user asked to fix. As an
+ * INSET shadow it is painted inside the border box, so geometry is untouched —
+ * the user named this resolution ("作为框内的一条左缘"). Same 2px and same
+ * `--primary-dim` token as before; no new value.
+ */
+export const SNIPPET_BOX_CLASS =
+  'text-[11px] font-mono mt-2 break-all whitespace-pre-wrap rounded px-2 py-1.5 leading-relaxed';
+
+/**
+ * `masked`  — the redacted snippet: the collapsed, default state.
+ * `raw`     — the SAME box holding un-masked text (Personal lane's context_snippet).
+ * `rawTurn` — the same box again, holding a whole conversation turn. A turn can
+ *             run for pages and it sits INSIDE a finding card, so it is capped
+ *             and scrolls internally; the cap changes what the box can grow to,
+ *             never how it is drawn, so a short turn is pixel-identical to the
+ *             masked state.
+ */
+export type SnippetBoxVariant = 'masked' | 'raw' | 'rawTurn';
+
+export function snippetBoxStyle(variant: SnippetBoxVariant): React.CSSProperties {
+  // The base is the ONLY place the box's geometry and fill are written down.
+  const base: React.CSSProperties = {
+    color: 'var(--foreground)',
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    border: '1px solid var(--border)',
+  };
+  if (variant === 'masked') return base;
+  const raw: React.CSSProperties = { ...base, boxShadow: 'inset 2px 0 0 var(--primary-dim)' };
+  if (variant === 'raw') return raw;
+  return { ...raw, maxHeight: 220, overflowY: 'auto' };
+}

@@ -119,6 +119,24 @@ const SUGGESTIONS: Record<string, string> = {
 export function parseApiError(err: unknown): ApiError {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data as Record<string, unknown> | undefined;
+    // 🔴 The OTHER server envelope: `{code, message}` (aikey-data's
+    // shared.ErrorResponse — query-service and collector-service both use it),
+    // as opposed to control-master's `{error, message}` handled below.
+    //
+    // Without this branch a data-service error fell through to the generic
+    // `HTTP_<status>` path and the caller showed "request failed" — throwing
+    // away a message that was written to be acted on. Found 2026-08-11: the
+    // conversation-audit seat search returns 400 「seat_keys accepts at most
+    // 1000 keys; narrow the search」 and the console rendered a bare
+    // 「加载失败」, so a working, self-explaining refusal read as a broken page.
+    if (typeof data?.code === 'string' && !data.error) {
+      const code = data.code;
+      return {
+        code,
+        message: typeof data.message === 'string' ? data.message : code,
+        suggestion: SUGGESTIONS[code],
+      };
+    }
     if (data?.error && typeof data.error === 'string') {
       const code = data.error;
       const apiErr: ApiError = {

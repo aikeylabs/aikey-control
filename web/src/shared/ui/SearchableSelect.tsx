@@ -52,6 +52,21 @@ interface SearchableSelectProps {
    * events, provider-accounts) are unaffected.
    */
   allowCustom?: boolean;
+  /**
+   * Shown as the first row of the OPEN dropdown when nothing in it can be
+   * picked — the list is empty, or every option is `disabled`.
+   *
+   * WHY IT LIVES IN THE DROPDOWN (2026-08-11): "there is nothing you can
+   * choose" is discovered by opening the list and finding only greyed rows, so
+   * the explanation has to be where the eye already is. A hint placed outside
+   * the control is either covered by the panel (it opens downward) or simply
+   * not where the operator is looking.
+   *
+   * The CALLER supplies the wording because only it knows the reason — the
+   * component cannot tell "every account is already in another pool" from
+   * "this provider has no accounts yet", and those need different advice.
+   */
+  noOptionsHint?: string;
 }
 
 /**
@@ -69,6 +84,7 @@ export function SearchableSelect({
   style,
   disabled,
   allowCustom = false,
+  noOptionsHint,
 }: SearchableSelectProps) {
   const { t } = useTranslation();
   // Default placeholder is resolved here (not as a prop default) so it can
@@ -97,6 +113,10 @@ export function SearchableSelect({
   };
 
   const selectedLabel = options.find(o => o.value === value)?.label;
+
+  // `[].every()` is true, so this covers both "empty list" and "everything is
+  // disabled" — the two ways a dropdown can offer nothing.
+  const nothingSelectable = filtered.every((o) => o.disabled);
 
   // Custom-add row: show when `allowCustom` is on, the user has typed
   // something non-empty, and it doesn't exactly match any preset value
@@ -244,9 +264,28 @@ export function SearchableSelect({
             />
           </div>
 
+          {/* Nothing-to-pick hint — the dropdown's first row.
+              🔴 Rendered OUTSIDE `listRef`'s container on purpose: the keyboard
+              scroll-into-view reads `listRef.current.children[highlightIdx]`,
+              so an extra child inside the list would shift every option's index
+              by one and scroll to the wrong row. Visually it is still the first
+              thing under the search box. */}
+          {noOptionsHint && nothingSelectable && (
+            <div
+              className="px-3 py-2 text-[11px] font-mono leading-relaxed"
+              style={{
+                color: 'var(--primary-dim, var(--muted-foreground))',
+                borderBottom: '1px solid var(--border)',
+                backgroundColor: 'rgba(250,204,21,0.06)',
+              }}
+            >
+              {noOptionsHint}
+            </div>
+          )}
+
           {/* Options list */}
           <div ref={listRef} className="max-h-52 overflow-y-auto py-1">
-            {filtered.length === 0 && !canCustom ? (
+            {filtered.length === 0 && !canCustom && !(noOptionsHint && nothingSelectable) ? (
               <div className="px-3 py-2 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
                 {t('searchableSelect.noMatches')}
               </div>

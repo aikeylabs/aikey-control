@@ -30,6 +30,7 @@
  * user sees groupings rather than a flat list mixing types.
  */
 import { useMemo, useState } from 'react';
+import { LIVE_PICKER_QUERY } from '@/shared/utils/query-options';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -78,7 +79,9 @@ export function SwitchKeyModal({
     queryKey: ['vault-status'],
     queryFn: importApi.vaultStatus,
     refetchInterval: 10_000,
-    staleTime: 0,
+    // Already live via the 10s poll; the shared preset keeps the intent named
+    // and the picker rule uniform across every query in this modal.
+    ...LIVE_PICKER_QUERY,
   });
   const vaultLocked = !vaultStatusQuery.data?.unlocked;
   const vaultInitialized = vaultStatusQuery.data?.initialized ?? true;
@@ -112,6 +115,7 @@ export function SwitchKeyModal({
     queryKey: ['user-vault-list-for-switch'],
     queryFn: vaultApi.list,
     enabled: !vaultLocked,
+    ...LIVE_PICKER_QUERY,
   });
 
   // Team-managed virtual keys live on a separate API (not vault.list).
@@ -124,6 +128,7 @@ export function SwitchKeyModal({
     queryFn: deliveryApi.allKeys,
     enabled: !vaultLocked,
     retry: false,
+    ...LIVE_PICKER_QUERY,
   });
 
   const candidates = useMemo<CandidateRow[]>(() => {

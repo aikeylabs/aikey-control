@@ -21,6 +21,7 @@
  * the locked state itself rather than punting to the parent.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { LIVE_PICKER_QUERY } from '@/shared/utils/query-options';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -72,7 +73,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
     queryKey: ['vault-status'],
     queryFn: importApi.vaultStatus,
     refetchInterval: 10_000,
-    staleTime: 0,
+    ...LIVE_PICKER_QUERY,
   });
   const vaultLocked = !vaultStatusQuery.data?.unlocked;
   const vaultInitialized = vaultStatusQuery.data?.initialized ?? true;

@@ -34,7 +34,14 @@ import { Pagination, useStoredPageSize } from '@/shared/ui/Pagination';
 import { formatDateTime } from '@/shared/utils/datetime-intl';
 // Mask-token highlighting is shared with the master audit + triage drawers —
 // one regex, three pages (see mask-highlight.tsx for why).
-import { renderMaskedSnippet, resolveWireLabelFocus } from '@/shared/utils/mask-highlight';
+import {
+  renderMaskedSnippet,
+  resolveWireLabelFocus,
+  // The box those spans sit in — shared for the same reason the regex is
+  // (2026-08-11): the masked and the revealed state must be the SAME box.
+  SNIPPET_BOX_CLASS,
+  snippetBoxStyle,
+} from '@/shared/utils/mask-highlight';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterTokenBar, type FilterToken, type FilterTokenDimension } from '@/shared/ui/FilterTokenBar';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
@@ -714,11 +721,36 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                   // ComplianceViewSource.originalTurn for the full rationale.
                   const teamOriginal = source.originalTurn;
                   const canReveal = canRevealOriginal(source, selected, f);
-                  // Team lane never substitutes text in place — the masked
-                  // snippet stays put and the turn opens BELOW it, because the
-                  // two are not the same span and swapping one for the other
-                  // would read as "this is what that mask covered".
-                  const shown = !teamOriginal && revealed && raw ? raw : masked;
+                  // 🔴 ONE SLOT, TWO STATES (2026-08-11 用户: 「改成原地替换」).
+                  // The eye SWAPS what occupies the single block below; it never
+                  // appends a second one. Both lanes now behave identically:
+                  //   - LOCAL — `shown` flips from the masked text to the raw
+                  //     span inside the ONE box (this was always true here).
+                  //   - TEAM  — the fetched turn takes the box's PLACE, rendered
+                  //     by the lane that knows what it is. Until 2026-08-11 the
+                  //     masked snippet stayed put and the turn opened BELOW it;
+                  //     the reason given was that the snippet had to survive as
+                  //     the anchor for the placeholder highlight. That reason
+                  //     does not survive the swap: expanded, the reader is
+                  //     looking at raw values, and there is no placeholder left
+                  //     to highlight (see `focus` below, which goes null).
+                  //
+                  // 🔴 WHAT THE SLOT SHOWS IS TEXT AND ONLY TEXT (2026-08-11
+                  // 用户: 「这段话不需要了」+「能不能在原框框内显示，不要在下方」).
+                  // Neither lane may put a heading, a caption or a notice around
+                  // it. LOCAL never had any. TEAM briefly did — heading + note +
+                  // text stacked inside this slot — and that is what the second
+                  // complaint was about; the panel is now a single text element
+                  // and its own fence asserts the two copy keys are gone
+                  // (master .../user/compliance/original-turn-eye.test.ts §B).
+                  // The turn is STILL not the masked span; what keeps that from
+                  // being mis-implemented is the offsets ban fenced in the panel,
+                  // not a sentence on screen.
+                  // Holds the SOURCE (not a boolean) so the JSX below narrows it
+                  // without a non-null assertion — `.Panel` is only reachable on
+                  // the branch that proved the lane exists.
+                  const showOriginalInPlace = revealed ? teamOriginal : undefined;
+                  const shown = revealed && raw ? raw : masked;
                   // ── 发出形态, shown IN the snippet ────────────────────────
                   // The window around this match routinely contains OTHER
                   // findings' placeholders, so「哪一个是我的」was unanswerable
@@ -794,26 +826,31 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                       </span>
                     </div>
                     {f.detector && <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.fieldDetector')}: {f.detector}</p>}
-                    {shown && (
-                      <div
-                        className="text-[11px] font-mono mt-2 break-all whitespace-pre-wrap rounded px-2 py-1.5 leading-relaxed"
-                        style={{
-                          color: 'var(--foreground)',
-                          backgroundColor: 'rgba(0,0,0,0.28)',
-                          // Revealed raw text gets a warm left edge so it is
-                          // obvious at a glance which cards are un-masked.
-                          border: '1px solid var(--border)',
-                          borderLeft: revealed && raw ? '2px solid var(--primary-dim)' : '1px solid var(--border)',
-                        }}
-                      >
+                    {/* 🔴 THE TERNARY IS THE MECHANISM (2026-08-11 原地替换).
+                        Two sibling `&&` guards would render the snippet AND the
+                        turn the moment the eye opens — that is precisely the
+                        append shape this replaced. Fenced in
+                        ./snippet-reveal.test.ts (R4), which slices this branch
+                        out by name and asserts the snippet is unreachable while
+                        the panel is mounted.
+
+                        The team panel mounts ONLY while an eye is open, so the
+                        RECORDED read happens on the click and not on the drawer
+                        opening. */}
+                    {showOriginalInPlace ? (
+                      <showOriginalInPlace.Panel event={selected} />
+                    ) : shown ? (
+                      // ONE box, both states (2026-08-11 用户:「显示原文的样式，
+                      // 需要也有背景框框，和 mask 后的保持一致性的样式」). Geometry
+                      // and fill come from the shared source so the collapsed and
+                      // expanded outlines coincide; the only difference is the
+                      // text, plus an INSET warm left edge marking un-masked
+                      // values (inset so it cannot move the outline — see
+                      // snippetBoxStyle).
+                      <div className={SNIPPET_BOX_CLASS} style={snippetBoxStyle(revealed && raw ? 'raw' : 'masked')}>
                         {renderMaskedSnippet(shown, focus)}
                       </div>
-                    )}
-                    {/* Team lane: the fetched TURN, rendered by the lane that
-                        knows what it is. Mounted only while an eye is open, so
-                        the recorded read happens on the click and not on the
-                        drawer opening. */}
-                    {teamOriginal && revealed && <teamOriginal.Panel event={selected} />}
+                    ) : null}
                   </div>
                   );
                 })}

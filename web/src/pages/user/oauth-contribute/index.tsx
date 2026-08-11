@@ -16,6 +16,7 @@
  *   - POST /api/user/oauth/pool/*           → pool sign-in (relay → proxy broker)
  */
 import { PageTitleGlyph } from '@/shared/ui/PageHeader';
+import { LIVE_PICKER_QUERY } from '@/shared/utils/query-options';
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ModalPortal } from '@/shared/ui/ModalShell';
@@ -1486,7 +1487,11 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
   const [providerCode, setProviderCode] = useState<string>(ADDABLE_PROVIDERS[0].code);
   const [err, setErr] = useState('');
 
-  const groupsQ = useQuery({ queryKey: ['my-oauth-groups'], queryFn: fetchMyGroups });
+  const groupsQ = useQuery({
+    queryKey: ['my-oauth-groups'],
+    queryFn: fetchMyGroups,
+    ...LIVE_PICKER_QUERY,
+  });
   const groups: MyOauthGroup[] = Array.isArray(groupsQ.data) ? groupsQ.data : [];
   const groupsErr = groupsQ.data && isTeamFetchError(groupsQ.data) ? groupsQ.data : undefined;
 
