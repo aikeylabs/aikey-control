@@ -41,7 +41,87 @@ export interface FilterTokenDimension {
    *  token. The PAGE implements the actual fuzzy row matching — the bar only
    *  carries the keyword. Stacks (AND) with the other dimension tokens. */
   keyword?: boolean;
+  /**
+   * Not browsable: this dimension stays out of the left pane, so its values are
+   * never enumerated on screen — but they DO participate in value-first search,
+   * so typing surfaces the ones that match (2026-08-11 user decision).
+   *
+   * 🔴 Why this is a DIMENSION flag and not a bar-level mode: one page routinely
+   * needs both kinds at once. Seats browses 状态 (three values — listing them is
+   * the fastest way to pick) while its member dimension must never enumerate the
+   * org's whole roster of names and addresses. A bar-level switch could not
+   * express that page at all.
+   *
+   * 🔴 Distinct from `keyword`, which carries a free string the PAGE fuzzy-matches
+   * against rows. `searchOnly` still has real options with real values — it is
+   * the same exact-match token as any other dimension, just discovered by typing
+   * instead of by browsing.
+   *
+   * When EVERY dimension is searchOnly the left pane has nothing to show, and the
+   * popover collapses to a single column on its own — no extra flag needed.
+   */
+  searchOnly?: boolean;
 }
+
+/**
+ * Bar geometry. Purely visual — it changes no behaviour and no filtering.
+ *
+ * 🔴 Font sizes deliberately do NOT shrink across the scale. The space a smaller
+ * font buys back is small and the legibility it costs is not: these are dense
+ * mono admin tables read for long stretches. The scale comes from width, row
+ * height and padding instead.
+ *
+ * 🔴 `width` covers the input AND the popover. They used to be set in two
+ * different places — the popover's `w-[520px]` lived here while every page wrote
+ * its own `w-[520px]` wrapper — so narrowing a page silently left a popover
+ * hanging off the edge of its own input. One number, one source.
+ *
+ * - lg: the 2026-07-29 original, unchanged to the pixel. Dense pages with many
+ *       dimensions and long values (usage-audit, bindings, seats).
+ * - md: pages whose filter row is a handful of short enum values.
+ * - sm: pages with one or two conditions, typically all `searchOnly`, where the
+ *       control should read as a small toolbar input rather than a palette.
+ */
+export type FilterTokenBarSize = 'sm' | 'md' | 'lg';
+
+/**
+ * The console-wide filter-row height, in px. 🔴 NOT part of the size scale.
+ *
+ * Every filter-row control resolves to 38px by construction — `py-2 text-sm`
+ * plus a 1px border (20 line-height + 16 padding + 2 border). FilterBar's search
+ * input says so in its own comment ("the canonical"), SearchableSelect's trigger
+ * uses the same classes, and the plain search inputs on the personal pages do
+ * too. A toolbar is read as one horizontal line, so a control that is 4px
+ * shorter than the thing beside it looks broken rather than smaller.
+ *
+ * 🔴 2026-08-11: `size` originally scaled height too (38/34/30). That is what a
+ * "size" intuitively means, and it was wrong: it put three different control
+ * heights across the console and broke alignment on nine pages at once (user
+ * report). What varies with page density is FOOTPRINT — width, pane, row height,
+ * popover height. Height is an alignment contract with every other control in
+ * the row, and contracts do not scale.
+ */
+const FILTER_ROW_HEIGHT = 38;
+
+interface SizeSpec {
+  /** Input + popover width in px. */
+  width: number;
+  /** Left (dimension) pane width in px. */
+  dimPaneWidth: number;
+  /** Candidate row height in px. */
+  rowHeight: number;
+  /** Popover body max height in px. */
+  maxBodyHeight: number;
+}
+
+const SIZE_SPECS: Record<FilterTokenBarSize, SizeSpec> = {
+  // 🔴 lg's numbers are the pre-2026-08-11 hardcoded ones verbatim. Any edit
+  // here silently restyles usage-audit / bindings / virtual-keys /
+  // provider-accounts, which never opted into a size.
+  lg: { width: 520, dimPaneWidth: 180, rowHeight: 30, maxBodyHeight: 300 },
+  md: { width: 420, dimPaneWidth: 160, rowHeight: 28, maxBodyHeight: 260 },
+  sm: { width: 300, dimPaneWidth: 140, rowHeight: 26, maxBodyHeight: 220 },
+};
 
 export interface FilterToken {
   key: string;
@@ -63,10 +143,33 @@ interface FilterTokenBarProps {
   tokens: FilterToken[];
   onChange: (tokens: FilterToken[]) => void;
   placeholder?: string;
+  /** Visual scale; see SIZE_SPECS. Defaults to the original 'lg'. */
+  size?: FilterTokenBarSize;
+  /**
+   * Which surface the bar should read as, so it matches the OTHER controls on
+   * its page (2026-08-11 user request).
+   *
+   * 🔴 The two consoles genuinely differ, and neither is wrong:
+   *  - 'card'  (default) — the master console's filter row, where the bar sits
+   *    beside SearchableSelect triggers and FilterBar's search input, all of
+   *    which are var(--card) #27272a. index.css even carries a dedicated
+   *    `input.filter-search-input` rule to force that.
+   *  - 'muted' — the personal console (vault / virtual-keys), whose search box
+   *    is a plain <input> and therefore picks up the global form rule's
+   *    var(--muted) #3f3f46, one tier lighter, with a 14px font and a 16px
+   *    magnifier.
+   *
+   * 🚫 Not a theme and not a preference: it is "match your neighbours". Picking
+   * the wrong one is visible — a #27272a box in a row of #3f3f46 ones reads as
+   * a different KIND of control, which is what prompted this.
+   */
+  tone?: 'card' | 'muted';
 }
 
-export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: FilterTokenBarProps) {
+export function FilterTokenBar({ dimensions, tokens, onChange, placeholder, size = 'lg', tone = 'card' }: FilterTokenBarProps) {
   const { t } = useTranslation();
+  const spec = SIZE_SPECS[size];
+  const muted = tone === 'muted';
   const [text, setText] = useState('');
   // activeKey = the dimension the right pane previews. `explicit` marks a
   // deliberate pick (click / Enter on a dim row): typed text then filters
@@ -79,9 +182,21 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
   const inputRef = useRef<HTMLInputElement>(null);
 
   const dimByKey = useMemo(() => new Map(dimensions.map((d) => [d.key, d])), [dimensions]);
-  // Keyword dim is a fallback mechanism, not a browsable dimension — it stays
-  // out of the left pane and out of value-first enumeration.
-  const listDims = useMemo(() => dimensions.filter((d) => !d.keyword), [dimensions]);
+  // 🔴 Two different exclusions that used to be one.
+  //
+  // `listDims` = what the LEFT PANE offers to browse. Both `keyword` and
+  // `searchOnly` are excluded.
+  //
+  // `matchDims` = what typed text is matched AGAINST. Only `keyword` is
+  // excluded (it has no options to match — it IS the free string). A
+  // `searchOnly` dimension keeps its options here: that is the whole point,
+  // "not listed" must not mean "not findable".
+  //
+  // Collapsing these back into one filter is exactly the bug this split exists
+  // to prevent — a searchOnly dimension would become unreachable, and the page
+  // would look like it had lost a filter rather than like it had a hidden one.
+  const listDims = useMemo(() => dimensions.filter((d) => !d.keyword && !d.searchOnly), [dimensions]);
+  const matchDims = useMemo(() => dimensions.filter((d) => !d.keyword), [dimensions]);
   const keywordDim = useMemo(() => dimensions.find((d) => d.keyword), [dimensions]);
   const previewKey = activeKey ?? listDims[0]?.key ?? null;
   const previewDim = previewKey ? dimByKey.get(previewKey) : undefined;
@@ -121,10 +236,15 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
       }
       return rows;
     }
+    // Dimension-NAME rows stay browsable-only: a 'dim' row switches the palette
+    // into that dimension's value list, which is precisely what a searchOnly
+    // dimension has no business offering.
     const dimRows: Suggestion[] = listDims
       .filter((d) => matches(d.label, q))
       .map((d) => ({ kind: 'dim', dimKey: d.key, label: `${d.label} ▸` }));
-    const valRows: Suggestion[] = listDims.flatMap((d) =>
+    // Value rows come from matchDims, so a searchOnly dimension's values show up
+    // here — and ONLY here.
+    const valRows: Suggestion[] = matchDims.flatMap((d) =>
       d.options
         .filter((o) => matches(o.label, q) || matches(o.value, q))
         .slice(0, VALUE_HITS_PER_DIMENSION)
@@ -139,7 +259,7 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
       rows.splice(Math.min(2, rows.length), 0, fuzzyRow);
     }
     return rows;
-  }, [listDims, keywordDim, previewDim, explicit, text, paneText, tokens, t]);
+  }, [listDims, matchDims, keywordDim, previewDim, explicit, text, paneText, tokens, t]);
 
   useEffect(() => setHighlight(0), [text, paneText, activeKey, open]);
   // Pane filter is scoped to one dimension — switching preview or closing
@@ -266,17 +386,21 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
   const searchMode = !explicit && text.trim() !== '';
 
   return (
-    // Width is the CALLER's decision (wrap in a sized container): a token bar
-    // stretched across the whole page reads as oversized (user report
-    // 2026-07-29), but the right cap depends on the page's toolbar.
-    <div ref={rootRef} className="relative w-full min-w-64">
+    // 🔴 Width comes from `size`, not from the caller (changed 2026-08-11). It
+    // WAS the caller's job — every page wrapped the bar in its own `w-[520px]`
+    // while the popover carried a separate hardcoded 520 — and the two could
+    // not be kept in agreement: narrowing the wrapper left the popover hanging
+    // off the edge of its own input. `max-w-full` keeps it honest inside a
+    // narrower column.
+    <div ref={rootRef} className="relative max-w-full" style={{ width: spec.width }}>
       <div
-        // min-h-[38px]: the canonical master filter-row height (SearchableSelect
-        // intrinsic / FilterBar search input — see FilterBar.tsx 2026-06-11
-        // rationale). Without it this bar sat at ~34px and read misaligned next
-        // to sibling filter controls (user report 2026-07-29 ×2).
-        className="flex items-center flex-wrap gap-1.5 px-2 py-1.5 min-h-[38px] rounded border cursor-text"
-        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}
+        // FILTER_ROW_HEIGHT, identical at every size, so the bar lines up with
+        // the page's sibling toolbar controls (SearchableSelect trigger /
+        // FilterBar search input — see FilterBar.tsx 2026-06-11 rationale, and
+        // FILTER_ROW_HEIGHT's own note). Without it this bar sat at ~34px and
+        // read misaligned (user report 2026-07-29 ×2, again 2026-08-11).
+        className="flex items-center flex-wrap gap-1.5 px-2 py-1.5 rounded border cursor-text"
+        style={{ backgroundColor: muted ? 'var(--muted)' : 'var(--card)', borderColor: 'var(--border)', minHeight: FILTER_ROW_HEIGHT }}
         onClick={() => {
           setOpen(true);
           inputRef.current?.focus();
@@ -286,7 +410,7 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
             (2026-07-29 user decision: the filter family carries the icon).
             A flex child, not absolute-positioned, so chips flow after it. */}
         <svg
-          className="w-3.5 h-3.5 shrink-0 ml-1 pointer-events-none"
+          className={`${muted ? 'w-4 h-4' : 'w-3.5 h-3.5'} shrink-0 ml-1 pointer-events-none`}
           style={{ color: 'var(--muted-foreground)' }}
           fill="none"
           stroke="currentColor"
@@ -350,29 +474,33 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
           // overrides ANY inline/utility style and rendered this inner input
           // as a bright box-in-a-box (user report 2026-07-29). The class
           // out-specifies it to keep the input truly transparent/borderless.
-          className="filter-token-input flex-1 min-w-28 bg-transparent outline-none text-xs font-mono py-0.5"
+          className={`filter-token-input flex-1 min-w-28 bg-transparent outline-none font-mono py-0.5 ${muted ? 'text-sm' : 'text-xs'}`}
           style={{ color: 'var(--foreground)' }}
         />
       </div>
       {open && (
         <div
-          className="absolute z-20 mt-1 w-[520px] max-w-full rounded border overflow-hidden flex flex-col"
-          style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-md)' }}
+          className="absolute z-20 mt-1 max-w-full rounded border overflow-hidden flex flex-col"
+          style={{ width: spec.width, backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: 'var(--shadow-md)' }}
         >
-          <div className="flex" style={{ maxHeight: 300 }}>
+          <div className="flex" style={{ maxHeight: spec.maxBodyHeight }}>
             {/* Left pane: dimension list. Hover previews (browse mode only,
                 so main-input typing isn't disturbed); click commits the pick.
                 Hidden in cross-dimension search mode — the grouped results
-                carry the dimension names themselves. */}
-            {!searchMode && (
-              <div className="w-[180px] shrink-0 overflow-y-auto border-r py-1" style={{ borderColor: 'var(--border)' }}>
+                carry the dimension names themselves. Also hidden when NOTHING
+                is browsable (every dimension is searchOnly/keyword): rendering
+                an empty 160px rail with a border would read as a broken pane,
+                so the popover collapses to a single column on its own. */}
+            {!searchMode && listDims.length > 0 && (
+              <div className="shrink-0 overflow-y-auto border-r py-1" style={{ width: spec.dimPaneWidth, borderColor: 'var(--border)' }}>
                 {listDims.map((d) => {
                   const active = d.key === previewKey;
                   return (
                     <button
                       key={d.key}
-                      className="relative flex items-center justify-between w-full text-left px-3 h-[30px] text-[11px] font-mono"
+                      className="relative flex items-center justify-between w-full text-left px-3 text-[11px] font-mono"
                       style={{
+                        height: spec.rowHeight,
                         color: active ? 'var(--primary)' : 'var(--muted-foreground)',
                         backgroundColor: active ? 'rgba(250,204,21,0.08)' : 'transparent',
                       }}
@@ -425,8 +553,9 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder }: Fi
                   suggestions.map((s, i) => (
                     <button
                       key={`${s.kind}-${s.dimKey}-${s.value ?? ''}`}
-                      className="block w-full text-left px-3 h-[30px] text-[11px] font-mono truncate"
+                      className="block w-full text-left px-3 text-[11px] font-mono truncate"
                       style={{
+                        height: spec.rowHeight,
                         color: s.kind === 'dim' ? 'var(--foreground)' : 'var(--soft-foreground)',
                         backgroundColor: i === highlight ? 'rgba(250,204,21,0.08)' : 'transparent',
                       }}

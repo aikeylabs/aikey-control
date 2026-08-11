@@ -1933,7 +1933,7 @@ export default function UserVaultPage() {
                         {t('vault.colLastTest')}
                         {sortKey === 'last_test' && <span className="th-sort-arrow">↓</span>}
                       </th>
-                      <th style={{ width: 130, textAlign: 'right' }}>{t('vault.colActions')}</th>
+                      <th style={{ width: 130, textAlign: 'center' }}>{t('vault.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3255,8 +3255,7 @@ const Row = React.memo(function Row(props: {
   // there IS something to show now; row-click should peek-open in lock-
   // step with Personal / OAuth for UX consistency.
   const onRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
-    const t = e.target as HTMLElement;
-    if (t.closest('button, input, textarea, a, [role="button"]')) return;
+    if (isRowClickExempt(e.target)) return;
     // Row-level open is a "peek" — casual click while scanning; the
     // drawer auto-closes on scroll so it doesn't linger.
     props.onOpenDrawer('peek');
@@ -3460,7 +3459,7 @@ const Row = React.memo(function Row(props: {
         <LastTestCell value={r.extra?.last_test ?? null} />
       </td>
 
-      <td style={{ textAlign: 'right' }}>
+      <td data-row-actions style={{ textAlign: 'right' }}>
         {/* Phase 3B (2026-05-11): team rows now share the row-actions
             slot with Personal/OAuth (Use + View + Rename), with one
             difference — Delete is hidden for team rows. The DB-level
@@ -7803,4 +7802,5 @@ import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { providerBrandColor } from '../_shared/provider-brand';
 import { VAULT_PAGE_SKIN_V1 } from '../_shared/vault-page-skin';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
+import { isRowClickExempt } from '@/shared/utils/row-click-guard';
 const VAULT_CSS = KEYS_PAGE_CSS;

@@ -39,12 +39,12 @@
       "auth_failed": "需要重新登录",
       "upstream_unavailable": "上游暂不可用"
     },
-	"routeHelp": {
-	  "rate_limited": "无需人工清理；该 Worker 会在冷却到期后自动重新接纳账号。",
-	  "window_exhausted": "系统会在重试边界到达后自动重新探测该账号。",
-	  "auth_failed": "已吊销的 Token 无法靠等待恢复；请重新登录或更换账号。",
-	  "upstream_unavailable": "请检查该账号出口以及 Worker 到上游的连通性。"
-	},
+    "routeHelp": {
+      "rate_limited": "无需人工清理；该 Worker 会在冷却到期后自动重新接纳账号。",
+      "window_exhausted": "系统会在重试边界到达后自动重新探测该账号。",
+      "auth_failed": "已吊销的 Token 无法靠等待恢复；请重新登录或更换账号。",
+      "upstream_unavailable": "请检查该账号出口以及 Worker 到上游的连通性。"
+    },
     "loginStatus": {
       "logged_in": "已登录",
       "needs_login": "待登录",
@@ -1752,9 +1752,7 @@
     "page": {
       "title": "组织席位",
       "description": "组织 · {{orgId}}",
-      "inviteSeat": "邀请席位",
-      "searchPlaceholder": "搜索邮箱…",
-      "allStatuses": "全部状态"
+      "inviteSeat": "邀请席位"
     },
     "bulk": {
       "selectedCount": "已选 {{count}} 个席位",
@@ -2042,9 +2040,6 @@
     "subjectTypeBinding": "协议通道",
     "pageTitle": "控制事件",
     "pageDescription": "组织 · {{orgId}} — 不可变审计日志",
-    "searchPlaceholder": "搜索对象 ID / 操作者 / 原因...",
-    "allEventTypes": "全部事件类型",
-    "allSubjectTypes": "全部对象类型",
     "sectionTitle": "控制事件",
     "recordCount": "{{count}} 条记录",
     "columnEventType": "事件类型",
@@ -2267,11 +2262,7 @@
       "description": "管理 ai-compliance-detector 拉取用于运行时检测的规则 / 词条合规包。",
       "newPack": "+ 新建合规包"
     },
-    "filters": {
-      "statusPlaceholder": "按状态筛选…",
-      "kindPlaceholder": "按类型筛选…",
-      "searchPlaceholder": "按名称搜索…"
-    },
+    "filters": {},
     "list": {
       "loading": "加载中…",
       "empty": "没有符合当前筛选条件的合规包。"
@@ -2518,15 +2509,10 @@
     "toggleOrgEnforcedShort": "企业强制",
     "sectionTitle": "事件",
     "recordCount": "{{count}} 条记录",
-    "summaryTitle": "概况",
-    "summaryTotal": "总事件",
     "summaryMasked": "遮蔽",
     "summaryAllowed": "放行",
     "summaryBlocked": "拦截",
     "summaryAudited": "只记账",
-    "categoryPlaceholder": "搜索类别 / 实体 / 内容…",
-    "allSeverities": "全部严重度",
-    "allActions": "全部动作",
     "sevCritical": "严重",
     "sevHigh": "高",
     "sevMedium": "中",
@@ -2551,7 +2537,11 @@
     "fieldDetector": "检测器",
     "revealOriginal": "查看原文",
     "hideOriginal": "隐藏原文",
-    "originalUnavailable": "该命中项没有留存原文（由旧版检测器记录）。升级本机检测器后，新事件即可查看原文。"
+    "originalUnavailable": "该命中项没有留存原文（由旧版检测器记录）。升级本机检测器后，新事件即可查看原文。",
+    "dimSeverity": "严重度",
+    "dimAction": "动作",
+    "dimCategory": "类型",
+    "reset": "重置"
   },
   "browserProfileGuide": {
     "title": "为每个账号使用独立的浏览器 Profile",
@@ -2927,7 +2917,10 @@
         "confirm": "确认轮换",
         "cancel": "取消"
       }
-    }
+    },
+    "filterReset": "重置",
+    "emptyFiltered": "没有符合筛选条件的令牌。",
+    "dimNameOwnerSource": "名称 / 所有者 / 来源"
   },
   "dataFetchError": {
     "title": "部分数据加载失败，页面显示可能不完整",

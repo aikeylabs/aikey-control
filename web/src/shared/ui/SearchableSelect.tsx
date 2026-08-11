@@ -15,6 +15,17 @@ export interface SelectOption {
    * an address a list deliberately hides). Defaults to label + detail + value.
    */
   searchText?: string;
+  /**
+   * Renders the option but refuses selection — for a choice the server would
+   * reject anyway (2026-08-11: an OAuth account already held by another pool;
+   * attaching it answers 409 BIZ_OAUTH_GROUP_CRED_IN_USE).
+   *
+   * 🔴 Shown-but-refused, not hidden, ON PURPOSE. Hiding leaves the operator
+   * asking "where is my account?" with nothing on screen to answer them;
+   * greying it out and stating the reason answers it. Callers should pair this
+   * with `detail` (the reason) and sort disabled options last.
+   */
+  disabled?: boolean;
 }
 
 /** Everything a typed query may match: what's on screen plus the opt-in extras. */
@@ -76,6 +87,15 @@ export function SearchableSelect({
     return options.filter(o => optionHaystack(o).includes(q));
   }, [options, search]);
 
+  // Keyboard navigation must skip what the mouse cannot click. Without this the
+  // control contradicts itself: the row ignores a click but Enter selects it.
+  const firstEnabledFrom = (start: number, step: 1 | -1): number => {
+    for (let i = start; i >= 0 && i < filtered.length; i += step) {
+      if (!filtered[i].disabled) return i;
+    }
+    return -1;
+  };
+
   const selectedLabel = options.find(o => o.value === value)?.label;
 
   // Custom-add row: show when `allowCustom` is on, the user has typed
@@ -92,8 +112,12 @@ export function SearchableSelect({
     );
 
   useEffect(() => {
-    setHighlightIdx(0);
-  }, [search]);
+    // Land on the first SELECTABLE row, not row 0 — with disabled options
+    // sorted last row 0 is normally fine, but an all-disabled result set must
+    // not leave a highlight on something Enter would refuse.
+    setHighlightIdx(Math.max(0, firstEnabledFrom(0, 1)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, options]);
 
   useEffect(() => {
     if (open) {
@@ -125,14 +149,26 @@ export function SearchableSelect({
     const maxIdx = filtered.length + (canCustom ? 1 : 0) - 1;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightIdx(i => Math.min(i + 1, Math.max(0, maxIdx)));
+      setHighlightIdx((i) => {
+        // The custom-add row (index === filtered.length) is always selectable.
+        const next = firstEnabledFrom(i + 1, 1);
+        if (next !== -1) return next;
+        return canCustom ? filtered.length : Math.min(i, Math.max(0, maxIdx));
+      });
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlightIdx(i => Math.max(i - 1, 0));
+      setHighlightIdx((i) => {
+        const prev = firstEnabledFrom(Math.min(i, filtered.length) - 1, -1);
+        return prev === -1 ? i : prev;
+      });
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (highlightIdx < filtered.length && filtered[highlightIdx]) {
-        onChange(filtered[highlightIdx].value);
+      const opt = filtered[highlightIdx];
+      if (highlightIdx < filtered.length && opt) {
+        // Refuse here too, not only on click — otherwise the keyboard path
+        // can select what the pointer path rejects.
+        if (opt.disabled) return;
+        onChange(opt.value);
         setOpen(false);
       } else if (canCustom) {
         onChange(q);
@@ -218,13 +254,21 @@ export function SearchableSelect({
               filtered.map((opt, idx) => (
                 <div
                   key={opt.value}
-                  onClick={() => handleSelect(opt.value)}
-                  onMouseEnter={() => setHighlightIdx(idx)}
-                  className="px-3 py-1.5 text-sm cursor-pointer transition-colors"
+                  onClick={() => !opt.disabled && handleSelect(opt.value)}
+                  onMouseEnter={() => !opt.disabled && setHighlightIdx(idx)}
+                  aria-disabled={opt.disabled || undefined}
+                  className="px-3 py-1.5 text-sm transition-colors"
                   style={{
-                    backgroundColor: idx === highlightIdx ? 'var(--accent)' : opt.value === value ? 'rgba(255,255,255,0.04)' : 'transparent',
+                    backgroundColor: opt.disabled
+                      ? 'transparent'
+                      : idx === highlightIdx ? 'var(--accent)' : opt.value === value ? 'rgba(255,255,255,0.04)' : 'transparent',
                     color: opt.value === value ? 'var(--accent-foreground, var(--foreground))' : 'var(--foreground)',
                     fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+                    // Dimmed rather than hidden; `not-allowed` says "this row is
+                    // a real thing that cannot be picked", which a plain
+                    // `default` cursor would not.
+                    opacity: opt.disabled ? 0.45 : 1,
+                    cursor: opt.disabled ? 'not-allowed' : 'pointer',
                   }}
                 >
                   {opt.label}

@@ -13,18 +13,14 @@
 // mark is misinformation. Callers pass the tool slug ('claude' | 'codex'),
 // typically a provider display alias or a protocol-derived label.
 
-export const TOOL_GLYPH: Record<string, string[]> = {
-  claude: [
-    'M12 3v4', 'M12 17v4', 'M3 12h4', 'M17 12h4',
-    'm5.64 5.64 2.83 2.83', 'm15.53 15.53 2.83 2.83',
-    'm18.36 5.64-2.83 2.83', 'm8.47 15.53-2.83 2.83',
-  ],
-  codex: ['M12 2 20.66 7v10L12 22 3.34 17V7Z'],
-  // kimi = crescent moon (2026-08-01 user request): the Moonshot「月之暗面」
-  // motif as a plain lucide-style stroke. Keyed by FAMILY name — kimi has no
-  // family-level display alias, so callers fall back to the family slug.
-  kimi: ['M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'],
-};
+// 🔴 The glyph DATA is not defined here. It used to be — a byte-identical copy
+// of the shared table — and on 2026-08-11 that meant changing the Claude mark
+// would have had to be pasted into three files, which is precisely the drift
+// this module was extracted to stop. Re-exported so the existing importers keep
+// working; the component below stays local because it takes a `title` prop the
+// shared one does not.
+export { TOOL_GLYPH, FILLED_GLYPH } from '@/shared/ui/ToolGlyph';
+import { TOOL_GLYPH, FILLED_GLYPH } from '@/shared/ui/ToolGlyph';
 
 // KIND_GLYPH — the credential-kind icon family (key = API key material,
 // users = team-managed key, fingerprint = OAuth-flavored). Same heroicons/
@@ -82,12 +78,13 @@ export function ToolGlyph({
 }) {
   const paths = TOOL_GLYPH[slug];
   if (!paths) return null;
+  const filled = FILLED_GLYPH.has(slug);
   return (
     <span className="inline-flex shrink-0" title={title ?? slug}>
       <svg
         className={className}
-        fill="none"
-        stroke="currentColor"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke={filled ? 'none' : 'currentColor'}
         viewBox="0 0 24 24"
         strokeWidth={1.8}
         style={inheritColor ? undefined : { color: 'var(--muted-foreground)' }}

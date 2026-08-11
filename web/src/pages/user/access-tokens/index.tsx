@@ -11,8 +11,9 @@
  * wizard (add accounts / log in / connectivity self-check) enriches the create
  * modal in a follow-up; this MVP creates against the member's own pool.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { PageTitleRow } from '@/shared/ui/PageHeader';
+import { FilterTokenBar, type FilterToken, type FilterTokenDimension } from '@/shared/ui/FilterTokenBar';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -31,6 +32,7 @@ import { formatDate, formatDateTime, formatRelativeTime } from '@/shared/utils/d
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { KindGlyph } from '../_shared/tool-glyph';
 import { PoolAccountList } from '../_shared/PoolAccountList';
+import { isRowClickExempt } from '@/shared/utils/row-click-guard';
 
 // statusLabel maps a seat status to the SAME words the card-header chips use
 // (启用中 / 停用 / 已吊销). Before 2026-07-31 the cell printed the raw backend
@@ -1000,14 +1002,116 @@ export default function MyAgentsPage() {
     refetchOnReconnect: true,
   });
 
+  // ── Aggregated token filter (2026-08-11 user request), `sm` ────────────────
+  //
+  // Every dimension is `searchOnly` (小尺寸「不列出值」): nothing is enumerated
+  // until you type. Dimensions are COLUMNS this table renders — 状态 and
+  // 池可用性 — plus the name as the fuzzy fallback. Labels reuse the existing
+  // `accessTokens.status.*` / `accessTokens.readiness.*` vocabulary rather than
+  // inventing filter-only wording, so a chip reads the same as the cell it
+  // filters on.
+  //
+  // 🔴 Availability is NOT a restatement of status: a token can be 启用中 and
+  // still unable to route because its pool has nobody logged in. "Which of my
+  // tokens are live but broken?" is the question this page exists to answer and
+  // previously took a manual scan of two columns.
+  const [tokenFilters, setTokenFilters] = useState<FilterToken[]>([]);
+  const tokenFilterValue = (key: string) => tokenFilters.find((tk) => tk.key === key)?.value ?? '';
+
+  /** The 来源 cell's text: the pool / api-key name, else the my-pool wording. */
+  function sourceLabelOf(a: MyAgentDTO): string {
+    return a.source?.name || (a.source?.owner_pool ? t('accessTokens.myPool') : '');
+  }
+  /** The 路由账号 cell's text — same expression RoutingCell renders, so a chip
+   *  and the cell it filters on can never disagree. */
+  function routingLabelOf(a: MyAgentDTO): string {
+    const sum = a.routing_summary;
+    return sum?.state === 'bound'
+      ? (sum.identity || sum.account_id || routingStateLabel(sum, t))
+      : routingStateLabel(sum, t);
+  }
+  // 🔴 Options come from the LOADED ROWS, not from a hand-written list. A
+  // member's pools and routed accounts are their own — enumerating a fixed set
+  // would offer values that can never match, and miss the ones that do.
+  const sourceOptions = useMemo(() => [...new Set((agents ?? []).map(sourceLabelOf).filter(Boolean))]
+    .sort().map(v => ({ value: v, label: v })), [agents, t]);
+  const routingOptions = useMemo(() => [...new Set((agents ?? []).map(routingLabelOf).filter(Boolean))]
+    .sort().map(v => ({ value: v, label: v })), [agents, t]);
+  const filterDimensions: FilterTokenDimension[] = useMemo(() => [
+    {
+      key: 'status',
+      label: t('accessTokens.col.status'),
+      // 🔴 Keys written out one by one, NOT assembled from the value with a
+      // template literal. A computed key is invisible to the i18n coverage
+      // scanner, so a missing translation would ship as a bare key on screen;
+      // the repo caps computed call sites for exactly that reason, and that
+      // fence caught the first draft of this file.
+      options: [
+        { value: 'active', label: t('accessTokens.status.active') },
+        { value: 'suspended', label: t('accessTokens.status.suspended') },
+        { value: 'revoked', label: t('accessTokens.status.revoked') },
+      ],
+      searchOnly: true,
+    },
+    {
+      key: 'availability',
+      label: t('accessTokens.col.availability'),
+      options: [
+        { value: 'ready', label: t('accessTokens.readiness.ready') },
+        { value: 'degraded', label: t('accessTokens.readiness.degraded') },
+        { value: 'no_login', label: t('accessTokens.readiness.no_login') },
+      ],
+      searchOnly: true,
+    },
+    {
+      key: 'source',
+      label: t('accessTokens.col.source'),
+      options: sourceOptions,
+      searchOnly: true,
+    },
+    {
+      key: 'routing',
+      label: t('accessTokens.col.routing'),
+      options: routingOptions,
+      searchOnly: true,
+    },
+    { key: 'q', label: t('accessTokens.col.agent'), options: [], freeText: true, keyword: true },
+  ], [t, sourceOptions, routingOptions]);
+
+  const visibleAgents = useMemo(() => {
+    const status = tokenFilterValue('status');
+    const availability = tokenFilterValue('availability');
+    const source = tokenFilterValue('source');
+    const routing = tokenFilterValue('routing');
+    const q = tokenFilterValue('q').trim().toLowerCase();
+    return (agents ?? []).filter((a) => {
+      if (status && a.status !== status) return false;
+      if (availability && a.pool_readiness !== availability) return false;
+      // Exact match on the RENDERED label, which is what the option carries —
+      // matching a raw id here would silently never hit.
+      if (source && sourceLabelOf(a) !== source) return false;
+      if (routing && routingLabelOf(a) !== routing) return false;
+      if (q && !a.alias.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    // sourceLabelOf / routingLabelOf close over `t`; listed so a language
+    // switch re-filters instead of leaving stale labels matching.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agents, tokenFilters, t]);
+
   // Card-header chip counts — same strip the Team Keys card renders above its
   // thead (2026-07-18 user request: align with /user/virtual-keys). Chip
   // classes (.chip/.status-dot) come from the shared KEYS_PAGE_CSS skin.
+  //
+  // 🔴 Counted over the FILTERED set, unlike route-groups' deliberately
+  // org-wide badge: these chips sit directly above the rows they describe, so
+  // "启用 6 个" over three visible rows would be read as a bug in the table
+  // rather than as a different scope.
   const counts = {
-    total: agents?.length ?? 0,
-    active: agents?.filter(a => a.status === 'active').length ?? 0,
-    suspended: agents?.filter(a => a.status === 'suspended').length ?? 0,
-    revoked: agents?.filter(a => a.status === 'revoked').length ?? 0,
+    total: visibleAgents.length,
+    active: visibleAgents.filter(a => a.status === 'active').length,
+    suspended: visibleAgents.filter(a => a.status === 'suspended').length,
+    revoked: visibleAgents.filter(a => a.status === 'revoked').length,
   };
 
   return (
@@ -1026,6 +1130,28 @@ export default function MyAgentsPage() {
           <p className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.subtitle')}</p>
         </PageTitleRow>
         <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-primary-dim text-xs px-4 py-2">{t('accessTokens.newAgent')}</button>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <FilterTokenBar
+          dimensions={filterDimensions}
+          tokens={tokenFilters}
+          onChange={setTokenFilters}
+          size="sm"
+          // Personal console: match the vault / virtual-keys search box, which is a
+          // plain <input> on var(--muted) — one tier lighter than the master
+          // console's var(--card) filter row (2026-08-11 user request).
+          tone="muted"
+        />
+        {tokenFilters.length > 0 && (
+          <button
+            onClick={() => setTokenFilters([])}
+            className="text-xs font-mono px-3 py-2 min-h-[38px] rounded border"
+            style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
+          >
+            {t('accessTokens.filterReset')}
+          </button>
+        )}
       </div>
 
       <section className="card overflow-hidden">
@@ -1073,7 +1199,7 @@ export default function MyAgentsPage() {
                 <th>{t('accessTokens.col.availability')}</th>
                 <th>{t('accessTokens.col.routing')}</th>
                 <th>{t('accessTokens.col.created')}</th>
-                <th style={{ textAlign: 'right' }}>{t('accessTokens.col.actions')}</th>
+                <th style={{ textAlign: 'center' }}>{t('accessTokens.col.actions')}</th>
               </tr>
             </thead>
             <tbody className="font-mono text-xs">
@@ -1093,8 +1219,46 @@ export default function MyAgentsPage() {
               {agents && agents.length === 0 && (
                 <tr><td colSpan={7} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.empty')}</td></tr>
               )}
-              {agents?.map(agent => (
-                <tr key={agent.seat_id}>
+              {/* 🔴 A SECOND empty state, distinct from the one above. Without
+                  it a filter that matches nothing renders an empty tbody — no
+                  rows, no message — which reads as "the page broke", not as
+                  "your filter excluded everything". The two states need
+                  different answers too: one says "create your first token",
+                  this one says "loosen the filter". */}
+              {agents && agents.length > 0 && visibleAgents.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-5 py-10 text-center" style={{ color: 'var(--muted-foreground)' }}>
+                    <span>{t('accessTokens.emptyFiltered')}</span>
+                    <button type="button" className="row-use-btn ml-3" onClick={() => setTokenFilters([])}>
+                      {t('accessTokens.filterReset')}
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {visibleAgents.map(agent => (
+                /* Whole row opens the routing drawer (2026-08-11 user request),
+                   the same interaction /user/virtual-keys and /user/vault
+                   already have.
+                   🔴 Deliberately the personal console's `row-clickable` +
+                   closest() convention rather than master's makeRowClickProps:
+                   `.vault-page table.vault tbody tr.row-clickable` already
+                   supplies the cursor affordance AND resets it to `auto` over
+                   inline buttons/links, and its own comment names the closest()
+                   skip as the other half of that contract. Importing the master
+                   helper here would give this table a second, silently
+                   different row-click behaviour on the same page skin.
+                   🔴 The closest() guard is load-bearing: without it, clicking
+                   「轮换」/「停用」 or the pool-readiness link would ALSO pop the
+                   drawer over the action the member just took. */
+                <tr
+                  key={agent.seat_id}
+                  className="row-clickable"
+                  onClick={(e) => {
+                    const el = e.target as HTMLElement;
+                    if (isRowClickExempt(e.target)) return;
+                    setRoutingAgent(agent);
+                  }}
+                >
                   <td className="px-5 py-4" style={{ color: 'var(--soft-foreground)' }}>
                     {/* Tool glyph LEFT of the name — same spec/placement as the
                         admin OAuth pools and Agents lists (shared/ui/ToolGlyph).
@@ -1125,7 +1289,7 @@ export default function MyAgentsPage() {
                   <td className="px-5 py-4" style={{ color: 'var(--muted-foreground)' }}>
                     {agent.created_at ? formatDate(agent.created_at) : '—'}
                   </td>
-                  <td className="px-5 py-4 text-right"><AgentRowActions agent={agent} /></td>
+                  <td className="px-5 py-4 text-right" data-row-actions><AgentRowActions agent={agent} /></td>
                 </tr>
               ))}
             </tbody>

@@ -22,7 +22,7 @@
  * prompt/column, and the FilterBar search box is repurposed for the category
  * filter (there's no tenant to search).
  */
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -34,10 +34,9 @@ import { Pagination, useStoredPageSize } from '@/shared/ui/Pagination';
 import { formatDateTime } from '@/shared/utils/datetime-intl';
 // Mask-token highlighting is shared with the master audit + triage drawers —
 // one regex, three pages (see mask-highlight.tsx for why).
-import { renderMaskedSnippet } from '@/shared/utils/mask-highlight';
+import { renderMaskedSnippet, resolveWireLabelFocus } from '@/shared/utils/mask-highlight';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
-import { FilterBar } from '@/shared/ui/FilterBar';
-import { SearchableSelect } from '@/shared/ui/SearchableSelect';
+import { FilterTokenBar, type FilterToken, type FilterTokenDimension } from '@/shared/ui/FilterTokenBar';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 import {
   COMPLIANCE_ACTION_SUMMARY_ACTIONS,
@@ -338,14 +337,35 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   const category = searchParams.get('category') ?? '';
   const action = searchParams.get('action') ?? '';
 
-  function updateFilter(key: string, value: string) {
+  // ── Aggregated token filter (2026-08-11 user request) ─────────────────────
+  // Replaces the FilterBar severity-select + action-select + category-input
+  // row with the same FilterTokenBar the master twin uses — this file's header
+  // states the two views are kept structurally aligned, and after the master
+  // side moved (2026-07-29) this page was the last one still showing three
+  // different filter idioms on one row.
+  //
+  // All three are SERVER params (they ride the listEvents query, not an
+  // in-memory filter), so the token set is the URL: one source of truth,
+  // shareable, and refresh-safe. `setOffset(0)` stays wired to every filter
+  // change — paging into offset 40 and then narrowing the filter to 12 rows
+  // would otherwise show an empty page.
+  const COMPLIANCE_FILTER_PARAMS = ['severity', 'action', 'category'] as const;
+  const filterTokens: FilterToken[] = COMPLIANCE_FILTER_PARAMS.flatMap((param) => {
+    const v = searchParams.get(param);
+    return v ? [{ key: param, value: v }] : [];
+  });
+  function setFilterTokens(next: FilterToken[]) {
     setOffset(0);
     setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (value) next.set(key, value);
-      else next.delete(key);
-      return next;
-    });
+      // One atomic rewrite of the filter params — a per-param update would
+      // rebuild from the same pre-click snapshot and re-add what another
+      // deleted. Params NOT in the list (page size, forward-compat keys) are
+      // preserved by starting from `prev`.
+      const sp = new URLSearchParams(prev);
+      for (const param of COMPLIANCE_FILTER_PARAMS) sp.delete(param);
+      for (const tk of next) sp.set(tk.key, tk.value);
+      return sp;
+    }, { replace: true });
   }
 
   const { data, isLoading, isError } = useQuery({
@@ -371,10 +391,20 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   });
   const packsReport = packsQuery.data?.available ? packsQuery.data.report : undefined;
 
-  // Collapsible summary cards. Counts reuse the existing list endpoint with an
-  // `action` override (limit:1, read total) — accurate across ALL matching rows
-  // (not just the current page), no new backend. Fetched only when expanded.
-  const [cardsOpen, setCardsOpen] = useState(false);
+  // Per-action breakdown, rendered inline in the table header (2026-08-11 user
+  // decision: 「概况挪到表头位置，折叠展开不需要了」).
+  //
+  // 🔴 The expand/collapse and its four big stat cards are GONE, and nothing was
+  // lost with them: the expanded grid showed the same four numbers the collapsed
+  // strip already printed inline, plus a 总计 card duplicating the record-count
+  // chip that sits in this very header. Two rows became one and a click became
+  // zero.
+  //
+  // Counts reuse the existing list endpoint with an `action` override (limit:1,
+  // read total) — accurate across ALL matching rows, not just the current page,
+  // and no new backend. They deliberately do NOT carry the `action` filter, so
+  // the breakdown keeps answering "how do this filter's events split by
+  // outcome" even while one outcome is selected.
   const countQ = (act: string | undefined, key: string) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useQuery({
@@ -386,40 +416,42 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
         limit: 1,
         offset: 0,
       }),
-      // Always fetched (cheap limit:1 count) so the collapsed summary bar can
-      // show the action breakdown inline without the user expanding the card.
-      enabled: true,
     });
-  const sumAll = countQ(undefined, 'all');
-  // One count per carded action, driven off the shared list so a new action can
-  // never be counted by the total while having no card of its own. The list is a
-  // module constant, so the number and order of these useQuery calls is fixed
-  // across renders (rules-of-hooks).
-  const actionSums = COMPLIANCE_ACTION_SUMMARY_ACTIONS.map((action) => ({
-    action,
+  // One count per action, driven off the shared module constant so a new action
+  // can never be missing from the breakdown — and so the number and order of
+  // these useQuery calls is fixed across renders (rules-of-hooks).
+  const summaryCards = COMPLIANCE_ACTION_SUMMARY_ACTIONS.map((action) => ({
+    label: t(COMPLIANCE_ACTION_SUMMARY_LABEL_KEY[action]),
     q: countQ(action, action),
+    color: COMPLIANCE_ACTION_SUMMARY_COLOR[action],
   }));
-  const summaryCards = [
-    { label: t('compliancePage.summaryTotal'), q: sumAll, color: 'var(--foreground)' },
-    ...actionSums.map(({ action, q }) => ({
-      label: t(COMPLIANCE_ACTION_SUMMARY_LABEL_KEY[action]),
-      q,
-      color: COMPLIANCE_ACTION_SUMMARY_COLOR[action],
-    })),
-  ];
 
-  const severityOptions = [
-    { value: 'critical', label: t('compliancePage.sevCritical') },
-    { value: 'high', label: t('compliancePage.sevHigh') },
-    { value: 'medium', label: t('compliancePage.sevMedium') },
-    { value: 'low', label: t('compliancePage.sevLow') },
-  ];
-  // Whole domain by construction — a hand-listed subset is how `audit` became
-  // unfilterable, and an empty filter result reads as "it never happened".
-  const actionOptions = [
-    { value: '', label: t('compliancePage.allActions') },
-    ...complianceActionFilterOptions(t, 'compliancePage'),
-  ];
+  const filterDimensions: FilterTokenDimension[] = useMemo(() => [
+    {
+      key: 'severity',
+      label: t('compliancePage.dimSeverity'),
+      options: [
+        { value: 'critical', label: t('compliancePage.sevCritical') },
+        { value: 'high', label: t('compliancePage.sevHigh') },
+        { value: 'medium', label: t('compliancePage.sevMedium') },
+        { value: 'low', label: t('compliancePage.sevLow') },
+      ],
+    },
+    {
+      key: 'action',
+      label: t('compliancePage.dimAction'),
+      // Whole domain by construction — a hand-listed subset is how `audit`
+      // became unfilterable, and an operator reads an empty filter result as
+      // "it never happened". 🔴 No leading `{ value: '' }` entry any more:
+      // clearing a token is removing the chip, so an "all actions" OPTION
+      // would be a second way to express the same state.
+      options: complianceActionFilterOptions(t, 'compliancePage'),
+    },
+    // Category is a free server param (e.g. "credential") with no enumerable
+    // option source, so it stays pure free text — exactly as on the master
+    // twin. That is also what the old search box was repurposed for.
+    { key: 'category', label: t('compliancePage.dimCategory'), options: [], freeText: true },
+  ], [t]);
 
   return (
     <div className="p-6 space-y-5">
@@ -510,71 +542,51 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
         </div>
       )}
 
-      {/* Collapsible summary — at-a-glance action breakdown (default collapsed). */}
-      <div className="rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--card)', boxShadow: 'inset 0 -1px 0 0 var(--border)' }}>
-        <button
-          className="w-full px-4 py-2.5 flex items-center justify-between gap-3 text-xs font-mono"
-          style={{ color: 'var(--muted-foreground)' }}
-          onClick={() => setCardsOpen((o) => !o)}
-        >
-          <span className="flex items-center gap-3 tracking-wider min-w-0">
-            <span className="shrink-0">
-              {t('compliancePage.summaryTitle')} · {t('compliancePage.recordCount', { count: total })}
-            </span>
-            {/* collapsed: inline text breakdown of the stat cards (遮蔽 / 放行 / 拦截) */}
-            {!cardsOpen && (
-              <span className="flex items-center gap-2.5 truncate">
-                <span style={{ color: 'var(--border)' }}>|</span>
-                {summaryCards.slice(1).map((c) => (
-                  <span key={c.label} className="shrink-0">
-                    {c.label} <b style={{ color: c.color }}>{c.q.isLoading ? '…' : (c.q.data?.total ?? 0)}</b>
-                  </span>
-                ))}
-              </span>
-            )}
-          </span>
-          <span aria-hidden style={{ color: 'var(--muted-foreground)' }}>{cardsOpen ? '▾' : '▸'}</span>
-        </button>
-        {cardsOpen && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 pb-4">
-            {summaryCards.map((c) => (
-              <div key={c.label} className="rounded-md border px-3 py-2.5" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.025)', borderLeft: `2px solid ${c.color}` }}>
-                <div className="text-[10px] font-mono tracking-wider uppercase" style={{ color: 'var(--muted-foreground)' }}>{c.label}</div>
-                <div className="text-xl font-mono font-bold mt-1" style={{ color: c.color }}>
-                  {c.q.isLoading ? '…' : (c.q.data?.total ?? 0)}
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="max-w-full">
+          <FilterTokenBar
+            dimensions={filterDimensions}
+            tokens={filterTokens}
+            onChange={setFilterTokens}
+            // md (2026-08-11 user decision): three short enum dimensions — the
+            // lg palette read as oversized for a filter row this sparse.
+            size="md"
+            // Personal console: match the vault / virtual-keys search box, which is a
+            // plain <input> on var(--muted) — one tier lighter than the master
+            // console's var(--card) filter row (2026-08-11 user request).
+            tone="muted"
+          />
+        </div>
+        {filterTokens.length > 0 && (
+          <button
+            onClick={() => setFilterTokens([])}
+            className="text-xs font-mono px-3 py-2 min-h-[38px] rounded border"
+            style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
+          >
+            {t('compliancePage.reset')}
+          </button>
         )}
       </div>
 
-      <FilterBar
-        searchValue={category}
-        onSearchChange={(v) => updateFilter('category', v)}
-        searchPlaceholder={t('compliancePage.categoryPlaceholder')}
-        statusOptions={severityOptions}
-        statusValue={severity}
-        onStatusChange={(v) => updateFilter('severity', v)}
-        statusPlaceholder={t('compliancePage.allSeverities')}
-        actions={
-          <>
-            <span aria-hidden style={{ width: 1, height: 22, background: 'var(--border)' }} />
-            <SearchableSelect
-              options={actionOptions}
-              value={action}
-              onChange={(v) => updateFilter('action', v)}
-              placeholder={t('compliancePage.allActions')}
-              style={{ minWidth: 140 }}
-            />
-          </>
-        }
-      />
-
       <div className="rounded-md border overflow-hidden" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: 'inset 0 -1px 0 0 var(--border)' }}>
-        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
-          <h2 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.sectionTitle')}</h2>
-          <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full border" style={{ color: 'var(--primary)', borderColor: 'rgba(250,204,21,0.35)', backgroundColor: 'rgba(250,204,21,0.06)' }}>
+        <div className="px-5 py-4 flex items-center justify-between gap-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          {/* 🔴 Title AND breakdown are ONE left-hand group (2026-08-11 user
+              decision), matching /user/virtual-keys' card header — there the
+              label and its count chips sit together on the left and nothing is
+              pushed to the middle. Centring the breakdown (the first attempt)
+              made it read as a third, unrelated column.
+              🚫 Still no 「概况 · N 条记录」 prefix: the title says what this
+              table is and the count is the chip on the right, so printing it
+              here would be the same fact three times in one row. */}
+          <div className="flex items-center gap-3 min-w-0 overflow-x-auto">
+            <h2 className="text-xs font-mono font-bold tracking-wider shrink-0" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.sectionTitle')}</h2>
+            {summaryCards.map((c) => (
+              <span key={c.label} className="shrink-0 whitespace-nowrap text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                {c.label} <b style={{ color: c.color }}>{c.q.isLoading ? '…' : (c.q.data?.total ?? 0)}</b>
+              </span>
+            ))}
+          </div>
+          <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full border shrink-0" style={{ color: 'var(--primary)', borderColor: 'rgba(250,204,21,0.35)', backgroundColor: 'rgba(250,204,21,0.06)' }}>
             {t('compliancePage.recordCount', { count: total })}
           </span>
         </div>
@@ -684,7 +696,52 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
             )}
             <DrawerField label={t('compliancePage.columnFindings')} value={
               <div className="space-y-3 pt-1.5 pl-1.5">
-                {selected.findings.map((f, idx) => (
+                {/* Per-finding values are computed in the map BODY rather than in a
+                    render-time IIFE (2026-08-11): the eye now sits in the card
+                    HEADER, above the snippet, so `canReveal` / `revealed` have to
+                    exist before the first JSX line. Same shape as the admin audit
+                    drawer's `map((f, idx) => { … return ( … ); })`. */}
+                {selected.findings.map((f, idx) => {
+                  const raw = f.context_snippet ?? '';
+                  const masked = f.redacted_snippet ?? '';
+                  const revealed = revealedFindings.has(f.finding_id);
+                  // 🔴 WHERE the original comes from is the injected source's
+                  // decision, not this file's. Local lane: the finding's own
+                  // `context_snippet` (the matched span, already in hand).
+                  // Team lane: `source.originalTurn`, which fetches the whole
+                  // TURN per event and is a RECORDED read — so the eye is
+                  // offered only when that source says it can answer. See
+                  // ComplianceViewSource.originalTurn for the full rationale.
+                  const teamOriginal = source.originalTurn;
+                  const canReveal = canRevealOriginal(source, selected, f);
+                  // Team lane never substitutes text in place — the masked
+                  // snippet stays put and the turn opens BELOW it, because the
+                  // two are not the same span and swapping one for the other
+                  // would read as "this is what that mask covered".
+                  const shown = !teamOriginal && revealed && raw ? raw : masked;
+                  // ── 发出形态, shown IN the snippet ────────────────────────
+                  // The window around this match routinely contains OTHER
+                  // findings' placeholders, so「哪一个是我的」was unanswerable
+                  // from the numberless snippet alone. The focus names this
+                  // card's own token; the renderer prints it under the number
+                  // it was forwarded as (`{{PHONE_1}}`) and greys the rest.
+                  //
+                  // 🔴 UNRESOLVABLE RENDERS THE SNIPPET AS-IS — no note, no
+                  // hint, no version warning. Absence is normal and permanent:
+                  // the Personal lane never has a wire_label at all (local
+                  // events go detector → control.db without passing the proxy —
+                  // 方案 L's accepted asymmetry), and on the team lane it is
+                  // absent for every audit-only finding, ceiling-capped piece
+                  // and restore degrade. Reading that as「版本太旧、去升级」is
+                  // the 2026-08-10 bug (workflow/CI/bugfix/20260810-team-
+                  // compliance-selfview-blames-old-detector.md). Fenced:
+                  // ./wire-label-display.test.ts.
+                  //
+                  // Only ever applied to the MASKED text: behind the eye the
+                  // raw values are on screen and there is no placeholder to
+                  // point at.
+                  const focus = shown === masked ? resolveWireLabelFocus(f, selected.findings) : null;
+                  return (
                   <div key={f.finding_id} className="rounded-md border p-2.5" style={{ position: 'relative', borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
                     {/* sequence badge — overhangs the card's top-left corner (出框) */}
                     <span
@@ -695,81 +752,71 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                       <Badge variant={severityVariant(f.severity)}>{f.severity.toUpperCase()}</Badge>
                       <span className="text-xs font-mono font-bold" style={{ color: 'var(--foreground)' }}>{f.entity_type}</span>
                       <span className="text-[10px] font-mono ml-auto whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>{f.category} · {f.confidence}</span>
+                      {/* Fixed eye slot — reserved even when the eye cannot be
+                          offered, so the glyphs line up across finding cards.
+                          Byte-identical to the admin audit drawer's slot
+                          (master .../compliance/audit/index.tsx), which is the
+                          layout anchor this card was aligned to on 2026-08-11
+                          (用户: 「个人版合规检测抽屉的样式需要简单化，对齐 master
+                          页面的」). NOTHING WAS REMOVED: the eye kept its two-state
+                          i18n text on `title` + `aria-label`, so the label is
+                          still readable on hover and to a screen reader — it just
+                          stopped costing every finding card a full extra row.
+
+                          Snippet + eye rules (2026-08-09 用户拍板 — see the file
+                          header) are unchanged: default = masked, and the eye
+                          renders ONLY when there IS something to reveal. A button
+                          that does nothing when clicked is worse than no button,
+                          and `context_snippet` is legitimately absent for events
+                          recorded between 2026-06-03 and that change, or by an
+                          older detector — and it is absent by DESIGN on the team
+                          lane (DC5: a compliance FINDING's raw text never leaves
+                          the box — scoped to THIS lane; the conversation-audit
+                          lane does upload the full turn when the org's capture
+                          switch is on — and a team-routed event is not kept
+                          locally either). That absence gets a note rather than a
+                          dead control — but the note is EVENT-level and rendered
+                          once, below the whole list (see it after this map). */}
+                      <span className="inline-flex items-center justify-center shrink-0" style={{ width: 26 }}>
+                        {canReveal && (
+                          <button
+                            type="button"
+                            onClick={() => toggleReveal(f.finding_id)}
+                            title={revealed ? t('compliancePage.hideOriginal') : t('compliancePage.revealOriginal')}
+                            aria-label={revealed ? t('compliancePage.hideOriginal') : t('compliancePage.revealOriginal')}
+                            aria-expanded={revealed}
+                            className="inline-flex items-center justify-center p-1 rounded border"
+                            style={{ borderColor: 'var(--border)', color: revealed ? 'var(--primary)' : 'var(--muted-foreground)' }}
+                          >
+                            {revealed ? <EyeOffIcon /> : <EyeIcon />}
+                          </button>
+                        )}
+                      </span>
                     </div>
                     {f.detector && <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.fieldDetector')}: {f.detector}</p>}
-                    {/* Snippet + eye (2026-08-09 用户拍板 — see the file header).
-                        Default = masked. The eye renders ONLY when there IS raw text
-                        to reveal: a button that does nothing when clicked is worse
-                        than no button, and `context_snippet` is legitimately absent
-                        for events recorded between 2026-06-03 and this change, or by
-                        a detector that predates it — and it is absent by DESIGN on
-                        the team lane (DC5: a compliance FINDING's raw text never
-                        leaves the box — scoped to THIS lane; the conversation-audit
-                        lane does upload the full turn when the org's capture switch
-                        is on — and a team-routed event is not kept locally either).
-                        That absence gets a note rather than a dead control — but the
-                        note is EVENT-level and rendered once, below the whole list
-                        (see it after this map). */}
-                    {(() => {
-                      const raw = f.context_snippet ?? '';
-                      const masked = f.redacted_snippet ?? '';
-                      const revealed = revealedFindings.has(f.finding_id);
-                      // 🔴 WHERE the original comes from is the injected source's
-                      // decision, not this file's. Local lane: the finding's own
-                      // `context_snippet` (the matched span, already in hand).
-                      // Team lane: `source.originalTurn`, which fetches the whole
-                      // TURN per event and is a RECORDED read — so the eye is
-                      // offered only when that source says it can answer. See
-                      // ComplianceViewSource.originalTurn for the full rationale.
-                      const teamOriginal = source.originalTurn;
-                      const canReveal = canRevealOriginal(source, selected, f);
-                      // Team lane never substitutes text in place — the masked
-                      // snippet stays put and the turn opens BELOW it, because the
-                      // two are not the same span and swapping one for the other
-                      // would read as "this is what that mask covered".
-                      const shown = !teamOriginal && revealed && raw ? raw : masked;
-                      if (!masked && !canReveal) return null;
-                      return (
-                        <div className="mt-2 space-y-1.5">
-                          {shown && (
-                            <div
-                              className="text-[11px] font-mono break-all whitespace-pre-wrap rounded px-2 py-1.5 leading-relaxed"
-                              style={{
-                                color: 'var(--foreground)',
-                                backgroundColor: 'rgba(0,0,0,0.28)',
-                                // Revealed raw text gets a warm left edge so it is
-                                // obvious at a glance which cards are un-masked.
-                                border: '1px solid var(--border)',
-                                borderLeft: revealed && raw ? '2px solid var(--primary-dim)' : '1px solid var(--border)',
-                              }}
-                            >
-                              {renderMaskedSnippet(shown)}
-                            </div>
-                          )}
-                          {canReveal && (
-                            <button
-                              type="button"
-                              onClick={() => toggleReveal(f.finding_id)}
-                              title={revealed ? t('compliancePage.hideOriginal') : t('compliancePage.revealOriginal')}
-                              aria-label={revealed ? t('compliancePage.hideOriginal') : t('compliancePage.revealOriginal')}
-                              aria-expanded={revealed}
-                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded border text-[10px] font-mono"
-                              style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
-                            >
-                              {revealed ? <EyeOffIcon /> : <EyeIcon />}
-                              {revealed ? t('compliancePage.hideOriginal') : t('compliancePage.revealOriginal')}
-                            </button>
-                          )}
-                          {/* Team lane: the fetched TURN, rendered by the lane that
-                              knows what it is. Mounted only while an eye is open, so
-                              the recorded read happens on the click and not on the
-                              drawer opening. */}
-                          {teamOriginal && revealed && <teamOriginal.Panel event={selected} />}
-                        </div>
-                      );
-                    })()}
+                    {shown && (
+                      <div
+                        className="text-[11px] font-mono mt-2 break-all whitespace-pre-wrap rounded px-2 py-1.5 leading-relaxed"
+                        style={{
+                          color: 'var(--foreground)',
+                          backgroundColor: 'rgba(0,0,0,0.28)',
+                          // Revealed raw text gets a warm left edge so it is
+                          // obvious at a glance which cards are un-masked.
+                          border: '1px solid var(--border)',
+                          borderLeft: revealed && raw ? '2px solid var(--primary-dim)' : '1px solid var(--border)',
+                        }}
+                      >
+                        {renderMaskedSnippet(shown, focus)}
+                      </div>
+                    )}
+                    {/* Team lane: the fetched TURN, rendered by the lane that
+                        knows what it is. Mounted only while an eye is open, so
+                        the recorded read happens on the click and not on the
+                        drawer opening. */}
+                    {teamOriginal && revealed && <teamOriginal.Panel event={selected} />}
                   </div>
-                ))}
+                  );
+                })}
                 {/* ── "why is there no original here" — ONCE PER DRAWER ──────────
                     2026-08-10 用户反馈: 「这段话，只需要在抽屉显示一次即可」. A real
                     event carried 8 findings, so the same paragraph rendered 8
@@ -858,8 +905,31 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                       <div className="min-w-0">
                         <div className="text-xs font-mono font-bold" style={{ color: 'var(--foreground)' }}>{e.name}</div>
                         <div className="text-[10px] font-mono mt-0.5 break-words" style={{ color: 'var(--muted-foreground)' }}>
-                          {e.entities.join(', ')}{e.note ? ` · ${e.note}` : ''}
+                          {e.entities.join(', ')}
                         </div>
+                        {/* The engine's own note, on its OWN line (2026-08-11).
+                            It used to be glued to the entity list with a `·`, so
+                            the one thing a reader most needs — the enforcement
+                            RUNG — read as the tail of a long grey run-on.
+                            `address.recognizer` publishes `lane=audit`, i.e.
+                            detected + recorded + FORWARDED UNMASKED, which the
+                            green 已启用 badge alone actively misreads as "your
+                            addresses are being masked".
+
+                            🔴 Printed VERBATIM from the report. Do not parse
+                            `lane=` here and do not restate the engine's
+                            properties in this file: the detector (and master's
+                            fenced mirror of it) owns what each engine is and at
+                            what rung it runs — a second copy in the SPA is the
+                            split-truth that produced the missing address row in
+                            the first place. Source of the string:
+                            ai-compliance-detector/cmd/detector/list_packs.go
+                            buildBuiltInEngineList. */}
+                        {e.note && (
+                          <div className="text-[10px] font-mono mt-0.5 break-words" style={{ color: 'var(--muted-foreground)' }}>
+                            {e.note}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

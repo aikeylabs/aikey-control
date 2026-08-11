@@ -151,29 +151,85 @@ function RouteErrorFallback({
 }) {
   const detail = [error.name, error.message, error.stack].filter(Boolean).join('\n');
   const inline = variant === 'inline';
+
+  const ghostButton = 'text-[11px] font-mono px-3 py-1.5 rounded border transition-colors';
+
+  const details = (
+    <>
+      <button
+        onClick={onToggleDetail}
+        data-testid="route-error-detail-toggle"
+        aria-expanded={showDetail}
+        className={`w-full flex items-center justify-between gap-3 rounded border px-3 py-2 text-[11px] font-mono ${inline ? '' : 'max-w-3xl'}`}
+        style={{ color: 'var(--muted-foreground)', borderColor: 'var(--border)', backgroundColor: 'var(--card)' }}
+      >
+        <span>异常堆栈详情 · Technical details</span>
+        <span aria-hidden="true">{showDetail ? '−' : '+'}</span>
+      </button>
+      {showDetail && (
+        <div className={`space-y-2 ${inline ? '' : 'max-w-3xl'}`}>
+          <pre
+            className="text-[10px] font-mono p-3 rounded overflow-auto max-h-64 whitespace-pre-wrap break-all"
+            style={{ backgroundColor: 'rgba(0,0,0,0.25)', color: 'var(--muted-foreground)' }}
+            data-testid="route-error-detail"
+          >
+            {detail}
+          </pre>
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <div className={inline ? '' : 'flex items-start justify-center p-8'} data-testid="route-error-boundary">
+    // 🔴 The page variant is a FULL-WIDTH band, not a centred card (2026-08-11,
+    // user request + SuperDesign project "AiKey Route Error Boundary"). A 512px
+    // box floating in the middle of a 1500px content area reads as a modal
+    // someone forgot to dismiss; the band reads as a state the page is in.
+    //
+    // The framing is deliberately calmer than what it replaced: no red outline
+    // around the whole thing, just one small destructive-coloured icon. The
+    // point is that ONE page failed inside a console that is otherwise fine —
+    // surrounding the message in alarm colour argues the opposite. What stays
+    // loud is the wording, which says plainly that something broke.
+    <div className={inline ? '' : 'w-full'} data-testid="route-error-boundary">
       <div
-        className={(inline ? 'w-full rounded border p-4 space-y-3' : 'w-full max-w-lg rounded border p-6 space-y-4')}
-        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--destructive, #ef4444)' }}
+        className={inline ? 'w-full rounded border p-4 space-y-3' : 'w-full px-8 py-7 space-y-5 border-b'}
+        style={
+          inline
+            ? { backgroundColor: 'var(--card)', borderColor: 'var(--destructive, #ef4444)' }
+            : { backgroundColor: 'var(--card)', borderColor: 'var(--border)' }
+        }
         role="alert"
       >
-        <div className="space-y-1">
-          <h2 className="text-sm font-mono font-bold" style={{ color: 'var(--destructive, #ef4444)' }}>
-            {inline ? '此窗口出现异常 · This dialog hit an error' : '此页面出现异常 · This page hit an error'}
-          </h2>
-          <p className="text-[11px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
-            {inline
-              ? '页面本身不受影响，关闭本窗口即可继续操作。 · The page itself is fine — close this dialog to continue.'
-              : '其他页面不受影响，可直接从左侧导航继续操作。 · Other pages are unaffected — use the navigation to continue.'}
-          </p>
+        <div className="flex items-start gap-3">
+          <span
+            className="flex-shrink-0 mt-[1px]"
+            style={{ color: 'var(--destructive, #ef4444)' }}
+            aria-hidden="true"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7.5v5.5" />
+              <path d="M12 16.2v.3" />
+            </svg>
+          </span>
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-sm font-mono font-bold" style={{ color: 'var(--display-foreground, var(--foreground))' }}>
+              {inline ? '此窗口出现异常 · This dialog hit an error' : '此页面出现异常 · This page hit an error'}
+            </h2>
+            <p className="text-[11px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+              {inline
+                ? '页面本身不受影响，关闭本窗口即可继续操作。 · The page itself is fine — close this dialog to continue.'
+                : '其他页面不受影响，可直接从左侧导航继续操作。 · Other pages are unaffected — use the navigation to continue.'}
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className={`flex flex-wrap items-center gap-2 ${inline ? '' : 'pl-7'}`}>
           <button
             onClick={onRetry}
             data-testid="route-error-retry"
-            className="text-[11px] font-mono px-3 py-1.5 rounded border"
+            className={ghostButton}
             style={{ color: 'var(--foreground)', borderColor: 'var(--border)' }}
           >
             重试 · Retry
@@ -184,41 +240,39 @@ function RouteErrorFallback({
           {!inline && (
             <button
               onClick={() => window.location.reload()}
-              className="text-[11px] font-mono px-3 py-1.5 rounded border"
+              className={ghostButton}
               style={{ color: 'var(--foreground)', borderColor: 'var(--border)' }}
             >
               刷新页面 · Reload
             </button>
           )}
           <button
-            onClick={onToggleDetail}
-            data-testid="route-error-detail-toggle"
-            className="text-[11px] font-mono px-3 py-1.5 rounded border"
+            onClick={() => { void navigator.clipboard?.writeText(detail); }}
+            data-testid="route-error-copy"
+            className={ghostButton}
             style={{ color: 'var(--muted-foreground)', borderColor: 'var(--border)' }}
           >
-            {showDetail ? '隐藏详情 · Hide details' : '技术详情 · Details'}
+            复制以便反馈 · Copy for a bug report
           </button>
         </div>
 
-        {showDetail && (
-          <div className="space-y-2">
-            <pre
-              className="text-[10px] font-mono p-3 rounded overflow-auto max-h-64 whitespace-pre-wrap break-all"
-              style={{ backgroundColor: 'rgba(0,0,0,0.25)', color: 'var(--muted-foreground)' }}
-              data-testid="route-error-detail"
-            >
-              {detail}
-            </pre>
-            <button
-              onClick={() => { void navigator.clipboard?.writeText(detail); }}
-              className="text-[10px] font-mono px-2 py-1 rounded border"
-              style={{ color: 'var(--muted-foreground)', borderColor: 'var(--border)' }}
-            >
-              复制以便反馈 · Copy for a bug report
-            </button>
-          </div>
+        {/* 🔴 Says what the recovery buttons DO, because "will this lose my
+            work?" is the actual reason someone hesitates to press either one.
+            Deliberately NOT the SuperDesign draft's "go to 供应商账户 or 仪表盘":
+            those are master-console pages, and this component is a byte-identical
+            mirror that also renders in the member console, which has neither. */}
+        {!inline && (
+          <p className="text-[11px] font-mono leading-relaxed pl-7" style={{ color: 'var(--muted-foreground)', opacity: 0.8 }}>
+            重试只重新加载这一页，不影响其他页面上的内容；刷新页面会重新加载整个控制台。
+            <br />
+            Retry remounts only this page; Reload restarts the whole console.
+          </p>
         )}
+
+        {inline && details}
       </div>
+
+      {!inline && <div className="px-8 py-5 space-y-2">{details}</div>}
     </div>
   );
 }

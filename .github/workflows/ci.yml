@@ -82,6 +82,16 @@ jobs:
       - name: Install
         run: npm ci
 
+      # 2026-08-11: this repo's CI ran ONLY vitest for the web app — no tsc.
+      # The local dev loop (make restart-personal) deliberately bundles with
+      # build:user-nocheck for speed, and its comment said "type safety is
+      # still enforceable via type-check in CI" — which was untrue here: the
+      # master repo's CI had the step, this one never did. A type error could
+      # ride green CI straight into a bundle. The dev loop now has its own
+      # tsc pre-gate (workflow/CI/Makefile), and this step closes the CI half.
+      - name: type-check
+        run: npm run type-check
+
       # Drives the real script over fixture YAMLs, including the cases that must
       # make it EXIT NON-ZERO (a routed provider with no display identity) and
       # the four-stage default-endpoint decision.

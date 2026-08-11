@@ -587,7 +587,7 @@ export default function UserAppsListPage() {
               >
                 {t('apps.colHealth')}
               </th>
-              <th className="px-4 py-3 font-normal text-right">{t('apps.colActions')}</th>
+              <th className="px-4 py-3 font-normal text-center">{t('apps.colActions')}</th>
             </tr>
           </thead>
           <tbody>

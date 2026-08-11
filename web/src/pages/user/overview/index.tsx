@@ -1352,7 +1352,13 @@ export default function UserOverviewPage() {
                   <th className="px-4 py-2.5">{t('overview.colProtocols')}</th>
                   <th className="px-4 py-2.5">{t('overview.colStatus')}</th>
                   <th className="px-4 py-2.5">{t('overview.colExpires')}</th>
-                  <th className="px-4 py-2.5 text-right">{t('overview.colActions')}</th>
+                  {/* 🔴 Inline style, not `text-center`. `.overview-page
+                      table.vault th` sets text-align:left with a 2-class
+                      selector, which outranks a single-class Tailwind utility —
+                      the same specificity trap access-tokens documents on its
+                      own actions header. A utility class here silently does
+                      nothing. */}
+                  <th className="px-4 py-2.5" style={{ textAlign: 'center' }}>{t('overview.colActions')}</th>
                 </tr>
               </thead>
               <tbody>

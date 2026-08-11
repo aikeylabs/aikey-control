@@ -1241,7 +1241,7 @@ export function UserShell() {
         {/* Nav — grouped items separated by spacing + uppercase mono
             headers, no divider rules. Groups without a `title` (the
             Overview bucket) render as plain items. */}
-        <nav ref={sidebarNavRef} className="flex-1 overflow-y-auto">
+        <nav ref={sidebarNavRef} className="sidebar-nav-scroll flex-1 overflow-y-auto">
           {sidedNavGroups.map((group, gi) => {
             // Cross-app entries belonging to this group, visibility-
             // filtered. Only rendered when otherBaseUrl is configured —

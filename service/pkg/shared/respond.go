@@ -8,7 +8,15 @@ import (
 )
 
 // JSON writes a JSON-encoded body with the given status code.
+//
+// Collection fields are normalized on the way out: a nil slice encodes as []
+// rather than null. This is the single-exit fix for a defect class that has
+// shipped four times as four different fields — see EnsureEmptyCollections
+// (respond_nilslice.go) for the incident list and the exact scope of the
+// rewrite. Handlers may keep building lists as `var out []T` + append; the
+// wire shape no longer depends on whether the loop ran.
 func JSON(w http.ResponseWriter, status int, v any) {
+	v = EnsureEmptyCollections(v)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)

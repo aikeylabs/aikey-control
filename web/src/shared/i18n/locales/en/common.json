@@ -39,12 +39,12 @@
       "auth_failed": "Sign in again",
       "upstream_unavailable": "Upstream unavailable"
     },
-	"routeHelp": {
-	  "rate_limited": "No action required — this Worker will re-admit the account automatically.",
-	  "window_exhausted": "This account will be probed again automatically at its retry boundary.",
-	  "auth_failed": "Waiting will not repair a revoked token. Sign in again or replace this account.",
-	  "upstream_unavailable": "Check this account's egress and the Worker's upstream connectivity."
-	},
+    "routeHelp": {
+      "rate_limited": "No action required — this Worker will re-admit the account automatically.",
+      "window_exhausted": "This account will be probed again automatically at its retry boundary.",
+      "auth_failed": "Waiting will not repair a revoked token. Sign in again or replace this account.",
+      "upstream_unavailable": "Check this account's egress and the Worker's upstream connectivity."
+    },
     "loginStatus": {
       "logged_in": "Signed in",
       "needs_login": "Sign-in needed",
@@ -1752,9 +1752,7 @@
     "page": {
       "title": "Org Seats",
       "description": "Org · {{orgId}}",
-      "inviteSeat": "Invite Seat",
-      "searchPlaceholder": "Search email...",
-      "allStatuses": "All statuses"
+      "inviteSeat": "Invite Seat"
     },
     "bulk": {
       "selectedCount": "{{count}} seat(s) selected",
@@ -2042,9 +2040,6 @@
     "subjectTypeBinding": "Binding",
     "pageTitle": "Control Events",
     "pageDescription": "Org · {{orgId}} — Immutable audit log",
-    "searchPlaceholder": "Search Subject ID / Actor / Reason...",
-    "allEventTypes": "All event types",
-    "allSubjectTypes": "All subject types",
     "sectionTitle": "Control Events",
     "recordCount": "{{count}} records",
     "columnEventType": "Event Type",
@@ -2267,11 +2262,7 @@
       "description": "Manage rule / phrase packs that ai-compliance-detector pulls down for runtime detection.",
       "newPack": "+ New Pack"
     },
-    "filters": {
-      "statusPlaceholder": "Filter status...",
-      "kindPlaceholder": "Filter kind...",
-      "searchPlaceholder": "Search by name..."
-    },
+    "filters": {},
     "list": {
       "loading": "Loading…",
       "empty": "No packs match the current filters."
@@ -2518,15 +2509,10 @@
     "toggleOrgEnforcedShort": "Org-enforced",
     "sectionTitle": "EVENTS",
     "recordCount": "{{count}} records",
-    "summaryTitle": "OVERVIEW",
-    "summaryTotal": "Total",
     "summaryMasked": "Masked",
     "summaryAllowed": "Allowed",
     "summaryBlocked": "Blocked",
     "summaryAudited": "Audit only",
-    "categoryPlaceholder": "Search category / entity / content…",
-    "allSeverities": "All severities",
-    "allActions": "All actions",
     "sevCritical": "Critical",
     "sevHigh": "High",
     "sevMedium": "Medium",
@@ -2551,7 +2537,11 @@
     "fieldDetector": "Detector",
     "revealOriginal": "Show original text",
     "hideOriginal": "Hide original text",
-    "originalUnavailable": "No original text kept for this finding (recorded by an older detector). Upgrade the detector on this machine and new events will include it."
+    "originalUnavailable": "No original text kept for this finding (recorded by an older detector). Upgrade the detector on this machine and new events will include it.",
+    "dimSeverity": "Severity",
+    "dimAction": "Action",
+    "dimCategory": "Category",
+    "reset": "Reset"
   },
   "browserProfileGuide": {
     "title": "Use a separate browser profile per account",
@@ -2927,7 +2917,10 @@
         "confirm": "Rotate",
         "cancel": "Cancel"
       }
-    }
+    },
+    "filterReset": "Reset",
+    "emptyFiltered": "No access tokens match the current filter.",
+    "dimNameOwnerSource": "Name / Owner / Source"
   },
   "dataFetchError": {
     "title": "Some data failed to load — this page may be incomplete",

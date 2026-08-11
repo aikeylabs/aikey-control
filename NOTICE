@@ -34,3 +34,15 @@ Notable dependency attribution:
 
 For a machine-readable SBOM, see release artifacts at
 https://github.com/aikeylabs/launch/releases.
+
+---
+
+THIRD-PARTY ASSETS
+
+Brand icon path data in `web/src/shared/ui/ToolGlyph.tsx`:
+
+- Claude mark — Simple Icons (https://simpleicons.org), file `icons/claude.svg`,
+  licensed CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/).
+  CC0 covers the SVG path data only. "Claude" and the Claude mark are
+  trademarks of Anthropic PBC; they are used here to identify the Claude tool
+  family in the console UI, which is nominative use, not an endorsement.

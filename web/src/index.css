@@ -154,6 +154,29 @@ body {
   background: var(--muted-foreground);
 }
 
+/* Sidebar nav scrollbar (2026-08-11 user request: 「菜单的垂直滚动条稍微再细
+   一点」). 🔴 Scoped to the nav, NOT the global 6px rule: the content pane next
+   to it reserves a permanent 6px gutter (`[scrollbar-gutter:stable]`, bugfix
+   2026-07-22-scrollbar-gutter-content-reflow), so narrowing the global width
+   would shrink that reservation and bring back the ~6px sideways reflow on
+   nav — a fix for a cosmetic nit re-opening a layout bug.
+   The nav has no such gutter contract, so it is free to be thinner.
+   `scrollbar-width: thin` covers Firefox, which ignores ::-webkit-scrollbar.
+   Dual-edit mirror: keep identical in control/web + master/web. */
+.sidebar-nav-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.sidebar-nav-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-nav-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-nav-scroll::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+}
+
 /* ── Vault Header ── */
 .vault-header {
   background: linear-gradient(180deg, var(--card) 0%, var(--background) 100%);

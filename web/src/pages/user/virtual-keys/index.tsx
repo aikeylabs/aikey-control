@@ -58,6 +58,7 @@ import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { providerBrandColor } from '../_shared/provider-brand';
 import { OWN_MENU, OWN_PERSONAL_MENU, getOtherBaseUrl, buildCrossAppUrl, isTeamGatewayActive, getCrossAppLinkBase } from '@/shared/cross-app-menu';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
+import { isRowClickExempt } from '@/shared/utils/row-click-guard';
 
 // Phase 3B R23 revised (2026-05-11): on B (team server) the Team Keys
 // drawer cross-fetches Personal A's vault.list to surface the
@@ -641,7 +642,7 @@ export default function UserVirtualKeysPage() {
                         {t('teamKeys.colExpires')}
                         {sortKey === 'expires' && <span className="th-sort-arrow">↓</span>}
                       </th>
-                      <th style={{ width: 130, textAlign: 'right' }}>{t('teamKeys.colActions')}</th>
+                      <th style={{ width: 130, textAlign: 'center' }}>{t('teamKeys.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -905,8 +906,7 @@ const Row = React.memo(function Row(props: {
   ].filter(Boolean).join(' ');
 
   const onRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
-    const t = e.target as HTMLElement;
-    if (t.closest('button, input, textarea, a, [role="button"]')) return;
+    if (isRowClickExempt(e.target)) return;
     props.onOpenDrawer();
   };
 
@@ -1042,7 +1042,7 @@ const Row = React.memo(function Row(props: {
         {expiresStr ?? <span className="cell-empty">—</span>}
       </td>
 
-      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+      <td data-row-actions style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
         <div className="row-actions" style={{ whiteSpace: 'nowrap' }}>
           {/* V2 fixed slots (2026-08-01, aligned with /user/vault): the primary
               action (领取 / 使用 / none) sits in a constant-width .action-rail

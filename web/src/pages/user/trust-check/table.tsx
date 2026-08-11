@@ -64,7 +64,11 @@ export function SourceTable({
             <th>{t('trustCheck.thModel')}</th>
             <th>{t('trustCheck.thConfidence')}</th>
             <th>{t('trustCheck.thChecked')}</th>
-            <th>{t('trustCheck.thAction')}</th>
+            {/* 🔴 Inline style, not a class. `.trust-check-page .tc-table th`
+                sets text-align:left with a 2-class selector, which outranks any
+                single-class utility — same specificity trap as the overview and
+                vault actions headers. */}
+            <th style={{ textAlign: 'center' }}>{t('trustCheck.thAction')}</th>
           </tr>
         </thead>
         <tbody>

@@ -58,9 +58,17 @@ describe('My Agents routing and account-pool observability', () => {
     expect(PAGE).toContain('className="vault-page space-y-5 font-mono"');
   });
 
-  it('opens the same routing drawer from both the Agent name and routing account', () => {
+  it('opens the same routing drawer from the Agent name, the routing account, and the row', () => {
+    // 🔴 THREE entry points since 2026-08-11 (user request: the whole row opens
+    // the drawer, matching /user/virtual-keys and /user/vault). The invariant
+    // this guards is "every entry point opens the SAME drawer" — one setter,
+    // one agent — NOT "there are exactly two of them". The count is asserted so
+    // that a fourth entry point is a deliberate edit rather than a drive-by.
     const openCalls = PAGE.match(/setRoutingAgent\(agent\)/g) ?? [];
-    expect(openCalls).toHaveLength(2);
+    expect(openCalls).toHaveLength(3);
     expect(PAGE).toContain("aria-label={t('accessTokens.routing.openTitle', { account: agent.alias })}");
+    // …and the row entry point must keep its exemption guard, or clicking a row
+    // ACTION would pop the drawer over the action the member just took.
+    expect(PAGE).toContain('isRowClickExempt(');
   });
 });
