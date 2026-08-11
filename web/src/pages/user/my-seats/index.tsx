@@ -1,4 +1,5 @@
 import React from 'react';
+import { PageTitleRow } from '@/shared/ui/PageHeader';
 import { useQuery } from '@tanstack/react-query';
 import { userAccountsApi } from '@/shared/api/user/accounts';
 import { formatDate } from '@/shared/utils/datetime-intl';
@@ -13,7 +14,7 @@ export default function MySeatsPage() {
     <div className="p-6 space-y-6">
       {/* Page header */}
       <div className="flex items-center justify-between">
-        <div>
+        <PageTitleRow>
           <h1
             className="text-lg font-mono font-bold tracking-widest"
             style={{ color: 'var(--foreground)' }}
@@ -23,7 +24,7 @@ export default function MySeatsPage() {
           <p className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>
             Org seats assigned to your account — GET /accounts/me/seats
           </p>
-        </div>
+        </PageTitleRow>
       </div>
 
       {/* Table */}

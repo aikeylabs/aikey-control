@@ -15,6 +15,7 @@
  *   - GET /accounts/me/group-routed-credential (no id) → reveal password (routed only)
  *   - POST /api/user/oauth/pool/*           → pool sign-in (relay → proxy broker)
  */
+import { PageTitleGlyph } from '@/shared/ui/PageHeader';
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ModalPortal } from '@/shared/ui/ModalShell';
@@ -316,9 +317,9 @@ export default function OAuthContributePage() {
           <section className="flex items-center gap-3">
             <div
               className="w-9 h-9 rounded flex items-center justify-center flex-shrink-0"
-              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+              style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--primary)' }}
             >
-              <ShareIcon className="w-4 h-4" style={{ color: 'var(--primary)' }} />
+              <PageTitleGlyph />
             </div>
             <div className="min-w-0">
               <div

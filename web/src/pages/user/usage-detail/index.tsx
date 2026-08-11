@@ -20,6 +20,7 @@
  * showing the token breakdown + endpoint + (for failures) the error reason.
  */
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { PageTitleGlyph } from '@/shared/ui/PageHeader';
 import { useTranslation } from 'react-i18next';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -218,10 +219,13 @@ export default function UserUsageDetailPage() {
       <PageQueryErrors sources={[meError, q.error]} />
       {/* Header: icon tile + title + meta row */}
       <header className="ud-head">
+        {/* Same mark as the sidebar entry for this route. Was a hand-drawn
+            hamburger, which is the exact page-vs-nav split the shared
+            registry removed on 2026-08-10 — .ud-icon keeps the tile's look. */}
         <div className="ud-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M4 6h16M4 12h16M4 18h10" />
-          </svg>
+          {/* No size class: `.ud-icon svg` already pins 18px, and a utility
+              here would race that rule on specificity. */}
+          <PageTitleGlyph className="" />
         </div>
         <div className="min-w-0">
           <h1 className="ud-title">{t('usageDetail.title')}</h1>

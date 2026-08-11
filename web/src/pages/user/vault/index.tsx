@@ -22,6 +22,7 @@
  *   roadmap20260320/技术实现/阶段3-增强版KEY管理/个人vault-Web页面-技术方案.md
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PageTitleRow } from '@/shared/ui/PageHeader';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -2167,13 +2168,19 @@ function IdentityStrip({
             - the CardHeader chips ("N stored / N active / N error")
               just below this strip on the Vault card itself, and
             - the FilterStrip filter pills ("All N / Key N / OAuth N").
-          A leading shield icon was also removed; identity is carried
-          by the topbar breadcrumb + sidebar active rail. Aligns with
-          the icon-less, subtitle-less H1 used on Trust Check /
-          Performance / Usage / Account / Usage Ledger. */}
-      <div className="min-w-0">
+          The subtitle stays dropped for that reason.
+
+          🔴 REVERSED 2026-08-10 (user request), the icon half only: this used
+          to say "a leading shield icon was also removed … aligns with the
+          icon-less H1 used on Trust Check / Performance / Usage / Account /
+          Usage Ledger". Every one of those pages now carries a title tile, and
+          it is the SAME glyph its sidebar entry uses — resolved from
+          shared/ui/page-icons.ts, not chosen here. Do not re-remove it without
+          also changing that table and the sidebar, or the two drift apart
+          again (which is the defect this round fixed). */}
+      <PageTitleRow>
         <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>{t('vault.myVault')}</div>
-      </div>
+      </PageTitleRow>
       <div className="flex items-center gap-2">
         <span
           className="text-[12px] font-mono flex items-center gap-1.5"

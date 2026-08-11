@@ -27,6 +27,7 @@
  * `follow_user_active` to show the right message.
  */
 import { useMemo, useState } from 'react';
+import { PageTitleRow } from '@/shared/ui/PageHeader';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -376,7 +377,7 @@ export default function UserAppsListPage() {
     return (
       <section className="p-6" aria-labelledby="apps-title">
         <header className="mb-6 flex items-start justify-between flex-wrap gap-3">
-          <div>
+          <PageTitleRow>
             <h1
               id="apps-title"
               className="text-lg font-bold font-mono tracking-wide"
@@ -390,7 +391,7 @@ export default function UserAppsListPage() {
             >
               {t('apps.subtitleNeverReceiveKeys')}
             </p>
-          </div>
+          </PageTitleRow>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -464,7 +465,7 @@ export default function UserAppsListPage() {
       <PageQueryErrors sources={[appsQuery.error, healthQuery.error, vaultQuery.error]} />
       {/* Header */}
       <header className="mb-6 flex items-start justify-between flex-wrap gap-3">
-        <div>
+        <PageTitleRow>
           <h1
             id="apps-title"
             className="text-lg font-bold font-mono tracking-wide"
@@ -478,7 +479,7 @@ export default function UserAppsListPage() {
           >
             {t('apps.subtitleAuthorized')}
           </p>
-        </div>
+        </PageTitleRow>
         <div className="flex items-center gap-2">
           <button
             type="button"

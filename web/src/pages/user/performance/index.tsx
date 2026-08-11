@@ -13,6 +13,7 @@
  * legend) so the two Insights pages read as a coherent set.
  */
 import { useMemo, useState } from 'react';
+import { PageTitleRow } from '@/shared/ui/PageHeader';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
@@ -381,7 +382,7 @@ export default function UserPerformancePage() {
           title + 11.5px muted subtitle. No range selector here; the page is
           single-day-scoped (today, or latest active day fallback). */}
       <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
-        <div>
+        <PageTitleRow>
           <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--display-foreground)' }}>
             {t('performance.title')}
           </h1>
@@ -389,7 +390,7 @@ export default function UserPerformancePage() {
             {t('performance.subtitle')}
             {updatedAt ? t('performance.updatedSuffix', { time: updatedAt }) : ''}
           </p>
-        </div>
+        </PageTitleRow>
       </div>
 
       {/* Filter chips + Reset (2026-05-26): ALWAYS rendered so the row

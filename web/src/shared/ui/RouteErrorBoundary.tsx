@@ -27,7 +27,7 @@
  * handling unfixed — every fallback shown is still a defect to fix at the source
  * (see 20260730-列表字段空集合必须序列化为空数组.md).
  */
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, Fragment, type ErrorInfo, type ReactNode } from 'react';
 
 export interface RouteErrorBoundaryProps {
   children: ReactNode;
@@ -101,7 +101,19 @@ export class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, Route
       // `attempt` in the key: 重试 must REMOUNT the subtree, not just re-render
       // it — a component that threw during mount would otherwise keep its
       // broken state and throw again immediately.
-      return <div key={this.state.attempt}>{this.props.children}</div>;
+      //
+      // 🔴 A keyed Fragment, NOT a <div>. The key is the only thing this
+      // wrapper was ever for, and a Fragment carries one just as well — but a
+      // div is a real DOM node, and inserting one between the shell's scroll
+      // container and the page BREAKS every `h-full` page underneath: the new
+      // parent has height:auto, and a percentage height against an auto-height
+      // parent falls back to content height. /user/import is built as a
+      // full-height two-pane workspace and had been collapsing to its content
+      // height (594px inside an 836px viewport) since this boundary landed on
+      // 2026-08-08 — its own comment (written 2026-07-26) still says "UserShell
+      // mounts <Outlet /> inside `flex-1 overflow-y-auto`", which stopped being
+      // true the moment a node appeared in between.
+      return <Fragment key={this.state.attempt}>{this.props.children}</Fragment>;
     }
     return (
       <RouteErrorFallback

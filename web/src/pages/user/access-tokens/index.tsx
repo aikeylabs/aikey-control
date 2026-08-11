@@ -12,6 +12,7 @@
  * modal in a follow-up; this MVP creates against the member's own pool.
  */
 import { useState } from 'react';
+import { PageTitleRow } from '@/shared/ui/PageHeader';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -1020,10 +1021,10 @@ export default function MyAgentsPage() {
       <style>{KEYS_PAGE_CSS}</style>
       <div className="vault-page p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
+        <PageTitleRow>
           <h1 className="text-lg font-mono font-bold tracking-widest" style={{ color: 'var(--foreground)' }}>{t('accessTokens.title')}</h1>
           <p className="text-xs font-mono mt-1" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.subtitle')}</p>
-        </div>
+        </PageTitleRow>
         <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-primary-dim text-xs px-4 py-2">{t('accessTokens.newAgent')}</button>
       </div>
 

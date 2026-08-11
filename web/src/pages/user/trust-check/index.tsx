@@ -19,6 +19,7 @@
  * domain — keep this file under ~400 lines per the splitting rule.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PageTitleTile } from '@/shared/ui/PageHeader';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -373,6 +374,10 @@ export default function UserTrustCheckPage() {
 
       <header className="tc-header">
         <div className="tc-header-title">
+          {/* Tile only, not PageTitleRow: this container is itself a flex row
+              whose .tc-subtitle wraps via flex-basis:100%, so the tile has to be
+              a sibling flex item. Glyph resolves from the route, same as the nav. */}
+          <PageTitleTile />
           {/* H1 aligned to "Trust Check" 2026-05-23 — matches the
               sidebar nav label + route directory + .trust-check-page
               CSS namespace + "Run Checks" / "Check History" UI copy.

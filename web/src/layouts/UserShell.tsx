@@ -1,3 +1,4 @@
+import { NavGlyph } from '@/shared/ui/nav-glyphs';
 import React from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -83,55 +84,39 @@ function NavIcon({ d, className = 'w-4 h-4' }: { d: string; className?: string }
 // the same geometry stops the Team Keys entry from looking like a
 // stranger. Compound path combines the ring (circle → arc) + the
 // bitting strokes that lucide ships as 3 SVG nodes.
-const ICON_KEY =
-  'M15.5 7.5l2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4M21 2l-9.6 9.6M13 15.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z';
 
 // lucide "layout-dashboard" (outline) — matches user_vault_3_1.html
 // template so /user/overview's sidebar glyph reads the same on both
 // user console pages. Swapped from heroicons "squares-2x2" 2026-04-23.
-const ICON_OVERVIEW =
-  'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z';
 
 // lucide "user" (outline) — matches user_vault_3_1.html. Compound
 // path: head circle + shoulders arc (lucide ships these as <circle> +
 // <path> nodes; collapsed into one `d` so the NavIcon wrapper doesn't
 // need to support multi-shape icons).
-const ICON_USER =
-  'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0z';
 
 // lucide "bar-chart-3" (outline) — matches template. Replaces the
 // heroicons "receipt-percent" we used before so the Usage entry's
 // glyph reads "charts/metrics" instead of "receipt/tax", which
 // better describes the page content (usage ledger + bar charts).
-const ICON_RECEIPT =
-  'M3 3v18h18M7 16v-4M12 16V8M17 16v-6';
 
 // lucide "circle-dollar-sign" (outline) — Cost / token-spend page glyph.
 // Picked over a generic dollar sign because the bounded circle reads as
 // "individual transaction unit" rather than monetary total, matching
 // the page's "per-key cost breakdown" content.
-const ICON_DOLLAR =
-  'M12 2a10 10 0 100 20 10 10 0 000-20zM8 14.5c.5 1.5 2 2.5 4 2.5s4-1 4-2.5-1-2-3-2.5l-2-.5c-2-.5-3-1-3-2.5s2-2.5 4-2.5 3.5 1 4 2.5M12 6v12';
 
 // lucide "download" (outline) — matches template. Previously was
 // heroicons "arrow-down-tray" (very similar glyph) but we align on
 // lucide's version so stroke terminations match the other lucide
 // icons rendered in the main content area (import page uses lucide
 // natively via <i data-lucide="download">).
-const ICON_UPLOAD_CLOUD =
-  'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3';
 
 // lucide "shield" (outline, no check) — matches user_vault_3_1.html.
 // Earlier we used heroicons "shield-check" which has an additional
 // checkmark stroke inside the shield; the template uses the plain
 // shield so we swap to match. Pairs with the key icon (Team Keys)
 // to distinguish vault-browsing destinations.
-const ICON_SHIELD =
-  'M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z';
 
 // heroicons v2 "user-plus" (outline) — header "Invite" button.
-const ICON_USER_PLUS =
-  'M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z';
 
 // lucide "fingerprint" (outline) — Compliance Audit (2026-06-02) sidebar
 // glyph. First attempted clipboard-check (rectangle + tab + tick), but at
@@ -143,8 +128,6 @@ const ICON_USER_PLUS =
 // leaves the machine — see compliancePage.pageDescription i18n). Multi-
 // arc lucide path compiled into one `d` via M subpaths so NavIcon's
 // single-path renderer works (same trick as ICON_APPS / ICON_SETTINGS).
-const ICON_FINGERPRINT =
-  'M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4 M14 13.12c0 2.38 0 6.38-1 8.88 M17.29 21.02c.12-.6.43-2.3.5-3.02 M2 12a10 10 0 0 1 18-6 M2 16h.01 M21.8 16c.2-2 .131-5.354 0-6 M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2 M8.65 22c.21-.66.45-1.32.57-2 M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2';
 
 // lucide "settings" (outline) — Phase 4G (2026-06-01) Settings page gear
 // glyph. Used in (a) the top-bar gear button that navigates to
@@ -152,8 +135,6 @@ const ICON_FINGERPRINT =
 // cross-app menu's `settings` icon name (master-side renders it when
 // surfacing the personal-settings cross-app entry). Compiled into one
 // `d` via M subpaths so NavIcon's single-path renderer works.
-const ICON_SETTINGS =
-  'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z';
 
 // lucide "bot" (outline) — Connected Apps glyph (refreshed 2026-05-23
 // per design_iterations/vault_logo_layout_refine_3.html mockup).
@@ -174,13 +155,9 @@ const ICON_SETTINGS =
 // Compiled into one `d` via multiple M subpaths so NavIcon's
 // single-path renderer works (lucide's original 7-element multi-path
 // can't be inlined directly).
-const ICON_APPS =
-  'M6 7 H18 a2 2 0 0 1 2 2 V20 a2 2 0 0 1 -2 2 H6 a2 2 0 0 1 -2 -2 V9 a2 2 0 0 1 2 -2 Z M8 3 H16 M12 3 V7 M2 14 H4 M20 14 H22 M9 13 V16 M15 13 V16';
 
 // lucide "bot" — Online Agents (alpha.5) sidebar glyph. Robot head + antenna
 // with a face (eyes + mouth) to read distinctly from ICON_APPS.
-const ICON_BOT =
-  'M12 3 V5 M8 9 H16 a2 2 0 0 1 2 2 V17 a2 2 0 0 1 -2 2 H8 a2 2 0 0 1 -2 -2 V11 a2 2 0 0 1 2 -2 Z M9 13 H9.01 M15 13 H15.01 M10 16 H14';
 
 // lucide "radar" — Trust Check (degrade-detector M5) sidebar glyph.
 // Multi-path icon, so we can't reuse the single-`d` NavIcon path; the
@@ -192,12 +169,12 @@ const ICON_BOT =
 // Named thin wrappers — keeps call sites self-documenting and gives
 // elements a stable identity for tests / `data-origin-name`-style tooling.
 function KeyIcon({ className }: { className?: string } = {}) {
-  return <NavIcon d={ICON_KEY} className={className} />;
+  return <NavGlyph name="key" className={className} />;
 }
-function OverviewIcon()    { return <NavIcon d={ICON_OVERVIEW} />; }
-function UserIcon()        { return <NavIcon d={ICON_USER} />; }
-function ReceiptIcon()     { return <NavIcon d={ICON_RECEIPT} />; }
-function DollarIcon()      { return <NavIcon d={ICON_DOLLAR} />; }
+function OverviewIcon()    { return <NavGlyph name="overview" />; }
+function UserIcon()        { return <NavGlyph name="user" />; }
+function ReceiptIcon()     { return <NavGlyph name="receipt" />; }
+function DollarIcon()      { return <NavGlyph name="dollar" />; }
 
 // Performance nav glyph (2026-08-01 user request): gauge/speedometer — the
 // canonical performance-profiling mark (lucide `gauge`). Replaces the dollar
@@ -218,44 +195,35 @@ function DollarIcon()      { return <NavIcon d={ICON_DOLLAR} />; }
 // Replaces ICON_APPS, which Agents inherited from Connected Apps on 2026-08-01 —
 // an app-grid mark on a credential page. Path bytes must match the master
 // console's TokenTallyIcon (icons are mirrored console-wide).
-const ICON_TOKEN_TALLY =
-  'M12 2.8L19.6 7.2L19.6 16.8L12 21.2L4.4 16.8L4.4 7.2Z M12 2.8l2.2 4.6 -4.4 4.6 4.4 4.6 -2.2 4.6';
 
-const ICON_GAUGE = 'm12 14 4-4 M3.34 19a10 10 0 1 1 17.32 0';
-function GaugeIcon() { return <NavIcon d={ICON_GAUGE} />; }
-function UploadCloudIcon() { return <NavIcon d={ICON_UPLOAD_CLOUD} />; }
-function AppsIcon()        { return <NavIcon d={ICON_APPS} />; }
-function TokenTallyIcon() { return <NavIcon d={ICON_TOKEN_TALLY} />; }
-function BotIcon()         { return <NavIcon d={ICON_BOT} />; }
-function UserPlusIcon()    { return <NavIcon d={ICON_USER_PLUS} />; }
-function ShieldIcon()      { return <NavIcon d={ICON_SHIELD} />; }
-function FingerprintIcon() { return <NavIcon d={ICON_FINGERPRINT} />; }
+function GaugeIcon() { return <NavGlyph name="gauge" />; }
+function UploadCloudIcon() { return <NavGlyph name="upload-cloud" />; }
+function AppsIcon()        { return <NavGlyph name="apps" />; }
+function TokenTallyIcon() { return <NavGlyph name="token-tally" />; }
+function BotIcon()         { return <NavGlyph name="bot" />; }
+function UserPlusIcon()    { return <NavGlyph name="user-plus" />; }
+function ShieldIcon()      { return <NavGlyph name="shield" />; }
+function FingerprintIcon() { return <NavGlyph name="fingerprint" />; }
 
 // Team-keys nav glyph (2026-08-01 user request): the SAME three-person mark
 // the vault page's kind tiles draw for team-managed keys (heroicons users
 // path, mirrored from pages/user/_shared/tool-glyph KIND_GLYPH.team) — the
 // menu and the rows it leads to now speak one icon language.
-const ICON_TEAM_KIND =
-  'M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z';
-function TeamKindIcon() { return <NavIcon d={ICON_TEAM_KIND} />; }
+function TeamKindIcon() { return <NavGlyph name="team-kind" />; }
 
 // Compliance-audit nav glyph (2026-08-01 user request, second pass): scales
 // of justice (lucide `scale` compiled into one `d` via M subpaths) — the
 // canonical "rules / 合规" metaphor. First cut was clipboard-check; the
 // fingerprint before that now belongs to Team OAuth (the vault OAuth-kind
 // mark), and two fingerprints in one sidebar read as the same feature.
-const ICON_SCALE =
-  'm16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z M7 21h10 M12 3v18 M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2';
-function ScaleIcon() { return <NavIcon d={ICON_SCALE} />; }
+function ScaleIcon() { return <NavGlyph name="scale" />; }
 
 // Connected-Apps nav glyph (2026-08-01 user request): puzzle piece — the
 // universal plugin/extension metaphor. Chosen over the literal 插头 plug
 // (already the console-wide mark for DIRECT-CREDENTIAL kind) and the grid
 // (handed to Agents the same day). Lucide `puzzle`, single path.
-const ICON_PUZZLE =
-  'M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 2c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z';
-function PuzzleIcon() { return <NavIcon d={ICON_PUZZLE} />; }
-function SettingsIcon()    { return <NavIcon d={ICON_SETTINGS} />; }
+function PuzzleIcon() { return <NavGlyph name="puzzle" />; }
+function SettingsIcon()    { return <NavGlyph name="settings" />; }
 
 // Team Usage glyph. History: Phase 3B R17 (2026-05-11) used heads-over-bars
 // to say "team's metrics"; replaced 2026-08-01 (user feedback: cluttered at
@@ -266,56 +234,19 @@ function TeamUsageIcon() {
   // v2's axis+columns collided with personal Usage's icon (named ReceiptIcon
   // but drawing a bar chart); a line chart keeps the "usage metrics" read
   // while staying visually distinct in the same sidebar group.
-  return <NavIcon d="M22 7 13.5 15.5 8.5 10.5 2 17 M16 7h6v6" />;
+  return <NavGlyph name="team-usage" />;
 }
 
 // Multi-path lucide "radar" (M5 Day 1, 2026-05-21). Re-rendered as inline
 // SVG instead of NavIcon since NavIcon takes only a single `d`.
-function RadarIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      viewBox="0 0 24 24"
-    >
-      <path d="M19.07 4.93A10 10 0 0 0 6.99 3.34" />
-      <path d="M4 6h.01" />
-      <path d="M2.29 9.62A10 10 0 1 0 21.31 8.35" />
-      <path d="M16.24 7.76A6 6 0 1 0 19.4 12.91" />
-      <path d="M14 12a2 2 0 1 0-4 0" />
-      <path d="M11.55 21.95A10 10 0 0 0 21.55 12" />
-      <path d="M4.05 14a10 10 0 0 0 1.92 5.99" />
-    </svg>
-  );
-}
+function RadarIcon() { return <NavGlyph name="radar" />; }
 
 // lucide "share-2" — Contribute OAuth (N3b) glyph (2026-06-29). Three nodes
 // linked by two edges: reads as "share / contribute your account into the org
 // pool". Replaces the old KeyIcon, which made Contribute OAuth visually
 // identical to the adjacent Team Keys entry in the KEYS group. Multi-path, so
 // inline like RadarIcon / TeamUsageIcon instead of the single-path NavIcon.
-function ShareIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      viewBox="0 0 24 24"
-    >
-      <circle cx="18" cy="5" r="3" />
-      <circle cx="6" cy="12" r="3" />
-      <circle cx="18" cy="19" r="3" />
-      <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
-    </svg>
-  );
-}
+function ShareIcon() { return <NavGlyph name="share" />; }
 
 /**
  * Phase 3B R8 (2026-05-11): map a cross-app-menu entry's `icon` string

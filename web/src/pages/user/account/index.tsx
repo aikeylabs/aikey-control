@@ -11,6 +11,7 @@
  *    populated case renders one row per seat with status + key counts.
  */
 import { useMemo } from 'react';
+import { PageTitleRow } from '@/shared/ui/PageHeader';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -82,6 +83,7 @@ export default function MyAccountPage() {
           used across master pages (same component also used by other
           user pages like /referrals, /pending-keys). */}
       <div className="mb-6">
+        <PageTitleRow>
         <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--display-foreground)' }}>
           {t('account.pageTitle')}
         </h1>
@@ -91,6 +93,7 @@ export default function MyAccountPage() {
         >
           {t('account.pageSubtitle')}
         </p>
+        </PageTitleRow>
       </div>
 
       <div className="space-y-5">

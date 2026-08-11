@@ -121,7 +121,7 @@ var PersonalMenu = []Entry{
 	// cluster/team org. MUST match own-menu.ts (ts_drift_test asserts id+path
 	// parity).
 	//
-	// 2026-08-10 (user decision): renamed "Agents" → "Access Token" (zh 令牌管理)
+	// 2026-08-10 (user decision): renamed "Agents" → "Access Token" (zh 访问令牌)
 	// and MOVED from the APPS group to KEYS. Two reasons: (a) "Agent" was a pun —
 	// it meant both this seat and the third-party tool (Claude Code / Codex) that
 	// consumes it, and the rename resolves it in favour of the tool; (b) what this
@@ -194,7 +194,8 @@ var personalMenuZhLabels = map[string]string{
 	"personal-cost":             "性能", // Label "Performance"; ID kept for back-compat.
 	"personal-apps":             "应用",
 	// 2026-08-10 rename ("Agents" → "Access Token"): unlike the 2026-07-17 round,
-	// the zh label is now TRANSLATED («令牌管理»). "Agent" was kept untranslated
+	// the zh label is now TRANSLATED («访问令牌» — an interim round said «令牌管理»;
+	// do not resurrect it, the shipped value is below). "Agent" was kept untranslated
 	// because it was a domain proper noun; "令牌" is deliberately NOT the
 	// transliteration "Token" — it keeps the credential sense clear of the
 	// billing-unit "token" (input_tokens / token 配额) that appears two menu

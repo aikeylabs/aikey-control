@@ -22,11 +22,11 @@
  * prompt/column, and the FilterBar search box is repurposed for the category
  * filter (there's no tenant to search).
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { complianceApi, type ComplianceEventDTO } from '@/shared/api/user/compliance';
+import { complianceApi, type ComplianceEventDTO, type ComplianceFindingDTO } from '@/shared/api/user/compliance';
 import { appsApi } from '@/shared/api/user/apps';
 import { Badge } from '@/shared/ui/Badge';
 import { PageHeader } from '@/shared/ui/PageHeader';
@@ -39,6 +39,13 @@ import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterBar } from '@/shared/ui/FilterBar';
 import { SearchableSelect } from '@/shared/ui/SearchableSelect';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
+import {
+  COMPLIANCE_ACTION_SUMMARY_ACTIONS,
+  COMPLIANCE_ACTION_SUMMARY_COLOR,
+  COMPLIANCE_ACTION_SUMMARY_LABEL_KEY,
+  complianceActionBadgeVariant,
+  complianceActionFilterOptions,
+} from '@/shared/compliance/action-taken';
 
 const PAGE_SIZE = 15;
 
@@ -51,14 +58,13 @@ function severityVariant(s: string): 'red' | 'yellow' | 'green' | 'gray' {
   }
 }
 
-function actionVariant(a: string): 'red' | 'yellow' | 'green' | 'gray' {
-  switch (a) {
-    case 'block': return 'red';
-    case 'mask': return 'yellow';
-    case 'warn': return 'gray';
-    default: return 'green'; // allow
-  }
-}
+// Action chip styling, the action filter and the summary cards all come from
+// the shared value domain (@/shared/compliance/action-taken), which is fenced
+// against the database CHECK constraint. This page used to carry its own
+// four-case switch ending in `default: return 'green'`, which painted the
+// `audit` outcome — "we detected something and forwarded it anyway" — in
+// allow's green, i.e. as "nothing matched" (2026-08-10).
+const actionVariant = complianceActionBadgeVariant;
 
 // Reveal toggle — lucide "eye" / "eye-off", inlined with the SAME path data as
 // pages/user/access-tokens (this app's other reveal control) and the master
@@ -121,6 +127,106 @@ export interface ComplianceViewSource {
   filterControl?: ComplianceFilterControl;
   titleKey: string;
   descriptionKey: string;
+  /**
+   * i18n key for the note rendered in place of the eye when a finding carries no
+   * un-redacted original text. REQUIRED (not defaulted) because the REASON is
+   * lane-specific and getting it wrong actively misleads:
+   *
+   *   - LOCAL lane  — raw text IS normally stored here; absence means the event
+   *     predates the 2026-08-09 reveal decision, so "upgrade the detector" is
+   *     genuinely the fix.
+   *   - TEAM lane   — raw text is NEVER present and never will be. DC5「原文不出
+   *     本机」: the detector's mayCarryRawSnippet gate is `LocalIntake && !team`,
+   *     and a team-routed event is NOT enqueued to the local uploader either
+   *     (cmd/detector emitEvent returns the JSON for the proxy instead), so the
+   *     un-redacted text is not retained anywhere. Telling a team member to
+   *     upgrade the detector sends them on a fix that can never work — that is
+   *     the 2026-08-10 bug this field exists to prevent.
+   *
+   * 🔴 The discriminator is THIS INJECTED SOURCE, never `runtimeConfig.authMode`:
+   * the unified-origin gateway patches forwarded team pages to
+   * `authMode:'local_bypass'`, so at runtime a team page is indistinguishable
+   * from a local one. See principles/gateway-local-bypass-masquerade.md.
+   */
+  originalUnavailableKey: string;
+  /**
+   * TEAM lane only — where the eye's text comes from when it does NOT come from
+   * `context_snippet`.
+   *
+   * WHY THIS IS AN INJECTED SOURCE AND NOT A BRANCH IN THIS FILE
+   * ------------------------------------------------------------
+   * The two lanes answer "show me the original" from two different stores, and
+   * the difference is not cosmetic:
+   *
+   *   - LOCAL — the detector kept the un-redacted window ON THE FINDING
+   *     (`context_snippet`). It is the matched span, it is already in the row
+   *     this page rendered, and revealing it costs nothing and records nothing.
+   *   - TEAM  — no such column exists. The text lives in conversation_records on
+   *     the team server, and reaching it is a per-event server round trip that
+   *     is RECORDED (one revealed original = one access record). It is also the
+   *     WHOLE TURN, not the matched span, because the finding's byte offsets and
+   *     the stored turn text are in different coordinate systems.
+   *
+   * So this page owns only what is common — the per-finding eye control, its
+   * open/closed state, and the "there is nothing to reveal" note — and the lane
+   * owns the fetch, the eight can't-show-it reasons, and the copy that says what
+   * the reader is looking at. Undefined ⇒ the local lane's `context_snippet`
+   * behaviour, unchanged.
+   *
+   * 🔴 The lane is decided by THIS field, never by `runtimeConfig.authMode`: the
+   * unified-origin gateway patches forwarded team pages to 'local_bypass', so at
+   * runtime a team page looks exactly like a local one
+   * (principles/gateway-local-bypass-masquerade.md).
+   */
+  originalTurn?: ComplianceOriginalTurnSource;
+}
+
+/** See ComplianceViewSource.originalTurn for why this indirection exists. */
+export interface ComplianceOriginalTurnSource {
+  /**
+   * Can this event's original be revealed at all? false ⇒ NO eye is rendered
+   * and `originalUnavailableKey` is shown instead.
+   *
+   * 🔴 Not just tidiness: on the team lane the reveal is a recorded read, so an
+   * eye offered when we already know the answer is empty would stamp the access
+   * trail with reads that revealed nothing — inflating exactly the record that
+   * answers "who read whose conversations". A dead button is also worse than no
+   * button.
+   */
+  canReveal: (event: ComplianceEventDTO) => boolean;
+  /**
+   * Rendered inside the expanded eye. Owns the fetch, the状态 copy, and — because
+   * what it shows is the whole turn rather than the matched span — the caption
+   * that says so.
+   */
+  Panel: (props: { event: ComplianceEventDTO }) => ReactNode;
+}
+
+/**
+ * SINGLE EXIT for "can this finding's original text be revealed?".
+ *
+ * Two callers need the same answer and must never drift: the per-finding eye
+ * (below) and the event-level "why is there no original here" note (also below,
+ * rendered once per drawer). Spelling the lane dispatch twice is how the two
+ * would end up disagreeing — the note claiming there is nothing to see while an
+ * eye sits right above it.
+ *
+ * Lane dispatch, unchanged:
+ *   - TEAM  (`source.originalTurn` injected) — the answer is a property of the
+ *     EVENT (the conversation turn is fetched per event, and the read is
+ *     RECORDED), so `finding` is not consulted at all.
+ *   - LOCAL (no injected source) — the answer is the finding's own
+ *     `context_snippet`, which the detector attaches per finding.
+ *
+ * 🔴 The lane comes from the injected source, NEVER from `runtimeConfig.authMode`
+ * (principles/gateway-local-bypass-masquerade.md).
+ */
+function canRevealOriginal(
+  source: ComplianceViewSource,
+  event: ComplianceEventDTO,
+  finding: ComplianceFindingDTO,
+): boolean {
+  return source.originalTurn ? source.originalTurn.canReveal(event) : !!finding.context_snippet;
 }
 
 const LOCAL_SOURCE: ComplianceViewSource = {
@@ -139,6 +245,10 @@ const LOCAL_SOURCE: ComplianceViewSource = {
   },
   titleKey: 'compliancePage.pageTitle',
   descriptionKey: 'compliancePage.pageDescription',
+  // Local lane: raw text is normally kept on this box, so an absence really is
+  // "recorded before the reveal decision / by an older detector" and upgrading
+  // the detector really does fix it.
+  originalUnavailableKey: 'compliancePage.originalUnavailable',
 };
 
 export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { source?: ComplianceViewSource } = {}) {
@@ -281,14 +391,21 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
       enabled: true,
     });
   const sumAll = countQ(undefined, 'all');
-  const sumMask = countQ('mask', 'mask');
-  const sumAllow = countQ('allow', 'allow');
-  const sumBlock = countQ('block', 'block');
+  // One count per carded action, driven off the shared list so a new action can
+  // never be counted by the total while having no card of its own. The list is a
+  // module constant, so the number and order of these useQuery calls is fixed
+  // across renders (rules-of-hooks).
+  const actionSums = COMPLIANCE_ACTION_SUMMARY_ACTIONS.map((action) => ({
+    action,
+    q: countQ(action, action),
+  }));
   const summaryCards = [
     { label: t('compliancePage.summaryTotal'), q: sumAll, color: 'var(--foreground)' },
-    { label: t('compliancePage.summaryMasked'), q: sumMask, color: '#fb923c' },
-    { label: t('compliancePage.summaryAllowed'), q: sumAllow, color: '#4ade80' },
-    { label: t('compliancePage.summaryBlocked'), q: sumBlock, color: '#f87171' },
+    ...actionSums.map(({ action, q }) => ({
+      label: t(COMPLIANCE_ACTION_SUMMARY_LABEL_KEY[action]),
+      q,
+      color: COMPLIANCE_ACTION_SUMMARY_COLOR[action],
+    })),
   ];
 
   const severityOptions = [
@@ -297,12 +414,11 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
     { value: 'medium', label: t('compliancePage.sevMedium') },
     { value: 'low', label: t('compliancePage.sevLow') },
   ];
+  // Whole domain by construction — a hand-listed subset is how `audit` became
+  // unfilterable, and an empty filter result reads as "it never happened".
   const actionOptions = [
     { value: '', label: t('compliancePage.allActions') },
-    { value: 'block', label: t('compliancePage.actionBlock') },
-    { value: 'mask', label: t('compliancePage.actionMask') },
-    { value: 'warn', label: t('compliancePage.actionWarn') },
-    { value: 'allow', label: t('compliancePage.actionAllow') },
+    ...complianceActionFilterOptions(t, 'compliancePage'),
   ];
 
   return (
@@ -586,14 +702,33 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                         to reveal: a button that does nothing when clicked is worse
                         than no button, and `context_snippet` is legitimately absent
                         for events recorded between 2026-06-03 and this change, or by
-                        a detector that predates it. That absence gets its own note
-                        rather than a dead control. */}
+                        a detector that predates it — and it is absent by DESIGN on
+                        the team lane (DC5: a compliance FINDING's raw text never
+                        leaves the box — scoped to THIS lane; the conversation-audit
+                        lane does upload the full turn when the org's capture switch
+                        is on — and a team-routed event is not kept locally either).
+                        That absence gets a note rather than a dead control — but the
+                        note is EVENT-level and rendered once, below the whole list
+                        (see it after this map). */}
                     {(() => {
                       const raw = f.context_snippet ?? '';
                       const masked = f.redacted_snippet ?? '';
                       const revealed = revealedFindings.has(f.finding_id);
-                      const shown = revealed && raw ? raw : masked;
-                      if (!raw && !masked) return null;
+                      // 🔴 WHERE the original comes from is the injected source's
+                      // decision, not this file's. Local lane: the finding's own
+                      // `context_snippet` (the matched span, already in hand).
+                      // Team lane: `source.originalTurn`, which fetches the whole
+                      // TURN per event and is a RECORDED read — so the eye is
+                      // offered only when that source says it can answer. See
+                      // ComplianceViewSource.originalTurn for the full rationale.
+                      const teamOriginal = source.originalTurn;
+                      const canReveal = canRevealOriginal(source, selected, f);
+                      // Team lane never substitutes text in place — the masked
+                      // snippet stays put and the turn opens BELOW it, because the
+                      // two are not the same span and swapping one for the other
+                      // would read as "this is what that mask covered".
+                      const shown = !teamOriginal && revealed && raw ? raw : masked;
+                      if (!masked && !canReveal) return null;
                       return (
                         <div className="mt-2 space-y-1.5">
                           {shown && (
@@ -611,7 +746,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                               {renderMaskedSnippet(shown)}
                             </div>
                           )}
-                          {raw ? (
+                          {canReveal && (
                             <button
                               type="button"
                               onClick={() => toggleReveal(f.finding_id)}
@@ -624,16 +759,66 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                               {revealed ? <EyeOffIcon /> : <EyeIcon />}
                               {revealed ? t('compliancePage.hideOriginal') : t('compliancePage.revealOriginal')}
                             </button>
-                          ) : (
-                            <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
-                              {t('compliancePage.originalUnavailable')}
-                            </p>
                           )}
+                          {/* Team lane: the fetched TURN, rendered by the lane that
+                              knows what it is. Mounted only while an eye is open, so
+                              the recorded read happens on the click and not on the
+                              drawer opening. */}
+                          {teamOriginal && revealed && <teamOriginal.Panel event={selected} />}
                         </div>
                       );
                     })()}
                   </div>
                 ))}
+                {/* ── "why is there no original here" — ONCE PER DRAWER ──────────
+                    2026-08-10 用户反馈: 「这段话，只需要在抽屉显示一次即可」. A real
+                    event carried 8 findings, so the same paragraph rendered 8
+                    times inside one drawer.
+
+                    🔴 WHY EVENT-LEVEL AND NOT PER FINDING (do not move it back
+                    into the map above): "is there an original I can look at" is a
+                    property of the EVENT, not of a single matched span.
+                      · TEAM lane — `originalTurn.canReveal(event)` does not even
+                        take a finding: the original is one conversation TURN
+                        fetched per event, so the answer is identical for every
+                        finding by construction. N copies of one sentence was
+                        always N copies of the same fact.
+                      · LOCAL lane — `context_snippet` is a per-finding column,
+                        but the detector's gate that fills it (mayCarryRawSnippet)
+                        is evaluated per EVENT, so an event's findings are
+                        all-or-nothing in practice; an old event (recorded before
+                        the 2026-08-09 reveal decision) repeated the note once per
+                        finding for the same single reason.
+                      Consequence, accepted deliberately: in the pathological
+                      mixed case (a finding whose byte offsets are degenerate, so
+                      contextSnippet() returned "" while its siblings got text) the
+                      eyeless finding now shows no note. The note's own text would
+                      have been wrong there anyway ("recorded by an older
+                      detector" — it wasn't), and an event-level fact stated once
+                      beats a per-finding fact that is only ever right by accident.
+
+                    🔴 WHY BELOW THE LIST rather than above it: two of the three
+                    team-lane notes say 「上方的脱敏片段…」/"The masked snippet
+                    above…". Those sentences are privacy copy under a fence
+                    (privacy-claim-scope.test.ts / team-lane-original-note.test.ts)
+                    and must not be reworded, so the note has to sit where the
+                    masked snippets really are above it. Hence: after the cards,
+                    and only when at least one card actually rendered a masked
+                    snippet for it to refer to.
+
+                    WHICH sentence is `source.originalUnavailableKey` — the reason
+                    is lane-specific and comes from the injected source, never from
+                    authMode (see the field's doc). */}
+                {(() => {
+                  const anyRevealable = selected.findings.some((f) => canRevealOriginal(source, selected, f));
+                  const anyMasked = selected.findings.some((f) => !!f.redacted_snippet);
+                  if (anyRevealable || !anyMasked) return null;
+                  return (
+                    <p className="text-[10px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+                      {t(source.originalUnavailableKey)}
+                    </p>
+                  );
+                })()}
               </div>
             } />
           </div>

@@ -98,13 +98,43 @@ describe('Access Token term unification (was "Agents")', () => {
   });
 
   it('no longer calls the seat an agent in its own copy', () => {
+    // Bans the SEAT sense of "agent", not the word. The naming dictionary
+    // RESERVES "Agent" for the third-party AI tool (Claude Code / Codex) — that
+    // usage is correct and is what master's own copy says ("第三方 Agent 凭它经
+    // 网关接入"). A blanket /agent/i ban therefore also outlawed the sanctioned
+    // sense: it went red on 2026-08-10 for a subtitle that used it correctly.
+    // Fences should pin WHERE something may be said, not forbid a word outright
+    // — the blanket form blocks the next correct change while looking protective.
+    const THIRD_PARTY_SENSE = /(third-party|第三方)\s*agents?/i;
     for (const [lang, dict] of [['en', EN], ['zh', ZH]] as const) {
-      const seatSense = lang === 'en'
-        ? [dict.accessTokens.cardAll, dict.accessTokens.subtitle, dict.accessTokens.newAgent, dict.accessTokens.loadError]
-        : [dict.accessTokens.cardAll, dict.accessTokens.subtitle, dict.accessTokens.newAgent, dict.accessTokens.loadError];
+      const seatSense = [
+        dict.accessTokens.cardAll, dict.accessTokens.subtitle,
+        dict.accessTokens.newAgent, dict.accessTokens.loadError,
+      ];
       for (const s of seatSense) {
-        expect(s, `${lang}: "${s}" still calls the seat an agent`).not.toMatch(/agent/i);
+        const residue = s.replace(new RegExp(THIRD_PARTY_SENSE, 'gi'), '');
+        expect(residue, `${lang}: "${s}" still calls the seat an agent `
+          + '(the third-party-tool sense is allowed; a bare "agent" is not)')
+          .not.toMatch(/agent/i);
       }
     }
+  });
+
+  // 2026-08-10 (user request): the member page must describe the SAME thing the
+  // master page does — a token for the centralized gateway's Worker nodes — so
+  // the two consoles stop telling different stories about one feature.
+  //
+  // Deliberately NOT a copy of master's string: master says "由组织成员创建",
+  // which is the ADMIN looking down at everyone's tokens. On the member page you
+  // are looking at your own, so a verbatim copy would be false. The shared part
+  // is the semantics (集中化网关 / Worker), not the sentence.
+  it('describes the member page as gateway/Worker tokens, in the member voice', () => {
+    expect(ZH.accessTokens.subtitle).toMatch(/集中化网关/);
+    expect(ZH.accessTokens.subtitle).toMatch(/Worker/);
+    expect(EN.accessTokens.subtitle).toMatch(/centralized gateway/i);
+    expect(EN.accessTokens.subtitle).toMatch(/Worker/i);
+    // The member voice: never the admin's "created by members of this org".
+    expect(ZH.accessTokens.subtitle).not.toMatch(/由组织成员创建/);
+    expect(EN.accessTokens.subtitle).not.toMatch(/members of this org/i);
   });
 });

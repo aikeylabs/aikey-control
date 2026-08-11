@@ -20,6 +20,7 @@
  *     `import UserVirtualKeysPage from 'aikey-control-web/pages/virtual-keys'`.
  *     This is the canonical Team Keys page on the team server.
  */
+import { PageTitleGlyph } from '@/shared/ui/PageHeader';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -712,9 +713,9 @@ function IdentityStrip({ counts }: { counts: { total: number; issued: number; pe
       <div className="flex items-center gap-3 min-w-0">
         <div
           className="w-9 h-9 rounded flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+          style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--primary)' }}
         >
-          <KeyRoundIcon className="w-4 h-4" style={{ color: 'var(--primary)' }} />
+          <PageTitleGlyph />
         </div>
         <div className="min-w-0">
           <div className="text-lg font-bold font-mono tracking-wide truncate" style={{ color: 'var(--display-foreground)' }}>{t('teamKeys.title')}</div>

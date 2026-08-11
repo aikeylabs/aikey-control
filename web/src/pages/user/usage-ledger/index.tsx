@@ -17,6 +17,7 @@
  *   - Protocol distribution:  GET /v1/usage/personal/by-protocol/total
  *   - Per-key totals:         GET /v1/usage/personal/by-key/total
  */
+import { PageTitleRow } from '@/shared/ui/PageHeader';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
@@ -558,7 +559,7 @@ export default function UserUsageLedgerPage() {
       {/* Title row — mb-6 gap mirrors the shared PageHeader component
           used across master pages. */}
       <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
-        <div>
+        <PageTitleRow>
           <h1 className="text-lg font-bold font-mono tracking-wide" style={{ color: 'var(--display-foreground)' }}>
             {t('usageLedger.title')}
           </h1>
@@ -566,7 +567,7 @@ export default function UserUsageLedgerPage() {
             {t('usageLedger.subtitle')}
             {updatedAt ? t('usageLedger.updatedSuffix', { updatedAt }) : ''}
           </p>
-        </div>
+        </PageTitleRow>
         <div className="seg" role="tablist" aria-label={t('usageLedger.timeRangeAria')}>
           {([1, 7, 14, 30, 90] as const).map((d) => (
             <button
