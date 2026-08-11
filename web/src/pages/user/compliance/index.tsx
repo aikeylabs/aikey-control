@@ -12,10 +12,16 @@
  * default; the un-redacted `context_snippet` sits behind a per-finding eye
  * toggle. Rationale: on your OWN machine, a masked `***CN_NAME***` cannot tell
  * you which of your own values tripped the rule, which is the entire point of a
- * self-view. DC5 is 「原文不出本机」, not 「原文不可见」 — this data never left the
- * box (local-server on 127.0.0.1) and is purged after 30 days. The detector
- * populates `context_snippet` only on the local lane (cmd/detector
- * mayCarryRawSnippet); the master intake wire has no such field at all.
+ * self-view. DC5 is 「原文不出**客户信任边界**」, not 「原文不可见」 — on THIS page
+ * (the Personal local lane) the data never left the box (local-server on
+ * 127.0.0.1) and is purged after 30 days.
+ *
+ * 🔴 2026-08-11 — DC5 was 「原文不出本机」 until the user overturned it. The
+ * detector's `mayCarryRawSnippet` is now TIERED: `team === false` still means
+ * `ictx.LocalIntake` (this page, unchanged), but `team === true` means
+ * `ictx.PrivacyTier >= 3`, and the master intake wire NOW DECLARES
+ * `context_snippet`. So "the master wire has no such field at all" is no longer
+ * a thing to reason from anywhere in this file.
  *
  * Structure mirrors aikey-control-master/web .../master/compliance/audit so the
  * two views stay visually consistent; the only differences are: no tenant
@@ -141,13 +147,17 @@ export interface ComplianceViewSource {
    *   - LOCAL lane  — raw text IS normally stored here; absence means the event
    *     predates the 2026-08-09 reveal decision, so "upgrade the detector" is
    *     genuinely the fix.
-   *   - TEAM lane   — raw text is NEVER present and never will be. DC5「原文不出
-   *     本机」: the detector's mayCarryRawSnippet gate is `LocalIntake && !team`,
-   *     and a team-routed event is NOT enqueued to the local uploader either
-   *     (cmd/detector emitEvent returns the JSON for the proxy instead), so the
-   *     un-redacted text is not retained anywhere. Telling a team member to
-   *     upgrade the detector sends them on a fix that can never work — that is
-   *     the 2026-08-10 bug this field exists to prevent.
+   *   - TEAM lane   — raw text may or may not be present, and the reason is
+   *     never "which detector build ran". 🔴 2026-08-11: it used to be NEVER
+   *     present (gate was `LocalIntake && !team`, master had no column). Now the
+   *     gate is `ictx.PrivacyTier >= 3` on the team branch and master stores the
+   *     column, so presence tracks the ORG'S POLICY — a fresh Team/Cluster
+   *     install seeds tier 3, an upgraded one stays at 1 until an admin raises
+   *     it, and the snippet is cleared after 90 days regardless.
+   *     Telling a team member to upgrade the detector still sends them on a fix
+   *     that cannot work — the lever is on the server, not on their machine —
+   *     so the 2026-08-10 bug this field exists to prevent is unchanged, only
+   *     its explanation is.
    *
    * 🔴 The discriminator is THIS INJECTED SOURCE, never `runtimeConfig.authMode`:
    * the unified-origin gateway patches forwarded team pages to
@@ -801,12 +811,14 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                           that does nothing when clicked is worse than no button,
                           and `context_snippet` is legitimately absent for events
                           recorded between 2026-06-03 and that change, or by an
-                          older detector — and it is absent by DESIGN on the team
-                          lane (DC5: a compliance FINDING's raw text never leaves
-                          the box — scoped to THIS lane; the conversation-audit
-                          lane does upload the full turn when the org's capture
-                          switch is on — and a team-routed event is not kept
-                          locally either). That absence gets a note rather than a
+                          older detector — and on the team lane it is absent
+                          whenever the ORG POLICY does not permit it (🔴 2026-08-11:
+                          this used to read "absent by DESIGN on the team lane";
+                          the team lane now carries the snippet at
+                          `compliance_privacy_tier >= 3`, which a fresh
+                          Team/Cluster install seeds, so absence there is a policy
+                          state or an expired 90-day retention, not a guarantee).
+                          That absence gets a note rather than a
                           dead control — but the note is EVENT-level and rendered
                           once, below the whole list (see it after this map). */}
                       <span className="inline-flex items-center justify-center shrink-0" style={{ width: 26 }}>
