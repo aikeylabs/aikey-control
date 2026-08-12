@@ -50,6 +50,7 @@ import {
 } from '@/shared/utils/mask-highlight';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterTokenBar, type FilterToken, type FilterTokenDimension } from '@/shared/ui/FilterTokenBar';
+import { complianceEntityTypeOptions } from '@/shared/compliance/entity-types';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 import {
   COMPLIANCE_ACTION_SUMMARY_ACTIONS,
@@ -353,6 +354,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   const severity = searchParams.get('severity') ?? '';
   const category = searchParams.get('category') ?? '';
   const action = searchParams.get('action') ?? '';
+  const entityType = searchParams.get('entity_type') ?? '';
 
   // ── Aggregated token filter (2026-08-11 user request) ─────────────────────
   // Replaces the FilterBar severity-select + action-select + category-input
@@ -366,7 +368,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   // shareable, and refresh-safe. `setOffset(0)` stays wired to every filter
   // change — paging into offset 40 and then narrowing the filter to 12 rows
   // would otherwise show an empty page.
-  const COMPLIANCE_FILTER_PARAMS = ['severity', 'action', 'category'] as const;
+  const COMPLIANCE_FILTER_PARAMS = ['severity', 'action', 'category', 'entity_type'] as const;
   const filterTokens: FilterToken[] = COMPLIANCE_FILTER_PARAMS.flatMap((param) => {
     const v = searchParams.get(param);
     return v ? [{ key: param, value: v }] : [];
@@ -386,11 +388,12 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   }
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['compliance-self', { severity, category, action, offset, pageSize }],
+    queryKey: ['compliance-self', { severity, category, action, entityType, offset, pageSize }],
     queryFn: () => source.listEvents({
       severity: severity || undefined,
       category: category || undefined,
       action: action || undefined,
+      entity_type: entityType || undefined,
       limit: pageSize,
       offset,
     }),
@@ -425,10 +428,16 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   const countQ = (act: string | undefined, key: string) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useQuery({
-      queryKey: ['compliance-count', key, { severity, category }],
+      // 🔴 Carries every filter EXCEPT `action` — that is the axis being broken
+      // down. entity_type included (2026-08-11): without it, filtering to
+      // CN_PHONE would narrow the table while the header still counted every
+      // event, and a breakdown that disagrees with the rows under it is read as
+      // a bug in the numbers.
+      queryKey: ['compliance-count', key, { severity, category, entityType }],
       queryFn: () => source.listEvents({
         severity: severity || undefined,
         category: category || undefined,
+        entity_type: entityType || undefined,
         action: act,
         limit: 1,
         offset: 0,
@@ -468,6 +477,15 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
     // option source, so it stays pure free text — exactly as on the master
     // twin. That is also what the old search box was repurposed for.
     { key: 'category', label: t('compliancePage.dimCategory'), options: [], freeText: true },
+    {
+      key: 'entity_type',
+      label: t('compliancePage.dimEntityType'),
+      // Option C (2026-08-11 user decision): value = stored entity_type, label
+      // = 「ADDR (CN_ADDRESS)」. freeText keeps a newly-shipped entity type
+      // reachable even before this table lists it.
+      options: complianceEntityTypeOptions(),
+      freeText: true,
+    },
   ], [t]);
 
   return (

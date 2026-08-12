@@ -60,15 +60,15 @@ type complianceIntakeRequest struct {
 }
 
 type complianceEventWire struct {
-	EventID      string                  `json:"event_id"`
-	CreatedAt    time.Time               `json:"created_at"`
-	UserID       string                  `json:"user_id,omitempty"`
-	ProxyVersion string                  `json:"proxy_version,omitempty"`
-	TargetModel  string                  `json:"target_model,omitempty"`
-	Scenario     string                  `json:"scenario,omitempty"`
-	PromptLength int                     `json:"prompt_length"`
-	ActionTaken  string                  `json:"action_taken"`
-	PromptHash   string                  `json:"prompt_hash,omitempty"`
+	EventID      string    `json:"event_id"`
+	CreatedAt    time.Time `json:"created_at"`
+	UserID       string    `json:"user_id,omitempty"`
+	ProxyVersion string    `json:"proxy_version,omitempty"`
+	TargetModel  string    `json:"target_model,omitempty"`
+	Scenario     string    `json:"scenario,omitempty"`
+	PromptLength int       `json:"prompt_length"`
+	ActionTaken  string    `json:"action_taken"`
+	PromptHash   string    `json:"prompt_hash,omitempty"`
 	// DetectLatencyMs is the detection step's own wall-clock time (ms, float —
 	// often sub-ms), shown in the self-view drawer. Stored in the events.metadata
 	// JSON column (reuses the existing extension column — no schema change).
@@ -352,13 +352,13 @@ type complianceListResponse struct {
 }
 
 type complianceAuditEvent struct {
-	EventID      string                   `json:"event_id"`
-	CreatedAt    string                   `json:"created_at"`
-	UserID       string                   `json:"user_id,omitempty"`
-	TargetModel  string                   `json:"target_model,omitempty"`
-	Scenario     string                   `json:"scenario,omitempty"`
-	PromptLength int                      `json:"prompt_length"`
-	ActionTaken  string                   `json:"action_taken"`
+	EventID      string `json:"event_id"`
+	CreatedAt    string `json:"created_at"`
+	UserID       string `json:"user_id,omitempty"`
+	TargetModel  string `json:"target_model,omitempty"`
+	Scenario     string `json:"scenario,omitempty"`
+	PromptLength int    `json:"prompt_length"`
+	ActionTaken  string `json:"action_taken"`
 	// DetectLatencyMs: detection step's own time (ms, float), parsed from the
 	// metadata JSON column. Omitted when absent/zero.
 	DetectLatencyMs float64                  `json:"detect_latency_ms,omitempty"`
@@ -429,6 +429,19 @@ func complianceListHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 			where = append(where, "EXISTS (SELECT 1 FROM local_compliance_findings f WHERE f.event_id = e.event_id AND (f.category LIKE ? OR f.entity_type LIKE ? OR f.context_snippet LIKE ?))")
 			like := "%" + cat + "%"
 			args = append(args, like, like, like)
+		}
+		// entity_type: EXACT match on the detected entity (2026-08-11 user
+		// request), distinct from the `category` box above which is a deliberate
+		// three-column fuzzy search.
+		//
+		// 🔴 Both may be present and are ANDed. They are not redundant: 「PHONE」
+		// typed in the search box also matches a snippet that merely mentions the
+		// word, while this picks the finding whose entity_type IS CN_PHONE. The
+		// console offers the enumerated values through this param and keeps the
+		// box for free text.
+		if et := q.Get("entity_type"); et != "" {
+			where = append(where, "EXISTS (SELECT 1 FROM local_compliance_findings f WHERE f.event_id = e.event_id AND f.entity_type = ?)")
+			args = append(args, et)
 		}
 		whereSQL := ""
 		if len(where) > 0 {

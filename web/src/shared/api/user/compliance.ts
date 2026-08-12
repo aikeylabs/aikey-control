@@ -71,6 +71,10 @@ export interface ComplianceListQuery {
   severity?: string;
   category?: string;
   action?: string;
+  /** Stored finding entity type (CN_ADDRESS / CN_PHONE / …), EXACT match —
+   *  distinct from `category`, which the local lane treats as a three-column
+   *  fuzzy search. See shared/compliance/entity-types.ts for the labelling. */
+  entity_type?: string;
   from?: string;          // RFC3339
   to?: string;            // RFC3339
   limit?: number;
@@ -111,11 +115,29 @@ export interface EffectivePacksReport {
   cursor: number;
 }
 
+export interface FilterLatencyLaneDTO {
+  count: number;
+  window_samples: number;
+  p50_ms: number;
+  p95_ms: number;
+  under_15ms_percent: number;
+}
+
+export interface FilterPerformanceDTO {
+  window_size: number;
+  samples_started_at?: string;
+  last_observed_at?: string;
+  incremental: FilterLatencyLaneDTO;
+  cold: FilterLatencyLaneDTO;
+}
+
 /** GET /api/user/compliance/packs envelope. available=false when no compliance
  *  filter is running (compliance off / offline / proxy unreachable). */
 export interface EffectivePacksResponse {
   available: boolean;
   report?: EffectivePacksReport;
+  /** Content-free rolling latency evidence from the active Proxy generation. */
+  performance?: FilterPerformanceDTO;
 }
 
 export const complianceApi = {

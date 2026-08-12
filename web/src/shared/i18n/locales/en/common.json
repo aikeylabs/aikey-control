@@ -2541,7 +2541,8 @@
     "dimSeverity": "Severity",
     "dimAction": "Action",
     "dimCategory": "Category",
-    "reset": "Reset"
+    "reset": "Reset",
+    "dimEntityType": "Entity type"
   },
   "browserProfileGuide": {
     "title": "Use a separate browser profile per account",
