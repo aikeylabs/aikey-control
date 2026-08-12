@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import enCommon from '@/shared/i18n/locales/en/common.json';
+import zhCommon from '@/shared/i18n/locales/zh/common.json';
+import { POOL_RUNTIME_REASON } from '@/shared/utils/pool-runtime-reason';
+
 const PAGE = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/user/access-tokens/index.tsx'), 'utf-8');
 const ACCOUNTS_API = fs.readFileSync(path.resolve(process.cwd(), 'src/shared/api/user/accounts.ts'), 'utf-8');
 const POOL_LIST = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/user/_shared/PoolAccountList.tsx'), 'utf-8');
@@ -34,6 +38,26 @@ describe('My Agents routing and account-pool observability', () => {
 		expect(POOL_LIST).toContain('account.node_id');
 		expect(POOL_LIST).toContain("t('poolAccount.workerNode'");
 		expect(POOL_LIST).toContain("account.runtime_state === 'unavailable'");
+	});
+
+	// 2026-08-12 — the member and the admin must read the SAME explanation of the
+	// same server field. Before this, the member's runtime line was a single
+	// reason-free sentence, so "this token has no account assigned yet" and "Hub
+	// is unreachable" were indistinguishable here even after the Master console
+	// learned to tell them apart.
+	it('explains a non-available runtime with the SHARED reason vocabulary', () => {
+		expect(ACCOUNTS_API).toContain('reason?: string');
+		expect(PAGE).toContain("from '@/shared/utils/pool-runtime-reason'");
+		expect(PAGE).toContain('runtimeReasonText(runtime?.reason, t)');
+		// Tone follows the reason family, not the state: a token with no binding
+		// yet must not be painted as an outage.
+		expect(PAGE).toContain('isPoolRuntimeAlarm(runtime.reason)');
+		for (const [reason, spec] of Object.entries(POOL_RUNTIME_REASON)) {
+			const key = spec.key.replace('poolRuntime.reason.', '');
+			for (const locale of [enCommon, zhCommon]) {
+				expect(locale.poolRuntime.reason[key], `${reason} missing in member locale`).toBeTruthy();
+			}
+		}
 	});
 
   it('receives latest actual account through the ownership-scoped Control model', () => {

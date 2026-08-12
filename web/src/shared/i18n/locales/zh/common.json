@@ -2781,6 +2781,20 @@
   "modalShell": {
     "closeAria": "关闭"
   },
+  "poolRuntime": {
+    "reason": {
+      "tokenInactive": "该令牌未启用（已停用或已吊销），不参与调度。",
+      "sourceUnavailable": "该令牌没有账号池来源，不涉及 Worker 调度。",
+      "notConfigured": "本部署未启用集群（无 Hub），不涉及 Worker 调度。",
+      "notBound": "该令牌尚未分配账号，首次请求后才会占用 Worker。",
+      "bindingStale": "该令牌绑定的账号已不在账号池中，等待重新分配。",
+      "bindingUnavailable": "分配台账读取失败，暂时无法判断调度状态。",
+      "credentialMissing": "绑定的账号缺少凭据信息，无法定位所属 Worker。",
+      "hubUnreachable": "无法从 Hub 读取 Worker 分配，请检查 Hub 服务。",
+      "nodeAbsent": "Hub 分配的 Worker 未出现在健康报告中，可能刚刚退出节点环。",
+      "nodeDown": "分配到的 Worker 当前不是存活状态。"
+    }
+  },
   "accessTokens": {
     "cardAll": "全部令牌",
     "cardTotal": "共 {{count}} 个",

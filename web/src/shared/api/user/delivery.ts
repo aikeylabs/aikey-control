@@ -63,6 +63,10 @@ export interface GroupAccountRef {
   node_id?: string;
   node_liveness?: string;
   runtime_state?: 'available' | 'not_reported' | 'unavailable' | string;
+  // runtime_reason explains a non-available runtime_state for THIS account.
+  // Absent when the runtime was never read for it (unknown, not a fault).
+  // Vocabulary: shared/utils/pool-runtime-reason.
+  runtime_reason?: string;
   // Provider quota observations delivered through the existing group-runtime
   // rail. Fractions are 0..1. Absent means unknown — never treat it as 0%.
   util_5h?: number;

@@ -13,7 +13,27 @@ import * as path from 'node:path';
 // moment. Those must refetch on open (LIVE_PICKER_QUERY). Page-level lists
 // should keep the global staleTime — this fence is deliberately scoped to a
 // named list rather than "every useQuery in a dialog file".
-const R = (p: string) => fs.readFileSync(path.resolve(process.cwd(), p), 'utf-8');
+// 🔴 This file is a byte-identical dual-edit mirror, so it runs in BOTH repos —
+// but most of the components it pins live in master/web only. Resolve each path
+// against the local repo first, then the peer, instead of assuming a cwd.
+//
+// The first version used bare `src/pages/master/...` relative paths and was
+// committed green: in the member repo vitest failed at COLLECTION, which it
+// reports on the "Test Files" line, and the check that cleared it only read the
+// "Tests" line. A file-level failure was invisible to the very grep that was
+// supposed to catch it (2026-08-11).
+const PEERS = ['.', '../../aikey-control/web', '../../aikey-control-master/web'];
+
+const R = (p: string): string => {
+  for (const base of PEERS) {
+    const full = path.resolve(process.cwd(), base, p);
+    if (fs.existsSync(full)) return fs.readFileSync(full, 'utf-8');
+  }
+  throw new Error(
+    `${p} not found in this repo or its peer (looked in ${PEERS.join(', ')}). `
+    + 'This fence is mirrored into both consoles; use a repo-agnostic path.',
+  );
+};
 
 /** component → file. Both consoles; the member path is relative to master/web. */
 const PICKERS: Array<[string, string]> = [
@@ -22,10 +42,10 @@ const PICKERS: Array<[string, string]> = [
   ['BindSeatsDialog', 'src/pages/master/orgs/oauth-groups/dialogs.tsx'],
   ['EditGroupDrawer', 'src/pages/master/orgs/oauth-groups/EditGroupDrawer.tsx'],
   ['InviteDialog', 'src/pages/master/orgs/seats/index.tsx'],
-  ['AddAccountModal', '../../aikey-control/web/src/pages/user/oauth-contribute/index.tsx'],
-  ['AddAppModal', '../../aikey-control/web/src/pages/user/apps/AddAppModal.tsx'],
+  ['AddAccountModal', 'src/pages/user/oauth-contribute/index.tsx'],
+  ['AddAppModal', 'src/pages/user/apps/AddAppModal.tsx'],
   ['IssueKeyDialog', 'src/pages/master/orgs/virtual-keys/index.tsx'],
-  ['SwitchKeyModal', '../../aikey-control/web/src/pages/user/apps/SwitchKeyModal.tsx'],
+  ['SwitchKeyModal', 'src/pages/user/apps/SwitchKeyModal.tsx'],
 ];
 
 /**

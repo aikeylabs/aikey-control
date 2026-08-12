@@ -33,6 +33,7 @@ import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { KindGlyph } from '../_shared/tool-glyph';
 import { PoolAccountList } from '../_shared/PoolAccountList';
 import { isRowClickExempt } from '@/shared/utils/row-click-guard';
+import { isPoolRuntimeAlarm, poolRuntimeReasonKey } from '@/shared/utils/pool-runtime-reason';
 
 // statusLabel maps a seat status to the SAME words the card-header chips use
 // (启用中 / 停用 / 已吊销). Before 2026-07-31 the cell printed the raw backend
@@ -58,6 +59,15 @@ function routingStateLabel(summary: AgentRoutingSummaryDTO | undefined, t: (key:
     case 'source_unavailable': return t('accessTokens.routing.sourceUnavailable');
     default: return t('accessTokens.routing.unavailable');
   }
+}
+
+// Reason text for this page. The reason -> key/tone table is shared with the
+// Master console (shared/utils/pool-runtime-reason) so a member and an admin
+// looking at the same token read the same explanation; only the fallback
+// sentence, for a reason this build does not know, is per-page.
+function runtimeReasonText(reason: string | undefined, t: (key: string) => string): string {
+  const key = poolRuntimeReasonKey(reason);
+  return key ? t(key) : t('accessTokens.routing.runtimeUnavailable');
 }
 
 function RoutingCell({ agent, onOpen }: { agent: MyAgentDTO; onOpen: () => void }) {
@@ -101,6 +111,15 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
   });
   const lastRoute = latestQuery.data?.last_served;
   const runtime = poolQuery.data?.runtime;
+  // Tone follows the reason FAMILY, not the state: "no account assigned yet" is
+  // a state of the token (neutral), while a Hub/Worker failure is an outage the
+  // member should see (2026-08-12). Amber stays reserved for "resolved, but
+  // nothing schedulable right now".
+  const runtimeColor = runtime?.state === 'unavailable' && isPoolRuntimeAlarm(runtime.reason)
+    ? '#f87171'
+    : runtime?.state === 'available' && runtime.schedulable_accounts === 0
+      ? '#fbbf24'
+      : 'var(--foreground)';
   const binding = poolQuery.data?.binding ?? agent?.routing_summary;
   const bindingLabel = binding?.state === 'bound'
     ? (binding.identity || binding.account_id || t('accessTokens.routing.bound'))
@@ -159,14 +178,14 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.routing.runtimeScheduling')}</p>
-              <p className="mt-2 text-sm" style={{ color: runtime?.state === 'available' && runtime.schedulable_accounts === 0 ? '#fbbf24' : 'var(--foreground)' }}>
+              <p className="mt-2 text-sm" style={{ color: runtimeColor }}>
                 {poolQuery.isLoading
                   ? t('accessTokens.routing.loading')
                   : runtime?.state === 'available'
                     ? t('accessTokens.routing.runtimeCount', { ready: runtime.schedulable_accounts, total: runtime.total_accounts })
                     : runtime?.state === 'not_reported'
                       ? t('accessTokens.routing.runtimeNotReported')
-                      : t('accessTokens.routing.runtimeUnavailable')}
+                      : runtimeReasonText(runtime?.reason, t)}
               </p>
               {runtime?.state === 'available' && runtime.earliest_retry_at ? (
                 <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>

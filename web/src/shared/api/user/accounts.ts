@@ -63,6 +63,10 @@ export interface AgentPoolStatusDTO {
   accounts_state: 'available' | 'unavailable';
   runtime: {
     state: 'available' | 'not_reported' | 'unavailable';
+    // reason distinguishes a binding-side short-circuit (no Worker was ever
+    // contacted) from a real Worker fault. Vocabulary + tone:
+    // shared/utils/pool-runtime-reason.
+    reason?: string;
     node_id?: string;
     node_liveness?: string;
     updated_at?: number;

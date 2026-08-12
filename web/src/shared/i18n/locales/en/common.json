@@ -2781,6 +2781,20 @@
   "modalShell": {
     "closeAria": "Close"
   },
+  "poolRuntime": {
+    "reason": {
+      "tokenInactive": "This token is not active (suspended or revoked), so it takes part in no scheduling.",
+      "sourceUnavailable": "This token has no account pool, so Worker scheduling does not apply.",
+      "notConfigured": "This deployment runs no Hub (non-cluster), so Worker scheduling does not apply.",
+      "notBound": "No account is assigned to this token yet — it occupies no Worker until its first request.",
+      "bindingStale": "The assigned account is no longer in the pool; waiting for reassignment.",
+      "bindingUnavailable": "The allocation ledger could not be read, so scheduling state is unknown.",
+      "credentialMissing": "The assigned account carries no credential, so its Worker cannot be located.",
+      "hubUnreachable": "Worker placement could not be read from Hub — check the Hub service.",
+      "nodeAbsent": "Hub resolved a Worker that is missing from its own health report; it may have just left the ring.",
+      "nodeDown": "The assigned Worker is not alive."
+    }
+  },
   "accessTokens": {
     "cardAll": "All tokens",
     "cardTotal": "{{count}} total",
