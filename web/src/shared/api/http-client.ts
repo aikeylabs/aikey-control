@@ -4,6 +4,7 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import { runtimeConfig } from '@/app/config/runtime';
 import i18n from '@/shared/i18n/i18n';
+import { shouldAttachBrowserToken } from './browser-auth';
 
 function getToken(): string | null {
   try {
@@ -43,6 +44,17 @@ function isUserPath(): boolean {
   return window.location.pathname.startsWith('/user');
 }
 
+/**
+ * Personal's composing gateway owns team authentication server-side: it reads
+ * the current CLI JWT from the local vault and injects it into forwarded
+ * requests. A browser token in these two gateway-capable quadrants is stale by
+ * construction (CLI login refreshes the vault, not localStorage) and must not
+ * override that authoritative token.
+ *
+ * Standalone Trial keeps the historical local_bypass behaviour: its one server
+ * may use the browser token to resolve a real identity, so only Personal and a
+ * gateway-forwarded Team page suppress browser Authorization.
+ */
 function redirectToLogin() {
   // User console: session comes from CLI (`aikey web`), not password login.
   // Redirect to a session-expired page instead of a login form.
@@ -74,7 +86,7 @@ function createHttpClient(config?: AxiosRequestConfig): AxiosInstance {
   //   - local_bypass + absent    → local-owner fallback
   client.interceptors.request.use((req) => {
     const token = getToken();
-    if (token && req.headers) {
+    if (token && req.headers && shouldAttachBrowserToken(runtimeConfig)) {
       req.headers['Authorization'] = `Bearer ${token}`;
     }
     // Send the active UI language so backend error messages come back

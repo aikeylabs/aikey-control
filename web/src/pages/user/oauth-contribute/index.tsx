@@ -44,6 +44,7 @@ import {
   filterAgentPools,
   filterPersonalAccounts,
   initialAccountScope,
+  isKnownPoolFilter,
   type AccountScopeFilter,
 } from './account-scope';
 import {
@@ -179,7 +180,7 @@ export default function OAuthContributePage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const initialPoolFilter = searchParams.get('group');
   // Ownership, not login status, is the page's primary task boundary. Group
@@ -235,10 +236,22 @@ export default function OAuthContributePage() {
   const autoResolvedGroupRef = useRef<string | null>(null);
   useEffect(() => {
     if (!poolFilter || autoResolvedGroupRef.current === poolFilter) return;
-    if (!myGroups.some((group) => group.oauth_group_id === poolFilter)) return;
+    if (ownerGroupsQ.isSuccess && !ownerGroupsErr && !isKnownPoolFilter(poolFilter, myGroups)) {
+      // The URL points at a deleted pool or a membership the caller no longer
+      // has. Drop both coupled deep-link fields and show the caller's current
+      // projection instead of an empty/"session expired" dead end.
+      setPoolFilter(null);
+      setExpandedCred(null);
+      const next = new URLSearchParams(searchParams);
+      next.delete('group');
+      next.delete('expand');
+      setSearchParams(next, { replace: true });
+      return;
+    }
+    if (!isKnownPoolFilter(poolFilter, myGroups)) return;
     setScopeFilter(initialAccountScope(poolFilter, myGroups));
     autoResolvedGroupRef.current = poolFilter;
-  }, [myGroups, poolFilter]);
+  }, [myGroups, ownerGroupsErr, ownerGroupsQ.isSuccess, poolFilter, searchParams, setSearchParams]);
   const visibleOwnerPools = useMemo(
     () => filterAgentPools(ownerPools, poolFilter, search),
     [ownerPools, poolFilter, search],

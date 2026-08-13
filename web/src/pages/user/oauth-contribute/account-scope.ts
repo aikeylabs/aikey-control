@@ -24,6 +24,16 @@ export function initialAccountScope(
   return group.is_owner ? 'agent_pool' : 'personal';
 }
 
+/** Whether an explicit group deep link still belongs to the signed-in caller.
+ * A successful groups response is authoritative; false lets the page discard a
+ * bookmark to a deleted pool or a pool whose membership has been removed. */
+export function isKnownPoolFilter(
+  poolFilter: string | null,
+  groups: readonly MyOauthGroup[],
+): boolean {
+  return !poolFilter || groups.some((group) => group.oauth_group_id === poolFilter);
+}
+
 /** Personal accounts always precede Agent pools in the combined view. */
 export function accountScopeSections(scope: AccountScopeFilter): readonly AccountScopeSection[] {
   if (scope === 'all') return ALL_SECTIONS;
