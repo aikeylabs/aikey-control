@@ -1518,4 +1518,152 @@ export const TRUST_CHECK_CSS = `
   color: var(--foreground, #ccc);
   font-weight: 500;
 }
+
+/* Row-level model-identity flag. Sits beside a score that will look
+   healthy — that is the point, not an oversight. */
+.trust-check-page .tc-score-kb-alert {
+  margin-top: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #f87171;
+  cursor: help;
+}
+
+/* ---------------------------------------------------------------------
+   Knowledge boundary (2026-08-12).
+
+   🔴 Deliberately NOT styled as a fourth score tile. It reads as a
+   statement with supporting figures, because the underlying quantity is
+   a likelihood ratio and a tile beside L1/L2/L3 invites the reader to
+   average it with them.
+   --------------------------------------------------------------------- */
+.trust-check-page .tc-kb {
+  background: #1f1f23;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 12px;
+}
+/* Abstain is the common case (only OpenAI has a mined fingerprint
+   today) and must not look like a problem. */
+.trust-check-page .tc-kb-abstain {
+  border-left-color: var(--muted-foreground, #666);
+  opacity: 0.85;
+}
+.trust-check-page .tc-kb-pass {
+  border-left-color: rgba(34, 197, 94, 0.7);
+}
+.trust-check-page .tc-kb-fail {
+  border-left-color: rgba(239, 68, 68, 0.85);
+  background: rgba(239, 68, 68, 0.06);
+}
+.trust-check-page .tc-kb-info {
+  border-left-color: rgba(250, 204, 21, 0.6);
+}
+.trust-check-page .tc-kb-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.trust-check-page .tc-kb-status {
+  font-size: 11px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+}
+.trust-check-page .tc-kb-status-fail {
+  color: #f87171;
+}
+.trust-check-page .tc-kb-score {
+  font-size: 22px;
+  font-weight: 800;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+.trust-check-page .tc-kb-summary {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--foreground, #ccc);
+}
+.trust-check-page .tc-kb-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px 16px;
+  margin: 10px 0 0;
+}
+.trust-check-page .tc-kb-facts dt {
+  font-size: 10px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+.trust-check-page .tc-kb-facts dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+
+/* --- Capability dimensions ------------------------------------------ */
+.trust-check-page .tc-dimensions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+.trust-check-page .tc-dimension {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #1f1f23;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.trust-check-page .tc-dimension.warn {
+  border-color: rgba(250, 204, 21, 0.45);
+  background: rgba(250, 204, 21, 0.06);
+}
+.trust-check-page .tc-dimension-label {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--foreground, #ccc);
+}
+.trust-check-page .tc-dimension-value {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  white-space: nowrap;
+}
+
+/* --- Deep re-check (multi-round escalation) -------------------------- */
+.trust-check-page .tc-escalation {
+  background: #1f1f23;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.trust-check-page .tc-escalation-outcome {
+  font-size: 12px;
+  color: var(--foreground, #ccc);
+}
+/* 🔴 "Suspect and not re-checked" gets a visible edge. It is a fact
+   about our bank, not about the user's endpoint — but it is the one
+   outcome that would otherwise be mistaken for a clean re-check. */
+.trust-check-page .tc-escalation-no_round2_bank,
+.trust-check-page .tc-escalation-insufficient_budget,
+.trust-check-page .tc-escalation-round2_failed {
+  border-left: 3px solid rgba(250, 204, 21, 0.6);
+}
+.trust-check-page .tc-escalation-reason {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
 `;
