@@ -20,6 +20,7 @@ import {
   computeT24h,
   dedupByBaseUrl,
   deriveBand,
+  deriveMetrics,
   summaryToRow,
 } from './derive';
 
@@ -585,5 +586,116 @@ describe('dedupByBaseUrl', () => {
     ];
     const groups = dedupByBaseUrl(rows);
     expect(groups[0].label).toBe('not-a-url');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Knowledge-boundary veto (2026-08-12).
+//
+// 🔴 The case these tests exist for is the one where every other number
+// on the page looks fine. Calibrated live 2026-08-12: a relay claiming
+// gpt-4o while serving gpt-4o-mini scores 100 / 100 / 95 in L1 / L2 / L3
+// — identical to an honest endpoint, not merely close. So the harmonic
+// mean is high, `deriveBand` returns "trust", and the row is green.
+//
+// If these tests are ever "fixed" by folding the KB score into
+// `displayScore`, read the 🚫 note on `TrustSummary.s_knowledge_boundary`
+// first: the quantity is a likelihood ratio, and averaging it into a mean
+// turns "4000:1 better explained by gpt-4o-mini" into a couple of points
+// that a reader discounts.
+// ---------------------------------------------------------------------------
+
+describe('summaryToRow — knowledge-boundary veto', () => {
+  test('a KB failure forces the band to risk even with healthy layers', () => {
+    const row = summaryToRow(makeSummary({
+      s_l1: 100, s_l2: 100, s_l3: 95, s_display: 98,
+      s_knowledge_boundary: 4,
+      kb_finding: {
+        code: 'kb_knowledge_boundary',
+        status: 'fail',
+        summary: 'These answers are better explained by gpt-4o-mini.',
+      },
+    }));
+    expect(deriveBand(98)).toBe('trust');  // what the layers alone say
+    expect(row.band).toBe('risk');
+    expect(row.kb_alert).toBe(true);
+  });
+
+  test('the headline score is NOT dragged down by the veto', () => {
+    const row = summaryToRow(makeSummary({
+      s_display: 98,
+      kb_finding: {
+        code: 'kb_knowledge_boundary', status: 'fail', summary: 'x',
+      },
+    }));
+    // The number stays what L1/L2/L3 measured. Moving it would make the
+    // page claim the layers saw something they did not.
+    expect(row.score).toBe(98);
+  });
+
+  test('an abstaining KB reading changes nothing', () => {
+    const row = summaryToRow(makeSummary({
+      s_display: 98,
+      s_knowledge_boundary: null,
+      kb_finding: {
+        code: 'kb_knowledge_boundary',
+        status: 'abstain',
+        summary: 'Not tested: no fingerprint for this protocol.',
+      },
+    }));
+    expect(row.band).toBe('trust');
+    expect(row.kb_alert).toBe(false);
+  });
+
+  test('a row from a backend without the dimension is unaffected', () => {
+    const row = summaryToRow(makeSummary({ s_display: 98 }));
+    expect(row.band).toBe('trust');
+    expect(row.kb_alert).toBe(false);
+  });
+});
+
+describe('the KB veto reaches every band decision, not only the row', () => {
+  // 🔴 Caught in the browser, not by a test: the first version of the
+  // veto touched `summaryToRow` alone, which put a red "RISKY · model
+  // identity" row directly underneath a green header reading "Sources
+  // are stable · healthy 1 · needs review 0" — same payload, same
+  // screen. `deriveMetrics` and `computeHealthSummary` were each
+  // calling `deriveBand(displayScore(s))` on their own.
+  const vetoed = makeSummary({
+    s_l1: 100, s_l2: 100, s_l3: 95, s_display: 98,
+    last_verified_at: Math.floor(Date.now() / 1000) - 60,
+    kb_finding: {
+      code: 'kb_knowledge_boundary', status: 'fail',
+      summary: 'Better explained by gpt-4o-mini.',
+    },
+  });
+
+  test('deriveMetrics counts it as needing review', () => {
+    expect(deriveMetrics([vetoed]).review).toBe(1);
+  });
+
+  test('computeHealthSummary does not call it healthy', () => {
+    const h = computeHealthSummary([vetoed]);
+    expect(h.healthyCount).toBe(0);
+    expect(h.needsReviewCount).toBe(1);
+  });
+
+  test('the ring keeps the score but loses the green band', () => {
+    const h = computeHealthSummary([vetoed]);
+    // The number is a mean of scores and stays one.
+    expect(h.overallPct).toBe(98);
+    // The band is not "trust", or the header contradicts the table.
+    expect(h.band).not.toBe('trust');
+  });
+
+  test('without a KB failure the header is unchanged', () => {
+    const clean = makeSummary({
+      s_display: 98,
+      last_verified_at: Math.floor(Date.now() / 1000) - 60,
+    });
+    const h = computeHealthSummary([clean]);
+    expect(h.healthyCount).toBe(1);
+    expect(h.needsReviewCount).toBe(0);
+    expect(h.band).toBe('trust');
   });
 });

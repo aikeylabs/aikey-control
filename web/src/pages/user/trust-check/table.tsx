@@ -110,6 +110,7 @@ export function SourceTable({
                     band={row.band}
                     label={resolveLabel(t, row.band_label)}
                     weakestLayer={row.weakest_layer}
+                    kbAlert={row.kb_alert}
                   />
                 </td>
                 <td>
@@ -168,11 +169,20 @@ export function ScorePill({
   band,
   label,
   weakestLayer,
+  kbAlert = false,
 }: {
   score: number;
   band: StatusBand;
   label: string;
   weakestLayer?: { name: string; score: number } | null;
+  /** The knowledge-boundary dimension identified a different model than
+   *  the one claimed.
+   *
+   *  🔴 Rendered BESIDE the score rather than inside it. The score is a
+   *  mean over L1/L2/L3, and on a same-family downgrade all three read
+   *  as healthy — so the number next to this chip will look fine, and
+   *  that is not a bug to hide but the finding itself. */
+  kbAlert?: boolean;
 }) {
   return (
     <div className="tc-score-wrap">
@@ -186,6 +196,21 @@ export function ScorePill({
           style={{ ['--score' as string]: `${Math.max(0, Math.min(100, score))}%` }}
         />
       </div>
+      {kbAlert && (
+        <div
+          className="tc-score-kb-alert"
+          title={
+            'Knowledge boundary: these answers are better explained by a ' +
+            'different model than the one this endpoint claims. The score ' +
+            'above is a mean over L1/L2/L3, and a same-family downgrade ' +
+            'scores the same as an honest endpoint on all three — so this ' +
+            'chip, not the number, is the finding. Click the row for the ' +
+            'likelihood ratio and the per-item answers.'
+          }
+        >
+          <span aria-hidden="true">⚠</span> model identity
+        </div>
+      )}
       {weakestLayer && (
         <div
           className="tc-score-weakest"
