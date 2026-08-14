@@ -23,6 +23,31 @@
 const TRUST_LOCAL_BASE = 'http://127.0.0.1:8801';
 
 /**
+ * Hard deadline on every trust-local request.
+ *
+ * Why a deadline at all: `fetch` has no timeout of its own. A trust-local
+ * that is LISTENING but never answers — killed mid-restart while the
+ * socket stayed open, a keep-alive connection black-holed across a
+ * laptop sleep/wake, a wedged worker — leaves the request pending
+ * forever. Every loading state on this page is derived from that query,
+ * so the table sits on "Loading trust signals…" indefinitely AND the
+ * Refresh button is disabled precisely because a fetch is in flight:
+ * the user is trapped with no error, no retry and no escape short of a
+ * page reload. "Connection refused" was always handled (fetch rejects
+ * immediately → offline banner); "listening but silent" was not.
+ * Bugfix: workflow/CI/bugfix/20260814-trust-check-web-infinite-loading-no-fetch-timeout.md
+ *
+ * Why 10s: the slowest endpoint we call is GET /v1/status, whose worst
+ * case is one 5s-capped call out to aikey-local-server's vault list
+ * (server_local/sync/vault_client.py::FETCH_TIMEOUT_SECONDS) plus local
+ * SQLite reads. 10s keeps 2x headroom so a merely-slow trust-local is
+ * never misreported as a wedged one. Nothing we call is long-running by
+ * design — POST /v1/verify returns as soon as the row is written and
+ * runs the cascade on a background thread.
+ */
+const TRUST_LOCAL_TIMEOUT_MS = 10_000;
+
+/**
  * Mirrors the dict shape returned by trust-local's `_to_summary()`
  * (server_local/api/status.py). Kept identical field-for-field so the
  * server team can rename here and we'll catch the drift in tsc.
@@ -233,36 +258,92 @@ class TrustAliasInUseError extends Error {
 }
 
 /**
+ * Runs one trust-local exchange under {@link TRUST_LOCAL_TIMEOUT_MS}.
+ *
+ * The deadline deliberately covers the response BODY too, not just the
+ * headers — a server that answers `200` and then stalls mid-stream hangs
+ * `resp.json()` exactly as badly as one that never answers at all, so
+ * `handle` runs inside the same abort window.
+ *
+ * Both cold shapes — refused (fetch rejects) and silent (we abort) — are
+ * reported as the SAME TrustLocalUnavailableError on purpose: the page
+ * already renders one honest banner for it ("trust-local is offline,
+ * start the service") and the user's next action is identical either
+ * way. The message still names which one happened so a bug report can
+ * tell them apart.
+ */
+async function withTrustLocalDeadline<T>(
+  path: string,
+  init: RequestInit | undefined,
+  handle: (resp: Response) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TRUST_LOCAL_TIMEOUT_MS);
+  const asUnavailable = (cause: unknown) =>
+    new TrustLocalUnavailableError(
+      controller.signal.aborted
+        ? new Error(
+            `no response within ${TRUST_LOCAL_TIMEOUT_MS}ms — the port is listening but not answering`,
+          )
+        : cause,
+    );
+  try {
+    let resp: Response;
+    try {
+      resp = await fetch(`${TRUST_LOCAL_BASE}${path}`, {
+        ...init,
+        // Last so the deadline always wins; no caller passes its own
+        // signal today, and one that wants to must compose it here.
+        signal: controller.signal,
+      });
+    } catch (err) {
+      // fetch throws on network/CORS issues — that's our "trust-local
+      // offline" signal. Wrap so callers can switch on the error type.
+      throw asUnavailable(err);
+    }
+    try {
+      return await handle(resp);
+    } catch (err) {
+      // Only a body that died mid-read becomes "unavailable"; the
+      // non-2xx errors `handle` raises itself must pass through intact.
+      if (controller.signal.aborted) throw asUnavailable(err);
+      throw err;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Generic fetch wrapper. Distinguishes "trust-local down" (network /
- * CORS error → wrap as TrustLocalUnavailableError so the page can show
- * the right banner) from "endpoint returned non-2xx" (let the caller
- * decide whether to surface).
+ * CORS error / no answer → wrap as TrustLocalUnavailableError so the
+ * page can show the right banner) from "endpoint returned non-2xx"
+ * (let the caller decide whether to surface).
  */
 async function trustLocalFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  let resp: Response;
-  try {
-    resp = await fetch(`${TRUST_LOCAL_BASE}${path}`, {
+  return withTrustLocalDeadline(
+    path,
+    {
       ...init,
       headers: {
         Accept: 'application/json',
         ...(init?.headers ?? {}),
       },
-    });
-  } catch (err) {
-    // fetch throws on network/CORS issues — that's our "trust-local
-    // offline" signal. Wrap so callers can switch on the error type.
-    throw new TrustLocalUnavailableError(err);
-  }
-
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '');
-    // M6 decision 3.1: manual /v1/verify is unlimited — 429 should
-    // never come back. If it does (e.g., upstream rate-limit bubble),
-    // surface it as a generic error rather than a typed
-    // rate-limit-retry-with-force path; that UI lane is gone.
-    throw new Error(`trust-local ${path} returned ${resp.status}: ${text.slice(0, 200)}`);
-  }
-  return (await resp.json()) as T;
+    },
+    async (resp) => {
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        // M6 decision 3.1: manual /v1/verify is unlimited — 429 should
+        // never come back. If it does (e.g., upstream rate-limit bubble),
+        // surface it as a generic error rather than a typed
+        // rate-limit-retry-with-force path; that UI lane is gone.
+        throw new Error(
+          `trust-local ${path} returned ${resp.status}: ${text.slice(0, 200)}`,
+        );
+      }
+      return (await resp.json()) as T;
+    },
+  );
 }
 
 export const trustLocalApi = {
@@ -373,33 +454,31 @@ export const trustLocalApi = {
     cleared_events: number;
     cleared_state: number;
   }> {
-    let resp: Response;
-    try {
-      resp = await fetch(
-        `${TRUST_LOCAL_BASE}/v1/status/${encodeURIComponent(alias)}/reset-tracking`,
-        {
-          method: 'POST',
-          headers: { Accept: 'application/json' },
-        },
-      );
-    } catch (err) {
-      throw new TrustLocalUnavailableError(err);
-    }
-    if (resp.status === 409) {
-      throw new TrustAliasInUseError(alias);
-    }
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => '');
-      throw new Error(
-        `trust-local reset-tracking returned ${resp.status}: ${text.slice(0, 200)}`,
-      );
-    }
-    return (await resp.json()) as {
-      ok: true;
-      alias_name: string;
-      cleared_events: number;
-      cleared_state: number;
-    };
+    // Same deadline as every other call — the drawer's Reset button
+    // would otherwise spin forever against a wedged trust-local. Kept
+    // on its own path (not trustLocalFetch) only because of the 409
+    // special case below.
+    return withTrustLocalDeadline(
+      `/v1/status/${encodeURIComponent(alias)}/reset-tracking`,
+      { method: 'POST', headers: { Accept: 'application/json' } },
+      async (resp) => {
+        if (resp.status === 409) {
+          throw new TrustAliasInUseError(alias);
+        }
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(
+            `trust-local reset-tracking returned ${resp.status}: ${text.slice(0, 200)}`,
+          );
+        }
+        return (await resp.json()) as {
+          ok: true;
+          alias_name: string;
+          cleared_events: number;
+          cleared_state: number;
+        };
+      },
+    );
   },
 };
 

@@ -25,7 +25,9 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 
 import {
   StartServiceError,
+  fetchTrustLocalServiceStatus,
   normalizeServiceStatus,
+  startTrustLocalService,
   useStartTrustLocalService,
   useTrustLocalServiceStatus,
 } from './hooks';
@@ -63,14 +65,20 @@ describe('StartServiceError', () => {
 });
 
 describe('useStartTrustLocalService — error code preservation', () => {
-  // We're testing the mutation function directly via the hook's
-  // internal call path. The simplest faithful test is to extract
-  // the mutationFn behavior by stubbing fetch and invoking the
-  // hook's underlying fetch+parse logic. Since the hook returns
-  // a React Query mutation, we exercise the network-level contract
-  // by hand-rolling what mutationFn does — this keeps the fence
-  // free of React rendering noise and focused on the JSON envelope
-  // → error-code contract.
+  // These fences call `startTrustLocalService`, the mutationFn the hook
+  // actually installs — NOT a copy of it.
+  //
+  // They used to hand-roll the mutationFn body inline ("behavior here
+  // mirrors the source"), which is exactly how a fence rots: the replica
+  // kept asserting a `resp.status === 0 ? 'NETWORK_ERROR'` branch for
+  // months after that branch became unreachable, and would have stayed
+  // green through any rewrite of the real hook. Rewritten 2026-08-14
+  // alongside the deadline work in
+  // 20260814-trust-check-web-infinite-loading-no-fetch-timeout.md.
+  //
+  // The React-rendering objection that motivated the replica no longer
+  // applies: the request core is exported precisely so the fence can run
+  // it without a component, the same way `normalizeServiceStatus` is.
 
   it('throws StartServiceError with errorCode="TRUST_LOCAL_NOT_INSTALLED" on console 502', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(
@@ -81,27 +89,7 @@ describe('useStartTrustLocalService — error code preservation', () => {
       })
     );
 
-    // Replicate mutationFn body — we can't easily invoke the React
-    // Query mutation outside a component, but the mutationFn is the
-    // surface we care about; behavior here mirrors the source.
-    let caught: unknown;
-    try {
-      const resp = await fetch('/api/internal/services/trust-local/start', {
-        method: 'POST',
-      });
-      const body = await resp.json().catch(() => ({} as Record<string, unknown>));
-      if (!resp.ok || (body as { ok?: boolean })?.ok === false) {
-        const errorCode =
-          ((body as { error?: string })?.error) ||
-          (resp.status === 0 ? 'NETWORK_ERROR' : `HTTP_${resp.status}`);
-        const detail =
-          ((body as { detail?: string })?.detail) ||
-          `start failed (HTTP ${resp.status})`;
-        throw new StartServiceError(errorCode, detail);
-      }
-    } catch (e) {
-      caught = e;
-    }
+    const caught = await startTrustLocalService().catch((e) => e);
 
     expect(caught).toBeInstanceOf(StartServiceError);
     const err = caught as StartServiceError;
@@ -116,26 +104,38 @@ describe('useStartTrustLocalService — error code preservation', () => {
       mockResponse(500, { ok: false, detail: 'unexpected upstream failure' })
     );
 
-    let caught: unknown;
-    try {
-      const resp = await fetch('/api/internal/services/trust-local/start', { method: 'POST' });
-      const body = await resp.json().catch(() => ({} as Record<string, unknown>));
-      if (!resp.ok || (body as { ok?: boolean })?.ok === false) {
-        const errorCode =
-          ((body as { error?: string })?.error) ||
-          (resp.status === 0 ? 'NETWORK_ERROR' : `HTTP_${resp.status}`);
-        const detail =
-          ((body as { detail?: string })?.detail) ||
-          `start failed (HTTP ${resp.status})`;
-        throw new StartServiceError(errorCode, detail);
-      }
-    } catch (e) {
-      caught = e;
-    }
-
-    const err = caught as StartServiceError;
+    const err = (await startTrustLocalService().catch(
+      (e) => e,
+    )) as StartServiceError;
     expect(err.errorCode).toBe('HTTP_500');
     expect(err.detail).toBe('unexpected upstream failure');
+  });
+
+  it('treats a 200 whose envelope says ok:false as a failure', async () => {
+    // The console passes the CLI's `ok` through as the HTTP status, so a
+    // 200 + `ok:false` should not happen — but the real mutationFn checks
+    // BOTH, and a replica-based fence never proved that second half.
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      mockResponse(200, { ok: false, error: 'START_FAILED', detail: 'launchctl refused' })
+    );
+
+    const err = (await startTrustLocalService().catch(
+      (e) => e,
+    )) as StartServiceError;
+    expect(err).toBeInstanceOf(StartServiceError);
+    expect(err.errorCode).toBe('START_FAILED');
+    expect(err.detail).toBe('launchctl refused');
+  });
+
+  it('resolves with the console envelope on success', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(mockResponse(200, { ok: true, detail: 'start succeeded' }));
+
+    await expect(startTrustLocalService()).resolves.toEqual({
+      ok: true,
+      detail: 'start succeeded',
+    });
   });
 });
 
@@ -182,5 +182,113 @@ describe('normalizeServiceStatus — proactive install-state', () => {
 
   it('exports the hook for the page to call', () => {
     expect(useTrustLocalServiceStatus).toBeTypeOf('function');
+  });
+});
+
+/**
+ * Fence: the console's service-control calls (8090) MUST fail within a
+ * bounded time when the console accepts the request and then goes silent.
+ *
+ * Why this fence exists
+ * ---------------------
+ * Bugfix 20260814-trust-check-web-infinite-loading-no-fetch-timeout.md,
+ * second half. `fetch` has no timeout, so a console whose
+ * `aikey service …` spawn wedges left the Start button stuck on
+ * "Starting…" forever and the install-state probe pending forever, with
+ * no error for the user to act on. Same hole as the trust-local client,
+ * different service.
+ *
+ * NOTE — unlike the two describes above, these fences call the REAL
+ * request core (`startTrustLocalService`) rather than a hand-copied
+ * replica of `mutationFn`, so a regression in the shipped code actually
+ * turns them red. `SERVICE_STATUS_TIMEOUT_MS` is covered through the
+ * exported `fetchTrustLocalServiceStatus` core for the same reason.
+ *
+ * F1: a start request that is never answered rejects, and does so as
+ *     StartServiceError — the banner renders `error.detail`, so a bare
+ *     Error would show "Start failed: ." with the reason nowhere.
+ * F2: the deadline is generous enough to outlast the console's own 40s
+ *     exec ceiling — aborting earlier would report "start failed" for a
+ *     cold start that then succeeds.
+ * F3: the status probe's deadline stays INSIDE its 30s refetch tick, so
+ *     a wedged CLI can't leave the probe permanently in flight.
+ */
+describe('console service-control deadlines', () => {
+  /** A fetch that never answers; only an abort signal can end it. */
+  const silentFetch = () =>
+    vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError')),
+          );
+        }),
+    ) as unknown as typeof fetch;
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('F1: a start that is never answered rejects as StartServiceError', async () => {
+    vi.useFakeTimers();
+    globalThis.fetch = silentFetch();
+
+    const pending = startTrustLocalService().catch((e) => e);
+    await vi.advanceTimersByTimeAsync(120_000);
+    const err = await pending;
+
+    expect(err).toBeInstanceOf(StartServiceError);
+    expect(err.errorCode).toBe('NETWORK_ERROR');
+    // The detail is what the banner prints — it has to name the stall
+    // and give the user a next step.
+    expect(err.detail).toMatch(/did not answer/);
+    expect(err.detail).toMatch(/aikey service status/);
+  });
+
+  it('F2: the start deadline outlasts the console 40s exec ceiling', async () => {
+    vi.useFakeTimers();
+    globalThis.fetch = silentFetch();
+
+    const pending = startTrustLocalService().catch((e) => e);
+    // A cold PyInstaller start can legitimately run ~20s+, and the
+    // console kills its own spawn at 40s. Aborting before that would
+    // fail a start that is still succeeding.
+    await vi.advanceTimersByTimeAsync(40_000);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(80_000);
+    expect(await pending).toBeInstanceOf(StartServiceError);
+  });
+
+  it('F3: the status probe fails inside its 30s refetch tick', async () => {
+    vi.useFakeTimers();
+    globalThis.fetch = silentFetch();
+
+    const pending = fetchTrustLocalServiceStatus().catch((e) => e);
+    // Must already be rejected by the time the next 30s tick fires,
+    // otherwise a wedged CLI leaves the probe permanently in flight.
+    await vi.advanceTimersByTimeAsync(29_000);
+    const err = await pending;
+    expect(err).toBeInstanceOf(Error);
+    expect(String(err.message)).toMatch(/did not answer/);
+  });
+
+  it('a healthy console answer still resolves normally', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        mockResponse(200, { ok: true, installed: true, running: true, detail: 'ok' }),
+      );
+    await expect(fetchTrustLocalServiceStatus()).resolves.toEqual({
+      ok: true,
+      installed: true,
+      running: true,
+      detail: 'ok',
+    });
   });
 });
