@@ -24,6 +24,88 @@ const VERIFY_POLL_INTERVAL = 1_500; // 1.5s — fast enough for spinner, low eno
 const DETAIL_STALE_MS = 5_000; // detail drawer: short stale window so re-opening the same row inside 5s reuses the cache
 
 /**
+ * Deadlines for the console's service-control endpoints on 8090.
+ *
+ * Why these need deadlines at all: same hole as the trust-local client
+ * (see api.ts::TRUST_LOCAL_TIMEOUT_MS) — `fetch` has no timeout, so a
+ * console whose CLI spawn wedges leaves the Start button stuck on
+ * "Starting…" forever and the install-state probe pending forever, with
+ * no error to act on. Bugfix:
+ * workflow/CI/bugfix/20260814-trust-check-web-infinite-loading-no-fetch-timeout.md
+ *
+ * Why two different values — this is a layered-deadline stack, each ring
+ * sitting ABOVE the one it wraps so the innermost, most-informative
+ * error is the one the user sees:
+ *
+ *   CLI healthz probe   30s  (commands_service/commands.rs PROBE_DEADLINE_SECS)
+ *   console exec ctx    40s  (service_handler.go — 30s probe + margin)
+ *   START (this file)   45s  ← must outlast 40s
+ *   STATUS (this file)  15s  ← independent: see below
+ *
+ * START at 45s: a cold PyInstaller start legitimately takes ~20s+ under
+ * load. Aborting at, say, 10s would report "start failed" for a start
+ * that then succeeds — strictly worse than making the user wait, because
+ * it sends them debugging a working service.
+ *
+ * STATUS at 15s: this one is a background probe on a 30s tick, and its
+ * failure is harmless (the banner falls back to reactive post-click
+ * detection). It must fail well inside the tick rather than ride the
+ * 40s server ceiling, so a wedged CLI can never leave the probe
+ * permanently in flight.
+ */
+const START_SERVICE_TIMEOUT_MS = 45_000;
+const SERVICE_STATUS_TIMEOUT_MS = 15_000;
+
+/**
+ * POST to the console under a deadline.
+ *
+ * Deliberately NOT shared with api.ts::withTrustLocalDeadline: that one
+ * throws TrustLocalUnavailableError, which would tell the page
+ * "trust-local is offline" when the truth is "the console that supervises
+ * it didn't answer" — two different services, two different remediations.
+ * Callers here add their own typed envelope on top.
+ *
+ * The deadline covers the response body too, so a console that sends
+ * headers and then stalls can't hang `resp.json()`.
+ */
+async function consoleFetch<T>(
+  path: string,
+  timeoutMs: number,
+  handle: (resp: Response) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const asTransportError = (cause: unknown) =>
+    new Error(
+      controller.signal.aborted
+        ? `aikey-local-server did not answer ${path} within ${timeoutMs / 1000}s — ` +
+          'the console is running but its service-control call is stuck. ' +
+          'Run `aikey service status` in a terminal to see the real state.'
+        : `aikey-local-server is unreachable at ${path} (${
+            cause instanceof Error ? cause.message : String(cause)
+          }) — is the console still running?`,
+    );
+  try {
+    let resp: Response;
+    try {
+      resp = await fetch(path, { method: 'POST', signal: controller.signal });
+    } catch (err) {
+      throw asTransportError(err);
+    }
+    try {
+      return await handle(resp);
+    } catch (err) {
+      // Only a body that died mid-read is a transport failure; errors
+      // `handle` raises about the envelope itself must pass through.
+      if (controller.signal.aborted) throw asTransportError(err);
+      throw err;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * useStartTrustLocalService — POST /api/internal/services/trust-local/start
  *
  * Backs the "Start service" button on the offline banner. The endpoint
@@ -57,28 +139,53 @@ export class StartServiceError extends Error {
   }
 }
 
+/**
+ * The mutation's request core, exported for the same reason
+ * `normalizeServiceStatus` is: the fence test must exercise the code the
+ * hook actually runs, not a hand-copied replica that drifts from it.
+ * Every failure — envelope, transport, deadline — leaves here as a
+ * StartServiceError, because the banner reads `error.detail` and a bare
+ * Error would render "Start failed: ." with the reason nowhere on screen.
+ */
+export async function startTrustLocalService(): Promise<{
+  ok: boolean;
+  detail?: string;
+}> {
+  try {
+    return await consoleFetch(
+      '/api/internal/services/trust-local/start',
+      START_SERVICE_TIMEOUT_MS,
+      async (resp) => {
+        const body = await resp
+          .json()
+          .catch(() => ({} as Record<string, unknown>));
+        if (!resp.ok || (body as { ok?: boolean })?.ok === false) {
+          const errorCode =
+            ((body as { error?: string })?.error) || `HTTP_${resp.status}`;
+          const detail =
+            ((body as { detail?: string })?.detail) ||
+            `start failed (HTTP ${resp.status})`;
+          throw new StartServiceError(errorCode, detail);
+        }
+        return body as { ok: boolean; detail?: string };
+      },
+    );
+  } catch (err) {
+    if (err instanceof StartServiceError) throw err;
+    throw new StartServiceError(
+      'NETWORK_ERROR',
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
 export function useStartTrustLocalService() {
   return useMutation<
     { ok: boolean; detail?: string },
     StartServiceError,
     void
   >({
-    mutationFn: async () => {
-      const resp = await fetch('/api/internal/services/trust-local/start', {
-        method: 'POST',
-      });
-      const body = await resp.json().catch(() => ({} as Record<string, unknown>));
-      if (!resp.ok || (body as { ok?: boolean })?.ok === false) {
-        const errorCode =
-          ((body as { error?: string })?.error) ||
-          (resp.status === 0 ? 'NETWORK_ERROR' : `HTTP_${resp.status}`);
-        const detail =
-          ((body as { detail?: string })?.detail) ||
-          `start failed (HTTP ${resp.status})`;
-        throw new StartServiceError(errorCode, detail);
-      }
-      return body as { ok: boolean; detail?: string };
-    },
+    mutationFn: startTrustLocalService,
   });
 }
 
@@ -96,8 +203,9 @@ export function useStartTrustLocalService() {
  *
  * Never throws on a not-installed/offline result — the console returns
  * `{ok:true, installed:false, running:false}` (HTTP 200) for those; only a
- * genuine transport failure rejects, and the banner degrades to the existing
- * reactive (post-Start-click) detection in that case.
+ * genuine transport failure rejects — including the probe blowing its
+ * SERVICE_STATUS_TIMEOUT_MS deadline — and the banner degrades to the
+ * existing reactive (post-Start-click) detection in that case.
  */
 export interface TrustLocalServiceStatus {
   ok: boolean;
@@ -124,18 +232,28 @@ export function normalizeServiceStatus(
   };
 }
 
-export function useTrustLocalServiceStatus() {
-  return useQuery<TrustLocalServiceStatus>({
-    queryKey: ['trust-local', 'service-status'],
-    queryFn: async () => {
-      const resp = await fetch('/api/internal/services/trust-local/status', {
-        method: 'POST',
-      });
+/**
+ * The probe's request core — exported for the same reason
+ * `normalizeServiceStatus` and `startTrustLocalService` are: the fence
+ * test must run the shipped code path, deadline included.
+ */
+export function fetchTrustLocalServiceStatus(): Promise<TrustLocalServiceStatus> {
+  return consoleFetch(
+    '/api/internal/services/trust-local/status',
+    SERVICE_STATUS_TIMEOUT_MS,
+    async (resp) => {
       const body = (await resp
         .json()
         .catch(() => ({}))) as Partial<TrustLocalServiceStatus>;
       return normalizeServiceStatus(body);
     },
+  );
+}
+
+export function useTrustLocalServiceStatus() {
+  return useQuery<TrustLocalServiceStatus>({
+    queryKey: ['trust-local', 'service-status'],
+    queryFn: fetchTrustLocalServiceStatus,
     refetchInterval: STATUS_REFETCH_INTERVAL,
     staleTime: 10_000,
   });
