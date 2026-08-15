@@ -128,6 +128,13 @@ export async function fetchMyPoolAccounts(credentialID?: string): Promise<MyPool
   const q = credentialID ? `?credential_id=${encodeURIComponent(credentialID)}` : '';
   const res = await teamGetJSON<MyPoolAccount[]>(`/accounts/me/oauth-member-tokens${q}`);
   if (Array.isArray(res)) return res;
+  // A vault deep link can outlive the group/account it targeted. Master rejects
+  // that stale credential with 403; retry the caller's ordinary projection so a
+  // bad bookmark does not masquerade as an expired team session. A genuinely
+  // expired JWT still fails the unscoped retry and remains `unauth`.
+  if (credentialID && res.kind === 'unauth') {
+    return teamGetJSON<MyPoolAccount[]>('/accounts/me/oauth-member-tokens');
+  }
   if ('kind' in res) return res;
   return [];
 }

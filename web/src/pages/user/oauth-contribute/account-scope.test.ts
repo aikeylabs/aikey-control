@@ -10,6 +10,7 @@ import {
   filterAgentPools,
   filterPersonalAccounts,
   initialAccountScope,
+  isKnownPoolFilter,
 } from './account-scope';
 
 const personalAccounts: MyPoolAccount[] = [
@@ -84,6 +85,12 @@ describe('Team OAuth account ownership scope', () => {
     expect(initialAccountScope('company-group', [...agentPools, companyPool])).toBe('personal');
     expect(initialAccountScope('unknown-group', [...agentPools, companyPool])).toBe('all');
     expect(initialAccountScope(null, [...agentPools, companyPool])).toBe('all');
+  });
+
+  it('recognizes stale group deep links from the authoritative membership list', () => {
+    expect(isKnownPoolFilter('agent-group', [...agentPools, companyPool])).toBe(true);
+    expect(isKnownPoolFilter('removed-group', [...agentPools, companyPool])).toBe(false);
+    expect(isKnownPoolFilter(null, [...agentPools, companyPool])).toBe(true);
   });
 
   it('counts rendered account rows with one unit across every scope', () => {

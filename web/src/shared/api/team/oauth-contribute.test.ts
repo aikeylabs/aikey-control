@@ -75,6 +75,35 @@ describe('fetchMyPoolAccounts', () => {
     expect(calledPath).toContain('credential_id=cred%2Fnext');
   });
 
+  it('falls back to the ordinary projection when a deep-linked credential is stale', async () => {
+    let scopedCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/system/team-url')) {
+          return { ok: true, status: 200, json: async () => ({ team_url: 'https://m' }) } as Response;
+        }
+        if (url.includes('/system/team-jwt')) {
+          return { ok: true, status: 200, json: async () => ({ jwt: 'JWT' }) } as Response;
+        }
+        if (url.includes('credential_id=stale')) {
+          scopedCalls += 1;
+          return { ok: false, status: 403, json: async () => ({}) } as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [{ credential_id: 'current', identity: 'now@x.com' }],
+        } as Response;
+      }),
+    );
+
+    expect(await fetchMyPoolAccounts('stale')).toEqual([
+      { credential_id: 'current', identity: 'now@x.com' },
+    ]);
+    expect(scopedCalls).toBe(1);
+  });
+
   it('not-logged-in propagates', async () => {
     routeFetch({ '/system/team-url': { json: {} }, '/system/team-jwt': { json: {} } });
     expect(await fetchMyPoolAccounts()).toEqual({ kind: 'not-logged-in' });
