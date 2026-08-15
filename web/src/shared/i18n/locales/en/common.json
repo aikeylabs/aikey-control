@@ -1230,7 +1230,31 @@
       "gatewayOauthOfficial": "OAuth (official)",
       "gatewayBrandOauthOfficial": "{{brand}} OAuth (official)",
       "sourceAppKey": "app key · {{idTail}}…"
-    }
+    },
+    "kbTitle": "Knowledge boundary · model identity",
+    "kbStatus": {
+      "pass": "Consistent with the claimed model",
+      "fail": "Better explained by another model",
+      "info": "Inconclusive",
+      "abstain": "Not tested"
+    },
+    "kbItems": "Boundary items read",
+    "kbRatio": "Likelihood ratio",
+    "kbRatioHint": "Odds that these answers came from the claimed model rather than the best-fitting alternative. This is the only dimension that can separate a same-family downgrade: a relay claiming gpt-4o while serving gpt-4o-mini scores identically to an honest one in L1, L2 and L3.",
+    "kbNearest": "Best-fitting alternative",
+    "kbMixed": "Share better explained by the alternative",
+    "dimensionsTitle": "Capability dimensions",
+    "escalationTitle": "Deep re-check",
+    "escalationOutcome": {
+      "not_evaluated": "Not evaluated — round 1 produced no score to test against",
+      "not_triggered": "Trigger evaluated; round 1 was not suspect",
+      "no_round2_bank": "Round 1 was suspect; this model's bank carries no second round",
+      "insufficient_budget": "Round 1 was suspect; not enough budget for a real re-check",
+      "round2_failed": "Round 2 started and hit an upstream error",
+      "ran": "Round 2 ran and was integrated"
+    },
+    "escalationRound2Score": "Round 2 answer score: {{value}}",
+    "protocolLabel": "Protocol"
   },
   "apps": {
     "loadingConnectedApps": "Loading connected apps…",

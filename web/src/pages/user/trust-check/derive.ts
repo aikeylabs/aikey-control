@@ -71,6 +71,24 @@ export interface TrustRow {
    *  as ~TRUSTED 86/88 despite a real 15-point L1 gap. See drawer
    *  "by-layer breakdown" for the full layer view. */
   weakest_layer: { name: string; score: number } | null;
+  /** The knowledge-boundary dimension says these answers are better
+   *  explained by a different model than the one claimed.
+   *
+   *  🔴 A SEPARATE FIELD BECAUSE IT CANNOT BE A SCORE.
+   *
+   *  `score` above is `s_display`, a mean over L1/L2/L3, and the
+   *  knowledge-boundary reading is deliberately excluded from it — its
+   *  underlying quantity is a likelihood ratio, and a Bayes factor
+   *  averaged into a mean stops being a Bayes factor.
+   *
+   *  🔴 Which leaves a hazard this flag exists to close. A same-family
+   *  downgrade scores 100/100/95 in L1/L2/L3 — identical to honest, not
+   *  merely close (calibrated live 2026-08-12). So the mean is high, the
+   *  band derived from it is "Trusted", and without this flag the table
+   *  would render a green row for the exact case the dimension was built
+   *  to catch, while the drawer one click away said "4000:1 better
+   *  explained by gpt-4o-mini". */
+  kb_alert: boolean;
   checked: string;
   /** Day 3 will set this from a verify-id polling map; Day 2 always
    *  false because we don't trigger verifies yet. */
@@ -279,10 +297,42 @@ function displayScore(s: TrustSummary): number | null {
   return null;
 }
 
+/**
+ * True when the knowledge-boundary dimension identified a different
+ * model than the endpoint claims.
+ */
+export function hasKbAlert(s: TrustSummary): boolean {
+  return s.kb_finding?.status === 'fail';
+}
+
+/**
+ * A row's band, including the knowledge-boundary veto.
+ *
+ * 🔴 A VETO, NOT A TERM. The KB reading is kept out of `s_display` on
+ * purpose (see `TrustRow.kb_alert`), so folding it into the mean here
+ * would undo that. But a band derived from the mean ALONE renders a
+ * green "Trusted" row for a relay this dimension has identified as
+ * serving a different model — the layers genuinely cannot see it. So the
+ * number stays what the layers measured, and the band reflects that an
+ * independent dimension disagrees with them.
+ *
+ * 🔴 EVERY BAND DECISION GOES THROUGH HERE. `summaryToRow`,
+ * `deriveMetrics` and `computeHealthSummary` each used to call
+ * `deriveBand(displayScore(s))` directly, and the first version of this
+ * veto touched only `summaryToRow` — which put a red "RISKY / model
+ * identity" row directly underneath a green header reading "Sources are
+ * stable · healthy 1 · needs review 0", from the same payload, on the
+ * same screen. Caught in the browser, not by a test.
+ */
+export function effectiveBand(s: TrustSummary): StatusBand {
+  return hasKbAlert(s) ? 'risk' : deriveBand(displayScore(s));
+}
+
 export function summaryToRow(s: TrustSummary): TrustRow {
   const effective = displayScore(s);
-  const band = deriveBand(effective);
   const score = effective == null ? 0 : Math.round(effective);
+  const kb_alert = hasKbAlert(s);
+  const band = effectiveBand(s);
   const { label: use_label, kind: use_kind } = deriveUseLabel(s);
   const { name: source_name, meta: source_meta } = deriveSourceLabels(s.alias_name);
 
@@ -317,6 +367,7 @@ export function summaryToRow(s: TrustSummary): TrustRow {
     band,
     band_label: deriveBandLabel(band),
     weakest_layer: weakest,
+    kb_alert,
     checked: formatTimeSince(s.last_verified_at),
     // Passthrough server flags. The merge that decides these lives in
     // trust-local's services/in_use.py — web doesn't recompute.
@@ -587,10 +638,11 @@ export function deriveMetrics(items: TrustSummary[]): TrustMetrics {
     // and the chip filter agree.
     if (s.is_in_use) inUse += 1;
 
-    // review = needs operator attention: score < 80 OR anomaly_suggested.
-    // Use the same s_combined → s_l3 fallback as the row pill so this
-    // count agrees with what the user sees per-row.
-    const band = deriveBand(displayScore(s));
+    // review = needs operator attention: score < 80, anomaly_suggested,
+    // or the knowledge-boundary veto. Uses `effectiveBand` — the same
+    // single decision the row pill uses — so this count agrees with what
+    // the user sees per-row.
+    const band = effectiveBand(s);
     if (band === 'suspect' || band === 'risk' || s.anomaly_suggested) review += 1;
 
     if (s.last_verified_at != null && now - s.last_verified_at < 86400) {
@@ -674,7 +726,9 @@ export function computeHealthSummary(items: TrustSummary[]): HealthSummary {
     // what the operator sees per row. Without this M6 always shows
     // ring '—' even right after a passing cascade.
     const score = displayScore(s);
-    const band = deriveBand(score);
+    // 🔴 `effectiveBand`, not `deriveBand` — the veto has to reach the
+    // header or the header contradicts the table it sits on top of.
+    const band = effectiveBand(s);
     if (band === 'trust') healthyCount += 1;
     if (band === 'suspect' || band === 'risk' || s.anomaly_suggested) {
       needsReviewCount += 1;
@@ -688,7 +742,20 @@ export function computeHealthSummary(items: TrustSummary[]): HealthSummary {
 
   const overallPct: number | null =
     scoreCount > 0 ? Math.round(sumScore / scoreCount) : null;
-  const band = deriveBand(overallPct);
+
+  // 🔴 The RING NUMBER stays the score mean — it is a mean of scores and
+  // relabelling it would make it something else. The ring's BAND does not.
+  //
+  // A knowledge-boundary failure leaves every layer score high by
+  // construction, so the mean stays in the 90s and the ring renders
+  // green: the largest element on the page saying "healthy" directly
+  // above a row saying a different model is being served. Capped at
+  // 'suspect' rather than 'risk' because this is an aggregate over
+  // sources of which the others may be genuinely fine.
+  const anyKbAlert = items.some(hasKbAlert);
+  const scoreBand = deriveBand(overallPct);
+  const band: StatusBand =
+    anyKbAlert && scoreBand === 'trust' ? 'suspect' : scoreBand;
 
   const description = describeHealth(overallPct, needsReviewCount, items.length);
 
