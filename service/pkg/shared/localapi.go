@@ -59,6 +59,12 @@ const (
 	// long enough that the local web UI doesn't have to refresh tokens
 	// mid-session.
 	csrfTTL = 8 * time.Hour
+
+	// controlPanelCSRFTTL applies to a nonce returned cross-origin to the
+	// exact Control Panel configured by `aikey login`. Unlike the local UI's
+	// double-submit token, this proof is header-only, so its replay window is
+	// deliberately much shorter.
+	controlPanelCSRFTTL = 5 * time.Minute
 )
 
 // LocalAPIConfig bundles all knobs the Wrap helper needs. Construct once
@@ -90,7 +96,7 @@ type LocalAPIConfig struct {
 	AuditLog *LocalAPIAuditLog
 }
 
-// IssueCSRFToken mints a fresh CSRF token, sets the httponly cookie, and
+// IssueCSRFToken mints a fresh CSRF token, sets the JS-readable cookie, and
 // returns the cleartext value the page must echo via the
 // X-Aikey-Local-CSRF header. Call this from the page-load handler (the
 // same one that serves the SPA) — NOT from /local-api endpoints
@@ -100,6 +106,21 @@ type LocalAPIConfig struct {
 // Wire format: <random-base64>.<unix-expiry>.<hmac>. We sign the
 // (random || expiry) pair so a stale or rewritten token fails RequireCSRF.
 func IssueCSRFToken(w http.ResponseWriter, cfg LocalAPIConfig) (string, error) {
+	return issueCSRFToken(w, cfg, csrfTTL)
+}
+
+// IssueCSRFTokenForOrigin mints the token used by the shared local-api issuer.
+// The exact configured remote Control Panel receives a five-minute nonce;
+// local same-origin pages retain the existing eight-hour double-submit token.
+func IssueCSRFTokenForOrigin(w http.ResponseWriter, cfg LocalAPIConfig, origin string) (string, error) {
+	ttl := csrfTTL
+	if IsConfiguredControlPanelOrigin(origin) {
+		ttl = controlPanelCSRFTTL
+	}
+	return issueCSRFToken(w, cfg, ttl)
+}
+
+func issueCSRFToken(w http.ResponseWriter, cfg LocalAPIConfig, ttl time.Duration) (string, error) {
 	if len(cfg.CSRFKey) < 32 {
 		return "", errors.New("CSRFKey must be at least 32 bytes")
 	}
@@ -107,7 +128,7 @@ func IssueCSRFToken(w http.ResponseWriter, cfg LocalAPIConfig) (string, error) {
 	if _, err := rand.Read(raw); err != nil {
 		return "", fmt.Errorf("read csrf entropy: %w", err)
 	}
-	expiry := time.Now().Add(csrfTTL).Unix()
+	expiry := time.Now().Add(ttl).Unix()
 	payload := base64.RawURLEncoding.EncodeToString(raw) + "." + fmt.Sprintf("%d", expiry)
 	mac := hmac.New(sha256.New, cfg.CSRFKey)
 	mac.Write([]byte(payload))
@@ -125,7 +146,7 @@ func IssueCSRFToken(w http.ResponseWriter, cfg LocalAPIConfig) (string, error) {
 		// and-braces.
 		SameSite: http.SameSiteStrictMode,
 		Secure:   false, // loopback http is the supported transport
-		MaxAge:   int(csrfTTL / time.Second),
+		MaxAge:   int(ttl / time.Second),
 	})
 	return token, nil
 }
@@ -170,17 +191,17 @@ func strconvParseInt(s string) (int64, error) {
 // WrapLocalAPI bundles all defences for a /local-api/* handler in one
 // place. The order matters:
 //
-//   1. CORS (preflight + denied origin gets 403 BEFORE auth) — handles
-//      OPTIONS and synthesises CORS headers when Origin is on the list.
-//   2. Origin / Host strict check — rejects requests whose Origin is
-//      absent or off-list. Different from CORS denial because some
-//      browsers don't send Origin on same-origin POSTs (we tolerate
-//      missing Origin only when Host matches a configured local origin).
-//   3. Rate limit — only after auth-shape checks pass (don't waste a
-//      bucket slot on a forged origin).
-//   4. CSRF cookie + header double-submit — the actual anti-CSRF gate.
-//   5. Audit log — every reject + every accepted POST writes one row.
-//   6. Forward to handler.
+//  1. CORS (preflight + denied origin gets 403 BEFORE auth) — handles
+//     OPTIONS and synthesises CORS headers when Origin is on the list.
+//  2. Origin / Host strict check — rejects requests whose Origin is
+//     absent or off-list. Different from CORS denial because some
+//     browsers don't send Origin on same-origin POSTs (we tolerate
+//     missing Origin only when Host matches a configured local origin).
+//  3. Rate limit — only after auth-shape checks pass (don't waste a
+//     bucket slot on a forged origin).
+//  4. CSRF cookie + header double-submit — the actual anti-CSRF gate.
+//  5. Audit log — every reject + every accepted POST writes one row.
+//  6. Forward to handler.
 //
 // Failed defences return 403 (Origin/CSRF) or 429 (rate limit) WITH a
 // JSON envelope containing only the failure category — never the
@@ -213,7 +234,8 @@ func WrapLocalAPI(cfg LocalAPIConfig, h http.Handler) http.Handler {
 
 		// 4. CSRF double-submit: header value MUST equal cookie value
 		// AND verify against the HMAC key. A cross-site POST cannot
-		// read the cookie (httponly+SameSite=Strict) so cannot mint a
+		// read the cookie cross-origin (same-origin policy + SameSite=Strict)
+		// so it cannot mint a
 		// matching header value.
 		if err := verifyCSRFDoubleSubmit(r, cfg.CSRFKey); err != nil {
 			writeLocalAPIError(w, http.StatusForbidden, "csrf_denied", "csrf cookie + header mismatch or invalid")
@@ -228,6 +250,80 @@ func WrapLocalAPI(cfg LocalAPIConfig, h http.Handler) http.Handler {
 		// 6. Forward.
 		h.ServeHTTP(w, r)
 	})
+}
+
+// WrapSensitiveLocalAPI is the narrower cross-origin variant used only by the
+// Session Key mutation. The exact configured Control Panel origin may echo a
+// signed token in the header without a cookie; every local/same-origin caller
+// still uses the original cookie + header double-submit rule. Do not use this
+// wrapper for unrelated local APIs.
+func WrapSensitiveLocalAPI(cfg LocalAPIConfig, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			handleCORSPreflight(w, r, cfg.AllowedOrigins)
+			return
+		}
+		applyLocalAPICORS(w, r, cfg.AllowedOrigins)
+		if !originOrHostMatches(r, cfg.AllowedOrigins) {
+			writeLocalAPIError(w, http.StatusForbidden, "origin_denied", "request Origin / Host is not on the local-api allowlist")
+			auditLocalAPIDenied(cfg, r, "origin_denied")
+			return
+		}
+		if cfg.RateLimiter != nil && !cfg.RateLimiter.Allow(rateKeyFor(r)) {
+			writeLocalAPIError(w, http.StatusTooManyRequests, "rate_limited", "local-api rate limit exceeded for this client")
+			auditLocalAPIDenied(cfg, r, "rate_limited")
+			return
+		}
+		if err := verifySensitiveLocalAPICSRF(r, cfg.CSRFKey); err != nil {
+			writeLocalAPIError(w, http.StatusForbidden, "csrf_denied", "csrf proof is missing or invalid")
+			auditLocalAPIDenied(cfg, r, "csrf_denied:"+err.Error())
+			return
+		}
+		auditLocalAPIAccepted(cfg, r)
+		h.ServeHTTP(w, r)
+	})
+}
+
+// WrapLocalAPITokenIssuer protects the nonce-issuing GET endpoint with the
+// same strict Origin/Host, CORS, PNA, rate-limit, and audit boundary as POSTs.
+// It omits CSRF verification because its purpose is to mint that nonce.
+func WrapLocalAPITokenIssuer(cfg LocalAPIConfig, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			handleCORSPreflight(w, r, cfg.AllowedOrigins)
+			return
+		}
+		applyLocalAPICORS(w, r, cfg.AllowedOrigins)
+		if !originOrHostMatches(r, cfg.AllowedOrigins) {
+			writeLocalAPIError(w, http.StatusForbidden, "origin_denied", "request Origin / Host is not on the local-api allowlist")
+			auditLocalAPIDenied(cfg, r, "origin_denied")
+			return
+		}
+		if cfg.RateLimiter != nil && !cfg.RateLimiter.Allow(rateKeyFor(r)) {
+			writeLocalAPIError(w, http.StatusTooManyRequests, "rate_limited", "local-api rate limit exceeded for this client")
+			auditLocalAPIDenied(cfg, r, "rate_limited")
+			return
+		}
+		auditLocalAPIAccepted(cfg, r)
+		h.ServeHTTP(w, r)
+	})
+}
+
+// verifyLocalAPICSRF keeps double-submit for the Personal same-origin path. A
+// configured remote Control Panel cannot reliably use a SameSite=Strict cookie
+// when calling HTTP loopback, so its exact allowlisted Origin may present the
+// signed short-lived token in the header alone. An arbitrary website cannot
+// read the token issuer response because both issuer and mutation enforce the
+// same exact origin before CORS is emitted.
+func verifySensitiveLocalAPICSRF(r *http.Request, key []byte) error {
+	header := r.Header.Get(CSRFHeaderName)
+	if header == "" {
+		return errors.New("csrf header missing")
+	}
+	if origin := r.Header.Get("Origin"); IsConfiguredControlPanelOrigin(origin) {
+		return verifyCSRFToken(header, key)
+	}
+	return verifyCSRFDoubleSubmit(r, key)
 }
 
 // verifyCSRFDoubleSubmit reads the cookie + header, confirms they match,
@@ -257,12 +353,7 @@ func verifyCSRFDoubleSubmit(r *http.Request, key []byte) error {
 func originOrHostMatches(r *http.Request, allowed []string) bool {
 	origin := r.Header.Get("Origin")
 	if origin != "" {
-		for _, o := range allowed {
-			if origin == o {
-				return true
-			}
-		}
-		return false
+		return IsSensitiveAllowedOrigin(origin, allowed)
 	}
 	// Origin missing → fall back to Host (which the browser always
 	// sends and the user agent itself controls).
@@ -284,9 +375,12 @@ func originOrHostMatches(r *http.Request, allowed []string) bool {
 // the browser its origin is legitimate).
 func handleCORSPreflight(w http.ResponseWriter, r *http.Request, allowed []string) {
 	applyLocalAPICORS(w, r, allowed)
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, "+CSRFHeaderName)
 	w.Header().Set("Access-Control-Max-Age", "300") // short cache; rules may change at next deploy
+	if r.Header.Get("Access-Control-Request-Private-Network") == "true" && IsSensitiveAllowedOrigin(r.Header.Get("Origin"), allowed) {
+		w.Header().Set("Access-Control-Allow-Private-Network", "true")
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -299,13 +393,10 @@ func applyLocalAPICORS(w http.ResponseWriter, r *http.Request, allowed []string)
 	if origin == "" {
 		return
 	}
-	for _, o := range allowed {
-		if origin == o {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Vary", "Origin")
-			return
-		}
+	if IsSensitiveAllowedOrigin(origin, allowed) {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Vary", "Origin")
 	}
 }
 
@@ -355,7 +446,7 @@ type LocalAPIRateLimiter struct {
 }
 
 type rlBucket struct {
-	tokens int
+	tokens  int
 	resetAt time.Time
 }
 
@@ -412,8 +503,8 @@ func (l *LocalAPIRateLimiter) Allow(key string) bool {
 // stderr warning per process at startup if the dir is unwritable and
 // then no-op so a read-only filesystem can't crash the request.
 type LocalAPIAuditLog struct {
-	mu      sync.Mutex
-	path    string
+	mu       sync.Mutex
+	path     string
 	disabled bool
 }
 
@@ -457,13 +548,13 @@ func auditLocalAPIDenied(cfg LocalAPIConfig, r *http.Request, reason string) {
 		return
 	}
 	cfg.AuditLog.Append(map[string]any{
-		"outcome":  "denied",
-		"reason":   reason,
-		"method":   r.Method,
-		"path":     r.URL.Path,
-		"origin":   r.Header.Get("Origin"),
-		"host":     r.Host,
-		"remote":   r.RemoteAddr,
+		"outcome":    "denied",
+		"reason":     reason,
+		"method":     r.Method,
+		"path":       r.URL.Path,
+		"origin":     r.Header.Get("Origin"),
+		"host":       r.Host,
+		"remote":     r.RemoteAddr,
 		"user_agent": r.Header.Get("User-Agent"),
 	})
 }

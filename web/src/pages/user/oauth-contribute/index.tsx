@@ -51,7 +51,7 @@ import {
   isTeamWriteError,
   type TeamFetchError,
 } from '@/shared/api/team/team-fetch';
-import { poolAuthorizeURL, poolSubmitCode, poolStatus, isPoolLoginError } from '@/shared/api/user/pool-login';
+import { poolAuthorizeURL, poolSessionKey, poolSessionKeyCapabilities, poolSubmitCode, poolStatus, isPoolLoginError, SESSION_KEY_IDENTITY_MISMATCH } from '@/shared/api/user/pool-login';
 import { copyText } from '@/shared/utils/clipboard';
 // Shared page CSS (card / chip / vault table / status-dot / row-use-btn / icon-btn
 // / alias-main …), all scoped under `.vault-page`. WITHOUT injecting this the
@@ -95,10 +95,11 @@ function glyphFor(providerCode?: string, protocolType?: string): { slug: string;
   return null;
 }
 
-// exitIPEcho is the browser-side exit-IP echo (2026-07-19, P1=A). ping0.cc sends
-// no CORS header + returns HTML → a browser fetch can't read it; api.ipify.org is
-// CORS-enabled and returns a bare/JSON IP. The IP is objective, so it compares
-// cleanly against the master baseline (which was captured server-side, ping0.cc).
+// exitIPEcho is the browser-side exit-IP echo (2026-07-19, P1=A). api.ipify.org is
+// CORS-enabled and returns a bare/JSON IP, so a browser fetch can actually read it.
+// Since 2026-08-14 the master baseline this value is compared against is captured
+// server-side from the SAME host (egress.DefaultEchoURL), so the two sides no longer
+// depend on two providers agreeing.
 // Overridable for tests / air-gapped deployments.
 const EXIT_IP_ECHO = 'https://api.ipify.org?format=json';
 
@@ -811,8 +812,30 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     cred && !isTeamFetchError(cred) ? (cred as RoutedCredential) : undefined;
 
   // pool sign-in flow
+  const sessionKeyCapabilitiesQ = useQuery({
+    queryKey: ['session-key-capabilities'],
+    queryFn: poolSessionKeyCapabilities,
+    staleTime: 30_000,
+  });
+  const sessionKeyCapabilities = sessionKeyCapabilitiesQ.data;
+  const isAnthropicSessionKeyAccount =
+    (account.provider_code === 'anthropic' && (!account.protocol_type || account.protocol_type === 'anthropic')) ||
+    (account.provider_code === 'mock' && account.protocol_type === 'anthropic');
+  const sessionKeyCapabilityError = !sessionKeyCapabilities
+    ? (sessionKeyCapabilitiesQ.isPending ? t('oauthContribute.sessionKeyChecking') : t('oauthContribute.sessionKeyCapabilityUnavailable'))
+    : isPoolLoginError(sessionKeyCapabilities)
+      ? `[${sessionKeyCapabilities.code}] ${sessionKeyCapabilities.message}`
+      : !sessionKeyCapabilities.available
+        ? `[${sessionKeyCapabilities.reason_code || 'SESSION_KEY_UNAVAILABLE'}] ${t('oauthContribute.sessionKeyPlatformUnavailable')}`
+        : '';
+  const supportsSessionKey = isAnthropicSessionKeyAccount && !sessionKeyCapabilityError;
+  const [loginMethod, setLoginMethod] = useState<'browser' | 'session_key'>('browser');
+  const effectiveLoginMethod = isAnthropicSessionKeyAccount ? loginMethod : 'browser';
   const [sessionId, setSessionId] = useState('');
   const [code, setCode] = useState('');
+  const [sessionKey, setSessionKey] = useState('');
+  const [sessionKeyOperationID, setSessionKeyOperationID] = useState('');
+  const [sessionKeyStatus, setSessionKeyStatus] = useState<{ tone: 'success' | 'error' | 'pending'; message: string } | null>(null);
   const [err, setErr] = useState('');
   // A successful OAuth writeback can still be waiting for the local runtime
   // rail. Keep that distinction visible without forcing the user to repeat
@@ -963,7 +986,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
 
   const startMut = useMutation({
     mutationFn: () => poolAuthorizeURL(account.credential_id),
-    onSuccess: (res) => {
+    onSuccess: (res, variables) => {
       if (isPoolLoginError(res)) {
         setErr(res.message);
         return;
@@ -982,7 +1005,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   // NOTHING is written to master yet. On success we reveal the review + Confirm step.
   const finishMut = useMutation({
     mutationFn: () => poolSubmitCode(sessionId, code.trim(), false),
-    onSuccess: (res) => {
+    onSuccess: (res, variables) => {
       if (isPoolLoginError(res)) {
         setErr(res.message);
         return;
@@ -1013,6 +1036,65 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       setSessionId('');
       setCode('');
       setSessionFlow('');
+      setExpectedLoginIdentity(account.identity);
+      qc.invalidateQueries({ queryKey: ['my-pool-accounts'] });
+      qc.invalidateQueries({ queryKey: ['my-oauth-groups'] });
+    },
+  });
+
+  const sessionKeyStartMut = useMutation({
+    mutationFn: ({ value, operationID }: { value: string; operationID: string }) =>
+      poolSessionKey(account.credential_id, value, operationID, false),
+    onSuccess: (res, variables) => {
+      if (isPoolLoginError(res)) {
+        if (res.code === SESSION_KEY_IDENTITY_MISMATCH) {
+          setSessionKey('');
+          setSessionKeyOperationID('');
+        }
+        setSessionKeyStatus({ tone: 'error', message: `[${res.code}] ${res.message}` });
+        return;
+      }
+      // The provider secret leaves React state as soon as the local exchanger
+      // confirms it has created a reviewable operation. The access token stays
+      // inside aikey-proxy and is never returned to this page.
+      setSessionKey('');
+      setErr('');
+      setSyncWarning('');
+      // The proxy already compared the stable provider account ID (or its
+      // authoritative email fallback) with the selected pool credential and
+      // refuses to create a pending operation on mismatch. Repeating that
+      // decision against a display label here would create a second identity
+      // truth source and reject valid aliases.
+      setSessionKeyStatus({ tone: 'pending', message: t('oauthContribute.sessionKeySaving') });
+      sessionKeyConfirmMut.mutate(res.operation_id || variables.operationID);
+    },
+  });
+
+  const sessionKeyConfirmMut = useMutation({
+    mutationFn: (operationID: string) => poolSessionKey(account.credential_id, '', operationID, true),
+    onSuccess: (res) => {
+      if (isPoolLoginError(res)) {
+        setSessionKeyStatus({
+          tone: 'error',
+          message: res.code === 'WRITEBACK_FAILED'
+            ? `${t('oauthContribute.writebackRetryHint')} [${res.code}] ${res.message}`
+            : `[${res.code}] ${res.message}`,
+        });
+        return;
+      }
+      setErr('');
+      setSyncWarning(
+        res.sync_status === 'pending'
+          ? t('oauthContribute.loginSyncPending', { detail: res.sync_error || t('oauthContribute.loginSyncPendingFallback') })
+          : '',
+      );
+      setSignedInAs('');
+      setAwaitingConfirm(false);
+      setSessionKeyOperationID('');
+      setSessionKeyStatus({
+        tone: 'success',
+        message: t('oauthContribute.sessionKeyLoginSuccess', { identity: res.identity || account.identity }),
+      });
       setExpectedLoginIdentity(account.identity);
       qc.invalidateQueries({ queryKey: ['my-pool-accounts'] });
       qc.invalidateQueries({ queryKey: ['my-oauth-groups'] });
@@ -1062,7 +1144,31 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     setCode('');
     setWaitingCallback(false);
     setSessionFlow('');
+    setSessionKey('');
+    setSessionKeyOperationID('');
+    setSessionKeyStatus(null);
     setExpectedLoginIdentity(account.identity);
+  }
+
+  function selectLoginMethod(method: 'browser' | 'session_key') {
+    if (method === effectiveLoginMethod || awaitingConfirm) return;
+    onCancelConfirm();
+    setErr('');
+    setLoginMethod(method);
+  }
+
+  function startSessionKeySignIn() {
+    const value = sessionKey.trim();
+    if (!value) return;
+    let operationID = sessionKeyOperationID;
+    if (!operationID) {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      operationID = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    setSessionKeyOperationID(operationID);
+    setSessionKeyStatus({ tone: 'pending', message: t('oauthContribute.sessionKeySigningIn') });
+    sessionKeyStartMut.mutate({ value, operationID });
   }
 
   // Team-account match check (advisory, not enforced): the token IS written either
@@ -1077,9 +1183,39 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       className="px-4 py-4 space-y-4"
       style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid var(--border)' }}
     >
+      {isAnthropicSessionKeyAccount && (
+        <div
+          className="flex items-center gap-1 border-b"
+          style={{ borderBottomColor: 'var(--border)' }}
+          role="tablist"
+          aria-label={t('oauthContribute.loginMethodLabel')}
+          data-login-method-tabs
+        >
+          {(['browser', 'session_key'] as const).map((method) => (
+            <button
+              key={method}
+              type="button"
+              role="tab"
+              aria-selected={effectiveLoginMethod === method}
+              disabled={awaitingConfirm}
+              className="px-3 py-2 text-[11px] font-mono"
+              style={{
+                color: effectiveLoginMethod === method ? 'var(--foreground)' : 'var(--muted-foreground)',
+                borderBottom: effectiveLoginMethod === method ? '2px solid var(--primary)' : '2px solid transparent',
+              }}
+              onClick={() => selectLoginMethod(method)}
+            >
+              {t(method === 'browser' ? 'oauthContribute.browserLoginTab' : 'oauthContribute.sessionKeyLoginTab')}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Step 1: egress config + exit-IP self-check. Both pool types can view/copy
-          the resolved config; edits remain account-level overrides. */}
-      <div
+          the resolved config; edits remain account-level overrides. It belongs
+          to Browser OAuth, not to the Session Key flow. */}
+      {effectiveLoginMethod === 'browser' && <div
+        data-browser-oauth-step="egress-check"
         className="rounded px-3 py-3 space-y-2"
         style={{ border: '1px solid var(--border)', background: 'rgba(0,0,0,0.15)' }}
       >
@@ -1139,21 +1275,25 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         <p className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>
           {t('oauthContribute.egressGuideNote')}
         </p>
-      </div>
+      </div>}
 
-      {/* Step 2: account credentials + sign-in. The first step's browser exit-IP
-          test remains the hard gate for the login action. */}
+      {/* Browser OAuth step 2, or the independent Session Key flow. */}
       <div
+        data-login-flow={effectiveLoginMethod}
         className="rounded px-3 py-3 space-y-3"
         style={{ border: '1px solid var(--border)', background: 'rgba(0,0,0,0.15)' }}
       >
-        <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
+        {effectiveLoginMethod === 'browser' && <div
+          data-browser-oauth-step="account-login"
+          className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider"
+          style={{ color: 'var(--muted-foreground)' }}
+        >
           <span className="inline-flex h-5 w-5 items-center justify-center rounded-full" style={{ color: 'var(--primary)', border: '1px solid var(--primary)' }}>2</span>
           {t('oauthContribute.loginSectionTitle')}
-        </div>
+        </div>}
 
-        {/* Password row */}
-        <div className="flex items-center gap-3 flex-wrap">
+        {/* The admin-stored password is useful only for the existing browser flow. */}
+        {effectiveLoginMethod === 'browser' && <div className="flex items-center gap-3 flex-wrap">
           <span
             className="text-[10px] font-mono uppercase tracking-wider"
             style={{ color: 'var(--muted-foreground)', minWidth: 64 }}
@@ -1176,10 +1316,10 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
           >
             {revealed ? <EyeOffIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
           </button>
-        </div>
+        </div>}
 
       {/* Sign-in flow */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {effectiveLoginMethod === 'browser' ? <div className="flex items-center gap-3 flex-wrap">
         {!ipTested && (
           <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
             {t('oauthContribute.testBeforeLogin')}
@@ -1225,7 +1365,72 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             {finishMut.isPending ? t('oauthContribute.resolving') : t('oauthContribute.codexWaiting')}
           </span>
         )}
-      </div>
+      </div> : (
+        <div className="space-y-3">
+          <p className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+            {t('oauthContribute.sessionKeyHint')}
+          </p>
+          {sessionKeyCapabilityError && (
+            <div role="alert" className="rounded border px-3 py-2 text-[11px] font-mono" style={{ color: '#fca5a5', borderColor: 'rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)' }}>
+              {sessionKeyCapabilityError}
+            </div>
+          )}
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              type="password"
+              autoComplete="off"
+              className="px-3 py-2 text-sm font-mono"
+              style={{ width: 360, maxWidth: '100%' }}
+              value={sessionKey}
+              onChange={(e) => {
+                setSessionKey(e.target.value);
+                setSessionKeyOperationID('');
+                setSessionKeyStatus(null);
+              }}
+              placeholder={t('oauthContribute.sessionKeyPlaceholder')}
+              aria-label={t('oauthContribute.sessionKeyLabel')}
+              disabled={!supportsSessionKey || sessionKeyStartMut.isPending || sessionKeyConfirmMut.isPending}
+            />
+            <button
+              type="button"
+              className="row-use-btn"
+              onClick={startSessionKeySignIn}
+              disabled={!supportsSessionKey || sessionKeyStartMut.isPending || sessionKeyConfirmMut.isPending || !sessionKey.trim()}
+            >
+              <ZapIcon className="w-3 h-3" />
+              {sessionKeyStartMut.isPending || sessionKeyConfirmMut.isPending
+                ? t('oauthContribute.sessionKeySigningIn')
+                : t('oauthContribute.sessionKeyConfirmLogin')}
+            </button>
+            {sessionKeyOperationID && sessionKeyStatus?.tone === 'error' && !sessionKey.trim() && (
+              <button
+                type="button"
+                className="row-use-btn"
+                onClick={() => sessionKeyConfirmMut.mutate(sessionKeyOperationID)}
+                disabled={sessionKeyConfirmMut.isPending}
+              >
+                {t('oauthContribute.sessionKeyRetrySave')}
+              </button>
+            )}
+          </div>
+          {sessionKeyStatus && (
+            <div
+              role={sessionKeyStatus.tone === 'error' ? 'alert' : 'status'}
+              className="rounded border px-3 py-2 text-[11px] font-mono"
+              style={{
+                color: sessionKeyStatus.tone === 'success' ? '#4ade80' : sessionKeyStatus.tone === 'error' ? '#fca5a5' : 'var(--muted-foreground)',
+                borderColor: sessionKeyStatus.tone === 'success' ? 'rgba(74,222,128,0.35)' : sessionKeyStatus.tone === 'error' ? 'rgba(239,68,68,0.4)' : 'var(--border)',
+                background: sessionKeyStatus.tone === 'success' ? 'rgba(74,222,128,0.06)' : sessionKeyStatus.tone === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(0,0,0,0.15)',
+              }}
+            >
+              {sessionKeyStatus.message}
+            </div>
+          )}
+          <p className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>
+            {t('oauthContribute.sessionKeyPlatformNote')}
+          </p>
+        </div>
+      )}
 
       {/* Step-2 review + confirm: the token is exchanged + held but NOT written yet.
           Show which Claude account resolved (green = matches this slot, yellow warning
@@ -1267,11 +1472,11 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       )}
 
       <p className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}>
-        {t('oauthContribute.securityNote')}
+        {t(effectiveLoginMethod === 'session_key' ? 'oauthContribute.sessionKeySecurityNote' : 'oauthContribute.securityNote')}
       </p>
       {/* Tip: log into different accounts in separate, isolated Chrome profiles so
           their sessions don't overwrite each other. Opens the how-to in a new tab. */}
-      <a
+      {effectiveLoginMethod === 'browser' && <a
         href="/user/browser-profile-guide"
         target="_blank"
         rel="noopener noreferrer"
@@ -1280,7 +1485,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       >
         💡 {t('oauthContribute.profileGuideHint')}
         <span aria-hidden="true">→</span>
-      </a>
+      </a>}
       {err && (
         <div
           role="alert"

@@ -18,7 +18,10 @@ export interface PoolAuthorizeStart {
 export interface PoolLoginError {
   code: string;
   message: string;
+  operation_id?: string;
 }
+
+export const SESSION_KEY_IDENTITY_MISMATCH = 'SESSION_KEY_IDENTITY_MISMATCH';
 
 async function postPool<T>(path: string, body: unknown): Promise<T | PoolLoginError> {
   try {
@@ -31,7 +34,8 @@ async function postPool<T>(path: string, body: unknown): Promise<T | PoolLoginEr
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const e = (data as { error?: PoolLoginError }).error;
-      return e ?? { code: 'POOL_LOGIN_FAILED', message: `HTTP ${res.status}` };
+      const operationID = (data as { operation_id?: string }).operation_id;
+      return e ? { ...e, operation_id: operationID } : { code: 'POOL_LOGIN_FAILED', message: `HTTP ${res.status}`, operation_id: operationID };
     }
     return data as T;
   } catch (e) {
@@ -71,6 +75,57 @@ export function poolSubmitCode(sessionID: string, code: string, confirm = false)
     code,
     confirm,
   });
+}
+
+export interface PoolSessionKeyResult {
+  status: 'pending' | 'ok' | 'canceled';
+  operation_id?: string;
+  identity?: string;
+  expected_identity?: string;
+  provider_code?: string;
+  sync_status?: 'ok' | 'pending';
+  sync_error?: string;
+}
+
+/** Exchange a Claude web session key locally on Windows or macOS. The first call keeps
+ * the resulting OAuth token inside aikey-proxy for identity review; the second
+ * call writes that held token to the existing member-token endpoint. Neither
+ * call returns token material to the browser. */
+export function poolSessionKey(
+  credentialID: string,
+  sessionKey: string,
+  operationID: string,
+  confirm = false,
+) {
+  return postPool<PoolSessionKeyResult>('session-key', {
+    credential_id: credentialID,
+    session_key: sessionKey,
+    operation_id: operationID,
+    confirm,
+  });
+}
+
+export interface PoolSessionKeyCapabilities {
+  status: 'ok';
+  available: boolean;
+  platform: string;
+  browser_required: false;
+  refresh_supported: false;
+  reason_code?: string;
+}
+
+export async function poolSessionKeyCapabilities(): Promise<PoolSessionKeyCapabilities | PoolLoginError> {
+  try {
+    const res = await fetch('/api/user/oauth/pool/session-key/capabilities', { credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const e = (data as { error?: PoolLoginError }).error;
+      return e ?? { code: 'POOL_LOGIN_FAILED', message: `HTTP ${res.status}` };
+    }
+    return data as PoolSessionKeyCapabilities;
+  } catch (e) {
+    return { code: 'PROXY_UNAVAILABLE', message: String(e) };
+  }
 }
 
 /** Session progress for callback-based flows (codex): pending / success / failed /

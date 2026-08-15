@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -201,6 +202,120 @@ func TestWrapLocalAPI_PreflightOPTIONS(t *testing.T) {
 	}
 	if got := rec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "POST") {
 		t.Errorf("Access-Control-Allow-Methods: want POST, got %q", got)
+	}
+}
+
+func TestWrapSensitiveLocalAPI_ControlPanelHeaderOnlyCSRFAndPNA(t *testing.T) {
+	// A remote Master page cannot rely on the loopback service's Strict cookie.
+	// It is allowed to echo the signed nonce in the header only, but exclusively
+	// when the Origin equals the controlPanelUrl single source of truth.
+	prevCache := controlPanelOriginCache.Load()
+	t.Cleanup(func() {
+		if prevCache != nil {
+			controlPanelOriginCache.Store(prevCache)
+		}
+	})
+	const controlOrigin = "https://stage.example.test"
+	controlPanelOriginCache.Store(controlPanelOriginCacheEntry{origin: controlOrigin, at: time.Now()})
+	cfg := LocalAPIConfig{
+		AllowedOrigins: []string{CORSAllowControlPanelURL, "http://127.0.0.1:8090"},
+		CSRFKey:        fixedKey,
+	}
+	_, token := issueCSRFViaRecorder(t, cfg)
+
+	next := &passthroughHandler{}
+	wrapped := WrapSensitiveLocalAPI(cfg, next)
+	r := newPOST(t, `{}`, func(r *http.Request) {
+		r.Header.Set("Origin", controlOrigin)
+		r.Header.Set(CSRFHeaderName, token)
+		// Intentionally no cookie: this is the remote Control Panel path.
+	})
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, r)
+	if rec.Code != http.StatusOK || !next.called {
+		t.Fatalf("configured Control Panel header-only CSRF: got %d %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != controlOrigin {
+		t.Fatalf("configured origin not reflected: %q", got)
+	}
+
+	preflight := httptest.NewRequest(http.MethodOptions, "/local-api/oauth/pool/session-key", nil)
+	preflight.Header.Set("Origin", controlOrigin)
+	preflight.Header.Set("Access-Control-Request-Method", "POST")
+	preflight.Header.Set("Access-Control-Request-Private-Network", "true")
+	preflightRec := httptest.NewRecorder()
+	wrapped.ServeHTTP(preflightRec, preflight)
+	if got := preflightRec.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
+		t.Fatalf("PNA allow header = %q, want true", got)
+	}
+	if methods := preflightRec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(methods, "GET") || !strings.Contains(methods, "POST") {
+		t.Fatalf("preflight methods incomplete: %q", methods)
+	}
+}
+
+func TestIssueCSRFTokenForOrigin_ControlPanelUsesShortTTL(t *testing.T) {
+	prevCache := controlPanelOriginCache.Load()
+	t.Cleanup(func() {
+		if prevCache != nil {
+			controlPanelOriginCache.Store(prevCache)
+		}
+	})
+	const controlOrigin = "https://stage.example.test"
+	controlPanelOriginCache.Store(controlPanelOriginCacheEntry{origin: controlOrigin, at: time.Now()})
+	rec := httptest.NewRecorder()
+	token, err := IssueCSRFTokenForOrigin(rec, LocalAPIConfig{CSRFKey: fixedKey}, controlOrigin)
+	if err != nil {
+		t.Fatalf("IssueCSRFTokenForOrigin: %v", err)
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("token shape: %q", token)
+	}
+	expiresAt, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		t.Fatalf("parse expiry: %v", err)
+	}
+	remaining := time.Until(time.Unix(expiresAt, 0))
+	if remaining < 4*time.Minute || remaining > controlPanelCSRFTTL+time.Second {
+		t.Fatalf("remote Control Panel nonce TTL=%s, want about %s", remaining, controlPanelCSRFTTL)
+	}
+}
+
+func TestWrapLocalAPI_ExplicitNonControlOriginStillRequiresCookie(t *testing.T) {
+	cfg := localAPITestCfg()
+	_, token := issueCSRFViaRecorder(t, cfg)
+	wrapped := WrapLocalAPI(cfg, &passthroughHandler{})
+	r := newPOST(t, `{}`, func(r *http.Request) {
+		r.Header.Set("Origin", "http://127.0.0.1:8090")
+		r.Header.Set(CSRFHeaderName, token)
+	})
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, r)
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "csrf_denied") {
+		t.Fatalf("same-origin path without double-submit cookie must fail: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestWrapLocalAPI_ControlPanelStillRequiresCookie(t *testing.T) {
+	prevCache := controlPanelOriginCache.Load()
+	t.Cleanup(func() {
+		if prevCache != nil {
+			controlPanelOriginCache.Store(prevCache)
+		}
+	})
+	const controlOrigin = "https://stage.example.test"
+	controlPanelOriginCache.Store(controlPanelOriginCacheEntry{origin: controlOrigin, at: time.Now()})
+	cfg := LocalAPIConfig{AllowedOrigins: []string{CORSAllowControlPanelURL}, CSRFKey: fixedKey}
+	_, token := issueCSRFViaRecorder(t, cfg)
+	wrapped := WrapLocalAPI(cfg, &passthroughHandler{})
+	r := newPOST(t, `{}`, func(r *http.Request) {
+		r.Header.Set("Origin", controlOrigin)
+		r.Header.Set(CSRFHeaderName, token)
+	})
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, r)
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "csrf_denied") {
+		t.Fatalf("generic local API must not inherit Session Key header-only authority: %d %s", rec.Code, rec.Body.String())
 	}
 }
 

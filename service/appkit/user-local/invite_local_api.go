@@ -78,6 +78,14 @@ type InviteLocalAPIConfig struct {
 	// timeout so the local API can't hang the web UI on a stalled
 	// main-site.
 	HTTPClient *http.Client
+
+	// SessionKeyHandler is mounted only by Personal/Trial local editions. It
+	// relays the sensitive body to the local proxy; remote Master deployments
+	// leave it nil and therefore never receive sessionKEY values.
+	SessionKeyHandler http.Handler
+	// SessionKeyCapabilitiesHandler exposes read-only Windows broker readiness.
+	// It must be nil in remote Master deployments.
+	SessionKeyCapabilitiesHandler http.Handler
 }
 
 // NewInviteLocalAPI returns the http.Handler covering
@@ -96,13 +104,11 @@ func NewInviteLocalAPI(cfg InviteLocalAPIConfig) http.Handler {
 
 	mux := http.NewServeMux()
 
-	// CSRF token issue: unprotected (no double-submit possible until
-	// the cookie exists). Same-origin enforced by the browser; this
-	// handler doesn't gate on Origin so a freshly-loaded SPA in a new
-	// tab can prime its token. Audit-logged separately so abuse
-	// (mass token issuance) is still observable.
-	mux.HandleFunc("GET /local-api/csrf-token", func(w http.ResponseWriter, r *http.Request) {
-		tok, err := shared.IssueCSRFToken(w, cfg.LocalAPICfg)
+	// CSRF token issue: no double-submit is possible until the cookie exists,
+	// so the shared token-issuer wrapper enforces the strict Origin/Host,
+	// CORS/PNA, rate-limit, and audit boundary before minting a token.
+	csrfIssuer := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tok, err := shared.IssueCSRFTokenForOrigin(w, cfg.LocalAPICfg, r.Header.Get("Origin"))
 		if err != nil {
 			logger.Error("issue csrf token failed", "error", err)
 			http.Error(w, "csrf token issue failed", http.StatusInternalServerError)
@@ -111,6 +117,9 @@ func NewInviteLocalAPI(cfg InviteLocalAPIConfig) http.Handler {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(map[string]string{"token": tok})
 	})
+	csrfIssuerHandler := shared.WrapLocalAPITokenIssuer(cfg.LocalAPICfg, csrfIssuer)
+	mux.Handle("GET /local-api/csrf-token", csrfIssuerHandler)
+	mux.Handle("OPTIONS /local-api/csrf-token", csrfIssuerHandler)
 
 	// Invite create + revoke: full middleware stack.
 	mux.Handle("POST /local-api/invite/create", shared.WrapLocalAPI(cfg.LocalAPICfg,
@@ -121,6 +130,20 @@ func NewInviteLocalAPI(cfg InviteLocalAPIConfig) http.Handler {
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handleLocalAPIRevoke(w, r, cfg, mainSiteBase, logger)
 		})))
+	if cfg.SessionKeyHandler != nil {
+		// Cross-origin Control Panel calls send an OPTIONS preflight before
+		// the mutation because the request carries JSON and the local CSRF
+		// header. Both methods must reach the same security wrapper; otherwise
+		// ServeMux returns 405 before CORS/PNA can authorize the browser.
+		sessionKeyHandler := shared.WrapSensitiveLocalAPI(cfg.LocalAPICfg, cfg.SessionKeyHandler)
+		mux.Handle("POST /local-api/oauth/pool/session-key", sessionKeyHandler)
+		mux.Handle("OPTIONS /local-api/oauth/pool/session-key", sessionKeyHandler)
+	}
+	if cfg.SessionKeyCapabilitiesHandler != nil {
+		capabilitiesHandler := shared.WrapLocalAPITokenIssuer(cfg.LocalAPICfg, cfg.SessionKeyCapabilitiesHandler)
+		mux.Handle("GET /local-api/oauth/pool/session-key/capabilities", capabilitiesHandler)
+		mux.Handle("OPTIONS /local-api/oauth/pool/session-key/capabilities", capabilitiesHandler)
+	}
 
 	return mux
 }

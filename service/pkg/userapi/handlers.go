@@ -141,6 +141,8 @@ func NewHandlers(cfg *Config, logger *slog.Logger) *Handlers {
 //	POST   /api/user/oauth/poll          -> oauth.PollHandler            (no unlock; broker Device-Code poll for Kimi)
 //	POST   /api/user/oauth/pool/authorize-url -> oauth.PoolAuthorizeURLHandler (per-member pool login; → proxy memory broker → writeback master)
 //	POST   /api/user/oauth/pool/submit-code   -> oauth.PoolSubmitCodeHandler
+//	POST   /api/user/oauth/pool/session-key  -> oauth.PoolSessionKeyHandler (desktop browserless login)
+//	GET    /api/user/oauth/pool/session-key/capabilities -> local feature health (no provider request)
 //	GET    /api/user/oauth/pool/status        -> oauth.PoolStatusHandler (codex callback polling)
 //	POST   /api/user/import/parse        -> Import.ParseHandler
 //	POST   /api/user/import/confirm      -> Import.ConfirmHandler        (requires unlock)
@@ -263,6 +265,10 @@ func (h *Handlers) Register(
 			authMW(http.HandlerFunc(oauth.PoolAuthorizeURLHandler)))
 		mux.Handle("POST /api/user/oauth/pool/submit-code",
 			authMW(http.HandlerFunc(oauth.PoolSubmitCodeHandler)))
+		mux.Handle("POST /api/user/oauth/pool/session-key",
+			authMW(http.HandlerFunc(oauth.PoolSessionKeyHandler)))
+		mux.Handle("GET /api/user/oauth/pool/session-key/capabilities",
+			authMW(http.HandlerFunc(oauth.PoolSessionKeyCapabilitiesHandler)))
 		// Codex pool login polls status until the broker's localhost callback
 		// completes the exchange (no paste-code for auth_code flows; R34).
 		mux.Handle("GET /api/user/oauth/pool/status",
