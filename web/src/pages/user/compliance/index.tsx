@@ -48,6 +48,7 @@ import {
   SNIPPET_BOX_CLASS,
   snippetBoxStyle,
 } from '@/shared/utils/mask-highlight';
+import { engineLoadBadge, engineLoadStateIsUnreadable } from './engine-load-state';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterTokenBar, type FilterToken, type FilterTokenDimension } from '@/shared/ui/FilterTokenBar';
 import { complianceEntityTypeOptions } from '@/shared/compliance/entity-types';
@@ -965,10 +966,25 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
             {(packsReport.engines ?? []).length > 0 && (
               <div>
                 <h3 className="text-[10px] font-mono tracking-wider mb-2" style={{ color: 'var(--muted-foreground)' }}>{t('effectivePacks.enginesSection')}</h3>
+                {/* Why the badges below can read UNKNOWN, stated once for the
+                    whole section rather than repeated on five rows (2026-08-14,
+                    D8). A lone UNKNOWN badge is honest but unhelpful; this line
+                    is the "where the real answer is" half, the same shape the
+                    address row's note uses for the enforcement rung (D7). */}
+                {engineLoadStateIsUnreadable(packsReport.engines ?? []) && (
+                  <p className="text-[10px] font-mono mb-2 break-words" style={{ color: 'var(--muted-foreground)' }}>
+                    {t('effectivePacks.engineLoadUnknownNote')}
+                  </p>
+                )}
                 <div className="space-y-1.5">
                   {(packsReport.engines ?? []).map((e) => (
                     <div key={e.name} className="flex items-start gap-2 rounded border px-2.5 py-1.5" style={{ borderColor: 'var(--border)' }}>
-                      <Badge variant={e.loaded ? 'green' : 'gray'} className="shrink-0">{e.loaded ? t('effectivePacks.engineOn') : t('effectivePacks.engineOff')}</Badge>
+                      {/* 🔴 Do NOT branch on `e.loaded` here. It has three
+                          meanings (true / false / not-knowable-by-this-backend)
+                          and the absent case must not collapse into "OFF".
+                          engineLoadBadge() is the single exit — see
+                          ./engine-load-state.ts. */}
+                      <Badge variant={engineLoadBadge(e.loaded).variant} className="shrink-0">{t(engineLoadBadge(e.loaded).labelKey)}</Badge>
                       <div className="min-w-0">
                         <div className="text-xs font-mono font-bold" style={{ color: 'var(--foreground)' }}>{e.name}</div>
                         <div className="text-[10px] font-mono mt-0.5 break-words" style={{ color: 'var(--muted-foreground)' }}>
@@ -978,20 +994,31 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                             It used to be glued to the entity list with a `·`, so
                             the one thing a reader most needs — the enforcement
                             RUNG — read as the tail of a long grey run-on.
-                            `address.recognizer` publishes `lane=audit`, i.e.
-                            detected + recorded + FORWARDED UNMASKED, which the
-                            green 已启用 badge alone actively misreads as "your
-                            addresses are being masked".
+                            `address.recognizer` publishes `lane=<rung>`, and
+                            "detected" is NOT "masked", which the green 已启用
+                            badge alone actively misreads as "your addresses are
+                            being masked". (This comment used to name the rung
+                            as `audit`; the factory default moved to `mask` on
+                            2026-08-13 and the hard-coded name went stale within
+                            a day. Never name it here — the rung is node-local
+                            runtime state with exactly one source of truth,
+                            actionpolicy default_policy.json + the node's
+                            operator override. See D7, 2026-08-14.)
 
                             🔴 Printed VERBATIM from the report. Do not parse
                             `lane=` here and do not restate the engine's
-                            properties in this file: the detector (and master's
-                            fenced mirror of it) owns what each engine is and at
-                            what rung it runs — a second copy in the SPA is the
-                            split-truth that produced the missing address row in
-                            the first place. Source of the string:
-                            ai-compliance-detector/cmd/detector/list_packs.go
-                            buildBuiltInEngineList. */}
+                            properties in this file — a second copy in the SPA is
+                            the split-truth that produced the missing address row
+                            in the first place. Two backends serve this page and
+                            they know different amounts, which is why the SPA must
+                            stay dumb: Personal reads the LIVE detector through
+                            the local proxy (ai-compliance-detector
+                            cmd/detector/list_packs.go buildBuiltInEngineList, so
+                            its note carries the real `lane=<rung>`), while the
+                            team console reads master's mirror (aikey-control-master
+                            .../compliance/handler_my_packs.go), which cannot see
+                            a node's runtime policy and therefore states no rung
+                            at all. */}
                         {e.note && (
                           <div className="text-[10px] font-mono mt-0.5 break-words" style={{ color: 'var(--muted-foreground)' }}>
                             {e.note}

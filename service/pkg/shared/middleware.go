@@ -285,30 +285,10 @@ func loadControlPanelOriginFromPath(path string) string {
 // auth (anonymous → LocalOwnerAccountID). A malicious page could enumerate
 // vault metadata including route_token — a usable proxy bearer.
 func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
-	originSet := make(map[string]bool, len(allowedOrigins))
-	allowAny := false
-	allowLocalNetworks := false
-	allowControlPanelURL := false
-	for _, o := range allowedOrigins {
-		switch o {
-		case "*":
-			allowAny = true
-		case CORSAllowLocalNetworks:
-			allowLocalNetworks = true
-		case CORSAllowControlPanelURL:
-			allowControlPanelURL = true
-		default:
-			originSet[o] = true
-		}
-	}
-
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			allow := origin != "" && (allowAny ||
-				originSet[origin] ||
-				(allowControlPanelURL && origin == readControlPanelOrigin()) ||
-				(allowLocalNetworks && isLocalNetworkOrigin(origin)))
+			allow := origin != "" && IsAllowedOrigin(origin, allowedOrigins)
 			if allow {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Vary", "Origin")
@@ -325,6 +305,67 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// IsAllowedOrigin is the single origin-matching rule shared by generic CORS
+// and the sensitive loopback local-api. Sentinels are resolved at request time
+// so `aikey login --control-url` changes take effect without a restart.
+func IsAllowedOrigin(origin string, allowedOrigins []string) bool {
+	if origin == "" {
+		return false
+	}
+	for _, allowed := range allowedOrigins {
+		switch allowed {
+		case "*":
+			return true
+		case CORSAllowControlPanelURL:
+			if origin == readControlPanelOrigin() {
+				return true
+			}
+		case CORSAllowLocalNetworks:
+			if isLocalNetworkOrigin(origin) {
+				return true
+			}
+		default:
+			if origin == allowed {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// IsSensitiveAllowedOrigin applies the same exact and control-panel rules but
+// deliberately rejects wildcard and local-network sentinels. A mutation that
+// carries a session key may be called only by this loopback UI or the one
+// Control Panel origin explicitly configured by the user.
+func IsSensitiveAllowedOrigin(origin string, allowedOrigins []string) bool {
+	if origin == "" {
+		return false
+	}
+	for _, allowed := range allowedOrigins {
+		switch allowed {
+		case CORSAllowControlPanelURL:
+			if origin == readControlPanelOrigin() {
+				return true
+			}
+		case "*", CORSAllowLocalNetworks:
+			continue
+		default:
+			if origin == allowed {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// IsConfiguredControlPanelOrigin reports whether origin is the exact dynamic
+// origin written by `aikey login --control-url`. It is intentionally narrower
+// than an explicit local-api allowlist entry and is used only for the remote
+// Control Panel's header-only signed nonce path.
+func IsConfiguredControlPanelOrigin(origin string) bool {
+	return origin != "" && origin == readControlPanelOrigin()
 }
 
 // isLocalNetworkOrigin reports whether the given Origin header value

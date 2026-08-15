@@ -104,7 +104,20 @@ export interface BuiltInEngineDTO {
   name: string; // "ner.char" | "ner.token" | "recall.semantic"
   kind: string; // "ner-crf" | "semantic-classifier"
   entities: string[];
-  loaded: boolean;
+  /**
+   * Runtime wiring state of this engine in the detector that produced the
+   * report — ABSENT when the serving backend cannot see it (2026-08-14, D8).
+   *
+   * Present on the Personal lane (the live local detector answers for itself).
+   * Absent on the team lane: master mirrors the detector's shipped assembly but
+   * has no view of any node's runtime, and one org has N enforcing nodes.
+   *
+   * 🔴 Never coerce the absent case to `false` — that renders running engines as
+   * 未启用. Route it through `engineLoadBadge()` in
+   * pages/user/compliance/engine-load-state.ts, which is the only place allowed
+   * to decide what absence means.
+   */
+  loaded?: boolean;
   note?: string;
 }
 

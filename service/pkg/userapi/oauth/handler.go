@@ -106,6 +106,19 @@ func PoolSubmitCodeHandler(w http.ResponseWriter, r *http.Request) {
 	forward(w, r, http.MethodPost, proxyBase()+"/oauth/pool/submit-code", true)
 }
 
+// PoolSessionKeyHandler relays a desktop-local sessionKEY login to the proxy's
+// in-process Go broker. The request body is streamed and never decoded or logged
+// by local-server; the proxy response never contains token material.
+func PoolSessionKeyHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodPost, proxyBase()+"/oauth/pool/session-key", true)
+}
+
+// PoolSessionKeyCapabilitiesHandler exposes the local broker's platform and
+// feature readiness without contacting Anthropic or returning account data.
+func PoolSessionKeyCapabilitiesHandler(w http.ResponseWriter, r *http.Request) {
+	forward(w, r, http.MethodGet, proxyBase()+"/oauth/pool/session-key/capabilities", false)
+}
+
 // PoolStatusHandler relays GET /api/user/oauth/pool/status?session_id=<id> →
 // GET /oauth/pool/status. The codex pool login has no code to paste (OpenAI
 // redirects to the broker's localhost:1455 callback, which exchanges in-place),

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -68,12 +69,12 @@ func TestJSONNormalizesNestedCollections(t *testing.T) {
 // Scope guard: the rewrite must NOT widen into shapes the fix does not own.
 func TestJSONLeavesNonArrayShapesAlone(t *testing.T) {
 	type payload struct {
-		Blob   []byte          `json:"blob"`             // marshals as string/null, not array
-		Raw    json.RawMessage `json:"raw"`              // raw passthrough
-		When   time.Time       `json:"when"`             // json.Marshaler — owns its shape
-		MaybeP *int            `json:"maybe_p"`          // nil pointer stays null
-		MaybeM map[string]int  `json:"maybe_m"`          // nil map stays null
-		Omit   []string        `json:"omit,omitempty"`   // omitempty still omits
+		Blob   []byte          `json:"blob"`           // marshals as string/null, not array
+		Raw    json.RawMessage `json:"raw"`            // raw passthrough
+		When   time.Time       `json:"when"`           // json.Marshaler — owns its shape
+		MaybeP *int            `json:"maybe_p"`        // nil pointer stays null
+		MaybeM map[string]int  `json:"maybe_m"`        // nil map stays null
+		Omit   []string        `json:"omit,omitempty"` // omitempty still omits
 	}
 	rec := httptest.NewRecorder()
 	JSON(rec, 200, payload{})
@@ -98,6 +99,42 @@ func TestJSONNormalizesThroughInterfaces(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, `"items":[]`) {
 		t.Fatalf("nil slice behind interface{} reached the wire as null: %s", body)
+	}
+}
+
+func TestJSONDoesNotMutateSharedResponseGraph(t *testing.T) {
+	type nested struct {
+		Items []string `json:"items"`
+	}
+	child := &nested{}
+	payload := map[string]any{
+		"direct": []string(nil),
+		"nested": child,
+	}
+
+	const requests = 32
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range requests {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			rec := httptest.NewRecorder()
+			JSON(rec, 200, payload)
+			if body := rec.Body.String(); !strings.Contains(body, `"direct":[]`) || !strings.Contains(body, `"items":[]`) {
+				t.Errorf("nil slices were not normalized in detached response: %s", body)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if direct := payload["direct"].([]string); direct != nil {
+		t.Fatal("JSON mutated a top-level shared map value")
+	}
+	if child.Items != nil {
+		t.Fatal("JSON mutated a shared nested pointer")
 	}
 }
 
