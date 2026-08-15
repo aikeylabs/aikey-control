@@ -27,7 +27,10 @@ import { useTranslation } from 'react-i18next';
 
 import {
   TrustAliasInUseError,
+  type CascadeBlock,
   type CascadeHistoryEntry,
+  type CascadeOutcome,
+  type DimensionScore,
   type RecentObservation,
   type TrustStatusDetail,
 } from './api';
@@ -104,6 +107,15 @@ export function AliasDetailDrawer({
           {detail && !isLoading && (
             <>
               <SubScoresPanel detail={detail} />
+              {/* 🔴 KB sits directly under the layer scores and ABOVE
+                  everything else, because it is the dimension whose
+                  disagreement with them is the finding. When a
+                  same-family downgrade is being served, L1/L2/L3 above
+                  read healthy and this panel is the only thing on the
+                  page that does not. */}
+              <KnowledgeBoundaryPanel detail={detail} />
+              <DimensionsPanel dimensions={detail.dimensions ?? []} />
+              <EscalationPanel cascade={detail.cascade} />
               <CascadeHistoryPanel history={detail.cascade_history} />
               <RecentObservationsPanel
                 observations={detail.recent_observations ?? []}
@@ -252,7 +264,19 @@ function SubScoresPanel({ detail }: { detail: TrustStatusDetail }) {
   const { t } = useTranslation();
   return (
     <section className="tc-drawer-section">
-      <h3 className="tc-drawer-section-title">{t('trustCheck.subScoresTitle')}</h3>
+      <h3 className="tc-drawer-section-title">
+        {t('trustCheck.subScoresTitle')}
+        {/* 🔴 Which wire format produced these numbers. The L1 rules and
+            the L3 chunk windows are per-protocol and were MEASURED
+            separately, so the same "L1 80" is a different statement on
+            each — an unlabelled score invites comparing two that are not
+            comparable. */}
+        {detail.protocol && (
+          <span className="tc-drawer-section-count">
+            {t('trustCheck.protocolLabel')}: {detail.protocol}
+          </span>
+        )}
+      </h3>
       <div className="tc-subscores">
         <SubScore
           label={t('trustCheck.l1Label')}
@@ -397,6 +421,234 @@ function SubScore({
       </div>
       <div className="tc-subscore-hint">{hint}</div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// KnowledgeBoundaryPanel — statistical model identity (2026-08-12).
+//
+// 🔴 RENDERED AS A SENTENCE AND A RATIO, NOT AS ANOTHER 0–100 TILE.
+//
+// The underlying quantity is a likelihood ratio. Displaying it as a
+// fourth SubScore beside L1/L2/L3 would invite the reader to average it
+// with them — which is exactly what the backend refuses to do, and for
+// the same reason: a Bayes factor folded into a mean stops being a Bayes
+// factor and becomes a few points, which a reader discounts.
+//
+// 🔴 THE ABSTAIN CASE IS THE COMMON CASE AND IS RENDERED IN FULL.
+// Every Anthropic alias abstains today — the only mined fingerprint we
+// have is for OpenAI. The scorer's own sentence says which side is
+// missing what, so a reader can tell "we have no reference for this
+// endpoint" from "we checked and found nothing", and neither reads as a
+// verdict on their relay.
+// ---------------------------------------------------------------------------
+
+function KnowledgeBoundaryPanel({ detail }: { detail: TrustStatusDetail }) {
+  const { t } = useTranslation();
+  const finding = detail.kb_finding ?? null;
+  const score = detail.s_knowledge_boundary ?? null;
+
+  // Nothing at all: this alias has never been checked by a build that
+  // has the dimension. Rendering an empty panel would suggest it ran.
+  if (!finding && score == null) return null;
+
+  const status = finding?.status ?? (score == null ? 'abstain' : 'info');
+  const ratio = detail.kb_log_likelihood_ratio ?? null;
+  const mixed = detail.kb_mixed_route_probability ?? null;
+
+  return (
+    <section className="tc-drawer-section">
+      <h3 className="tc-drawer-section-title">{t('trustCheck.kbTitle')}</h3>
+      <div className={`tc-kb tc-kb-${status}`}>
+        <div className="tc-kb-head">
+          <span className={`tc-kb-status tc-kb-status-${status}`}>
+            {kbStatusLabel(t, status)}
+          </span>
+          {/* 🔴 THE NUMBER IS SHOWN ONLY WHEN THE DIMENSION REACHED A
+              VERDICT.
+              The scorer returns a score even when the evidence was
+              inconclusive — the first real run against api.openai.com
+              came back `info`, "the answers fit gpt-4o and gpt-4.1 about
+              equally well", with `s_knowledge_boundary: 36.4`. Printing
+              a 36 beside that sentence is the same mistake as L3's old
+              neutral 50: a number a reader takes as a measurement when
+              the dimension is saying it could not tell. The ratio and
+              the sentence below carry the actual finding. */}
+          {score != null && (status === 'pass' || status === 'fail') && (
+            <span className="tc-kb-score">{Math.round(score)}</span>
+          )}
+        </div>
+        {/* Verbatim. These strings are carefully worded about what was
+            and was not measured; paraphrasing loses exactly that. */}
+        {finding?.summary && <p className="tc-kb-summary">{finding.summary}</p>}
+        <dl className="tc-kb-facts">
+          <div>
+            <dt>{t('trustCheck.kbItems')}</dt>
+            <dd>{detail.kb_n_items ?? 0}</dd>
+          </div>
+          {ratio != null && (
+            <div>
+              <dt>{t('trustCheck.kbRatio')}</dt>
+              {/* Shown as odds, because "3.6" means nothing and
+                  "≈4000:1" is the form the calibration is quoted in. */}
+              <dd title={t('trustCheck.kbRatioHint')}>
+                {formatOdds(ratio)}
+              </dd>
+            </div>
+          )}
+          {detail.kb_nearest_model && (
+            <div>
+              <dt>{t('trustCheck.kbNearest')}</dt>
+              <dd>{detail.kb_nearest_model}</dd>
+            </div>
+          )}
+          {mixed != null && (
+            <div>
+              <dt>{t('trustCheck.kbMixed')}</dt>
+              <dd>{Math.round(mixed * 100)}%</dd>
+            </div>
+          )}
+        </dl>
+      </div>
+    </section>
+  );
+}
+
+/** Finding status → label, via LITERAL `t()` call sites.
+ *
+ * 🔴 Not `t(\`trustCheck.kbStatus.${status}\`)`. Two fences in
+ * `src/shared/i18n/i18n-key-coverage.test.ts` exist to keep template-key
+ * lookups rare and to catch catalogue keys with no caller — a dynamic key
+ * is invisible to both, so a locale entry could be deleted or misspelled
+ * and only show up as raw key text on someone's screen. An exhaustive
+ * switch also makes a new status a TypeScript error rather than a
+ * silently-untranslated string.
+ */
+function kbStatusLabel(t: (k: string) => string, status: string): string {
+  switch (status) {
+    case 'pass':
+      return t('trustCheck.kbStatus.pass');
+    case 'fail':
+      return t('trustCheck.kbStatus.fail');
+    case 'info':
+      return t('trustCheck.kbStatus.info');
+    case 'abstain':
+      return t('trustCheck.kbStatus.abstain');
+    default:
+      // A status the backend added and this build has no wording for.
+      // Shown raw rather than mapped to the nearest known one — guessing
+      // would put a verdict on the page that nothing produced.
+      return status;
+  }
+}
+
+/** Escalation outcome → label. Same reasoning as `kbStatusLabel`. */
+function escalationOutcomeLabel(
+  t: (k: string) => string, outcome: CascadeOutcome | string,
+): string {
+  switch (outcome) {
+    case 'not_evaluated':
+      return t('trustCheck.escalationOutcome.not_evaluated');
+    case 'not_triggered':
+      return t('trustCheck.escalationOutcome.not_triggered');
+    case 'no_round2_bank':
+      return t('trustCheck.escalationOutcome.no_round2_bank');
+    case 'insufficient_budget':
+      return t('trustCheck.escalationOutcome.insufficient_budget');
+    case 'round2_failed':
+      return t('trustCheck.escalationOutcome.round2_failed');
+    case 'ran':
+      return t('trustCheck.escalationOutcome.ran');
+    default:
+      return String(outcome);
+  }
+}
+
+/** log10 likelihood ratio → readable odds.
+ *
+ *  Positive favours the CLAIMED model, negative favours the alternative;
+ *  the sign is preserved in the wording rather than in a minus sign,
+ *  because "-3.6" and "3.6" look like a typo apart and mean opposite
+ *  things about someone's endpoint.
+ */
+function formatOdds(log10Ratio: number): string {
+  const magnitude = Math.pow(10, Math.abs(log10Ratio));
+  const rounded =
+    magnitude >= 1000
+      ? `${Math.round(magnitude / 1000)}000`
+      : `${Math.round(magnitude)}`;
+  return log10Ratio >= 0 ? `${rounded}:1 claimed` : `1:${rounded} claimed`;
+}
+
+// ---------------------------------------------------------------------------
+// DimensionsPanel — the eight capability probes (capability-v1).
+//
+// 🔴 These are the dimensions the product page ADVERTISES. Until
+// `fixtures/questions/dimensions/capability-v1.json` shipped, their ids
+// appeared in no question bank on either side, so the list described a
+// check nobody was performing. Rendering them here is the half of that
+// fix the installed product needed.
+//
+// The labels come from the fixture, untranslated on purpose: the fixture
+// is the source of truth for what each probe tests, and a second name
+// maintained in the locale files would drift away from it.
+// ---------------------------------------------------------------------------
+
+function DimensionsPanel({ dimensions }: { dimensions: DimensionScore[] }) {
+  const { t } = useTranslation();
+  if (dimensions.length === 0) return null;
+  return (
+    <section className="tc-drawer-section">
+      <h3 className="tc-drawer-section-title">
+        {t('trustCheck.dimensionsTitle')}
+        <span className="tc-drawer-section-count">({dimensions.length})</span>
+      </h3>
+      <div className="tc-dimensions">
+        {dimensions.map((d) => (
+          <div
+            key={d.dimension}
+            className={`tc-dimension ${d.score != null && d.score < 100 ? 'warn' : ''}`}
+          >
+            <div className="tc-dimension-label">{d.dimension}</div>
+            <div className="tc-dimension-value">
+              {d.n_pass}/{d.n_total}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EscalationPanel — what the multi-round check did.
+//
+// 🔴 RENDERED EVEN WHEN NOTHING ESCALATED. "We evaluated the trigger and
+// it did not fire" and "there is no second round in this build" are
+// different facts, and a reader who sees neither concludes the second.
+// ---------------------------------------------------------------------------
+
+function EscalationPanel({ cascade }: { cascade?: CascadeBlock | null }) {
+  const { t } = useTranslation();
+  const outcome = cascade?.outcome;
+  if (!cascade || !outcome) return null;
+  return (
+    <section className="tc-drawer-section">
+      <h3 className="tc-drawer-section-title">{t('trustCheck.escalationTitle')}</h3>
+      <div className={`tc-escalation tc-escalation-${outcome}`}>
+        <div className="tc-escalation-outcome">
+          {escalationOutcomeLabel(t, outcome)}
+        </div>
+        {cascade.reason && (
+          <p className="tc-escalation-reason">{cascade.reason}</p>
+        )}
+        {cascade.round2_ran && cascade.s_round2 != null && (
+          <p className="tc-escalation-reason">
+            {t('trustCheck.escalationRound2Score', { value: Math.round(cascade.s_round2) })}
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

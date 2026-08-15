@@ -23,6 +23,31 @@
 const TRUST_LOCAL_BASE = 'http://127.0.0.1:8801';
 
 /**
+ * Hard deadline on every trust-local request.
+ *
+ * Why a deadline at all: `fetch` has no timeout of its own. A trust-local
+ * that is LISTENING but never answers — killed mid-restart while the
+ * socket stayed open, a keep-alive connection black-holed across a
+ * laptop sleep/wake, a wedged worker — leaves the request pending
+ * forever. Every loading state on this page is derived from that query,
+ * so the table sits on "Loading trust signals…" indefinitely AND the
+ * Refresh button is disabled precisely because a fetch is in flight:
+ * the user is trapped with no error, no retry and no escape short of a
+ * page reload. "Connection refused" was always handled (fetch rejects
+ * immediately → offline banner); "listening but silent" was not.
+ * Bugfix: workflow/CI/bugfix/20260814-trust-check-web-infinite-loading-no-fetch-timeout.md
+ *
+ * Why 10s: the slowest endpoint we call is GET /v1/status, whose worst
+ * case is one 5s-capped call out to aikey-local-server's vault list
+ * (server_local/sync/vault_client.py::FETCH_TIMEOUT_SECONDS) plus local
+ * SQLite reads. 10s keeps 2x headroom so a merely-slow trust-local is
+ * never misreported as a wedged one. Nothing we call is long-running by
+ * design — POST /v1/verify returns as soon as the row is written and
+ * runs the cascade on a background thread.
+ */
+const TRUST_LOCAL_TIMEOUT_MS = 10_000;
+
+/**
  * Mirrors the dict shape returned by trust-local's `_to_summary()`
  * (server_local/api/status.py). Kept identical field-for-field so the
  * server team can rename here and we'll catch the drift in tsc.
@@ -108,9 +133,146 @@ export interface TrustSummary {
   /** Source label for ``s_l2_crowd``: 'remote' | 'local_24h' | null.
    *  UI badge tells the operator where the crowd number came from. */
   s_l2_crowd_source?: string | null;
-  /** True when no per-model baseline existed for L3 scoring → s_l3
-   *  is the neutral 50 fallback, not a real measurement. */
+  /** True when no per-model baseline existed for L3 scoring.
+   *
+   *  🔴 CORRECTED 2026-08-12. This used to say "→ s_l3 is the neutral 50
+   *  fallback". That stopped being true in ai-degrade-detector 5d30594:
+   *  L3 now ABSTAINS — `s_l3` comes back `null`, not 50 — because a
+   *  neutral 50 is a measurement claim ("we measured, it was average")
+   *  about a layer that did not run. Anything on this page that reads
+   *  50 as a real rhythm score is reading a number the backend no longer
+   *  produces. */
   s_l3_baseline_missing?: boolean;
+
+  // ── 2026-08-12 dimensions ─────────────────────────────────────────
+  //
+  // Ported from the public detection platform (ai-degrade-detector
+  // probe-runner), where they had been built, measured and shipped while
+  // trust-local — the backend behind THIS page — never called them.
+  // Mirrors `server_local/api/status.py::_SUMMARY_FIELDS`.
+
+  /** Which wire format the last check spoke: "anthropic" |
+   *  "openai_compatible". Worth showing, because the same L1 or L3
+   *  number means a different measurement on each — the rules and the
+   *  rhythm windows are per-protocol. */
+  protocol?: string | null;
+
+  /** Knowledge-boundary score, 0–100.
+   *
+   *  🔴 The ONLY dimension that can see a same-family downgrade.
+   *  Calibrated live 2026-08-12: claim gpt-4o / serve gpt-4o-mini reads
+   *  100 / 100 / 95 in L1 / L2 / L3 — identical to an honest endpoint,
+   *  not merely close — while this dimension catches it 20/20 at
+   *  ~4000:1 with no false positives over 20 honest runs.
+   *
+   *  🚫 DO NOT fold this into `s_display` or any other mean. Its
+   *  underlying quantity is a likelihood ratio, and a Bayes factor
+   *  averaged into a mean stops being a Bayes factor and becomes a few
+   *  points, which a reader discounts. "4000:1 better explained by
+   *  gpt-4o-mini" is a sentence someone acts on; "s_display 91 instead
+   *  of 94" is not.
+   *
+   *  `null` whenever the dimension abstained — never 50. `kb_finding`
+   *  carries the reason, and it must be rendered instead of the number. */
+  s_knowledge_boundary?: number | null;
+  /** log10 of the likelihood ratio between the claimed model and the
+   *  best-fitting alternative. Positive favours the claim. */
+  kb_log_likelihood_ratio?: number | null;
+  /** How many boundary items produced a readable answer. Zero means the
+   *  dimension had nothing to weigh, not that it found nothing. */
+  kb_n_items?: number;
+  /** The alternative model that best explains the answers. Empty when
+   *  the dimension abstained. */
+  kb_nearest_model?: string;
+  /** Estimated share of answers better explained by the alternative —
+   *  the mixed-routing reading. `null` where it would not mean
+   *  anything, which is most honest runs. */
+  kb_mixed_route_probability?: number | null;
+  /** The finding, including the abstain sentence. Present even when
+   *  `s_knowledge_boundary` is null — that is the case where it matters
+   *  most, because a null with no reason is a silence. */
+  kb_finding?: TrustFinding | null;
+
+  /** Per-dimension pass rates over the eight capability probes
+   *  (`fixtures/questions/dimensions/capability-v1.json`).
+   *
+   *  Empty array when the model's bank carries no capability probes.
+   *  🚫 An absent dimension is absent from this list; it is never
+   *  reported as a zero, which would say "we asked and it failed". */
+  dimensions?: DimensionScore[];
+
+  /** What the multi-round escalation did, always present after a check.
+   *  See `CascadeOutcome` for why the states are kept distinct. */
+  cascade_outcome?: CascadeOutcome | null;
+  cascade?: CascadeBlock | null;
+}
+
+/** One capability dimension's result for a run. */
+export interface DimensionScore {
+  /** Bilingual label straight from the fixture, e.g.
+   *  "基础数学推理 / Basic Math Reasoning". Not translated web-side —
+   *  the fixture is the source of truth for what the probe tests, and
+   *  a second name for it here would drift. */
+  dimension: string;
+  n_total: number;
+  n_pass: number;
+  /** Pass rate × 100. Null only if the group somehow had no rows. */
+  score: number | null;
+  qids: string[];
+}
+
+/** A finding as `shared/algorithms/findings.py` serialises it. */
+export interface TrustFinding {
+  code: string;
+  /** "pass" | "fail" | "info" | "abstain". */
+  status: string;
+  /** One sentence, already written for a reader. Render it verbatim —
+   *  these strings are carefully worded about what was and wasn't
+   *  measured, and paraphrasing them web-side loses exactly that. */
+  summary: string;
+  detail?: Record<string, unknown>;
+}
+
+/**
+ * 🔴 FOUR DISTINCT OUTCOMES, DELIBERATELY NOT COLLAPSED.
+ *
+ * They read as the same silence otherwise, and the two that matter most
+ * are the ones a reader would most want separated: a run that was
+ * suspect and NOT re-checked must never render as a re-check that found
+ * nothing.
+ *
+ *  - `not_evaluated`      — round 1 produced no L1/L2 to test the trigger
+ *  - `not_triggered`      — trigger evaluated, did not fire
+ *  - `no_round2_bank`     — suspect, but this model's bank has no round 2
+ *  - `insufficient_budget`— suspect, but not enough time for a real re-check
+ *  - `round2_failed`      — round 2 started and hit an upstream error
+ *  - `ran`                — round 2 ran and was integrated
+ *
+ * `no_round2_bank` is the expected state for every bank today: the
+ * 2026-08-12 calibration moved the identity probes into round 1, because
+ * a same-family downgrade scores identically to honest in every round-1
+ * layer, so no threshold fires for it.
+ */
+export type CascadeOutcome =
+  | 'not_evaluated'
+  | 'not_triggered'
+  | 'no_round2_bank'
+  | 'insufficient_budget'
+  | 'round2_failed'
+  | 'ran';
+
+export interface CascadeBlock {
+  outcome?: CascadeOutcome;
+  round2_ran?: boolean;
+  triggered?: boolean;
+  trigger_reason?: string;
+  reason?: string;
+  s_l1_round1?: number | null;
+  s_l2_round1?: number | null;
+  s_round2?: number | null;
+  t_final?: number | null;
+  integration_scenario?: string;
+  round2_qids?: string[];
 }
 
 export interface TrustStatusListResponse {
@@ -233,36 +395,92 @@ class TrustAliasInUseError extends Error {
 }
 
 /**
+ * Runs one trust-local exchange under {@link TRUST_LOCAL_TIMEOUT_MS}.
+ *
+ * The deadline deliberately covers the response BODY too, not just the
+ * headers — a server that answers `200` and then stalls mid-stream hangs
+ * `resp.json()` exactly as badly as one that never answers at all, so
+ * `handle` runs inside the same abort window.
+ *
+ * Both cold shapes — refused (fetch rejects) and silent (we abort) — are
+ * reported as the SAME TrustLocalUnavailableError on purpose: the page
+ * already renders one honest banner for it ("trust-local is offline,
+ * start the service") and the user's next action is identical either
+ * way. The message still names which one happened so a bug report can
+ * tell them apart.
+ */
+async function withTrustLocalDeadline<T>(
+  path: string,
+  init: RequestInit | undefined,
+  handle: (resp: Response) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TRUST_LOCAL_TIMEOUT_MS);
+  const asUnavailable = (cause: unknown) =>
+    new TrustLocalUnavailableError(
+      controller.signal.aborted
+        ? new Error(
+            `no response within ${TRUST_LOCAL_TIMEOUT_MS}ms — the port is listening but not answering`,
+          )
+        : cause,
+    );
+  try {
+    let resp: Response;
+    try {
+      resp = await fetch(`${TRUST_LOCAL_BASE}${path}`, {
+        ...init,
+        // Last so the deadline always wins; no caller passes its own
+        // signal today, and one that wants to must compose it here.
+        signal: controller.signal,
+      });
+    } catch (err) {
+      // fetch throws on network/CORS issues — that's our "trust-local
+      // offline" signal. Wrap so callers can switch on the error type.
+      throw asUnavailable(err);
+    }
+    try {
+      return await handle(resp);
+    } catch (err) {
+      // Only a body that died mid-read becomes "unavailable"; the
+      // non-2xx errors `handle` raises itself must pass through intact.
+      if (controller.signal.aborted) throw asUnavailable(err);
+      throw err;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Generic fetch wrapper. Distinguishes "trust-local down" (network /
- * CORS error → wrap as TrustLocalUnavailableError so the page can show
- * the right banner) from "endpoint returned non-2xx" (let the caller
- * decide whether to surface).
+ * CORS error / no answer → wrap as TrustLocalUnavailableError so the
+ * page can show the right banner) from "endpoint returned non-2xx"
+ * (let the caller decide whether to surface).
  */
 async function trustLocalFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  let resp: Response;
-  try {
-    resp = await fetch(`${TRUST_LOCAL_BASE}${path}`, {
+  return withTrustLocalDeadline(
+    path,
+    {
       ...init,
       headers: {
         Accept: 'application/json',
         ...(init?.headers ?? {}),
       },
-    });
-  } catch (err) {
-    // fetch throws on network/CORS issues — that's our "trust-local
-    // offline" signal. Wrap so callers can switch on the error type.
-    throw new TrustLocalUnavailableError(err);
-  }
-
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '');
-    // M6 decision 3.1: manual /v1/verify is unlimited — 429 should
-    // never come back. If it does (e.g., upstream rate-limit bubble),
-    // surface it as a generic error rather than a typed
-    // rate-limit-retry-with-force path; that UI lane is gone.
-    throw new Error(`trust-local ${path} returned ${resp.status}: ${text.slice(0, 200)}`);
-  }
-  return (await resp.json()) as T;
+    },
+    async (resp) => {
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        // M6 decision 3.1: manual /v1/verify is unlimited — 429 should
+        // never come back. If it does (e.g., upstream rate-limit bubble),
+        // surface it as a generic error rather than a typed
+        // rate-limit-retry-with-force path; that UI lane is gone.
+        throw new Error(
+          `trust-local ${path} returned ${resp.status}: ${text.slice(0, 200)}`,
+        );
+      }
+      return (await resp.json()) as T;
+    },
+  );
 }
 
 export const trustLocalApi = {
@@ -373,33 +591,31 @@ export const trustLocalApi = {
     cleared_events: number;
     cleared_state: number;
   }> {
-    let resp: Response;
-    try {
-      resp = await fetch(
-        `${TRUST_LOCAL_BASE}/v1/status/${encodeURIComponent(alias)}/reset-tracking`,
-        {
-          method: 'POST',
-          headers: { Accept: 'application/json' },
-        },
-      );
-    } catch (err) {
-      throw new TrustLocalUnavailableError(err);
-    }
-    if (resp.status === 409) {
-      throw new TrustAliasInUseError(alias);
-    }
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => '');
-      throw new Error(
-        `trust-local reset-tracking returned ${resp.status}: ${text.slice(0, 200)}`,
-      );
-    }
-    return (await resp.json()) as {
-      ok: true;
-      alias_name: string;
-      cleared_events: number;
-      cleared_state: number;
-    };
+    // Same deadline as every other call — the drawer's Reset button
+    // would otherwise spin forever against a wedged trust-local. Kept
+    // on its own path (not trustLocalFetch) only because of the 409
+    // special case below.
+    return withTrustLocalDeadline(
+      `/v1/status/${encodeURIComponent(alias)}/reset-tracking`,
+      { method: 'POST', headers: { Accept: 'application/json' } },
+      async (resp) => {
+        if (resp.status === 409) {
+          throw new TrustAliasInUseError(alias);
+        }
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(
+            `trust-local reset-tracking returned ${resp.status}: ${text.slice(0, 200)}`,
+          );
+        }
+        return (await resp.json()) as {
+          ok: true;
+          alias_name: string;
+          cleared_events: number;
+          cleared_state: number;
+        };
+      },
+    );
   },
 };
 

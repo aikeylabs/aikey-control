@@ -1230,7 +1230,31 @@
       "gatewayOauthOfficial": "OAuth（官方）",
       "gatewayBrandOauthOfficial": "{{brand}} OAuth（官方）",
       "sourceAppKey": "应用密钥 · {{idTail}}…"
-    }
+    },
+    "kbTitle": "知识边界 · 模型身份",
+    "kbStatus": {
+      "pass": "与所声明的模型一致",
+      "fail": "更可能是另一个模型",
+      "info": "无定论",
+      "abstain": "未检测"
+    },
+    "kbItems": "读到的边界题数",
+    "kbRatio": "似然比",
+    "kbRatioHint": "这些回答来自所声明模型、而非最贴合的替代模型的赔率。这是唯一能分辨同族降级的维度：声称 gpt-4o 实际提供 gpt-4o-mini 的中转站，在 L1／L2／L3 上与诚实端点得分完全相同。",
+    "kbNearest": "最贴合的替代模型",
+    "kbMixed": "更像替代模型的回答占比",
+    "dimensionsTitle": "能力维度",
+    "escalationTitle": "深度复检",
+    "escalationOutcome": {
+      "not_evaluated": "未评估 — 第一轮没有产出可用于判断的分数",
+      "not_triggered": "已评估触发条件；第一轮不可疑",
+      "no_round2_bank": "第一轮可疑；该模型题库没有第二轮题目",
+      "insufficient_budget": "第一轮可疑；剩余预算不足以完成一次真正的复检",
+      "round2_failed": "第二轮已开始，但遇到上游错误",
+      "ran": "第二轮已执行并已并入结论"
+    },
+    "escalationRound2Score": "第二轮答案得分：{{value}}",
+    "protocolLabel": "协议"
   },
   "apps": {
     "loadingConnectedApps": "正在加载已连接应用…",
