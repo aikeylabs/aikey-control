@@ -18,6 +18,7 @@ const (
 	EventControlOAuthGroupVKInvalidationCompensationFailed = "control.oauth_group.vk_invalidation_compensation_failed"
 	EventControlOAuthGroupAttachMemberListFailed           = "control.oauth_group.attach_member_list_failed"
 	EventControlOAuthGroupEnableMemberListFailed           = "control.oauth_group.enable_member_list_failed"
+	EventControlOAuthGroupUtilizationReadFailed            = "control.oauth_group.utilization_read_failed"
 	EventControlSnapshotOAuthGroupResolveFailed            = "control.snapshot.oauth_group_resolve_failed"
 	EventControlSnapshotOAuthGroupBumpFailed               = "control.snapshot.oauth_group_bump_failed"
 	EventControlOrgDeliveryAssignmentReadFailed            = "control.org_delivery.assignment_read_failed"

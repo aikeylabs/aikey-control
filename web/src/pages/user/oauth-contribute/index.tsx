@@ -53,6 +53,7 @@ import {
 } from '@/shared/api/team/team-fetch';
 import { poolAuthorizeURL, poolSessionKey, poolSessionKeyCapabilities, poolSubmitCode, poolStatus, isPoolLoginError, SESSION_KEY_IDENTITY_MISMATCH } from '@/shared/api/user/pool-login';
 import { copyText } from '@/shared/utils/clipboard';
+import { sessionKeyProviderKind } from '@/shared/session-key-capability';
 // Shared page CSS (card / chip / vault table / status-dot / row-use-btn / icon-btn
 // / alias-main …), all scoped under `.vault-page`. WITHOUT injecting this the
 // classes below render unstyled (the page looked "messy"). Same opt-in as the
@@ -818,9 +819,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     staleTime: 30_000,
   });
   const sessionKeyCapabilities = sessionKeyCapabilitiesQ.data;
-  const isAnthropicSessionKeyAccount =
-    (account.provider_code === 'anthropic' && (!account.protocol_type || account.protocol_type === 'anthropic')) ||
-    (account.provider_code === 'mock' && account.protocol_type === 'anthropic');
+  const sessionKeyKind = sessionKeyProviderKind(account.provider_code || '', account.protocol_type || '');
   const sessionKeyCapabilityError = !sessionKeyCapabilities
     ? (sessionKeyCapabilitiesQ.isPending ? t('oauthContribute.sessionKeyChecking') : t('oauthContribute.sessionKeyCapabilityUnavailable'))
     : isPoolLoginError(sessionKeyCapabilities)
@@ -828,9 +827,12 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       : !sessionKeyCapabilities.available
         ? `[${sessionKeyCapabilities.reason_code || 'SESSION_KEY_UNAVAILABLE'}] ${t('oauthContribute.sessionKeyPlatformUnavailable')}`
         : '';
-  const supportsSessionKey = isAnthropicSessionKeyAccount && !sessionKeyCapabilityError;
+  const supportsSessionKey = sessionKeyKind !== null && !sessionKeyCapabilityError;
   const [loginMethod, setLoginMethod] = useState<'browser' | 'session_key'>('browser');
-  const effectiveLoginMethod = isAnthropicSessionKeyAccount ? loginMethod : 'browser';
+  const effectiveLoginMethod = sessionKeyKind ? loginMethod : 'browser';
+  const sessionKeyLabel = t(sessionKeyKind === 'codex' ? 'oauthContribute.codexSessionKeyLabel' : 'oauthContribute.sessionKeyLabel');
+  const sessionKeyPlaceholder = t(sessionKeyKind === 'codex' ? 'oauthContribute.codexSessionKeyPlaceholder' : 'oauthContribute.sessionKeyPlaceholder');
+  const sessionKeyHint = t(sessionKeyKind === 'codex' ? 'oauthContribute.codexSessionKeyHint' : 'oauthContribute.sessionKeyHint');
   const [sessionId, setSessionId] = useState('');
   const [code, setCode] = useState('');
   const [sessionKey, setSessionKey] = useState('');
@@ -1183,7 +1185,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       className="px-4 py-4 space-y-4"
       style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid var(--border)' }}
     >
-      {isAnthropicSessionKeyAccount && (
+      {sessionKeyKind && (
         <div
           className="flex items-center gap-1 border-b"
           style={{ borderBottomColor: 'var(--border)' }}
@@ -1368,7 +1370,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       </div> : (
         <div className="space-y-3">
           <p className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
-            {t('oauthContribute.sessionKeyHint')}
+            {sessionKeyHint}
           </p>
           {sessionKeyCapabilityError && (
             <div role="alert" className="rounded border px-3 py-2 text-[11px] font-mono" style={{ color: '#fca5a5', borderColor: 'rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)' }}>
@@ -1376,19 +1378,26 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             </div>
           )}
           <div className="flex items-center gap-3 flex-wrap">
-            <input
-              type="password"
+            {/* textarea has no native password type. The supported desktop
+                engines use WebkitTextSecurity to preserve masking while the
+                long Session Key soft-wraps across multiple visual lines. */}
+            <textarea
+              rows={4}
+              wrap="soft"
               autoComplete="off"
-              className="px-3 py-2 text-sm font-mono"
-              style={{ width: 360, maxWidth: '100%' }}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="px-3 py-2 text-sm font-mono resize-y"
+              style={{ width: 360, maxWidth: '100%', minHeight: 96, WebkitTextSecurity: 'disc' } as React.CSSProperties}
               value={sessionKey}
               onChange={(e) => {
                 setSessionKey(e.target.value);
                 setSessionKeyOperationID('');
                 setSessionKeyStatus(null);
               }}
-              placeholder={t('oauthContribute.sessionKeyPlaceholder')}
-              aria-label={t('oauthContribute.sessionKeyLabel')}
+              placeholder={sessionKeyPlaceholder}
+              aria-label={sessionKeyLabel}
               disabled={!supportsSessionKey || sessionKeyStartMut.isPending || sessionKeyConfirmMut.isPending}
             />
             <button
