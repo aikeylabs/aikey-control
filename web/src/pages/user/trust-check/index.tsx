@@ -44,7 +44,7 @@ import {
   useVerifyPolling,
 } from './hooks';
 import { GaugeIcon, KeyIcon, RefreshIcon, ScanIcon } from './icons';
-import { SourceTable, type VerifyErrorState } from './table';
+import { SourceTable, VerifyErrorChip, type VerifyErrorState } from './table';
 import { TRUST_CHECK_CSS } from './trust-check-css';
 
 // Resolve a derive.ts label output for rendering. derive returns a
@@ -935,7 +935,6 @@ function BaseUrlList({
   onRowClick: (row: TrustRow) => void;
 }) {
   const { t } = useTranslation();
-  void errors;
   void verifyById;
   if (groups.length === 0) {
     return (
@@ -962,6 +961,14 @@ function BaseUrlList({
         {groups.map((group) => {
           const rep = group.representative;
           const running = !!inFlight[rep.alias_name];
+          // Surface a failed Check here, not just in SourceTable. The row's
+          // score / lastCheck / Check button already all speak for the
+          // representative alias, so its error belongs on the same row —
+          // otherwise a Check the user just launched from THIS view fails
+          // silently and the row keeps showing the previous run's band
+          // (e.g. stale "TRUSTED 85" after an UPSTREAM_429 "no credits").
+          // Bugfix: 2026-08-15-trust-check-band-view-drops-verify-error.md
+          const err = errors[rep.alias_name];
           const isExpanded = expandedAlias === rep.alias_name;
           return (
             <div
@@ -1002,15 +1009,21 @@ function BaseUrlList({
                 <div className="tc-mono">{rep.checked}</div>
               </div>
               <div className="tc-baseurl-cell tc-baseurl-action">
-                <button
-                  type="button"
-                  className="tc-btn"
-                  disabled={running}
-                  onClick={() => void onCheck(rep)}
-                  title={t('trustCheck.checkRowTitle', { alias: rep.alias_name })}
-                >
-                  {running ? t('trustCheck.checking') : t('trustCheck.check')}
-                </button>
+                {/* .tc-action-cell is SourceTable's button+chip stack
+                    (flex column, gap 4px) — reused verbatim so the two
+                    views render a failed Check identically. */}
+                <div className="tc-action-cell">
+                  <button
+                    type="button"
+                    className="tc-btn"
+                    disabled={running}
+                    onClick={() => void onCheck(rep)}
+                    title={t('trustCheck.checkRowTitle', { alias: rep.alias_name })}
+                  >
+                    {running ? t('trustCheck.checking') : t('trustCheck.check')}
+                  </button>
+                  {err && <VerifyErrorChip err={err} />}
+                </div>
               </div>
             </div>
           );
