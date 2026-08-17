@@ -40,4 +40,10 @@ describe('Personal Session Key login surface', () => {
     expect(source).toContain('identityMismatchConfirmed: true');
     expect(source).toContain("sessionKeyStatus.tone === 'error' || sessionKeyStatus.tone === 'warning'");
   });
+
+  it('places shared provider-specific acquisition help beside the visible input label', () => {
+    expect(source).toContain('<SessionKeyHelp providerKind={sessionKeyKind} />');
+    expect(source).toContain('htmlFor={sessionKeyInputID}');
+    expect(source).toContain('id={sessionKeyInputID}');
+  });
 });

@@ -230,6 +230,11 @@ func (b *Bridge) InvokeWithTimeout(
 type initEnvelope struct {
 	Password  string `json:"password"`
 	RequestID string `json:"request_id,omitempty"`
+	// SessionBackend asks the CLI to remember this password so unattended
+	// starts work. omitempty keeps the wire shape unchanged for callers that
+	// do not set it. See the field's doc in aikey-cli
+	// commands_internal/init.rs for why it exists.
+	SessionBackend string `json:"session_backend,omitempty"`
 }
 
 // hookOpEnvelope: stdin shape for `aikey _internal hook-op --stdin-json`.
@@ -253,12 +258,17 @@ func (b *Bridge) InvokeInit(
 	ctx context.Context,
 	password string,
 	requestID string,
+	sessionBackend string,
 ) (*Result, error) {
 	if err := b.resolveBinary(); err != nil {
 		return nil, &InvokeError{Code: ErrCliNotFound, Msg: err.Error()}
 	}
 
-	envJSON, err := json.Marshal(initEnvelope{Password: password, RequestID: requestID})
+	envJSON, err := json.Marshal(initEnvelope{
+		Password:       password,
+		RequestID:      requestID,
+		SessionBackend: sessionBackend,
+	})
 	if err != nil {
 		return nil, &InvokeError{Code: ErrBadRequest, Msg: "marshal init envelope: " + err.Error()}
 	}

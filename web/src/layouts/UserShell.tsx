@@ -419,6 +419,38 @@ function useBreadcrumbTrail(): Crumb[] {
   return trail;
 }
 
+/**
+ * Tray hand-off — where the "back to the simple view" control comes from.
+ *
+ * 🔴 WHY A QUERY PARAM AND NOT A BUILD FLAG (2026-08-17). The desktop tray and
+ * a plain browser open the SAME console URL. The tray's Expert button is a
+ * switch between two views of one window, so it must be able to switch BACK;
+ * a user who typed the console's address themselves has nothing to go back to,
+ * and a dead "Simple" button in their toolbar would be a lie. The difference is
+ * per-visit, not per-build, so it travels on the URL: the tray appends
+ * `?from=tray&back=<its own loopback url>`.
+ *
+ * 🔴 `back` IS ATTACKER-CONTROLLABLE. Anyone can send a link with any `back`
+ * value; without the check below the console would render a button, styled as
+ * its own, that navigates wherever that link says. So it is accepted only when
+ * it is plain http on loopback — which is the only thing the tray ever serves.
+ */
+function traySimpleViewUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('from') !== 'tray') return null;
+  const back = params.get('back');
+  if (!back) return null;
+  try {
+    const target = new URL(back);
+    if (target.protocol !== 'http:') return null;
+    if (target.hostname !== '127.0.0.1' && target.hostname !== 'localhost') return null;
+    return target.toString();
+  } catch {
+    return null;
+  }
+}
+
 // ── i18n label maps ──────────────────────────────────────────────────────────
 //
 // Nav labels and group titles double as logic anchors elsewhere in this file:
@@ -735,6 +767,11 @@ export function UserShell() {
   // Production setup (personal local-server :8090 + docker team :3000)
   // is unaffected — different origins, isSingleBinaryComposed=false,
   // R7 filter and cross-app rendering work as before.
+  // Resolved once per mount: the query string does not change while the shell
+  // is alive, and re-reading it on every render would invite a
+  // navigation-dependent flicker in a control that must simply be there or not.
+  const simpleViewUrl = React.useMemo(traySimpleViewUrl, []);
+
   const isSingleBinaryComposed = React.useMemo(() => {
     // 2026-06-03: explicit `controlPlaneMode === 'trial'` signal short-
     // circuits the origin-comparison heuristic below. trial Go server
@@ -1570,6 +1607,20 @@ export function UserShell() {
             })}
           </div>
           <div className="flex items-center gap-3">
+            {/* Tray hand-off (2026-08-17): only rendered when this visit came
+                FROM the tray, so a browser-typed visit shows no dead control.
+                See traySimpleViewUrl for why the target is validated. */}
+            {simpleViewUrl && (
+              <button
+                type="button"
+                onClick={() => { window.location.href = simpleViewUrl; }}
+                className="btn btn-outline"
+                data-origin-name="Back to simple view"
+                title={t('userShell.backToSimple')}
+              >
+                {t('userShell.backToSimple')}
+              </button>
+            )}
             <LanguageSwitcher />
             {/* Phase 4G (2026-06-01): top-bar Settings entry. Gear icon-
                 only button, ghost variant so it sits visually quieter

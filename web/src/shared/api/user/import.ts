@@ -88,6 +88,23 @@ export interface UnlockResponse {
 
 export interface InitRequest {
   password: string;
+  /**
+   * Where the CLI should remember this password so unattended starts work
+   * ("keychain" | "file" | "disabled"). Omitted → nothing is cached.
+   *
+   * WHY (2026-08-17): setting a master password here creates the vault, but
+   * `aikey proxy start` runs under launchd with no terminal, so it takes the
+   * unattended path, finds an empty session cache and stops with "no master
+   * password available". Without this the user sets a password and is still
+   * looking at a dead proxy — the exact dead end the AiKey.app first-run flow
+   * exists to remove.
+   *
+   * Not "keychain as the vault's root of trust" (deferred by
+   * 20260430-个人vault-Web首次设置-方案A.md §6): the user still chooses the
+   * password, this only remembers it the way an interactive CLI prompt already
+   * does.
+   */
+  session_backend?: 'keychain' | 'file' | 'disabled';
 }
 
 export interface InitResponse {

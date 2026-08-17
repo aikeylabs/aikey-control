@@ -17,7 +17,7 @@
  */
 import { PageTitleGlyph } from '@/shared/ui/PageHeader';
 import { LIVE_PICKER_QUERY } from '@/shared/utils/query-options';
-import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect, useId } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ModalPortal } from '@/shared/ui/ModalShell';
 import { useTranslation } from 'react-i18next';
@@ -57,6 +57,10 @@ import {
 } from '@/shared/api/user/pool-login';
 import { copyText } from '@/shared/utils/clipboard';
 import { sessionKeyProviderKind } from '@/shared/session-key-capability';
+// Relative import keeps this user-owned shared component anchored to the
+// Personal package when the page is composed into Trial or Master builds,
+// whose generic `@` alias points at the host application.
+import { SessionKeyHelp } from '../../../shared/components/SessionKeyHelp';
 // Shared page CSS (card / chip / vault table / status-dot / row-use-btn / icon-btn
 // / alias-main …), all scoped under `.vault-page`. WITHOUT injecting this the
 // classes below render unstyled (the page looked "messy"). Same opt-in as the
@@ -842,6 +846,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     sessionKeyKind === 'codex' ? 'oauthContribute.codexSessionKeyPlaceholder' : 'oauthContribute.sessionKeyPlaceholder',
   );
   const sessionKeyHint = t(sessionKeyKind === 'codex' ? 'oauthContribute.codexSessionKeyHint' : 'oauthContribute.sessionKeyHint');
+  const sessionKeyInputID = useId();
   const [sessionId, setSessionId] = useState('');
   const [code, setCode] = useState('');
   const [sessionKey, setSessionKey] = useState('');
@@ -1476,37 +1481,47 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                 {sessionKeyCapabilityError}
               </div>
             )}
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* textarea has no native password type. The supported desktop
-                engines use WebkitTextSecurity to preserve masking while the
-                long Session Key soft-wraps across multiple visual lines. */}
-              <textarea
-                rows={4}
-                wrap="soft"
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                className="px-3 py-2 text-sm font-mono resize-y"
-                style={
-                  {
-                    width: 360,
-                    maxWidth: '100%',
-                    minHeight: 96,
-                    WebkitTextSecurity: 'disc',
-                  } as React.CSSProperties
-                }
-                value={sessionKey}
-                onChange={(e) => {
-                  setSessionKey(e.target.value);
-                  setSessionKeyOperationID('');
-                  setSessionKeyIdentityMismatch(false);
-                  setSessionKeyStatus(null);
-                }}
-                placeholder={sessionKeyPlaceholder}
-                aria-label={sessionKeyLabel}
-                disabled={!supportsSessionKey || sessionKeyStartMut.isPending || sessionKeyConfirmMut.isPending}
-              />
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="space-y-1.5" style={{ width: 360, maxWidth: '100%' }}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    htmlFor={sessionKeyInputID}
+                    className="text-[10px] font-mono uppercase tracking-wider"
+                    style={{ color: 'var(--muted-foreground)' }}
+                  >
+                    {sessionKeyLabel}
+                  </label>
+                  {sessionKeyKind && <SessionKeyHelp providerKind={sessionKeyKind} />}
+                </div>
+                {/* textarea has no native password type. The supported desktop
+                  engines use WebkitTextSecurity to preserve masking while the
+                  long Session Key soft-wraps across multiple visual lines. */}
+                <textarea
+                  id={sessionKeyInputID}
+                  rows={4}
+                  wrap="soft"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="w-full px-3 py-2 text-sm font-mono resize-y"
+                  style={
+                    {
+                      minHeight: 96,
+                      WebkitTextSecurity: 'disc',
+                    } as React.CSSProperties
+                  }
+                  value={sessionKey}
+                  onChange={(e) => {
+                    setSessionKey(e.target.value);
+                    setSessionKeyOperationID('');
+                    setSessionKeyIdentityMismatch(false);
+                    setSessionKeyStatus(null);
+                  }}
+                  placeholder={sessionKeyPlaceholder}
+                  disabled={!supportsSessionKey || sessionKeyStartMut.isPending || sessionKeyConfirmMut.isPending}
+                />
+              </div>
               <button
                 type="button"
                 className="row-use-btn"

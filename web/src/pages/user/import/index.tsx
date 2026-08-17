@@ -1174,7 +1174,13 @@ export default function UserBulkImportPage() {
       return;
     }
     setInitError(null);
-    initMut.mutate({ password: initPassword });
+    // session_backend (2026-08-17): remember the password so the background
+    // proxy can start without a terminal. Without it the user finishes this
+    // form and the proxy still stops with "no master password available" —
+    // and on the AiKey.app path there is no terminal to answer it from.
+    // 'keychain' rather than 'file': the OS store is protected by the login
+    // session, an encrypted file on disk is protected by a key next to it.
+    initMut.mutate({ password: initPassword, session_backend: 'keychain' });
   };
 
   // F-6 P0 review fix (2026-04-23): AbortController refs for in-flight
