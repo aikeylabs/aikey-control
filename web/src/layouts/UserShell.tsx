@@ -435,17 +435,59 @@ function useBreadcrumbTrail(): Crumb[] {
  * its own, that navigates wherever that link says. So it is accepted only when
  * it is plain http on loopback — which is the only thing the tray ever serves.
  */
-function traySimpleViewUrl(): string | null {
-  if (typeof window === 'undefined') return null;
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('from') !== 'tray') return null;
-  const back = params.get('back');
+const TRAY_BACK_KEY = 'aikey.trayBackUrl';
+
+/** Accepts a candidate `back` value, or null. See the 🔴 note above: this is
+ *  the only thing standing between an attacker-supplied link and a button that
+ *  looks like ours. Applied on every read — including reads from storage — so
+ *  there is exactly one definition of "acceptable". */
+function validTrayBackUrl(back: string | null): string | null {
   if (!back) return null;
   try {
     const target = new URL(back);
     if (target.protocol !== 'http:') return null;
     if (target.hostname !== '127.0.0.1' && target.hostname !== 'localhost') return null;
     return target.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 🔴 The origin has to OUTLIVE the URL that carried it (2026-08-17).
+ *
+ * Reading `location.search` at mount looked right and produced no button at
+ * all: the tray linked at `/`, the app redirects that to `/user/overview`, and
+ * the redirect drops the query — so by the time this ran there was nothing to
+ * read. Even with that fixed, the params vanish the moment the user clicks
+ * anything in the console, and the way back would disappear with them.
+ *
+ * sessionStorage is the right lifetime: per-tab, gone when the tab closes,
+ * which is exactly "this visit came from the tray". Not localStorage — that
+ * would keep offering a way back to a tray port that no longer exists, days
+ * later, in a window the user opened themselves.
+ */
+function traySimpleViewUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('from') === 'tray') {
+    const fresh = validTrayBackUrl(params.get('back'));
+    if (fresh) {
+      try {
+        window.sessionStorage.setItem(TRAY_BACK_KEY, fresh);
+      } catch {
+        // Private mode, storage disabled, quota. The button still works on
+        // this page; it just will not survive navigation. Degrading is better
+        // than throwing inside a layout.
+      }
+      return fresh;
+    }
+  }
+
+  try {
+    // Re-validated on read: same rule, one place, no trust in storage either.
+    return validTrayBackUrl(window.sessionStorage.getItem(TRAY_BACK_KEY));
   } catch {
     return null;
   }

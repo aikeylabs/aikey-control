@@ -74,6 +74,7 @@ type Bridge struct {
 	// BinaryPath is the resolved aikey executable. Empty => look up lazily.
 	BinaryPath string
 	// Timeout applied to each invocation unless the caller's ctx deadline is sooner.
+	// NOTE: vault init does not use it — see initTimeout.
 	Timeout time.Duration
 	Logger  *slog.Logger
 }
@@ -254,6 +255,11 @@ type hookOpEnvelope struct {
 // Why a separate method rather than reusing Invoke: init.rs reads its own
 // envelope shape (no vault_key_hex; vault doesn't exist yet) so the
 // standard envelope wrapper would just add fields the cli ignores.
+// initTimeout bounds vault creation. Generous on purpose: the only thing it
+// protects against is a wedged subprocess, while the normal path may legitimately
+// sit for a minute or more waiting for the user to answer a keychain dialog.
+const initTimeout = 3 * time.Minute
+
 func (b *Bridge) InvokeInit(
 	ctx context.Context,
 	password string,
@@ -273,7 +279,20 @@ func (b *Bridge) InvokeInit(
 		return nil, &InvokeError{Code: ErrBadRequest, Msg: "marshal init envelope: " + err.Error()}
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, b.Timeout)
+	// 🔴 init gets its OWN deadline, and a long one, because this call can block
+	// on a HUMAN (2026-08-17).
+	//
+	// Creating the vault writes the password to the OS keychain, and macOS
+	// answers that with a modal — "aikey wants to use your confidential
+	// information stored in aikey-cli" — that waits for the user to click.
+	// Against the 15s default the CLI was killed while that dialog was still on
+	// screen, and the setup page reported "cli did not respond within 15s" to a
+	// user who was doing exactly the right thing.
+	//
+	// Every other bridge call is machine-to-machine and a short deadline is a
+	// health check; this one is not, so it is timed for a person reading a
+	// dialog rather than for a subprocess that is misbehaving.
+	callCtx, cancel := context.WithTimeout(ctx, initTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(callCtx, b.BinaryPath, "_internal", "init", "--stdin-json")
@@ -290,7 +309,9 @@ func (b *Bridge) InvokeInit(
 		if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
 			return nil, &InvokeError{
 				Code: ErrCliTimeout,
-				Msg:  fmt.Sprintf("cli did not respond within %s", b.Timeout),
+				Msg: fmt.Sprintf("the master password was not set within %s. "+
+					"If macOS asked for permission to use your keychain, choose "+
+					"\"Always Allow\" and try again.", initTimeout),
 			}
 		}
 		if b.Logger != nil {
