@@ -6,8 +6,8 @@ describe('Personal Session Key login surface', () => {
   it('keeps Browser OAuth and Session Key as coexisting tabs', () => {
     expect(source).toContain("(['browser', 'session_key'] as const)");
     expect(source).toContain('role="tablist"');
-    expect(source).toContain("oauthContribute.browserLoginTab");
-    expect(source).toContain("oauthContribute.sessionKeyLoginTab");
+    expect(source).toContain('oauthContribute.browserLoginTab');
+    expect(source).toContain('oauthContribute.sessionKeyLoginTab');
   });
 
   it('chooses the login method before rendering Browser OAuth steps', () => {
@@ -17,7 +17,7 @@ describe('Personal Session Key login surface', () => {
     expect(tabs).toBeGreaterThanOrEqual(0);
     expect(egress).toBeGreaterThan(tabs);
     expect(accountLogin).toBeGreaterThan(egress);
-    expect(source).toContain("effectiveLoginMethod === 'browser' && <div");
+    expect(source).toContain("effectiveLoginMethod === 'browser' && (");
   });
 
   it('exposes Session Key through the shared Claude and Codex capability rule', () => {
@@ -27,14 +27,17 @@ describe('Personal Session Key login surface', () => {
     expect(source).toContain('oauthContribute.codexSessionKeyHint');
   });
 
-  it('uses one masked multiline textarea and one automatic confirmation action', () => {
+  it('uses one masked multiline textarea and changes the same action to Confirm again on mismatch', () => {
     expect(source).toContain('<textarea');
     expect(source).toContain('rows={4}');
     expect(source).toContain('wrap="soft"');
     expect(source).toContain('spellCheck={false}');
     expect(source).toContain("WebkitTextSecurity: 'disc'");
-    expect(source).toContain('onClick={startSessionKeySignIn}');
-    expect(source).toContain("sessionKeyConfirmMut.mutate");
-    expect(source).toContain("role={sessionKeyStatus.tone === 'error' ? 'alert' : 'status'}");
+    expect(source).toContain('startSessionKeySignIn');
+    expect(source).toContain('sessionKeyConfirmMut.mutate');
+    expect(source).toContain("sessionKeyStatus?.tone === 'warning'");
+    expect(source).toContain('oauthContribute.sessionKeyConfirmAgain');
+    expect(source).toContain('identityMismatchConfirmed: true');
+    expect(source).toContain("sessionKeyStatus.tone === 'error' || sessionKeyStatus.tone === 'warning'");
   });
 });
