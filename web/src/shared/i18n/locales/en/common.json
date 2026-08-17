@@ -303,7 +303,6 @@
     "unhideKey": "Unhide key",
     "hideKeyTitle": "Tuck this key away from the list when the toolbar pin is on. View preference only — the key keeps working, even if it is in use.",
     "unhideKeyTitle": "Show this key in the list again.",
-    "loadFailed": "Failed to load: ",
     "lastRefreshed": "Last refreshed",
     "refresh": "Refresh",
     "updatedPrefix": "Updated ",

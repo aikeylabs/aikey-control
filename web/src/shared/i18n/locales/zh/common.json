@@ -303,7 +303,6 @@
     "unhideKey": "取消隐藏",
     "hideKeyTitle": "在工具栏图钉点亮时将这条密钥从列表收起。仅影响显示——即使正在使用中，密钥也照常工作。",
     "unhideKeyTitle": "让这条密钥重新显示在列表中。",
-    "loadFailed": "加载失败：",
     "lastRefreshed": "最近刷新",
     "refresh": "刷新",
     "updatedPrefix": "已更新 ",

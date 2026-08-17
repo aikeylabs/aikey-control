@@ -1880,7 +1880,20 @@ export default function UserVaultPage() {
 
             <div className="overflow-x-auto">
               {listLoading && <EmptyState message={t('vault.emptyLoading')} />}
-              {listError && <EmptyState message={`${t('vault.loadFailed')}${(listError as Error).message}`} />}
+              {/* R2 of the read-path error-visibility spec (workflow/CI/
+                  requirements/2026-07-26-read-path-error-visibility.md):
+                  errors carry a CODE and an actionable suggestion — bare
+                  `err.message` and a lone "Failed to load" are both forbidden.
+                  This branch predates that spec and was left untouched by the
+                  2026-07-26 pass ("已有内联错误处理的地方保留不动"), so it kept
+                  rendering `加载失败: Network Error` — a dead end for the user.
+                  Now routed through the same parseApiError → ApiErrorDisplay
+                  pair every other error surface uses. */}
+              {listError && (
+                <div className="px-5 py-10">
+                  <ApiErrorDisplay error={parseApiError(listError)} />
+                </div>
+              )}
               {!listLoading && !listError && records.length > 0 && filtered.length === 0 && (
                 // 防呆 (2026-07-15): when the hide pin is what emptied the
                 // view, say so — "no match" would send the user hunting
@@ -7802,5 +7815,7 @@ import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { providerBrandColor } from '../_shared/provider-brand';
 import { VAULT_PAGE_SKIN_V1 } from '../_shared/vault-page-skin';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
+import { ApiErrorDisplay } from '@/shared/ui/ApiErrorDisplay';
+import { parseApiError } from '@/shared/utils/api-error';
 import { isRowClickExempt } from '@/shared/utils/row-click-guard';
 const VAULT_CSS = KEYS_PAGE_CSS;
