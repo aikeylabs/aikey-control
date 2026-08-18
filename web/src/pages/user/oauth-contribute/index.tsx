@@ -313,7 +313,7 @@ export default function OAuthContributePage() {
   return (
     <div className="vault-page h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
       <style>{KEYS_PAGE_CSS}</style>
-      <div className="flex-1 overflow-y-auto">
+      <div className="vault-page-scroll flex-1 overflow-y-auto">
         <div className="px-6 py-5 space-y-5">
           {/* Sub-component queries (RoutedActionPanel / AddAccountModal) are
               covered by the global DataFetchErrorBanner. */}
@@ -338,15 +338,18 @@ export default function OAuthContributePage() {
                 {t('oauthContribute.pageDescription')}
               </div>
             </div>
-            {/* 2026-07-31: switch-log drill-down — the allocation engine's
-                account-switch decision trail (third-level page, no menu item). */}
+            {/* Scheduling-log drill-down (third-level page, no menu item).
+                2026-08-18: this replaces the pair of buttons that used to sit
+                here — the switch log was a strict subset of this timeline (same
+                decision rows, fewer sources), so two entries showed the member
+                overlapping content and made them guess which to open. */}
             <button
               type="button"
               className="row-use-btn ml-auto flex-shrink-0"
               style={{ height: 34 }}
-              onClick={() => navigate('/user/team-oauth/switch-log')}
+              onClick={() => navigate('/user/team-oauth/scheduling-log')}
             >
-              {t('switchLog.entryButton')}
+              {t('mySchedLog.entryButton')}
             </button>
             {/* R24: employee self-service add — opens the modal to store an
                 account (email+password) into a pool group the member has joined. */}

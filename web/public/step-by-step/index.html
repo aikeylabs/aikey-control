@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AiKey · 员工安装与日常使用 · 图文步骤</title>
+<style>
+:root{--bg:#18181b;--card:#27272a;--border:rgba(244,244,245,.085);--fg:#f4f4f5;
+  --muted:#a1a1aa;--faint:#71717a;--primary:#facc15;--primary-dim:#ca8a04;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:
+  radial-gradient(circle at 78% -10%,rgba(250,204,21,.05),transparent 32rem),#18181b;
+  color:var(--fg);font:15px/1.7 var(--sans);-webkit-font-smoothing:antialiased}
+header{position:sticky;top:0;z-index:10;height:56px;display:flex;align-items:center;
+  justify-content:space-between;padding:0 24px;border-bottom:1px solid rgba(255,255,255,.05);
+  background:rgba(0,0,0,.35);backdrop-filter:blur(12px)}
+.brand{display:flex;align-items:center;gap:10px;font:700 14px var(--mono)}
+.mark{width:26px;height:26px;border-radius:6px;background:#0c0c0e;border:1px solid var(--primary-dim);
+  display:grid;place-items:center;font-size:10px;color:#fef3c7}
+header a{color:var(--muted);font:700 11px var(--mono);letter-spacing:.08em;text-decoration:none}
+header a:hover{color:var(--primary)}
+main{max-width:820px;margin:0 auto;padding:40px 20px 80px}
+h2{font:700 clamp(24px,3.4vw,32px)/1.25 var(--mono);letter-spacing:-.02em;margin:0 0 8px}
+h3{font:700 19px var(--mono);margin:44px 0 10px;padding-top:22px;border-top:1px solid rgba(255,255,255,.06)}
+h4{font:700 15px var(--mono);color:var(--primary);margin:28px 0 8px}
+p{margin:12px 0;color:#d4d4d8}
+a{color:var(--primary)}
+code{font:12.5px var(--mono);background:rgba(22,22,26,.9);border:1px solid var(--border);
+  border-radius:4px;padding:1px 5px;color:var(--primary)}
+pre{background:rgba(22,22,26,.88);border:1px solid var(--border);border-radius:8px;
+  padding:14px;overflow-x:auto;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+pre code{background:none;border:0;padding:0;display:block;line-height:1.6}
+blockquote{margin:14px 0;padding:10px 14px;border-left:3px solid var(--primary-dim);
+  border-radius:0 7px 7px 0;background:rgba(250,204,21,.05);color:var(--muted);font-size:13.5px}
+blockquote p{margin:4px 0;color:inherit}
+ul{margin:10px 0;padding-left:22px;color:#d4d4d8}
+figure{margin:18px 0}
+figure img{max-width:100%;border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 18px 50px rgba(0,0,0,.35)}
+figcaption{margin-top:6px;font:11px var(--mono);color:var(--faint)}
+.doc-ref{color:#d4d4d8;font-weight:600}
+.src-note{margin-top:56px;padding-top:18px;border-top:1px solid rgba(255,255,255,.06);
+  font:11px var(--mono);color:var(--faint)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="mark">AK</span>AiKey</div>
+  <nav><a href="/user/cli-guide">CLI GUIDE</a></nav>
+</header>
+<main>
+<h2>4. 员工：安装 + 日常使用（约 10 分钟）</h2>
+<p>目前仅支持 MAC/Windows 环境安装。</p>
+<h3>4.1 装客户端（离线包）</h3>
+<p>企业私有部署的员工机通常连不上公网 —— 用运维发给你的<strong>个人版离线包</strong>安装（和 §2 集群离线包同一套路：解包 → <code>--offline</code> 装，物料自带、全程不联网）：</p>
+<p><strong>macOS / Linux</strong>：</p>
+<pre><code>tar -xzf aikey-personal_&lt;版本&gt;_mac_linux_&lt;stamp&gt;.tar.gz &amp;&amp; cd aikey-personal_&lt;版本&gt;_mac_linux
+sh local-install.sh --offline
+source ~/.zshrc      # 或 ~/.bashrc，让 PATH 立即生效</code></pre>
+<p><code>--offline</code> 会从包内 <code>artifacts/</code> 装好 CLI + 本地代理 + 控制台（合规检测 / 降智检测一并装），不访问外网。</p>
+<p><strong>Windows</strong>：用 <code>aikey-personal_&lt;版本&gt;_windows_&lt;stamp&gt;.zip</code>，PowerShell 原生安装（无需 WSL）；详见包内 README 或 <span class="doc-ref">quickstart-personal</span>。</p>
+<figure><img src="assets/personal-step1-install-output.png" alt="安装完成的终端输出（aikey 已装到 ~/.aikey/bin）" loading="lazy"><figcaption>安装完成的终端输出（aikey 已装到 ~/.aikey/bin）</figcaption></figure>
+<h3>4.2 拿到能用的 Key</h3>
+<blockquote><p>💻 <strong>Windows 用户请用 PowerShell</strong>：本节及后续的 <code>aikey</code> / <code>claude</code> 命令都在 <strong>PowerShell</strong> 里运行（不要用旧的 CMD 命令提示符）。打开方式：开始菜单搜索 "PowerShell" 打开，或在文件夹里按住 Shift 右键选「在此处打开 PowerShell 窗口」。命令本身与截图（macOS 终端）一致，只是终端换成 PowerShell。</p></blockquote>
+<p><strong>主推 · 连控制台领团队虚拟 KEY（form-①）</strong> —— 用管理员邀请你的那个邮箱登录：</p>
+<pre><code>aikey login --control-url http://&lt;控制台地址&gt;:3000   # 浏览器授权；这一步同时"认领席位"
+aikey use                                            # 上下箭头选刚分给你的虚拟 KEY；接集群自动选可用节点、配好工具</code></pre>
+<figure><img src="assets/dev-step3-aikey-login-terminal.png" alt="aikey login 登录认领" loading="lazy"><figcaption>aikey login 登录认领</figcaption></figure>
+<figure><img src="assets/dev-step4-vault-key-list.png" alt="同步后能看到管理员分给你的团队虚拟 KEY" loading="lazy"><figcaption>同步后能看到管理员分给你的团队虚拟 KEY</figcaption></figure>
+<blockquote><p>⚠ <strong>注意</strong>：管理员"签发 KEY"前需要你<strong>先登录认领席位</strong>（§3.3 的关键顺序）。登录后没看到 KEY？让管理员确认已签发，再 <code>aikey key sync</code> 同步一次。</p></blockquote>
+<h4>用飞书 SSO 登录（form-① 的可选方式，管理员开启后）</h4>
+<p>如果管理员在控制面配置了<strong>飞书 SSO</strong>，<code>aikey login</code> 打开的登录页会在邮件登录下方多出一个 <strong>Continue with Feishu</strong> 按钮 —— 员工<strong>不用填邮箱、不用等激活邮件</strong>，用飞书身份直接登录。命令不变，还是上面那条 <code>aikey login --control-url ...</code>。</p>
+<blockquote><p>⚠ <strong>前提</strong>：管理员需先按 <span class="doc-ref">成员 SSO 登录</span> 在控制面配好飞书应用（一次性）。没配的话登录页只有邮件登录，不显示这个按钮。</p></blockquote>
+<p>浏览器打开登录页，邮箱表单下方多出 <strong>Continue with Feishu</strong>：</p>
+<figure><img src="assets/feishu-step1-login-page-button.png" alt="登录页：邮件登录下方多出 Continue with Feishu 按钮" loading="lazy"><figcaption>登录页：邮件登录下方多出 Continue with Feishu 按钮</figcaption></figure>
+<p>点它 → 跳到<strong>飞书自己的授权页</strong>扫码 / 确认授权（AiKey 全程不经手你的飞书账号密码）→ <strong>授权完直接进控制台</strong>，中间没有邮箱表单、也不发邮件。<strong>第一次和以后每一次都一样</strong>。</p>
+<p>授权返回后看到 <strong>Signed In</strong>（"已登录"），显示"以 XXX 身份经飞书登录"，随后<strong>自动跳进控制台</strong>（也可以直接点 <strong>Open Console</strong>）：</p>
+<figure><img src="assets/feishu-step2-signed-in-landing.png" alt="授权返回：Signed In，随后自动进入控制台" loading="lazy"><figcaption>授权返回：Signed In，随后自动进入控制台</figcaption></figure>
+<p><strong>登录成功后分两种情况</strong>：</p>
+<ul><li><strong>你还没有席位</strong> → 控制台顶部出现一条<strong>可关掉</strong>的提示：<strong>「账号已就绪 —— 尚未分配席位」</strong>。这<strong>不是登录失败</strong> —— 账号已经建好了（左下角能看到你的身份），只是还没有"工位"，所以密钥和额度是 0，其它页面照常能看。你会<strong>自动出现在管理员的「待分配席位」名单里</strong>（不用把邮箱报给他），管理员点一下<strong>分配席位</strong>（§3.3），你刷新页面即可用。</li></ul>
+<figure><img src="assets/feishu-step3-console-no-seat.png" alt="没有席位时的控制台：顶部「账号已就绪 —— 尚未分配席位」提示条，密钥/席位均为 0" loading="lazy"><figcaption>没有席位时的控制台：顶部「账号已就绪 —— 尚未分配席位」提示条，密钥/席位均为 0</figcaption></figure>
+<ul><li><strong>你已经有席位</strong>（管理员分配过，或开了自动开席） → 提示条消失，「我的席位」变成 1，立刻能用：终端里的 <code>aikey login</code> 会自动拿到 Key，之后照上面主推流程 <code>aikey use</code> 选 Key 即可。</li></ul>
+<figure><img src="assets/feishu-step4-console-seated.png" alt="有席位后的控制台：提示条消失，「我的席位」为 1" loading="lazy"><figcaption>有席位后的控制台：提示条消失，「我的席位」为 1</figcaption></figure>
+<blockquote><p>💡 <strong>飞书不返回邮箱是正常的</strong>：飞书的邮箱是可选字段，实测<strong>即使授予了读邮箱权限也基本不返回</strong>。这条登录链路<strong>不依赖邮箱</strong> —— 登录、建账号、开席都不需要它。所以别指望"用飞书登录后管理员就能按邮箱找到我"，管理员是在「待分配席位」名单里按<strong>飞书姓名</strong>认你的（见 §3.3）。</p></blockquote>
+<blockquote><p>⚠ <strong>授权没过怎么办</strong>：在飞书页面<strong>拒绝授权</strong>、或登录链接过期 / 校验失败时，页面会明确报错 <strong>"SSO login could not continue"</strong> 并给一个 <strong>Try again</strong> 按钮；此时<strong>不会签发任何 Key/Token</strong>，邮件登录（form-①）也照常可用。</p></blockquote>
+<figure><img src="assets/feishu-step5-declined-error.png" alt="拒绝授权时的可重试错误页" loading="lazy"><figcaption>拒绝授权时的可重试错误页</figcaption></figure>
+<p><strong>备选 · 也可以用自己的 Key（离线、不连服务端）</strong> —— 在 <code>aikey web</code> 的 <strong>Vault</strong> 页加，或用 CLI：</p>
+<pre><code>aikey add my-key &amp;&amp; aikey use my-key      # 自己的 API KEY，存进本地加密库，工具看不到真实密钥
+aikey auth login claude                   # 或 codex / kimi_code —— 用 Claude Pro/Max、ChatGPT Plus 等订阅账号</code></pre>
+<figure><img src="assets/personal-step3-add-key-form.png" alt="Vault 页添加自己的 Key" loading="lazy"><figcaption>Vault 页添加自己的 Key</figcaption></figure>
+<blockquote><p>⚠ <strong>注意</strong>：页面顶部出现 <strong>「Install hook」横幅时点一下安装</strong> —— 它把 shell hook 写进你的 shell 配置，新开终端里 <code>claude</code> / <code>codex</code> / <code>kimi</code> 才能自动认到当前 Key。</p></blockquote>
+<figure><img src="assets/personal-step3-install-hook-banner.png" alt="点顶部 Install hook 横幅" loading="lazy"><figcaption>点顶部 Install hook 横幅</figcaption></figure>
+<h3>4.3 示例一：运行 claude，聊完看费用小票</h3>
+<p>打开<strong>一个新终端</strong>（让 hook 生效），直接用你常用的工具：</p>
+<pre><code>claude        # 或 codex / kimi —— 本地代理自动注入 Key，无需手填</code></pre>
+<figure><img src="assets/personal-step4-claude-interactive.png" alt="新终端运行 claude 的交互界面" loading="lazy"><figcaption>新终端运行 claude 的交互界面</figcaption></figure>
+<p>聊完退出会话后，终端会打印一份<strong>费用小票</strong>：本次 token 用量 + 估算费用 —— 不用等月底账单，实时把控成本。</p>
+<figure><img src="assets/personal-step4-cost-receipt.png" alt="claude 退出后的费用小票（token + 估算费用）" loading="lazy"><figcaption>claude 退出后的费用小票（token + 估算费用）</figcaption></figure>
+<h3>4.4 示例二：额度不足，不退出会话就切 Key</h3>
+<p>额度在长对话中途用完时，<strong>不用退出正在跑的 <code>claude</code></strong> —— 另开一个终端切一下，运行中的会话下一次请求就用新 Key 继续：</p>
+<pre><code>aikey use &lt;另一个 Key&gt;      # 全局切换；正在跑的会话无缝接上新 Key</code></pre>
+<figure><img src="assets/personal-step5-cli-aikey-use.png" alt="aikey use 切换当前 Key" loading="lazy"><figcaption>aikey use 切换当前 Key</figcaption></figure>
+<blockquote><p>也可在 <code>aikey web</code> 的 Vault 页点另一个 Key 设为当前。临时只在本终端切、关了就恢复，用 <code>aikey activate &lt;Key&gt;</code> / <code>aikey deactivate</code>。</p></blockquote>
+<h3>4.5 示例三：看用量统计</h3>
+<pre><code>aikey web        # 浏览器打开本机控制台 → Usage / Dashboard</code></pre>
+<p>控制台按 Key / 账号 / provider 展示用量趋势 + token 结构（cache 占比、请求量、provider 分布），方便发布前后做费用复盘。</p>
+<figure><img src="assets/personal-step6-usage-dashboard.png" alt="用量 Dashboard：token 趋势 + provider 分布" loading="lazy"><figcaption>用量 Dashboard：token 趋势 + provider 分布</figcaption></figure>
+<h3>4.6 自检（出问题先跑这几条）</h3>
+<pre><code>aikey doctor      # 一键体检（CLI / 代理 / Vault / 网络 / 管道）
+aikey test        # 当前 Key 连通性：Ping → 代理 → API → Chat 四步
+aikey web         # 网页控制台看 Key 和用量</code></pre>
+<blockquote><p>完整命令与高级用法（第三方客户端接入、Trust Check 降智检测、Windows 安装等）：<span class="doc-ref">quickstart-personal</span>。</p></blockquote>
+<p class="src-note">本页由交付文档《快速开始 · §4 员工：安装 + 日常使用》在构建期生成 —— 文档更新后重新构建即为最新。</p>
+</main>
+</body>
+</html>

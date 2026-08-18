@@ -1774,7 +1774,7 @@ export default function UserVaultPage() {
 
       {/* The shell already draws breadcrumb / Invite; we render the 3.1
           content stack inside the scroll region. */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="vault-page-scroll flex-1 overflow-y-auto">
         {/* Full-width content. The old max-w-[1200px] cap mirrored the
             design mock's centered desktop preview, but on 1440+ px
             external displays it left large empty gutters and wasted

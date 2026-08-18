@@ -120,6 +120,7 @@
     "appShell.routes.provider-accounts",
     "appShell.routes.quota",
     "appShell.routes.route-groups",
+    "appShell.routes.scheduling-log",
     "appShell.routes.seats",
     "appShell.routes.settings",
     "appShell.routes.triage",

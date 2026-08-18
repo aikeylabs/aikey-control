@@ -1,4 +1,4 @@
-import { PROVIDER_CATALOG } from '@/shared/generated/provider-registry';
+import { familyOfProvider } from '@/shared/generated/provider-registry';
 /** displayProtocolFamily normalizes a TEAM record's wire protocol into the
  *  user-facing Client Route used by the key pages (Vault, Team Keys).
  *
@@ -44,8 +44,11 @@ export function familyOfProviderCode(code: string): string {
   // The registry entry's own contract ("family defaults to code for
   // single-platform families") is exactly the fallback below, so unknown and
   // single-platform codes behave as before.
-  const entry = PROVIDER_CATALOG.find((e) => e.code.toLowerCase() === lc);
-  return entry ? entry.family.toLowerCase() : lc;
+  // 🔴 Delegated, not re-implemented (2026-08-18). The same lookup existed
+  // here and in the codegen'"'"'s own output; ProviderMultiSelect was about to
+  // become a third. One exit, generated from the YAML, so a family change
+  // cannot be half-applied.
+  return familyOfProvider(lc);
 }
 
 /** Minimal two-axis binding shape shared by the key pages. */

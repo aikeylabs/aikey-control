@@ -360,6 +360,7 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   // (header button entry, no sidebar item). Breadcrumb nests like Import →
   // Vault: 用户 / 团队OAuth / 切换日志.
   'switch-log':   { label: 'Switch Log', parent: 'team-oauth' },
+  'scheduling-log': { label: 'Scheduling Log', parent: 'team-oauth' },
   vault:          { label: 'Vault',      originName: 'My Vault' },
   'usage-ledger': { label: 'Usage',      originName: 'Usage Ledger' },
   // 2026-07-08: team-usage-ledger + performance were absent here, so the
@@ -1617,7 +1618,16 @@ export function UserShell() {
 
       {/* ── Main ── */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        <header className="vault-header h-16 flex items-center justify-between px-6 flex-shrink-0 z-10">
+        {/* 🔴 Absolutely positioned, NOT a flex sibling (2026-08-18, user
+            decision A). The header used to sit above the scroll container in
+            normal flow, which meant no content ever passed beneath it — and
+            `backdrop-filter` on a bar with nothing behind it blurs a flat
+            colour, i.e. renders no glass at all. Overlaying it on the scroll
+            container is what makes the frosted effect real; the container
+            below compensates with pt-16 so page content still starts under
+            the bar rather than behind it.
+            Dual-edit mirror: keep identical in control/web + master/web. */}
+        <header className="vault-header h-16 flex items-center justify-between px-6 absolute top-0 left-0 right-0 z-20">
           <div className="flex items-center text-sm font-mono" style={{ color: 'var(--muted-foreground)' }}>
             <span data-origin-name="User Console">{t('userShell.breadcrumbUser')}</span>
             {breadcrumbTrail.map((crumb, i) => {
@@ -1694,7 +1704,7 @@ export function UserShell() {
             so routes that overflow vs fit don't reflow the content ~6px sideways
             on nav. Dual-edit mirror: keep identical in control/web + master/web.
             bugfix 2026-07-22-scrollbar-gutter-content-reflow. */}
-        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] pt-16">
           {/* Account without a seat: shown at the top of every console view
               because the member can reach any of them and none of them work.
               Dismissible — only an administrator can resolve it. */}

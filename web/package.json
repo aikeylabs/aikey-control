@@ -16,8 +16,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "gen:provider-registry": "node scripts/generate-provider-registry.mjs",
-    "prebuild": "node scripts/generate-provider-registry.mjs",
+    "gen:provider-registry": "node scripts/generate-provider-registry.mjs && node scripts/generate-step-by-step.mjs",
+    "prebuild": "node scripts/generate-provider-registry.mjs && node scripts/generate-step-by-step.mjs",
     "build": "npm run gen:provider-registry && tsc && vite build",
     "build:user": "npm run gen:provider-registry && cross-env VITE_AUTH_MODE=local_bypass tsc && cross-env VITE_AUTH_MODE=local_bypass vite build",
     "build:user-nocheck": "npm run gen:provider-registry && cross-env VITE_AUTH_MODE=local_bypass vite build",

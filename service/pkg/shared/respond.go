@@ -43,11 +43,20 @@ func HandleDomainErr(w http.ResponseWriter, err error) {
 	DomainErrorResponse(w, SysInternal())
 }
 
+// HeaderErrorCode carries the domain error code on every rejected response.
+// Response-direction only (control → client), so it never rides an upstream
+// request (the proxy's X-Aikey-* strip rule concerns the other direction).
+// Two consumers: the LoggingMiddleware rejection WARN reads it back so the
+// server log names WHICH rule rejected the request, and tests/ops can match on
+// it without parsing the body.
+const HeaderErrorCode = "X-Aikey-Error-Code"
+
 // DomainErrorResponse converts a DomainError to an HTTP response,
 // including any structured meta fields (field, rule, upstream_status, etc.).
 // Internal-only meta (db_detail, constraint) is stripped from the response
 // but logged server-side for debugging. See Issue #17.
 func DomainErrorResponse(w http.ResponseWriter, err *DomainError) {
+	w.Header().Set(HeaderErrorCode, err.Code)
 	if internal := err.InternalMeta(); len(internal) > 0 {
 		attrs := []any{slog.String("error_code", err.Code)}
 		for k, v := range internal {
@@ -117,6 +126,9 @@ func DomainErrorHTTPStatus(code string) int {
 	case CodeBizAuthEmailTaken, CodeBizSeatEmailTaken,
 		CodeBizBindAliasTaken, CodeBizKeyAliasTaken, CodeBizCredNameTaken, CodeBizProvCodeTaken,
 		CodeBizOauthGroupCredInUse, CodeBizOauthGroupRatioRejected,
+		// R7.1 per-pool seat cap — same 409 family as the ratio gate: a capacity
+		// conflict the admin resolves (move seats to another pool).
+		CodeBizOauthGroupSeatCapExceeded,
 		CodeBizAgentLimitReached, CodeBizAgentNonClusterOrg,
 		CodeBizAgentParentSeatRequired, CodeBizAgentStatusConflict,
 		CodeBizOauthLoginBindingChanged,

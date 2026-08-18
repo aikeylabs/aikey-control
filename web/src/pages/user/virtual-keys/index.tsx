@@ -585,7 +585,7 @@ export default function UserVirtualKeysPage() {
       <PageQueryErrors sources={[teamVaultQuery.error]} />
       <style>{KEYS_PAGE_CSS}</style>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="vault-page-scroll flex-1 overflow-y-auto">
         <div className="px-6 py-5 space-y-5">
           <HookReadinessBanner onEnableClick={wireRcModal.openManually} />
           <ModelMappingBanner />
