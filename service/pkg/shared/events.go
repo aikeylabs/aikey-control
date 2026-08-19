@@ -18,16 +18,37 @@ const (
 	EventControlOAuthGroupVKInvalidationCompensationFailed = "control.oauth_group.vk_invalidation_compensation_failed"
 	EventControlOAuthGroupAttachMemberListFailed           = "control.oauth_group.attach_member_list_failed"
 	EventControlOAuthGroupEnableMemberListFailed           = "control.oauth_group.enable_member_list_failed"
-	EventControlSnapshotOAuthGroupResolveFailed            = "control.snapshot.oauth_group_resolve_failed"
-	EventControlSnapshotOAuthGroupBumpFailed               = "control.snapshot.oauth_group_bump_failed"
-	EventControlOrgDeliveryAssignmentReadFailed            = "control.org_delivery.assignment_read_failed"
-	EventControlUsageReportingTimeZoneReadFailed           = "control.usage.reporting_time_zone_read_failed"
-	EventControlUsageReportingTimeZoneInvalid              = "control.usage.reporting_time_zone_invalid"
+	// Read-side projection lookups behind the OAuth-group account list. Both the
+	// utilization and the upstream-forbidden reads WARN under this name and then
+	// continue with the account unannotated — 🚫 a failed projection read must not
+	// drop the account from the list, but it must not be silent either
+	// (principles/logging-conventions: a fallback path always carries a WARN).
+	EventControlOAuthGroupUtilizationReadFailed = "control.oauth_group.utilization_read_failed"
+
+	// The deployment has a persisted state directory configured but could not
+	// mint or read its install id there. 🔴 Logged rather than fatal: the
+	// downstream symptom is an activation refused for "too few factors",
+	// which names the effect and not this cause.
+	EventControlLicenseInstallIDUnavailable = "control.license.install_id_unavailable"
+	// No deployment environment was configured, or the configured one is not a
+	// value fingerprint knows. 🔴 WARN rather than fatal: a control plane that
+	// refuses to boot over this is worse than one that boots unable to activate,
+	// and the deployment may already be activated. But it must not be silent —
+	// unset, this deployment names factors that are unstable where it runs, and
+	// the vendor refuses the activation with a message about primary_mac that
+	// points at no setting on this side.
+	EventControlLicenseEnvironmentUnset          = "control.license.environment_unset"
+	EventControlLicenseEnvironmentInvalid        = "control.license.environment_invalid"
+	EventControlSnapshotOAuthGroupResolveFailed  = "control.snapshot.oauth_group_resolve_failed"
+	EventControlSnapshotOAuthGroupBumpFailed     = "control.snapshot.oauth_group_bump_failed"
+	EventControlOrgDeliveryAssignmentReadFailed  = "control.org_delivery.assignment_read_failed"
+	EventControlUsageReportingTimeZoneReadFailed = "control.usage.reporting_time_zone_read_failed"
+	EventControlUsageReportingTimeZoneInvalid    = "control.usage.reporting_time_zone_invalid"
 	// EventControlConvAuditSeatSearchFailed fires when the usage facade cannot
 	// resolve a conversation-audit seat-name search (?q=) against org_seats. The
 	// request is answered with an explicit 500 (never silently forwarded
 	// unfiltered — a failed search must not masquerade as "everyone matched").
-	EventControlConvAuditSeatSearchFailed      = "control.conversation_audit.seat_search_failed"
+	EventControlConvAuditSeatSearchFailed = "control.conversation_audit.seat_search_failed"
 	// EventControlConvAuditSeatSearchNarrowed fires when a seat search resolved
 	// more keys than query-service accepts and the facade intersected them with
 	// the keys that actually carry conversation rows. INFO, not WARN: the search
