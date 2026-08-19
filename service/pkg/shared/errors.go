@@ -385,6 +385,11 @@ const (
 	// is relieved by adding accounts; the seat cap is relieved by splitting seats
 	// across another pool. 409 (capacity conflict).
 	CodeBizOauthGroupSeatCapExceeded = "BIZ_OAUTH_GROUP_SEAT_CAP_EXCEEDED"
+	// Bounded-ingress limits (2026-08-18): a payload rejected for SIZE gets its
+	// own codes so the caller's fix ("send less / batch smaller") is unambiguous
+	// versus DATA_INVALID_BODY's "your JSON is malformed".
+	CodeDataPayloadTooLarge = "DATA_PAYLOAD_TOO_LARGE"
+	CodeDataTooManyItems    = "DATA_TOO_MANY_ITEMS"
 	// CodeBizOauthGroupDisabled: a group binding target was requested but the
 	// oauth_group feature is off (OAUTH_GROUP_ENABLED). 422.
 	CodeBizOauthGroupDisabled = "BIZ_OAUTH_GROUP_DISABLED"
@@ -837,6 +842,21 @@ func BizOauthGroupRatioRejected(seats, accounts int, limit float64) *DomainError
 	return &DomainError{Code: CodeBizOauthGroupRatioRejected,
 		Message: fmt.Sprintf("OAuth account pool is over capacity: %d seats vs %d accounts exceeds the %.0f:1 limit — add accounts before issuing more keys", seats, accounts, limit),
 		Meta:    map[string]any{"seats": seats, "accounts": accounts, "reject_ratio": limit}}
+}
+
+// DataPayloadTooLarge — the request body exceeded the endpoint's byte ceiling.
+// The limit is included so a well-behaved client can adapt its batch size.
+func DataPayloadTooLarge(limitBytes int64) *DomainError {
+	return &DomainError{Code: CodeDataPayloadTooLarge,
+		Message: fmt.Sprintf("request body exceeds the %d-byte limit for this endpoint — split the payload into smaller batches", limitBytes),
+		Meta:    map[string]any{"limit_bytes": limitBytes}}
+}
+
+// DataTooManyItems — one list in the payload exceeded its element cap.
+func DataTooManyItems(field string, limit, actual int) *DomainError {
+	return &DomainError{Code: CodeDataTooManyItems,
+		Message: fmt.Sprintf("field %q carries %d items, exceeding the limit of %d — split into smaller batches", field, actual, limit),
+		Meta:    map[string]any{"field": field, "limit": limit, "actual": actual}}
 }
 
 // BizOauthGroupSeatCapExceeded — issuing to a group would push its member seat

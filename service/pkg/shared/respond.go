@@ -22,6 +22,25 @@ func JSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// DecodeBoundedJSON decodes a JSON request body with a hard byte ceiling.
+// It is the single bounded-ingress decoder (2026-08-18 决策: ingest endpoints
+// must reject oversized payloads BEFORE any allocation-heavy work or DB access;
+// nginx limits cover only some deployment shapes — Trial and internal service
+// paths have no front proxy). Over-limit → DATA_PAYLOAD_TOO_LARGE (413);
+// malformed JSON → DATA_INVALID_BODY (400). Callers still apply their own
+// element-count / field-length caps after decode.
+func DecodeBoundedJSON(w http.ResponseWriter, r *http.Request, maxBytes int64, v any) *DomainError {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBytes))
+	if err := dec.Decode(v); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return DataPayloadTooLarge(maxBytes)
+		}
+		return DataInvalidBody()
+	}
+	return nil
+}
+
 // Error writes a structured JSON error response without meta context.
 // Prefer DomainErrorResponse for typed errors.
 func Error(w http.ResponseWriter, status int, code, message string) {
@@ -191,8 +210,15 @@ func DomainErrorHTTPStatus(code string) int {
 		// Both were bare errors until 2026-08-06, so both answered 500 — found by
 		// auditing the whole function after two of its siblings were reported,
 		// which is the same move that turned one BIZ_BIND report into two defects.
-		CodeBizRouteGroupArchived, CodeBizRouteGroupEmpty:
+		CodeBizRouteGroupArchived, CodeBizRouteGroupEmpty,
+		// Bounded-ingress element cap (2026-08-18): the payload parsed fine but
+		// one list is beyond what this endpoint will process in one call.
+		CodeDataTooManyItems:
 		return http.StatusUnprocessableEntity
+
+	// ── 413 Payload Too Large ─────────────────────────────────────────────────
+	case CodeDataPayloadTooLarge:
+		return http.StatusRequestEntityTooLarge
 
 	// ── 429 Too Many Requests ─────────────────────────────────────────────────
 	case CodeExtProviderRateLimited, CodeBizLoginResendCooldown:
