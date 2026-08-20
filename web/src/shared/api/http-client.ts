@@ -2,6 +2,7 @@
  * Axios HTTP client with JWT injection and 401 handling.
  */
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import { TEAM_TOKEN_REJECTED_HEADER } from './user/team-session';
 import { runtimeConfig } from '@/app/config/runtime';
 import i18n from '@/shared/i18n/i18n';
 
@@ -105,6 +106,25 @@ function createHttpClient(config?: AxiosRequestConfig): AxiosInstance {
           localStorage.removeItem(isUser ? 'aikey-auth-user' : 'aikey-auth-master');
           redirectToLogin();
         }
+      } else if (
+        axios.isAxiosError(err) &&
+        err.response?.status === 401 &&
+        String(err.response.headers?.[TEAM_TOKEN_REJECTED_HEADER] ?? '').toLowerCase() === 'rejected'
+      ) {
+        // Self-heal a stale local token (2026-08-20). The branch above
+        // deliberately leaves local_bypass /user 401s alone — no redirect,
+        // no cleanup — which is right for a business 401 but left a DEAD
+        // token in place forever: the gateway used to step aside whenever
+        // the browser sent one, so B rejected it on every request and the
+        // console read 未登录 against a signed-in vault, across reloads.
+        //
+        // The gateway now always injects the vault JWT, so this token can
+        // no longer cause that. Clearing it here is the belt to that
+        // suspenders: existing browsers carry the stale value already, and
+        // the rejected marker is the server SAYING this credential is the
+        // problem. No redirect — local_bypass has nowhere to send the user,
+        // and the next request simply goes out clean.
+        localStorage.removeItem(isUserPath() ? 'aikey-auth-user' : 'aikey-auth-master');
       }
       return Promise.reject(err);
     }
