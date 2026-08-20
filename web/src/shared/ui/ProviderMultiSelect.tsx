@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
+import { familyMembersOf } from '@/shared/generated/provider-registry';
 import './ProviderMultiSelect.css';
 
 /**
@@ -97,7 +98,15 @@ interface ProviderMultiSelectProps {
 // Kimi family members share a single env-var (`KIMI_BASE_URL`), so they're
 // mutually exclusive at selection time. Hoisted to module scope so both the
 // `add()` mutex and the rendered note read from one source.
-const KIMI_FAMILY = ['kimi_code', 'moonshot', 'kimi'];
+//
+// 🔴 DERIVED, not restated (2026-08-18). This was a literal
+// `['kimi_code', 'moonshot', 'kimi']` — a hand-kept copy of a relation that
+// provider_registry.yaml already owns (`family: kimi`), with no way to fail: a
+// third Kimi platform would land in the YAML, the CLI would classify it
+// correctly, and this list would silently let a user select two providers that
+// cannot coexist in one KIMI_BASE_URL. Seeded from one member; membership
+// (including the deprecated `kimi` alias) comes from the generated registry.
+const KIMI_FAMILY = familyMembersOf('kimi_code');
 
 /**
  * ProviderMultiSelect — 多选 provider 下拉 (chips + search + custom add)。

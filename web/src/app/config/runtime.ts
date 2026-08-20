@@ -61,6 +61,15 @@ export interface RuntimeConfig {
    *  performance/overview. Gate `isLocalMode` on `!teamGateway` so the
    *  forwarded page uses the member's account_id instead. */
   teamGateway?: boolean;
+  /** 2026-08-18 App install guide (/user/app-guide, master-repo-local page):
+   *  optional URLs of the desktop packages a TEAM deployment hosts. Declared
+   *  here only because the two repos' RuntimeConfig interfaces share one
+   *  global `window.__AIKEY_CONFIG__` declaration and must stay identical
+   *  (TS2717 otherwise). The Personal console itself never reads it. */
+  appDownloads?: {
+    darwinDmg?: string;
+    windowsZip?: string;
+  };
   featureFlags: {
     usageLedger: boolean;
     controlEvents: boolean;

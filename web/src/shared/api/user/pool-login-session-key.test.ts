@@ -13,7 +13,11 @@ afterEach(() => {
 });
 
 function response(status: number, body: unknown): Response {
-  return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as Response;
 }
 
 describe('pool session key client', () => {
@@ -32,14 +36,32 @@ describe('pool session key client', () => {
       session_key: 'sk-ant-sid02-fixture',
       operation_id: 'operation-123456',
       confirm: false,
+      identity_mismatch_confirmed: false,
+    });
+  });
+
+  it('sends a separate identity mismatch acknowledgement only on reconfirmation', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(response(200, { status: 'ok', operation_id: 'operation-123456' }));
+
+    await poolSessionKey('credential-1', '', 'operation-123456', true, true);
+
+    const [, init] = vi.mocked(globalThis.fetch).mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      confirm: true,
+      identity_mismatch_confirmed: true,
     });
   });
 
   it('preserves stable error code and retry operation id', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(response(502, {
-      error: { code: 'WRITEBACK_FAILED', message: 'Master is temporarily unavailable.' },
-      operation_id: 'operation-123456',
-    }));
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      response(502, {
+        error: {
+          code: 'WRITEBACK_FAILED',
+          message: 'Master is temporarily unavailable.',
+        },
+        operation_id: 'operation-123456',
+      }),
+    );
     const result = await poolSessionKey('credential-1', '', 'operation-123456', true);
     expect(isPoolLoginError(result)).toBe(true);
     if (isPoolLoginError(result)) {
@@ -52,13 +74,19 @@ describe('pool session key client', () => {
   });
 
   it('reads the externally visible Windows capability endpoint', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(response(200, {
-      status: 'ok', available: true, platform: 'windows', browser_required: false, refresh_supported: false,
-    }));
-    await expect(poolSessionKeyCapabilities()).resolves.toMatchObject({ available: true, platform: 'windows' });
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/api/user/oauth/pool/session-key/capabilities',
-      { credentials: 'same-origin' },
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      response(200, {
+        status: 'ok',
+        available: true,
+        platform: 'windows',
+        browser_required: false,
+        refresh_supported: false,
+      }),
     );
+    await expect(poolSessionKeyCapabilities()).resolves.toMatchObject({
+      available: true,
+      platform: 'windows',
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/user/oauth/pool/session-key/capabilities', { credentials: 'same-origin' });
   });
 });

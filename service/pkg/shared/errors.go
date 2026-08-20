@@ -379,6 +379,17 @@ const (
 	// CodeBizOauthGroupRatioRejected: issuing to a group would push seats:accounts
 	// past the reject threshold (N4 capacity gate). 409 (capacity conflict).
 	CodeBizOauthGroupRatioRejected = "BIZ_OAUTH_GROUP_RATIO_REJECTED"
+	// CodeBizOauthGroupSeatCapExceeded: issuing to a group would push its member
+	// seat count past the per-pool hard cap (R7.1, 30 seats regardless of account
+	// count). Distinct from RATIO_REJECTED because the fix differs: ratio overflow
+	// is relieved by adding accounts; the seat cap is relieved by splitting seats
+	// across another pool. 409 (capacity conflict).
+	CodeBizOauthGroupSeatCapExceeded = "BIZ_OAUTH_GROUP_SEAT_CAP_EXCEEDED"
+	// Bounded-ingress limits (2026-08-18): a payload rejected for SIZE gets its
+	// own codes so the caller's fix ("send less / batch smaller") is unambiguous
+	// versus DATA_INVALID_BODY's "your JSON is malformed".
+	CodeDataPayloadTooLarge = "DATA_PAYLOAD_TOO_LARGE"
+	CodeDataTooManyItems    = "DATA_TOO_MANY_ITEMS"
 	// CodeBizOauthGroupDisabled: a group binding target was requested but the
 	// oauth_group feature is off (OAUTH_GROUP_ENABLED). 422.
 	CodeBizOauthGroupDisabled = "BIZ_OAUTH_GROUP_DISABLED"
@@ -831,6 +842,30 @@ func BizOauthGroupRatioRejected(seats, accounts int, limit float64) *DomainError
 	return &DomainError{Code: CodeBizOauthGroupRatioRejected,
 		Message: fmt.Sprintf("OAuth account pool is over capacity: %d seats vs %d accounts exceeds the %.0f:1 limit — add accounts before issuing more keys", seats, accounts, limit),
 		Meta:    map[string]any{"seats": seats, "accounts": accounts, "reject_ratio": limit}}
+}
+
+// DataPayloadTooLarge — the request body exceeded the endpoint's byte ceiling.
+// The limit is included so a well-behaved client can adapt its batch size.
+func DataPayloadTooLarge(limitBytes int64) *DomainError {
+	return &DomainError{Code: CodeDataPayloadTooLarge,
+		Message: fmt.Sprintf("request body exceeds the %d-byte limit for this endpoint — split the payload into smaller batches", limitBytes),
+		Meta:    map[string]any{"limit_bytes": limitBytes}}
+}
+
+// DataTooManyItems — one list in the payload exceeded its element cap.
+func DataTooManyItems(field string, limit, actual int) *DomainError {
+	return &DomainError{Code: CodeDataTooManyItems,
+		Message: fmt.Sprintf("field %q carries %d items, exceeding the limit of %d — split into smaller batches", field, actual, limit),
+		Meta:    map[string]any{"field": field, "limit": limit, "actual": actual}}
+}
+
+// BizOauthGroupSeatCapExceeded — issuing to a group would push its member seat
+// count past the per-pool hard cap (R7.1). Unlike the ratio limit, adding
+// accounts does not relieve this: the seats must go to another pool.
+func BizOauthGroupSeatCapExceeded(seats, cap int) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupSeatCapExceeded,
+		Message: fmt.Sprintf("OAuth account pool is full: %d seats exceeds the per-pool cap of %d — assign the extra seats to another pool (or create a new pool)", seats, cap),
+		Meta:    map[string]any{"seats": seats, "seat_cap": cap}}
 }
 
 // BizOauthGroupDisabled — a group binding target was requested but the oauth_group

@@ -178,6 +178,56 @@ body {
 }
 
 /* ── Vault Header ── */
+/* Personal console only (2026-08-18, user decision A): the frosted-glass
+   treatment used by the standalone guide pages (/user/app-guide,
+   /user/cli-guide). Scoped through .user-pages — the UserShell root class
+   theme.md reserves for exactly this — because .vault-header is SHARED with
+   the master console's AppShell, which keeps its solid bar.
+
+   Only the BACKGROUND changes. The amber bottom border and its halo below
+   stay: they are the console's identity across both shells, and the request
+   was for the translucent background effect, not a new divider treatment.
+
+   Requires the header to overlay the scroll container (see UserShell.tsx) —
+   backdrop-filter over a flat page background produces nothing.
+   Dual-edit mirror: keep identical in control/web + master/web. */
+.user-pages .vault-header {
+  background: linear-gradient(
+    180deg,
+    rgba(39, 39, 42, 0.72) 0%,
+    rgba(24, 24, 27, 0.55) 100%
+  );
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(12px) saturate(1.2);
+}
+
+/* Pages that own their scroll region (2026-08-18 follow-up).
+   The shell offsets its scroll container with pt-16 so page content clears the
+   overlaid header. For a normal page that is enough: the container itself
+   scrolls, so its content passes under the bar and the glass has something to
+   blur. But a page built as `h-full` with its OWN inner scroller starts that
+   scroller at the padding edge — 64px down, entirely below the header — so
+   nothing ever passes beneath it and the bar renders as flat colour over the
+   page background. Reported on /user/vault, /user/virtual-keys and
+   /user/team-oauth.
+
+   Fix: pull such a page back up under the bar (cancelling the shell's padding)
+   and hand the 64px back INSIDE its scroller, so the scroll region spans the
+   full height and its content slides under the glass. Content still starts in
+   the same visual place — only what happens above it changes.
+
+   `.vault-page-scroll` is an explicit contract, not a utility-class match: the
+   page declares "this element is my scroll region". Keyed off .user-pages so
+   the master console's AppShell is untouched.
+   Dual-edit mirror: keep identical in control/web + master/web. */
+.user-pages .vault-page {
+  margin-top: -4rem;
+  height: calc(100% + 4rem);
+}
+.user-pages .vault-page-scroll {
+  padding-top: 4rem;
+}
+
 .vault-header {
   background: linear-gradient(180deg, var(--card) 0%, var(--background) 100%);
   /* 2026-05-23 mirror of user/web: border switched from full --primary

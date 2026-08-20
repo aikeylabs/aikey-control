@@ -35,7 +35,7 @@ import UserCompliancePage from '../../pages/user/compliance';
 import UserOAuthContributePage from '../../pages/user/oauth-contribute';
 // 2026-07-31: allocation-engine switch log. Drill-down from the Team OAuth
 // page's header button — no sidebar menu item (usage-detail pattern).
-import UserSwitchLogPage from '../../pages/user/switch-log';
+import UserSchedulingLogPage from '../../pages/user/scheduling-log';
 // Phase 4 阶段 3 (2026-05-21): third-party Agent management UI.
 // Lives under /user/apps (list) + /user/apps/:slug (detail). Calls
 // /api/user/apps/* (前置 2 — pkg/userapi/app), which subprocess-bridges
@@ -120,7 +120,11 @@ export function buildUserRoutes(): RouteObject[] {
         { path: 'team-oauth', element: <UserOAuthContributePage /> },
         // Third-level drill-down (flat sibling path, like apps/:slug):
         // the engine's account-switch decision trail for this member.
-        { path: 'team-oauth/switch-log', element: <UserSwitchLogPage /> },
+        // 2026-08-18: the switch log merged INTO the scheduling log (one page,
+        // one URL). Kept as a redirect so existing bookmarks and doc links land
+        // on the successor instead of 404ing.
+        { path: 'team-oauth/switch-log', element: <Navigate to="/user/team-oauth/scheduling-log" replace /> },
+        { path: 'team-oauth/scheduling-log', element: <UserSchedulingLogPage /> },
         // Phase 4 阶段 3 — third-party Agent management.
         // List shows all registered apps; Detail shows binding + usage + audit.
         // Registration itself happens via CLI (`aikey app register`) — no

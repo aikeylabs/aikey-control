@@ -46,6 +46,10 @@ const TITLE_ROW = /<h1\b/g;
 const TILE_EXEMPT: Record<string, string> = {
   'user/browser-profile-guide': 'hero guide page, 24px display title',
   'user/cli-guide': 'hero landing page, clamp(30px,4vw,42px) title',
+  // Same standalone hero-landing pattern as cli-guide (superdesign draft
+  // 9fb9c33b, 2026-08-18): centered clamp() title, no shell, no tile row.
+  'user/app-guide': 'hero landing page, clamp(30px,4vw,42px) title',
+  'user/app-usage': 'hero landing page, clamp() title (superdesign 25e14f3d)',
   'user/settings': 'centred settings column, 28px display title',
   'user/overview': 'its tile is the account avatar (user initial), not a glyph',
   'user/oauth-contribute': 'renders its own tile',

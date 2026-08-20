@@ -51,6 +51,7 @@ const USER_PAGE_GLYPH: Record<string, GlyphName> = {
   'referrals': 'user-plus',
   'settings': 'settings',
   'switch-log': 'history',
+  'scheduling-log': 'history',
   'usage-detail': 'receipt',
 };
 

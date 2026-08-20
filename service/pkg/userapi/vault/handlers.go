@@ -255,6 +255,10 @@ func (h *Handlers) InitHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Password string `json:"password"`
+		// Optional. Validated by the CLI against its own whitelist rather than
+		// here: the CLI owns which backends exist, and a second copy of that
+		// list is a second thing that can disagree.
+		SessionBackend string `json:"session_backend"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Password == "" {
 		cli.WriteErr(w, cli.ErrBadRequest, "body must be {password: string} with non-empty password")
@@ -271,7 +275,7 @@ func (h *Handlers) InitHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// 1. Spawn cli init.
-	res, err := h.Bridge.InvokeInit(ctx, req.Password, "")
+	res, err := h.Bridge.InvokeInit(ctx, req.Password, "", req.SessionBackend)
 	req.Password = ""
 	if err != nil {
 		cli.WriteInvokeError(w, err)

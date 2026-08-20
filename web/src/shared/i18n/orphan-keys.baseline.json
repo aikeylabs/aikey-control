@@ -123,6 +123,7 @@
     "appShell.routes.quota",
     "appShell.routes.recovery",
     "appShell.routes.route-groups",
+    "appShell.routes.scheduling-log",
     "appShell.routes.seats",
     "appShell.routes.settings",
     "appShell.routes.triage",

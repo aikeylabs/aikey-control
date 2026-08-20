@@ -35,7 +35,13 @@ async function postPool<T>(path: string, body: unknown): Promise<T | PoolLoginEr
     if (!res.ok) {
       const e = (data as { error?: PoolLoginError }).error;
       const operationID = (data as { operation_id?: string }).operation_id;
-      return e ? { ...e, operation_id: operationID } : { code: 'POOL_LOGIN_FAILED', message: `HTTP ${res.status}`, operation_id: operationID };
+      return e
+        ? { ...e, operation_id: operationID }
+        : {
+            code: 'POOL_LOGIN_FAILED',
+            message: `HTTP ${res.status}`,
+            operation_id: operationID,
+          };
     }
     return data as T;
   } catch (e) {
@@ -51,7 +57,9 @@ export function isPoolLoginError(v: unknown): v is PoolLoginError {
 /** Start sign-in for one credential. Provider + flow are resolved by master and
  * bound server-side; the browser never chooses or defaults the provider model. */
 export function poolAuthorizeURL(credentialID: string) {
-  return postPool<PoolAuthorizeStart>('authorize-url', { credential_id: credentialID });
+  return postPool<PoolAuthorizeStart>('authorize-url', {
+    credential_id: credentialID,
+  });
 }
 
 /**
@@ -83,6 +91,7 @@ export interface PoolSessionKeyResult {
   identity?: string;
   expected_identity?: string;
   provider_code?: string;
+  identity_mismatch?: boolean;
   sync_status?: 'ok' | 'pending';
   sync_error?: string;
 }
@@ -96,12 +105,14 @@ export function poolSessionKey(
   sessionKey: string,
   operationID: string,
   confirm = false,
+  identityMismatchConfirmed = false,
 ) {
   return postPool<PoolSessionKeyResult>('session-key', {
     credential_id: credentialID,
     session_key: sessionKey,
     operation_id: operationID,
     confirm,
+    identity_mismatch_confirmed: identityMismatchConfirmed,
   });
 }
 
@@ -116,7 +127,9 @@ export interface PoolSessionKeyCapabilities {
 
 export async function poolSessionKeyCapabilities(): Promise<PoolSessionKeyCapabilities | PoolLoginError> {
   try {
-    const res = await fetch('/api/user/oauth/pool/session-key/capabilities', { credentials: 'same-origin' });
+    const res = await fetch('/api/user/oauth/pool/session-key/capabilities', {
+      credentials: 'same-origin',
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const e = (data as { error?: PoolLoginError }).error;
@@ -143,10 +156,7 @@ export interface PoolLoginStatus {
  */
 export async function poolStatus(sessionID: string): Promise<PoolLoginStatus | PoolLoginError> {
   try {
-    const res = await fetch(
-      `/api/user/oauth/pool/status?session_id=${encodeURIComponent(sessionID)}`,
-      { credentials: 'same-origin' },
-    );
+    const res = await fetch(`/api/user/oauth/pool/status?session_id=${encodeURIComponent(sessionID)}`, { credentials: 'same-origin' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const e = (data as { error?: PoolLoginError }).error;

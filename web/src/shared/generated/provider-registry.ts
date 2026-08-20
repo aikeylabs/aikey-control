@@ -721,3 +721,50 @@ export function pickerProtocolsForProvider(provider: string): readonly string[] 
   const want = provider.toLowerCase();
   return PROTOCOL_CATALOG.map((p) => p.value).filter((proto) => endpointsFor(want, proto).length > 0);
 }
+
+/** The family a provider code belongs to.
+ *
+ *  Today `kimi_code` and `moonshot` both answer `kimi`; every other code is
+ *  its own family. Single-platform families set `family === code`, so the
+ *  fallback for an unknown (user-typed) code is the code itself — the same
+ *  behaviour callers had before families existed.
+ *
+ *  Generated rather than hand-written because hand-written copies of this
+ *  relation kept appearing and had no way to fail: a new multi-platform family
+ *  lands in provider_registry.yaml, the CLI classifies it correctly, and every
+ *  hand-maintained list silently groups it wrong with nothing red. */
+export function familyOfProvider(code: string): string {
+  const lc = (code ?? '').trim().toLowerCase();
+  const entry = PROVIDER_CATALOG.find((e) => e.code.toLowerCase() === lc);
+  return entry ? entry.family.toLowerCase() : lc;
+}
+
+/** Every code sharing a provider's family, including the provider itself.
+ *
+ *  This is the set a UI must treat as ONE choice: family members share an
+ *  env-var namespace (both Kimi platforms write KIMI_BASE_URL), so selecting
+ *  two of them cannot be expressed on a machine. Callers previously carried a
+ *  literal `['kimi_code', 'moonshot', 'kimi']` for this.
+ *
+ *  Deprecated aliases (`kimi`) resolve through oauthAliases so a legacy stored
+ *  code still matches its family. */
+export function familyMembersOf(code: string): readonly string[] {
+  const lc = (code ?? '').trim().toLowerCase();
+  const direct = PROVIDER_CATALOG.find((e) => e.code.toLowerCase() === lc);
+  const viaAlias = direct
+    ? undefined
+    : PROVIDER_CATALOG.find((e) => e.oauthAliases.some((a) => a.toLowerCase() === lc));
+  const entry = direct ?? viaAlias;
+  if (!entry) return [lc];
+  const family = entry.family.toLowerCase();
+  const members: string[] = [];
+  for (const e of PROVIDER_CATALOG) {
+    if (e.family.toLowerCase() !== family) continue;
+    members.push(e.code.toLowerCase());
+    for (const a of e.oauthAliases) {
+      const al = a.toLowerCase();
+      if (!members.includes(al)) members.push(al);
+    }
+  }
+  return members;
+}

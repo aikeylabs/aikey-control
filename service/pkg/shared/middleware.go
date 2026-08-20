@@ -406,6 +406,52 @@ func isLocalNetworkOrigin(origin string) bool {
 }
 
 // LoggingMiddleware logs every request with method, path, and correlation ID.
+// EventControlHTTPRequestRejected is the central event name (logging-conventions
+// `<service>.<area>.<state>`) for the 4xx rejection WARN below. 2026-08-18 owner
+// decision: every 4xx rejection must land in the service log — a rejected
+// request that leaves no server-side trace cannot be audited or used as chain
+// evidence ("失败要显眼，不要沉默" applied to the control plane).
+const EventControlHTTPRequestRejected = "control.http.request_rejected"
+
+// rejectionRecorder captures the response status for the post-serve rejection
+// WARN. It passes Locale() and Flush() through explicitly: embedding the
+// http.ResponseWriter INTERFACE promotes only that interface's methods, so
+// without these the locale negotiation (LocaleFromWriter's assertion) and SSE
+// flushing would silently degrade behind this wrapper.
+type rejectionRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *rejectionRecorder) WriteHeader(status int) {
+	if r.status == 0 {
+		r.status = status
+	}
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *rejectionRecorder) Write(b []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	return r.ResponseWriter.Write(b)
+}
+
+func (r *rejectionRecorder) Locale() string {
+	if lw, ok := r.ResponseWriter.(interface{ Locale() string }); ok {
+		return lw.Locale()
+	}
+	return ""
+}
+
+func (r *rejectionRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (r *rejectionRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
 func LoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -416,7 +462,23 @@ func LoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				slog.String("path", r.URL.Path),
 				slog.String("correlation_id", cid),
 			)
-			next.ServeHTTP(w, r)
+			rec := &rejectionRecorder{ResponseWriter: w}
+			next.ServeHTTP(rec, r)
+			// 4xx = a rule refused this request; the refusal must be auditable
+			// server-side, with the refusing code named (2026-08-18 决策).
+			// 5xx is deliberately not duplicated here: SYS_INTERNAL paths already
+			// log the CAUSE at ERROR where it is caught (HandleDomainErr), which
+			// is strictly more useful than a response-side echo would be.
+			if rec.status >= 400 && rec.status < 500 {
+				logger.Warn("http request rejected",
+					slog.String("event.name", EventControlHTTPRequestRejected),
+					slog.String("method", r.Method),
+					slog.String("path", r.URL.Path),
+					slog.Int("status", rec.status),
+					slog.String("error_code", rec.Header().Get(HeaderErrorCode)),
+					slog.String("correlation_id", cid),
+				)
+			}
 		})
 	}
 }

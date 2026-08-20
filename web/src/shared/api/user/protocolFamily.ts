@@ -1,3 +1,4 @@
+import { familyOfProvider } from '@/shared/generated/provider-registry';
 /** displayProtocolFamily normalizes a TEAM record's wire protocol into the
  *  user-facing Client Route used by the key pages (Vault, Team Keys).
  *
@@ -18,10 +19,9 @@ export function displayProtocolFamily(protocol: string | null | undefined): stri
 /** provider_code → display family (V layer).
  *
  *  Source of truth: CLI provider registry (`data/provider_registry.yaml`
- *  RegistryEntry.family) + Rust `provider_registry::family_of()`. This frontend
- *  mapping mirrors only the MULTI-platform families (currently just Kimi);
- *  single-platform providers (anthropic / openai / google_gemini / ...) return the
- *  code unchanged — matching the registry's "family defaults to code" rule.
+ *  RegistryEntry.family) + Rust `provider_registry::family_of()`. This function
+ *  READS that registry via the generated catalog rather than restating any of
+ *  it, so a family added to the YAML needs no edit here.
  *
  *  Why it exists: pages that expand a key's `supported_providers` (an array of
  *  provider_codeS, not families) must family-group correctly. The vault page has
@@ -31,9 +31,24 @@ export function displayProtocolFamily(protocol: string | null | undefined): stri
  */
 export function familyOfProviderCode(code: string): string {
   const lc = (code ?? '').trim().toLowerCase();
-  if (lc === 'kimi_code' || lc === 'moonshot' || lc === 'kimi') return 'kimi';
-  // Add other multi-platform families here when they appear in the registry.
-  return lc;
+  // 🔴 Read the GENERATED registry, do not restate it (2026-08-17).
+  //
+  // This used to be `if (lc === 'kimi_code' || lc === 'moonshot') return 'kimi'`
+  // with a comment inviting the next person to "add other multi-platform
+  // families here when they appear in the registry". That is a second copy of
+  // data that is generated from provider_registry.yaml into the file imported
+  // right above — and the copy has no way to fail. A new family would land in
+  // the YAML, the CLI would classify it correctly, and every page here would
+  // silently group it wrong, with no error and nothing red.
+  //
+  // The registry entry's own contract ("family defaults to code for
+  // single-platform families") is exactly the fallback below, so unknown and
+  // single-platform codes behave as before.
+  // 🔴 Delegated, not re-implemented (2026-08-18). The same lookup existed
+  // here and in the codegen'"'"'s own output; ProviderMultiSelect was about to
+  // become a third. One exit, generated from the YAML, so a family change
+  // cannot be half-applied.
+  return familyOfProvider(lc);
 }
 
 /** Minimal two-axis binding shape shared by the key pages. */

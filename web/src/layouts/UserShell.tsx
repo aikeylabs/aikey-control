@@ -360,6 +360,7 @@ const ROUTE_LABELS: Record<string, RouteMeta> = {
   // (header button entry, no sidebar item). Breadcrumb nests like Import →
   // Vault: 用户 / 团队OAuth / 切换日志.
   'switch-log':   { label: 'Switch Log', parent: 'team-oauth' },
+  'scheduling-log': { label: 'Scheduling Log', parent: 'team-oauth' },
   vault:          { label: 'Vault',      originName: 'My Vault' },
   'usage-ledger': { label: 'Usage',      originName: 'Usage Ledger' },
   // 2026-07-08: team-usage-ledger + performance were absent here, so the
@@ -417,6 +418,80 @@ function useBreadcrumbTrail(): Crumb[] {
     parentKey = pm.parent;
   }
   return trail;
+}
+
+/**
+ * Tray hand-off — where the "back to the simple view" control comes from.
+ *
+ * 🔴 WHY A QUERY PARAM AND NOT A BUILD FLAG (2026-08-17). The desktop tray and
+ * a plain browser open the SAME console URL. The tray's Expert button is a
+ * switch between two views of one window, so it must be able to switch BACK;
+ * a user who typed the console's address themselves has nothing to go back to,
+ * and a dead "Simple" button in their toolbar would be a lie. The difference is
+ * per-visit, not per-build, so it travels on the URL: the tray appends
+ * `?from=tray&back=<its own loopback url>`.
+ *
+ * 🔴 `back` IS ATTACKER-CONTROLLABLE. Anyone can send a link with any `back`
+ * value; without the check below the console would render a button, styled as
+ * its own, that navigates wherever that link says. So it is accepted only when
+ * it is plain http on loopback — which is the only thing the tray ever serves.
+ */
+const TRAY_BACK_KEY = 'aikey.trayBackUrl';
+
+/** Accepts a candidate `back` value, or null. See the 🔴 note above: this is
+ *  the only thing standing between an attacker-supplied link and a button that
+ *  looks like ours. Applied on every read — including reads from storage — so
+ *  there is exactly one definition of "acceptable". */
+function validTrayBackUrl(back: string | null): string | null {
+  if (!back) return null;
+  try {
+    const target = new URL(back);
+    if (target.protocol !== 'http:') return null;
+    if (target.hostname !== '127.0.0.1' && target.hostname !== 'localhost') return null;
+    return target.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 🔴 The origin has to OUTLIVE the URL that carried it (2026-08-17).
+ *
+ * Reading `location.search` at mount looked right and produced no button at
+ * all: the tray linked at `/`, the app redirects that to `/user/overview`, and
+ * the redirect drops the query — so by the time this ran there was nothing to
+ * read. Even with that fixed, the params vanish the moment the user clicks
+ * anything in the console, and the way back would disappear with them.
+ *
+ * sessionStorage is the right lifetime: per-tab, gone when the tab closes,
+ * which is exactly "this visit came from the tray". Not localStorage — that
+ * would keep offering a way back to a tray port that no longer exists, days
+ * later, in a window the user opened themselves.
+ */
+function traySimpleViewUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('from') === 'tray') {
+    const fresh = validTrayBackUrl(params.get('back'));
+    if (fresh) {
+      try {
+        window.sessionStorage.setItem(TRAY_BACK_KEY, fresh);
+      } catch {
+        // Private mode, storage disabled, quota. The button still works on
+        // this page; it just will not survive navigation. Degrading is better
+        // than throwing inside a layout.
+      }
+      return fresh;
+    }
+  }
+
+  try {
+    // Re-validated on read: same rule, one place, no trust in storage either.
+    return validTrayBackUrl(window.sessionStorage.getItem(TRAY_BACK_KEY));
+  } catch {
+    return null;
+  }
 }
 
 // ── i18n label maps ──────────────────────────────────────────────────────────
@@ -735,6 +810,11 @@ export function UserShell() {
   // Production setup (personal local-server :8090 + docker team :3000)
   // is unaffected — different origins, isSingleBinaryComposed=false,
   // R7 filter and cross-app rendering work as before.
+  // Resolved once per mount: the query string does not change while the shell
+  // is alive, and re-reading it on every render would invite a
+  // navigation-dependent flicker in a control that must simply be there or not.
+  const simpleViewUrl = React.useMemo(traySimpleViewUrl, []);
+
   const isSingleBinaryComposed = React.useMemo(() => {
     // 2026-06-03: explicit `controlPlaneMode === 'trial'` signal short-
     // circuits the origin-comparison heuristic below. trial Go server
@@ -1538,7 +1618,16 @@ export function UserShell() {
 
       {/* ── Main ── */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        <header className="vault-header h-16 flex items-center justify-between px-6 flex-shrink-0 z-10">
+        {/* 🔴 Absolutely positioned, NOT a flex sibling (2026-08-18, user
+            decision A). The header used to sit above the scroll container in
+            normal flow, which meant no content ever passed beneath it — and
+            `backdrop-filter` on a bar with nothing behind it blurs a flat
+            colour, i.e. renders no glass at all. Overlaying it on the scroll
+            container is what makes the frosted effect real; the container
+            below compensates with pt-16 so page content still starts under
+            the bar rather than behind it.
+            Dual-edit mirror: keep identical in control/web + master/web. */}
+        <header className="vault-header h-16 flex items-center justify-between px-6 absolute top-0 left-0 right-0 z-20">
           <div className="flex items-center text-sm font-mono" style={{ color: 'var(--muted-foreground)' }}>
             <span data-origin-name="User Console">{t('userShell.breadcrumbUser')}</span>
             {breadcrumbTrail.map((crumb, i) => {
@@ -1570,6 +1659,20 @@ export function UserShell() {
             })}
           </div>
           <div className="flex items-center gap-3">
+            {/* Tray hand-off (2026-08-17): only rendered when this visit came
+                FROM the tray, so a browser-typed visit shows no dead control.
+                See traySimpleViewUrl for why the target is validated. */}
+            {simpleViewUrl && (
+              <button
+                type="button"
+                onClick={() => { window.location.href = simpleViewUrl; }}
+                className="btn btn-outline"
+                data-origin-name="Back to simple view"
+                title={t('userShell.backToSimple')}
+              >
+                {t('userShell.backToSimple')}
+              </button>
+            )}
             <LanguageSwitcher />
             {/* Phase 4G (2026-06-01): top-bar Settings entry. Gear icon-
                 only button, ghost variant so it sits visually quieter
@@ -1601,7 +1704,7 @@ export function UserShell() {
             so routes that overflow vs fit don't reflow the content ~6px sideways
             on nav. Dual-edit mirror: keep identical in control/web + master/web.
             bugfix 2026-07-22-scrollbar-gutter-content-reflow. */}
-        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+        <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] pt-16">
           {/* Account without a seat: shown at the top of every console view
               because the member can reach any of them and none of them work.
               Dismissible — only an administrator can resolve it. */}
