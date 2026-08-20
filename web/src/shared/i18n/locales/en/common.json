@@ -2640,6 +2640,24 @@
     "errParse": "Unexpected response from the team server.",
     "errUnreachable": "Team server unreachable — check the gateway and try again."
   },
+  "sessionKeyHelp": {
+    "trigger": "How to get a Session Key",
+    "providerClaude": "Claude",
+    "providerChatGPT": "ChatGPT",
+    "intro": "Use a browser where you are already signed in to {{provider}}. This help only locates the cookie; token exchange still happens in the local AiKey service.",
+    "stepOpen": "Open the official {{provider}} website.",
+    "stepDevTools": "Open Developer Tools, then Application (or Storage) > Cookies > {{cookieOrigin}}.",
+    "stepCopyPrefix": "Find the cookie named",
+    "stepCopySuffix": "and copy only its Value into the field below.",
+    "security": "Treat the value like a password. Do not copy the entire Cookie header, put it in a URL, or share it.",
+    "openProvider": "Open {{provider}}",
+    "copyCookieName": "Copy cookie name",
+    "copyInstructions": "Copy instructions",
+    "cookieNameCopied": "Cookie name copied.",
+    "instructionsCopied": "Instructions copied.",
+    "copyFailed": "Copy failed. Select and copy the text manually.",
+    "instructionsText": "Open {{officialURL}} in a browser where you are signed in to {{provider}}. Open Developer Tools, then Application (or Storage) > Cookies > {{cookieOrigin}}. Find the cookie named {{cookieName}} and copy only its Value into AiKey. Treat the value like a password; do not copy the entire Cookie header, put it in a URL, or share it."
+  },
   "oauthContribute": {
     "pageTitle": "Team OAuth",
     "pageDescription": "Sign in to the team account you're routed to. Past accounts are kept for history.",
