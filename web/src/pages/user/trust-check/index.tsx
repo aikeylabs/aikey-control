@@ -23,7 +23,7 @@ import { PageTitleTile } from '@/shared/ui/PageHeader';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 
-import type { VerifyRecord, TrustSummary } from './api';
+import type { VerifyRecord, TrustSummary, TrustEmptyReason } from './api';
 import {
   computeHealthSummary,
   dedupByBaseUrl,
@@ -146,7 +146,7 @@ export default function UserTrustCheckPage() {
   const [activeChips, setActiveChips] = useState<Set<ChipKey>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { status, rows: allRows, metrics, isOffline, summaries } = useTrustView();
+  const { status, rows: allRows, metrics, isOffline, emptyReason, summaries } = useTrustView();
   // Read the realtime toggle here so the OBSERVER pill in the header
   // can flip between ON / STANDBY based on whether the proxy is actively
   // scoring user_chat (toggle ON) or only handling manual Check (toggle
@@ -586,6 +586,7 @@ export default function UserTrustCheckPage() {
           isLoading={isLoading}
           isOffline={isOffline}
           isEmpty={isEmpty}
+          emptyReason={emptyReason}
           isFilteredEmpty={isFilteredEmpty}
           loadError={loadError}
           rows={rows}
@@ -655,11 +656,42 @@ export default function UserTrustCheckPage() {
 // view or the grouped BAND view.
 // ---------------------------------------------------------------------------
 
+/** `empty_reason` → copy keys (spec R7). One row per value of the plugin's
+ *  closed set; a value absent from this table falls through to the neutral
+ *  copy below, which is what makes a widened enum safe to deploy plugin-first. */
+const EMPTY_REASON_COPY: Record<TrustEmptyReason, { title: string; note: string }> = {
+  vault_unreachable: {
+    title: 'trustCheck.emptyVaultUnreachableTitle',
+    note: 'trustCheck.emptyVaultUnreachableNote',
+  },
+  no_credentials: {
+    title: 'trustCheck.emptyNoCredentialsTitle',
+    note: 'trustCheck.emptyNoCredentialsNote',
+  },
+  all_out_of_scope: {
+    title: 'trustCheck.emptyAllOutOfScopeTitle',
+    note: 'trustCheck.emptyAllOutOfScopeNote',
+  },
+  never_used: {
+    title: 'trustCheck.emptyNeverUsedTitle',
+    note: 'trustCheck.emptyNeverUsedNote',
+  },
+};
+
+/** Used when the cause is unknown — an older plugin that sends no reason, or
+ *  a reason newer than this bundle. Names every possibility instead of
+ *  picking one, and still points at one command that separates them. */
+const EMPTY_FALLBACK_COPY = {
+  title: 'trustCheck.emptyTitle',
+  note: 'trustCheck.emptyNote',
+} as const;
+
 function TablePanelBody({
   activeTab,
   isLoading,
   isOffline,
   isEmpty,
+  emptyReason,
   isFilteredEmpty,
   loadError,
   rows,
@@ -676,6 +708,7 @@ function TablePanelBody({
   isLoading: boolean;
   isOffline: boolean;
   isEmpty: boolean;
+  emptyReason: TrustEmptyReason | undefined;
   isFilteredEmpty: boolean;
   loadError: Error | null;
   rows: TrustRow[];
@@ -717,11 +750,22 @@ function TablePanelBody({
     );
   }
   if (isEmpty) {
+    // Spec R7. The plugin says WHICH of the four causes this is; this is a
+    // lookup, not a judgement — re-deriving the cause here would fork the
+    // scope rule into a second language.
+    //
+    // 🔴 The `?? EMPTY_FALLBACK_COPY` is the load-bearing half. The console
+    // and trust-local ship on separate upgrade paths, so this branch WILL
+    // run against a plugin that never sends the field (that skew is the
+    // incident this rule came from) and against values added after this
+    // bundle was built. Both land on cause-neutral copy that still offers a
+    // real next step — never on a blank panel, and never on a claim.
+    const copy = (emptyReason && EMPTY_REASON_COPY[emptyReason]) ?? EMPTY_FALLBACK_COPY;
     return (
       <div className="tc-empty">
-        <div className="tc-empty-title">{t('trustCheck.emptyTitle')}</div>
+        <div className="tc-empty-title">{t(copy.title)}</div>
         <div className="tc-empty-note">
-          {t('trustCheck.emptyNote')}
+          {t(copy.note)}
         </div>
       </div>
     );

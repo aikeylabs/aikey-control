@@ -105,13 +105,21 @@ export function SourceTable({
                   secondary={row.provider}
                 />
                 <td>
-                  <ScorePill
-                    score={row.score}
-                    band={row.band}
-                    label={resolveLabel(t, row.band_label)}
-                    weakestLayer={row.weakest_layer}
-                    kbAlert={row.kb_alert}
-                  />
+                  {/* 🔴 A blocked row does NOT render a score. `row.score`
+                      is 0 for an unchecked source, and a 0 with a bar at
+                      zero width reads as "measured, and it failed" — the
+                      opposite of "not measured". */}
+                  {row.blocked ? (
+                    <BlockedPill blocked={row.blocked} />
+                  ) : (
+                    <ScorePill
+                      score={row.score}
+                      band={row.band}
+                      label={resolveLabel(t, row.band_label)}
+                      weakestLayer={row.weakest_layer}
+                      kbAlert={row.kb_alert}
+                    />
+                  )}
                 </td>
                 <td>
                   {running ? (
@@ -131,6 +139,20 @@ export function SourceTable({
                       <button type="button" className="tc-btn tc-btn-primary" disabled>
                         <SpinDotInline /> {t('trustCheck.checkingInline')}
                       </button>
+                    ) : row.blocked ? (
+                      // 🔴 Disabled, not hidden. Hiding the button would
+                      // leave an empty cell that reads as a rendering
+                      // fault; a disabled one carrying the reason in its
+                      // tooltip says "this exists, and here is why it is
+                      // not available to you".
+                      <button
+                        type="button"
+                        className="tc-btn"
+                        disabled
+                        title={resolveLabel(t, row.blocked.hint)}
+                      >
+                        <ScanIcon /> {t('trustCheck.check')}
+                      </button>
                     ) : (
                       <button
                         type="button"
@@ -149,6 +171,37 @@ export function SourceTable({
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * The confidence cell for a source that cannot be checked.
+ *
+ * 🔴 Deliberately NOT a new colour band. A fifth band would have to be
+ * ranked among the other four everywhere they are compared — BAND
+ * grouping order, health aggregation, the drawer — and "we did not
+ * measure this" has no rank on a scale of measurements. So it reuses
+ * `tc-pill-info`, which is already the page's word for "no measurement
+ * here" (it carries the Unverified pill), and adds no colour of its own.
+ *
+ * There is no score bar: an empty bar next to a "0" is what a FAILED
+ * check looks like, and this is the opposite of a failed check.
+ */
+function BlockedPill({ blocked }: { blocked: NonNullable<TrustRow['blocked']> }) {
+  const { t } = useTranslation();
+  const hint = resolveLabel(t, blocked.hint);
+  return (
+    <div className="tc-score-wrap">
+      <div className="tc-score-head">
+        <span className="tc-blocked-dash" aria-hidden="true">
+          —
+        </span>
+        <span className="tc-pill tc-pill-info">{resolveLabel(t, blocked.label)}</span>
+      </div>
+      <div className="tc-blocked-hint" title={hint}>
+        {hint}
+      </div>
     </div>
   );
 }
