@@ -67,7 +67,22 @@ export interface RuntimeConfig {
    *  global `window.__AIKEY_CONFIG__` declaration and must stay identical
    *  (TS2717 otherwise). The Personal console itself never reads it. */
   appDownloads?: {
-    darwinDmg?: string;
+    /** macOS ships ONE BUILD PER CHIP, so this is an object, not a string.
+     *  The .app bundles a Cocoa binary, and an arm64 bundle simply does not run
+     *  on Intel — Rosetta translates x86_64 FOR Apple silicon, never the
+     *  reverse. A single `darwinDmg` URL therefore could not be correct for
+     *  both, and the old single-file name (`AiKey_<ver>_darwin.dmg`) hid that:
+     *  it carried no architecture, so nothing downstream could notice the
+     *  release had no Intel install path. (2026-08-21)
+     *
+     *  🔴 Do NOT auto-pick by user agent. A browser running under Rosetta on
+     *  Apple silicon reports Intel, so UA-sniffing hands those users the wrong
+     *  build. The page offers both and lets the human choose; UA may HINT
+     *  which OS, never which chip. */
+    darwinDmg?: {
+      arm64?: string;
+      amd64?: string;
+    };
     windowsZip?: string;
   };
   featureFlags: {

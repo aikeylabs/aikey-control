@@ -230,6 +230,7 @@ export default function OAuthContributePage() {
     refetchOnReconnect: true,
   });
   const ownerGroupsErr = ownerGroupsQ.data && isTeamFetchError(ownerGroupsQ.data) ? ownerGroupsQ.data : undefined;
+
   const myGroups: MyOauthGroup[] = useMemo(() => (Array.isArray(ownerGroupsQ.data) ? ownerGroupsQ.data : []), [ownerGroupsQ.data]);
   const ownerPools: MyOauthGroup[] = useMemo(() => {
     return myGroups.filter((g) => g.is_owner);

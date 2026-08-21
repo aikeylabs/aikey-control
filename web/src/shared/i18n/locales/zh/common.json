@@ -31,6 +31,7 @@
     "protectionLine": "保护线 {{percent}}%",
     "windowRefresh": "窗口刷新：{{time}}",
     "expectedRecovery": "预计恢复：{{time}}",
+    "windowResetAt": "{{window}} 窗口重置 {{time}}",
     "windowElapsed": "窗口已到期，等待下一次请求探测",
     "routeStatus": {
       "window_exhausted": "额度窗口已耗尽",

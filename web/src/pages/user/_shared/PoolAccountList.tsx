@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { routedGroupAccount, type GroupAccountRef } from '@/shared/api/user/delivery';
 import { formatDateTime, formatRelativeTime } from '@/shared/utils/datetime-intl';
 import { providerBrandColor } from './provider-brand';
-import { poolAccountTone, quotaPercent, retryTimeState, showRetryTime } from './pool-account-state';
+import { knownEpoch, poolAccountTone, quotaPercent, retryTimeState, showRetryTime } from './pool-account-state';
 
 interface PoolAccountListProps {
   accounts?: GroupAccountRef[] | null;
@@ -101,6 +101,19 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel, s
         const retryAt = account.route_retry_at ?? account.window_reset_at;
         const retryState = retryTimeState(retryAt);
         const retryVisible = showRetryTime(account.route_status, retryState);
+        // Window resets are FACTS about the quota window, shown whenever known —
+        // unlike the recovery line above, which is about this route's state and
+        // is therefore gated on route_status. A healthy `active` account has no
+        // route_status, so before 2026-08-20 its reset time was never displayed
+        // even when master had one. The 7d reset was never displayed at all: the
+        // field reached this component but nothing read it.
+        //
+        // The one case the two would say the same thing is an exhausted 5h
+        // window, where the recovery line already renders window_reset_at — so
+        // the 5h fact is suppressed exactly then, rather than printed twice.
+        const reset5h = knownEpoch(account.window_reset_at);
+        const reset7d = knownEpoch(account.window_7d_reset_at);
+        const resetShownAbove = retryVisible && retryState === 'future' && retryAt === account.window_reset_at;
         const helpText = routeStatusHelp(account.route_status);
 
         return (
@@ -188,6 +201,12 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel, s
                 )}
                 {account.window_7d_max_util_pct != null && (
                   <span>{t('poolAccount.util7d')} {t('poolAccount.protectionLine', { percent: account.window_7d_max_util_pct })}</span>
+                )}
+                {reset5h != null && !resetShownAbove && (
+                  <span>{t('poolAccount.windowResetAt', { window: '5h', time: formatDateTime(reset5h * 1000) })}</span>
+                )}
+                {reset7d != null && (
+                  <span>{t('poolAccount.windowResetAt', { window: '7d', time: formatDateTime(reset7d * 1000) })}</span>
                 )}
                 {retryVisible && retryState === 'future' && retryAt != null && (
                   <span>

@@ -31,6 +31,7 @@
     "protectionLine": "Protection line {{percent}}%",
     "windowRefresh": "Window refresh: {{time}}",
     "expectedRecovery": "Expected recovery: {{time}}",
+    "windowResetAt": "{{window}} window resets {{time}}",
     "windowElapsed": "Window ended; waiting for the next request probe",
     "routeStatus": {
       "window_exhausted": "Quota window exhausted",
