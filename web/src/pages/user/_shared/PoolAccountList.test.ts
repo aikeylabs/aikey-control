@@ -188,9 +188,33 @@ describe('compact window-reset display', () => {
     }
   });
 
+  it('says "not observed" in words, never as a bare dash', () => {
+    // 2026-08-22: the usage rendered as `—` next to a cap that looked like the
+    // usage, so the eye landed on the cap and read the window as nearly spent.
+    // A dash is not a word; the reader has to already know what it means.
+    expect(listSource).toContain(': props.unobservedLabel}');
+    expect(listSource).not.toContain("const UNOBSERVED = '—'");
+  });
+
+  it('never renders a bare cap number — the cap must carry its own noun', () => {
+    // 🔴 The regression this file exists to prevent (2026-08-22 user:
+    // "看起来像是用了93%"). `5h 已用 · 93%` reads as 93% USED; 93% is the
+    // anti-ban protection ceiling (oauthgroup/window.go rolls 5h ∈ [93,97]).
+    // 能红: restore the concatenation onto the label, or pass a raw number.
+    expect(listSource).not.toContain('${props.cap}%');
+    expect(listSource).not.toContain('props.label}{props.cap');
+    // The usage reads with its subject on the left ("5h 已用 未观测"); the cap
+    // and the reset sit on the right, as the things it is measured against.
+    expect(listSource).toContain('pool-account-usage-lead');
+    expect(listSource).toContain("capText={w.cap != null ? t('poolAccount.protectionLine', { percent: w.cap }) : undefined}");
+    // The wording itself must name the concept, in both languages.
+    for (const bundle of [en, zh]) {
+      expect(bundle.poolAccount.protectionLine).toContain('{{percent}}');
+      expect(bundle.poolAccount.protectionLine.replace('{{percent}}%', '').trim().length).toBeGreaterThan(0);
+    }
+  });
+
   it('still reaches the cap and the reset when the window was never observed', () => {
-    expect(listSource).toContain('cap={w.cap ?? undefined}');
-    expect(listSource).toContain("capTitle={w.cap != null ? t('poolAccount.protectionLine', { percent: w.cap }) : undefined}");
     expect(listSource).toContain('resetAt={w.reset}');
     expect(listSource).toContain('resetTitle={w.reset != null ? resetTitle(w.key, w.reset) : undefined}');
   });

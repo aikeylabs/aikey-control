@@ -217,6 +217,22 @@ export const KEYS_PAGE_CSS = `
   white-space: nowrap;
 }
 .vault-page .pool-account-usage-label > span:first-child { min-width: 0; }
+/* "5h 已用 未观测" — window, subject, measurement — reads as one sentence, so it
+   is one group. The gap is what separates the reading from its subject; there is
+   no separator glyph because the two words already belong together. */
+.vault-page .pool-account-usage-lead {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+/* The protection cap sits on the VALUE side, after the usage, carrying its own
+   noun ("保护线 93%"). It used to be glued onto the label as a bare " · 93%"
+   (no backticks in this file — it is one big template literal),
+   where it read as the usage itself (2026-08-22 user: 看起来像是用了93%).
+   Dimmer than the usage on purpose: the usage is what you are reading, the cap
+   is the line it is measured against. */
+.vault-page .pool-account-usage-cap { opacity: 0.7; }
 .vault-page .pool-account-usage-reset {
   display: inline-flex;
   align-items: center;

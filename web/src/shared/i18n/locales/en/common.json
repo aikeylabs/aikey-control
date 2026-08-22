@@ -30,7 +30,7 @@
     "noObservation": "No quota observation yet. Send a request to update it.",
     "noObservationShort": "not observed",
     "observed": "Observed {{time}}",
-    "protectionLine": "Protection line {{percent}}%",
+    "protectionLine": "Cap {{percent}}%",
     "windowRefresh": "Window refresh: {{time}}",
     "expectedRecovery": "Expected recovery: {{time}}",
     "windowResetAt": "{{window}} window resets {{time}}",

@@ -47,17 +47,37 @@ function WindowResetIcon() {
  * the full localized sentence survives as the hover/accessible name so no
  * information is lost.
  */
-const UNOBSERVED = '—';
-
+/** 🔴 Two numbers live on this row and only ONE of them is the usage.
+ *
+ * Until 2026-08-22 the protection cap was concatenated straight onto the label
+ * — `5h 已用 · 93%` — with nothing but a hover title to say the 93 was a cap.
+ * An account whose usage had NEVER been observed therefore rendered as
+ *
+ *     5h 已用 · 93%     —     8/11 14:40
+ *
+ * which every reader parses as "5h window is 93% used". It is not: 93% is the
+ * anti-ban ceiling master rolled for this window (5h ∈ [93,97], 7d ∈ [87,89] —
+ * see oauthgroup/window.go), and the real usage is the em dash, i.e. UNKNOWN.
+ * The user reported it exactly that way: "看起来像是用了 93%".
+ *
+ * That misreads in both directions and both are operationally expensive:
+ * an idle account looks nearly spent (swap it out for nothing), and an account
+ * genuinely at 90% ALSO shows a dash (no warning when there should be one).
+ *
+ * So: the label carries no number, the cap carries its own noun
+ * (`poolAccount.protectionLine` → "保护线 93%"), and "never observed" says so
+ * in words instead of hiding behind punctuation. Fenced by
+ * `PoolAccountList.test.ts` › "never renders a bare cap number".
+ */
 function UsageRow(props: {
   label: string;
-  /** Absent = this window was never observed. Renders an empty track and an em
-   *  dash rather than suppressing the row: the window's cap and reset are still
-   *  facts worth showing, and they have nowhere else to live. */
+  /** Absent = this window was never observed. Renders an empty track and the
+   *  word "not observed" rather than suppressing the row: the window's cap and
+   *  reset are still facts worth showing, and they have nowhere else to live. */
   percent?: number;
   unobservedLabel: string;
-  cap?: number;
-  capTitle?: string;
+  /** Already-worded cap, e.g. "保护线 93%" — never a bare number. */
+  capText?: string;
   danger: boolean;
   valueText?: string;
   valueTitle?: string;
@@ -68,11 +88,18 @@ function UsageRow(props: {
   return (
     <div className="pool-account-usage-row">
       <div className="pool-account-usage-label">
-        <span title={props.capTitle} aria-label={props.capTitle}>{props.label}{props.cap != null ? ` · ${props.cap}%` : ''}</span>
-        <span className="pool-account-usage-value">
+        {/* The usage sits with its own subject on the LEFT — "5h 已用 未观测"
+            is one sentence and has to read as one (2026-08-22 user). The right
+            side carries the things this window is measured AGAINST: the
+            protection cap and the reset. */}
+        <span className="pool-account-usage-lead">
+          {props.label}
           <span title={props.valueTitle} aria-label={props.valueTitle}>
-            {observed ? props.valueText ?? `${props.percent}%` : UNOBSERVED}
+            {observed ? props.valueText ?? `${props.percent}%` : props.unobservedLabel}
           </span>
+        </span>
+        <span className="pool-account-usage-value">
+          {props.capText && <span className="pool-account-usage-cap">{props.capText}</span>}
           {props.resetAt != null && (
             <span className="pool-account-usage-reset" title={props.resetTitle} aria-label={props.resetTitle}>
               <WindowResetIcon />
@@ -265,8 +292,7 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel, s
                     label={w.label}
                     percent={w.percent}
                     unobservedLabel={t('poolAccount.noObservationShort')}
-                    cap={w.cap ?? undefined}
-                    capTitle={w.cap != null ? t('poolAccount.protectionLine', { percent: w.cap }) : undefined}
+                    capText={w.cap != null ? t('poolAccount.protectionLine', { percent: w.cap }) : undefined}
                     danger={exhausted || (w.percent != null && w.percent >= (w.cap ?? 100))}
                     valueText={showRemaining && w.percent != null
                       ? t('poolAccount.usedAndRemainingShort', { used: w.percent, remaining: Math.max(0, 100 - w.percent) })
