@@ -13,6 +13,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import {
   trustLocalApi,
   TrustLocalUnavailableError,
+  type TrustEmptyReason,
   type TrustSummary,
   type VerifyRecord,
   type VerifyRequestBody,
@@ -287,6 +288,11 @@ export function useTrustView(): {
   rows: TrustRow[];
   metrics: TrustMetrics;
   isOffline: boolean;
+  /** Why the list is empty, straight from the plugin (spec R7).
+   *  `undefined` when the list is NOT empty, and also when the plugin is
+   *  older than this console and never sends it — the page treats both
+   *  the same way, which is the point. */
+  emptyReason: TrustEmptyReason | undefined;
   /** Raw summaries — exposed so consumers (e.g. BAND grouping) can
    *  reach fields the projection drops, like the epoch
    *  `last_verified_at` we need for time-sorting. */
@@ -299,8 +305,9 @@ export function useTrustView(): {
   const metrics = useMemo<TrustMetrics>(() => deriveMetrics(items), [items]);
 
   const isOffline = status.error instanceof TrustLocalUnavailableError;
+  const emptyReason = status.data?.empty_reason;
 
-  return { status, rows, metrics, isOffline, summaries: items };
+  return { status, rows, metrics, isOffline, emptyReason, summaries: items };
 }
 
 /**

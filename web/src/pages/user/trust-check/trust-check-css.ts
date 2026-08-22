@@ -525,6 +525,25 @@ export const TRUST_CHECK_CSS = `
    harmonic-mean score hides. Set in table.tsx when any single layer
    falls below the trust band (<80). See derive.ts::summaryToRow for
    the layer selection logic. */
+/* Blocked (not-checkable) source cell — 2026-08-21.
+   Values are taken from existing anchors, not invented: the dash reuses
+   the score number's size/weight, the hint reuses .tc-id-secondary's
+   muted 11px mono. No new colour enters the palette; the pill itself is
+   the existing .tc-pill-info.
+   (No backticks in this file: the whole stylesheet is one template
+   literal, so a backtick here terminates it mid-rule.) */
+.trust-check-page .tc-blocked-dash {
+  color: var(--muted-foreground);
+  opacity: 0.65;
+}
+.trust-check-page .tc-blocked-hint {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  opacity: 0.65;
+  max-width: 260px;
+  line-height: 1.35;
+}
+
 .trust-check-page .tc-score-weakest {
   margin-top: 4px;
   display: inline-flex;

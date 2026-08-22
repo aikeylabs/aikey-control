@@ -107,12 +107,47 @@ export interface TrustSummary {
    *  ChatGPT Plus, etc.) rather than an API key. Web uses this for
    *  the secondary label / icon hint. */
   is_oauth?: boolean;
-  /** True if the alias's provider is in the detector's currently
-   *  supported scope (anthropic in MVP). Always true in responses
-   *  today — the plugin filters out unsupported rows before
-   *  responding — but exposed for forward-compat with mixed-mode
-   *  rollouts. */
+  /** True if this credential can be checked right now.
+   *
+   *  🔴 No longer "always true". Until 2026-08-21 the plugin dropped
+   *  every credential it could not check, so this flag arrived `true`
+   *  on every row and nothing read it. It now mirrors
+   *  `measurability === 'eligible'` and is the compatibility shim for
+   *  clients that predate the field below. */
   is_supported_scope?: boolean;
+
+  /** Whether the plugin can check this credential, and if not, which
+   *  kind of "not".
+   *
+   *  - `eligible`     — checkable now
+   *  - `unmeasurable` — WE cannot measure this channel (no probe lane
+   *                     for its upstream protocol, or no probe route to
+   *                     its credential shape). The user has no action
+   *                     that changes this, so the UI must not offer one.
+   *  - `not_ready`    — the credential itself is unusable right now
+   *                     (needs sign-in, revoked). The user DOES have a
+   *                     next step.
+   *
+   *  Absent on responses from a plugin older than 2026-08-21; treat
+   *  absence as `eligible` so an old plugin keeps its old behaviour.
+   *
+   *  🚫 Web must not re-derive this from `is_oauth` / `provider_id` /
+   *  `base_url`. The judgement is the plugin's
+   *  (`server_local/services/in_use.py::measurability`) and depends on
+   *  facts web cannot see — which OAuth upstream a provider code maps
+   *  to, and which credential shapes the proxy's probe pipeline can
+   *  route to. Spec:
+   *  workflow/CI/requirements/2026-08-21-trust-check-credential-eligibility.md */
+  measurability?: 'eligible' | 'unmeasurable' | 'not_ready';
+
+  /** Machine reason behind a non-`eligible` verdict, e.g.
+   *  `upstream_protocol_unsupported`, `team_group_probe_unsupported`,
+   *  `credential_needs_login`. Empty when eligible.
+   *
+   *  🚫 Never rendered raw — it is internal vocabulary. `derive.ts`
+   *  maps it to an i18n key and falls back to a generic sentence for
+   *  codes it does not know. */
+  measurability_reason?: string;
   /** Vault's `base_url` for this credential — the user-configured
    *  endpoint (may be a relay). Stage 7 BAND view dedupes by this
    *  field; web MUST NOT re-derive baseurl from anywhere else.
@@ -275,8 +310,29 @@ export interface CascadeBlock {
   round2_qids?: string[];
 }
 
+/** Why `items` is empty (plugin spec R7).
+ *
+ *  The four are a closed set derived from the merge's own drop paths, and
+ *  the PLUGIN decides which one — the console must not re-derive it, or
+ *  the scope rule ends up forked across two languages
+ *  (requirements/2026-05-21-plugin-owns-domain-logic-web-stays-generic).
+ *
+ *  🔴 Treat an unrecognised value exactly like a missing one. This field
+ *  arrives from a SEPARATELY UPGRADED component: a console newer than its
+ *  trust-local sees no field at all, and a console older than a widened
+ *  enum sees a value it has no copy for. Both must land on the
+ *  cause-neutral fallback rather than on a blank or a wrong claim. */
+export type TrustEmptyReason =
+  | 'vault_unreachable'
+  | 'no_credentials'
+  | 'all_out_of_scope'
+  | 'never_used';
+
 export interface TrustStatusListResponse {
   items: TrustSummary[];
+  /** Present ONLY when `items` is empty. Absent — not null — otherwise,
+   *  so presence alone is the branch. */
+  empty_reason?: TrustEmptyReason;
 }
 
 export interface TrustStatusDetail extends TrustSummary {
