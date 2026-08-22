@@ -16,11 +16,15 @@ import { describe, expect, it, test } from 'vitest';
 
 import type { CascadeHistoryEntry, TrustSummary } from './api';
 import {
+  ALL_BLOCKED_KEYS,
+  BLOCKED_KEY_NAMESPACE,
   computeHealthSummary,
   computeT24h,
   dedupByBaseUrl,
   deriveBand,
+  deriveBlockedState,
   deriveMetrics,
+  isCheckable,
   summaryToRow,
 } from './derive';
 
@@ -697,5 +701,130 @@ describe('the KB veto reaches every band decision, not only the row', () => {
     expect(h.healthyCount).toBe(1);
     expect(h.needsReviewCount).toBe(0);
     expect(h.band).toBe('trust');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Checkability (2026-08-21). Spec:
+// workflow/CI/requirements/2026-08-21-trust-check-credential-eligibility.md
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('checkability', () => {
+  it('treats a plugin that predates the field as checkable', () => {
+    // 🔴 The direction of this default matters. If absence read as
+    // "blocked", upgrading the WEB against an older plugin would render
+    // every source as not-checkable — the user would experience a
+    // frontend deploy as their credentials breaking.
+    const s = makeSummary({});
+    expect(isCheckable(s)).toBe(true);
+    expect(summaryToRow(s).blocked).toBeNull();
+  });
+
+  it('maps every reason the plugin can send to its own sentence', () => {
+    // Mirrors the REASON_* constants in
+    // server_local/services/in_use.py. A code the plugin sends that is
+    // missing here renders the vague fallback, so this list is what
+    // stops a backend addition from degrading silently into vagueness.
+    const REASONS = [
+      'upstream_protocol_unsupported',
+      'team_group_probe_unsupported',
+      'team_vk_probe_unsupported',
+      'provider_out_of_scope',
+      'credential_needs_login',
+      'credential_revoked',
+      'credential_inactive',
+    ];
+    const keys = new Set<string>();
+    for (const reason of REASONS) {
+      const blocked = deriveBlockedState(
+        makeSummary({ measurability: 'unmeasurable', measurability_reason: reason }),
+      );
+      expect(blocked, reason).not.toBeNull();
+      expect(blocked!.hint.key, reason).not.toContain('blockedUnknown');
+      keys.add(blocked!.hint.key);
+    }
+    // Distinct sentences, not one sentence reused — a shared string
+    // would make two different situations read identically.
+    expect(keys.size).toBe(REASONS.length);
+  });
+
+  it('never renders a raw reason code, even one it does not know', () => {
+    const blocked = deriveBlockedState(
+      makeSummary({
+        measurability: 'unmeasurable',
+        measurability_reason: 'some_future_reason_code',
+      }),
+    );
+    expect(blocked!.hint.key).toContain('blockedUnknown');
+    // The code itself must not leak into anything rendered.
+    expect(JSON.stringify(blocked)).not.toContain('some_future_reason_code');
+  });
+
+  it('separates "our gap" from "your next step"', () => {
+    const ours = deriveBlockedState(
+      makeSummary({
+        measurability: 'unmeasurable',
+        measurability_reason: 'upstream_protocol_unsupported',
+      }),
+    );
+    const theirs = deriveBlockedState(
+      makeSummary({
+        measurability: 'not_ready',
+        measurability_reason: 'credential_needs_login',
+      }),
+    );
+    expect(ours!.actionable).toBe(false);
+    expect(theirs!.actionable).toBe(true);
+    // Different pill words too: "we can't" and "you haven't" are not the
+    // same message and must not share a label.
+    expect(ours!.label.key).not.toBe(theirs!.label.key);
+  });
+
+  it('keeps the header and the table talking about the same population', () => {
+    // 🔴 The failure this guards is on record in effectiveBand's own
+    // docstring: a header computed over a different set than the rows
+    // below it renders a green summary above a red row. Here the risk is
+    // the reverse — uncheckable rows dragging the header to a permanent
+    // "0 of N checked", a standing prompt no button on the page can
+    // satisfy.
+    const items = [
+      makeSummary({ alias_name: 'ok', s_combined: 95 }),
+      makeSummary({
+        alias_name: 'codex',
+        measurability: 'unmeasurable',
+        measurability_reason: 'upstream_protocol_unsupported',
+        last_verified_at: null,
+        s_combined: null,
+      }),
+      makeSummary({
+        alias_name: 'team',
+        measurability: 'unmeasurable',
+        measurability_reason: 'team_group_probe_unsupported',
+        last_verified_at: null,
+        s_combined: null,
+      }),
+    ];
+
+    const health = computeHealthSummary(items);
+    const metrics = deriveMetrics(items);
+
+    expect(health.totalCount ?? metrics.sources).toBe(1);
+    expect(metrics.sources).toBe(1);
+    expect(health.checkedCount).toBe(1);
+    // …and the rows themselves are still all there to be rendered.
+    expect(items.map(summaryToRow).filter((r) => r.blocked !== null)).toHaveLength(2);
+  });
+});
+
+describe('blocked keys stay in the page namespace', () => {
+  it('every blocked key is written in full AND stays under the prefix', () => {
+    // The keys are spelled out literally so the i18n coverage fence can
+    // see them (a `L + '...'` concatenation is invisible to a static
+    // scan and would have to be parked in the dead-keys baseline). This
+    // assertion is what keeps the namespace single-sourced despite that.
+    for (const k of ALL_BLOCKED_KEYS) {
+      expect(k.startsWith(BLOCKED_KEY_NAMESPACE), k).toBe(true);
+    }
+    expect(new Set(ALL_BLOCKED_KEYS).size).toBe(ALL_BLOCKED_KEYS.length);
   });
 });

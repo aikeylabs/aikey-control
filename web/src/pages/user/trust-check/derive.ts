@@ -107,6 +107,11 @@ export interface TrustRow {
    *  field too so dedupByBaseUrl can sort "latest first" without
    *  having to re-look-up the summary. */
   last_verified_at: number | null;
+  /** Non-null when this source cannot be checked; see `BlockedState`.
+   *  The table renders the pill / score / Check button from this rather
+   *  than from `band` + `score`, which describe a measurement that did
+   *  not happen. */
+  blocked: BlockedState | null;
 }
 
 export interface TrustMetrics {
@@ -126,6 +131,110 @@ export interface TrustMetrics {
 // "Watch" (in the UI template) is reserved for P1 — quarantine signal
 // that has no trust-local field today.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Checkability (2026-08-21). Spec:
+// workflow/CI/requirements/2026-08-21-trust-check-credential-eligibility.md
+//
+// 🔴 THE POINT IS THAT A ROW MUST NOT OFFER AN ACTION THAT CANNOT WORK.
+//
+// The plugin now returns credentials it cannot check instead of dropping
+// them, because dropping them left the page saying "no sources observed
+// — send a request through aikey-proxy", an instruction that could never
+// come true for a user whose only credentials were OAuth. Showing the
+// row fixes that, but only if the row is honest about what it is: a
+// Check button on a channel with no probe lane would just move the lie
+// one click later.
+// ---------------------------------------------------------------------------
+
+/** The blocked presentation of a row: what the pill says, and what the
+ *  user should understand about it. `null` for checkable rows. */
+export interface BlockedState {
+  /** Replaces the band pill's text. */
+  label: LabelRef;
+  /** One sentence: what is blocked and what (if anything) to do. Shown
+   *  under the pill and as the disabled Check button's tooltip. */
+  hint: LabelRef;
+  /** True when the user has a next step. Drives nothing visual today;
+   *  it exists so a future "fix it" affordance attaches to the rows
+   *  where an affordance is honest, and never to the others. */
+  actionable: boolean;
+}
+
+/** Reason code → catalog key. Mirrors the REASON_* constants in
+ *  `server_local/services/in_use.py`, which is their single source.
+ *
+ *  🔴 A code missing from this map renders the generic fallback rather
+ *  than the raw code — internal vocabulary must never reach a user. The
+ *  fallback is deliberately vague, so `derive.test.ts` pins the full set
+ *  of codes we expect: a plugin that starts sending a new reason should
+ *  be noticed by a failing test, not by a user reading a vague sentence.
+ */
+const BLOCKED_REASON_KEY: Record<string, string> = {
+  upstream_protocol_unsupported: 'trustCheck.trustCheckLeftover.blockedUnsupportedUpstream',
+  team_group_probe_unsupported: 'trustCheck.trustCheckLeftover.blockedTeamGroup',
+  team_vk_probe_unsupported: 'trustCheck.trustCheckLeftover.blockedTeamKey',
+  provider_out_of_scope: 'trustCheck.trustCheckLeftover.blockedProviderOutOfScope',
+  credential_needs_login: 'trustCheck.trustCheckLeftover.blockedNeedsLogin',
+  credential_revoked: 'trustCheck.trustCheckLeftover.blockedRevoked',
+  credential_inactive: 'trustCheck.trustCheckLeftover.blockedInactive',
+};
+
+/** Written out in full rather than as `L + '...'`, unlike the rest of
+ *  this file. Reason: the i18n coverage fence finds keys by scanning for
+ *  quoted literals, so a concatenated key is invisible to it and has to
+ *  be parked in `orphan-keys.baseline.json` — a file whose whole meaning
+ *  is "these keys are dead". Parking live keys there both lies about
+ *  them and leaves them unguarded. `blockedKeysStayInNamespace` below
+ *  keeps the namespace single-sourced despite the repetition. */
+const BLOCKED_LABEL_UNAVAILABLE = 'trustCheck.trustCheckLeftover.blockedLabelUnavailable';
+const BLOCKED_LABEL_NOT_READY = 'trustCheck.trustCheckLeftover.blockedLabelNotReady';
+const BLOCKED_REASON_FALLBACK = 'trustCheck.trustCheckLeftover.blockedUnknown';
+
+/** Every blocked key must live under the page's namespace. Exported so
+ *  the test can assert it rather than trusting ten hand-typed strings. */
+export const BLOCKED_KEY_NAMESPACE = L;
+export const ALL_BLOCKED_KEYS: string[] = [
+  ...Object.values(BLOCKED_REASON_KEY),
+  BLOCKED_LABEL_UNAVAILABLE,
+  BLOCKED_LABEL_NOT_READY,
+  BLOCKED_REASON_FALLBACK,
+];
+
+/** Reasons the user can actually resolve. Everything else is our gap. */
+const ACTIONABLE_REASONS = new Set([
+  'credential_needs_login',
+  'credential_revoked',
+  'credential_inactive',
+]);
+
+/**
+ * Whether this source can be checked right now.
+ *
+ * Absent `measurability` means a plugin older than 2026-08-21, which
+ * only ever returned checkable rows — so absence reads as checkable.
+ * 🚫 Do NOT tighten this to a strict equality against 'eligible': that
+ * would make every row of an older plugin render as blocked, i.e. an
+ * upgrade of the WEB would appear to the user as their credentials
+ * breaking.
+ */
+export function isCheckable(s: TrustSummary): boolean {
+  return s.measurability == null || s.measurability === 'eligible';
+}
+
+export function deriveBlockedState(s: TrustSummary): BlockedState | null {
+  if (isCheckable(s)) return null;
+  const reason = s.measurability_reason ?? '';
+  const hintKey = BLOCKED_REASON_KEY[reason] ?? BLOCKED_REASON_FALLBACK;
+  return {
+    label:
+      s.measurability === 'not_ready'
+        ? { key: BLOCKED_LABEL_NOT_READY }
+        : { key: BLOCKED_LABEL_UNAVAILABLE },
+    hint: { key: hintKey },
+    actionable: ACTIONABLE_REASONS.has(reason),
+  };
+}
 
 export function deriveBand(score: number | null | undefined): StatusBand {
   if (score == null) return 'info';
@@ -375,6 +484,7 @@ export function summaryToRow(s: TrustSummary): TrustRow {
     is_oauth: s.is_oauth ?? false,
     base_url: s.base_url ?? null,
     last_verified_at: s.last_verified_at,
+    blocked: deriveBlockedState(s),
   };
 }
 
@@ -632,6 +742,16 @@ export function deriveMetrics(items: TrustSummary[]): TrustMetrics {
   let review = 0;
   let checked24h = 0;
 
+  // 🔴 Health is measured over sources we can measure. A credential with
+  // no probe lane can never move any of these counters, so leaving it in
+  // the denominator pins the page at "0 of 2 checked" forever — a
+  // standing prompt to go do something no button on the page can do.
+  // The rows stay in the TABLE with their reason; they are excluded from
+  // the AGGREGATE. Same subset as computeHealthSummary, on purpose:
+  // those two disagreeing is how the header ends up contradicting the
+  // table underneath it (see effectiveBand's note about exactly that).
+  items = items.filter(isCheckable);
+
   for (const s of items) {
     // "in use" = vault's active binding flag from the plugin. Same
     // semantic as the chip's matchesChip(in_use), so the card count
@@ -703,6 +823,10 @@ export interface HealthSummary {
 }
 
 export function computeHealthSummary(items: TrustSummary[]): HealthSummary {
+  // Same filter, same reason as deriveMetrics — see the note there.
+  // These two functions MUST agree on the population or the header and
+  // the stat cards report different totals for the same screen.
+  items = items.filter(isCheckable);
   const now = Date.now() / 1000;
   let checkedCount = 0;
   let healthyCount = 0;
