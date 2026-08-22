@@ -580,7 +580,7 @@ export default function UserVirtualKeysPage() {
   }
 
   return (
-    <div className="vault-page h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
+    <div className="vault-page page-under-header h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
       {/* main list error renders inline below; teamVaultQuery would otherwise be silent */}
       <PageQueryErrors sources={[teamVaultQuery.error]} />
       <style>{KEYS_PAGE_CSS}</style>

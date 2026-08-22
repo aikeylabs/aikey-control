@@ -197,11 +197,35 @@ export const KEYS_PAGE_CSS = `
 .vault-page .pool-account-usage-label {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 12px;
   margin-bottom: 4px;
   color: var(--muted-foreground);
   font-size: 10.5px;
 }
+/* Squeeze-guard (same family as .kind-pill below, 2026-08-21 user report:
+   "进度条被挤压了"). The Access Token drawer renders this whole subtree in
+   font-mono (access-tokens/index.tsx) inside a 480px drawer, so the value +
+   window-reset side used to wrap and the 4px track got crushed between the
+   wrapped lines. The value side never wraps or shrinks; the window label on
+   the left absorbs the width instead. */
+.vault-page .pool-account-usage-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.vault-page .pool-account-usage-label > span:first-child { min-width: 0; }
+.vault-page .pool-account-usage-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0.75;
+}
+/* 1em, not a px value: the glyph tracks whatever font-size the label carries
+   instead of pinning a second magic number next to 10.5px. */
+.vault-page .pool-account-usage-reset-icon { width: 1em; height: 1em; flex-shrink: 0; }
 .vault-page .pool-account-usage-track {
   height: 4px;
   overflow: hidden;
@@ -219,10 +243,19 @@ export const KEYS_PAGE_CSS = `
   color: var(--muted-foreground);
   font-size: 10.5px;
 }
+/* One fact per line (2026-08-22 user: 不要挤到一行里面). These are independent
+   facts about DIFFERENT windows — "5h 保护线 93%" and "7d 窗口重置 …" share no
+   subject — so flowing them inline made adjacent, unrelated sentences read as
+   one run-on string. It is worst in exactly the case that produces the most
+   items: an account with NO utilization observation renders no usage rows, so
+   all four window facts fall back into this block at once. Column, not
+   flex-wrap: wrapping is width-dependent, and "sometimes two per line" is the
+   thing being complained about. */
 .vault-page .pool-account-observation {
   display: flex;
-  gap: 5px 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
   margin-top: 7px;
   color: var(--muted-foreground);
   font-size: 10px;
