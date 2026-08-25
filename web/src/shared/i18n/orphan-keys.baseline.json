@@ -113,6 +113,7 @@
     "appShell.routes.control-events",
     "appShell.routes.conversation-audit",
     "appShell.routes.dashboard",
+    "appShell.routes.directory",
     "appShell.routes.nodes",
     "appShell.routes.oauth-groups",
     "appShell.routes.packs",
