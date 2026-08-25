@@ -581,8 +581,15 @@ export default function UserVirtualKeysPage() {
 
   return (
     <div className="vault-page page-under-header h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
-      {/* main list error renders inline below; teamVaultQuery would otherwise be silent */}
-      <PageQueryErrors sources={[teamVaultQuery.error]} />
+      {/* Every read failure on this page reports in ONE place, here at the top.
+          The main list error (`error`) used to draw a second, bare-message copy
+          of itself inside the table; removed 2026-08-24, same decision the
+          vault page took on 2026-08-22. It is listed here because the aggregate
+          is the surviving report — dropping it is the 2026-07-26 silent-failure
+          regression. `teamVaultQuery.error` is structurally always null (its
+          queryFn swallows failures into an empty map) and is kept only so a
+          future un-swallow reports instead of going silent. */}
+      <PageQueryErrors sources={[error, teamVaultQuery.error]} />
       <style>{KEYS_PAGE_CSS}</style>
 
       <div className="vault-page-scroll flex-1 overflow-y-auto">
@@ -606,7 +613,22 @@ export default function UserVirtualKeysPage() {
 
             <div className="overflow-x-auto">
               {isLoading && <EmptyState message={t('teamKeys.emptyLoading')} />}
-              {isError && <EmptyState message={t('teamKeys.emptyLoadFailed', { message: (error as Error)?.message ?? t('teamKeys.unknownError') })} />}
+              {/* 🔴 No error text inside the table (2026-08-24 user decision,
+                  mirrors the vault page's 2026-08-22 one). The code + message +
+                  next step live in ONE place — the aggregate above, plus the
+                  shell's DataFetchErrorBanner — so a broken read is not drawn
+                  twice on one screen.
+
+                  Why the `allKeys.length === 0` guard, which vault's equivalent
+                  line does NOT have: react-query keeps `data` when a REFETCH
+                  fails (isRefetchError), so `isError` is routinely true while a
+                  perfectly good table renders below. Drawing "list unavailable"
+                  on top of visible rows contradicts them; the top banner's
+                  "页面显示可能不完整" already says the shown rows may be stale.
+                  The line is only needed when there is nothing to show — that
+                  is the case R1 of the read-path spec cares about, a dead
+                  backend masquerading as "you have no keys". */}
+              {isError && allKeys.length === 0 && <EmptyState message={t('teamKeys.listUnavailable')} />}
               {!isLoading && !isError && allKeys.length === 0 && <TeamKeysEmptyPanel />}
               {!isLoading && !isError && allKeys.length > 0 && filtered.length === 0 && (
                 <EmptyState message={t('teamKeys.emptyNoMatch')} />

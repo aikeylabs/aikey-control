@@ -110,6 +110,27 @@ while (i < lines.length) {
     continue;
   } else if (line.trim() === '' || line.trim() === '---') {
     // blank / rule: paragraph separation handled by block tags
+  } else if (/^\s*\|/.test(line) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] ?? '')) {
+    // GFM pipe table. Recognised only when the NEXT line is the delimiter row,
+    // so a stray line that merely starts with "|" still reaches the fail-loud
+    // branch below instead of being silently swallowed as a one-column table.
+    const cells = (l) =>
+      l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    const head = cells(line);
+    i += 2; // consume the header and delimiter rows
+    const rows = [];
+    while (i < lines.length && /^\s*\|/.test(lines[i])) {
+      rows.push(cells(lines[i]));
+      i++;
+    }
+    body.push(
+      `<div class="table-scroll"><table><thead><tr>${head
+        .map((c) => `<th>${inline(c)}</th>`)
+        .join('')}</tr></thead><tbody>${rows
+        .map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`)
+        .join('')}</tbody></table></div>`,
+    );
+    continue;
   } else if (/^[#|]/.test(line)) {
     throw new Error(`step-by-step: unrenderable markdown line shape: ${line}`);
   } else {
@@ -163,6 +184,17 @@ blockquote{margin:14px 0;padding:10px 14px;border-left:3px solid var(--primary-d
   border-radius:0 7px 7px 0;background:rgba(250,204,21,.05);color:var(--muted);font-size:13.5px}
 blockquote p{margin:4px 0;color:inherit}
 ul{margin:10px 0;padding-left:22px;color:#d4d4d8}
+/* Tables mirror the project's own treatment (web/src/index.css "-- Table --"):
+   muted small header over a faint wash, hairline row rules, none on the last
+   row. Every colour is one of this page's existing tokens - no new values. */
+.table-scroll{overflow-x:auto;margin:14px 0;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:520px}
+table th{font:600 11.5px var(--mono);letter-spacing:.02em;color:var(--muted);text-align:left;
+  padding:9px 12px;background:rgba(0,0,0,.2);border-bottom:1px solid var(--border);white-space:nowrap}
+table td{font-size:13.5px;color:#d4d4d8;padding:9px 12px;border-bottom:1px solid var(--border);
+  vertical-align:top}
+table tr:last-child td{border-bottom:none}
+table tbody tr:hover{background:rgba(255,255,255,.02)}
 figure{margin:18px 0}
 figure img{max-width:100%;border:1px solid var(--border);border-radius:8px;
   box-shadow:0 18px 50px rgba(0,0,0,.35)}
