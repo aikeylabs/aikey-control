@@ -297,9 +297,40 @@ export default function UserVirtualKeysPage() {
   const qc = useQueryClient();
   const { t } = useTranslation();
 
+  // Re-read the issuance state every time the user ARRIVES at this page —
+  // not only on a full document reload (2026-08-24 user report).
+  //
+  // WHAT WAS WRONG: the app-wide defaults (app/providers/index.tsx) are
+  // `staleTime: 30_000` + `refetchOnWindowFocus: false`. Together they mean a
+  // page that is left and re-entered issues NO request at all: an in-SPA nav
+  // back from another sidebar item re-mounts inside the 30s window and is
+  // served from cache, and bringing the browser tab back to the foreground
+  // never revalidates at all. The page then renders whatever the cache last
+  // held — including an empty list captured before the first key sync landed —
+  // with nothing in flight, no error, and no way back except F5. That is the
+  // reported symptom: "switching to this tab shows nothing and calls no API,
+  // reloading shows the keys".
+  //
+  // WHY THIS PAGE AND NOT THE GLOBAL DEFAULT: what this list shows is not the
+  // user's own local state, it is what the TEAM SERVER has issued / claimed /
+  // revoked / expired for them. Every writer lives on another surface (an admin
+  // on the team console, the CLI on claim), so this page cannot be kept correct
+  // by invalidation from its own mutations — it has to re-ask on arrival. The
+  // global default stays as-is for pages that do not have that property.
+  //
+  // WHY THESE TWO FLAGS: `refetchOnMount: 'always'` revalidates on arrival
+  // while the cached rows stay painted (stale-while-revalidate — no empty
+  // flash). `refetchOnWindowFocus: true` covers the browser-tab return and
+  // still honours the 30s staleTime, so alt-tabbing does not hammer the server.
+  // Deliberately NOT LIVE_PICKER_QUERY (shared/utils/query-options.ts): that
+  // preset also forces `staleTime: 0`, which is right for a short-lived picker
+  // and would drop the throttle this page still wants.
+  // Fence: pages/user/team-keys-refetch-on-entry.test.ts
   const { data: rawAll, isLoading, isError, error } = useQuery({
     queryKey: ['my-keys'],
     queryFn: deliveryApi.allKeys,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
   const allKeys: UserKeyDTO[] = useMemo(() => rawAll ?? [], [rawAll]);
 
