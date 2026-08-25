@@ -2031,8 +2031,6 @@
   },
   "providerAccounts": {
     "addDialogTitle": "Add Provider Credential",
-    "modeOfficial": "Official Provider",
-    "modeThirdParty": "Third-party Provider",
     "providerLabel": "Provider *",
     "selectPlaceholder": "Select...",
     "providerCodeLabel": "Provider Code *",

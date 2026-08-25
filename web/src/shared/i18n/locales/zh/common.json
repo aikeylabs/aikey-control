@@ -2031,8 +2031,6 @@
   },
   "providerAccounts": {
     "addDialogTitle": "添加供应商凭据",
-    "modeOfficial": "官方供应商",
-    "modeThirdParty": "第三方供应商",
     "providerLabel": "供应商 *",
     "selectPlaceholder": "请选择…",
     "providerCodeLabel": "供应商代码 *",
