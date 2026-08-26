@@ -36,17 +36,14 @@ blockquote{margin:14px 0;padding:10px 14px;border-left:3px solid var(--primary-d
   border-radius:0 7px 7px 0;background:rgba(250,204,21,.05);color:var(--muted);font-size:13.5px}
 blockquote p{margin:4px 0;color:inherit}
 ul{margin:10px 0;padding-left:22px;color:#d4d4d8}
-/* Tables mirror the project's own treatment (web/src/index.css "-- Table --"):
-   muted small header over a faint wash, hairline row rules, none on the last
-   row. Every colour is one of this page's existing tokens - no new values. */
-.table-scroll{overflow-x:auto;margin:14px 0;border:1px solid var(--border);border-radius:8px}
-table{border-collapse:collapse;width:100%;min-width:520px}
-table th{font:600 11.5px var(--mono);letter-spacing:.02em;color:var(--muted);text-align:left;
-  padding:9px 12px;background:rgba(0,0,0,.2);border-bottom:1px solid var(--border);white-space:nowrap}
-table td{font-size:13.5px;color:#d4d4d8;padding:9px 12px;border-bottom:1px solid var(--border);
-  vertical-align:top}
-table tr:last-child td{border-bottom:none}
-table tbody tr:hover{background:rgba(255,255,255,.02)}
+.table-wrap{margin:16px 0;overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:9px 12px;text-align:left;vertical-align:top;
+  border-bottom:1px solid rgba(255,255,255,.06)}
+th{font:700 11px var(--mono);letter-spacing:.06em;color:var(--muted);
+  background:rgba(0,0,0,.25);white-space:nowrap}
+td{color:#d4d4d8}
+tbody tr:last-child td{border-bottom:0}
 figure{margin:18px 0}
 figure img{max-width:100%;border:1px solid var(--border);border-radius:8px;
   box-shadow:0 18px 50px rgba(0,0,0,.35)}
@@ -65,9 +62,9 @@ figcaption{margin-top:6px;font:11px var(--mono);color:var(--faint)}
 <h2>4. 员工：安装 + 日常使用（约 10 分钟）</h2>
 <p>目前仅支持 macOS / Windows 环境安装。</p>
 <p><strong>这一段的三个关卡</strong>：</p>
-<div class="table-scroll"><table><thead><tr><th>线路</th><th>关键路径</th><th>验收关卡</th><th>去哪一节</th></tr></thead><tbody><tr><td>环境准备</td><td>Windows 11 机器，或 macOS（Apple 芯片 / Intel 均可）</td><td>建议用个人 PC 和干净的出口 IP</td><td><span class="doc-ref">§4.1</span></td></tr><tr><td>个人版安装</td><td>拿到离线安装包 → 执行安装脚本</td><td>安装脚本返回成功</td><td><span class="doc-ref">§4.1</span></td></tr><tr><td>登录团队版</td><td><code>aikey login</code> 领团队虚拟 KEY，或自己加 KEY / OAuth 账号</td><td><code>aikey web</code> 的<strong>保管库</strong>列表里能看到 KEY 或 OAuth 账号</td><td><span class="doc-ref">§4.2</span></td></tr><tr><td>使用虚拟 KEY / OAuth</td><td>切换账号 → 用 claude / codex 发一条消息</td><td><code>aikey use</code> 能看到当前在用的 KEY；发完消息后 <code>aikey web</code> 里出现用量曲线 = 接管成功</td><td><span class="doc-ref">§4.3</span></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>线路</th><th>关键路径</th><th>验收关卡</th><th>去哪一节</th></tr></thead><tbody><tr><td>环境准备</td><td>Windows 11 机器，或 macOS（Apple 芯片 / Intel 均可）</td><td>建议用个人 PC 和干净的出口 IP</td><td><span class="doc-ref">§4.1</span></td></tr><tr><td>个人版安装</td><td>拿到离线安装包 → 执行安装脚本</td><td>安装脚本返回成功</td><td><span class="doc-ref">§4.1</span></td></tr><tr><td>登录团队版</td><td><code>aikey login</code> 领团队虚拟 KEY，或自己加 KEY / OAuth 账号</td><td><code>aikey web</code> 的<strong>保管库</strong>列表里能看到 KEY 或 OAuth 账号</td><td><span class="doc-ref">§4.2</span></td></tr><tr><td>使用虚拟 KEY / OAuth</td><td>切换账号 → 用 claude / codex 发一条消息</td><td><code>aikey use</code> 能看到当前在用的 KEY；发完消息后 <code>aikey web</code> 里出现用量曲线 = 接管成功</td><td><span class="doc-ref">§4.3</span></td></tr></tbody></table></div>
 <p><strong>客户端兼容性矩阵</strong>（哪些工具能被接管、怎么接）：</p>
-<div class="table-scroll"><table><thead><tr><th>能力项</th><th>兼容范围</th><th>怎么用</th><th>背后机制</th></tr></thead><tbody><tr><td><strong>CLI / 编辑器</strong></td><td>claude CLI、Codex CLI、VS Code 的 Claude / Codex 扩展</td><td>装完直接运行</td><td>环境变量注入 —— <code>~/.zshrc</code> 底部由 aikey 写入的 hook 段；VS Code 扩展底层调用的还是 CLI，会继承同一套环境</td></tr><tr><td><strong>操作系统</strong></td><td>Windows、macOS</td><td>——</td><td>CLI（Rust）/ 代理（Go）跨平台编译</td></tr><tr><td><strong>桌面 App / 第三方客户端</strong></td><td>只要该 App 允许自定义 <code>base_url</code> + API Key 即可</td><td>在 <code>aikey web</code> 的保管库里取 <code>route_url</code>（填 base_url）和 <code>route token</code>（填 API Key）</td><td>本地代理把真实凭证换成可撤销的路由 token，App 拿不到真钥匙</td></tr><tr><td><strong>OAuth 账号池</strong></td><td>共享 Claude / Codex 订阅账号</td><td>见 <span class="doc-ref">OAuth 账号池 · 使用引导</span></td><td>接管 OAuth 登录集中管理：安全黏性自动调度、窗口额度共享、跨账号借额度</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>能力项</th><th>兼容范围</th><th>怎么用</th><th>背后机制</th></tr></thead><tbody><tr><td><strong>CLI / 编辑器</strong></td><td>claude CLI、Codex CLI、VS Code 的 Claude / Codex 扩展</td><td>装完直接运行</td><td>环境变量注入 —— <code>~/.zshrc</code> 底部由 aikey 写入的 hook 段；VS Code 扩展底层调用的还是 CLI，会继承同一套环境</td></tr><tr><td><strong>操作系统</strong></td><td>Windows、macOS</td><td>——</td><td>CLI（Rust）/ 代理（Go）跨平台编译</td></tr><tr><td><strong>桌面 App / 第三方客户端</strong></td><td>只要该 App 允许自定义 <code>base_url</code> + API Key 即可</td><td>在 <code>aikey web</code> 的保管库里取 <code>route_url</code>（填 base_url）和 <code>route token</code>（填 API Key）</td><td>本地代理把真实凭证换成可撤销的路由 token，App 拿不到真钥匙</td></tr><tr><td><strong>OAuth 账号池</strong></td><td>共享 Claude / Codex 订阅账号</td><td>见 <span class="doc-ref">OAuth 账号池 · 使用引导</span></td><td>接管 OAuth 登录集中管理：安全黏性自动调度、窗口额度共享、跨账号借额度</td></tr></tbody></table></div>
 <h3>4.1 装客户端（离线包）</h3>
 <p>企业私有部署的员工机通常连不上公网 —— 用运维发给你的<strong>个人版离线包</strong>安装（和 §2 集群离线包同一套路：解包 → <code>--offline</code> 装，物料自带、全程不联网）：</p>
 <p><strong>macOS / Linux</strong>：</p>
