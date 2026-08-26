@@ -63,6 +63,10 @@ const MASTER_PAGE_GLYPH: Record<string, GlyphName> = {
   'control-events': 'history',
   'conversation-audit': 'conversation',
   'dashboard': 'dashboard',
+  // Organisation structure (阶段8 · Feishu directory). 'team-kind' — the
+  // organisation's people as a body, distinct from Seats' 'users' (the
+  // individual roster) sitting directly beneath it in the same group.
+  'directory': 'team-kind',
   'nodes': 'server',
   'oauth-groups': 'layers',
   'packs': 'library',
