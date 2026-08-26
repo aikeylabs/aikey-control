@@ -10,6 +10,7 @@
  * This page guides users to install the CLI and authenticate.
  */
 import { useState } from 'react';
+import { LicensedTo } from '@/shared/components/LicensedTo';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { runtimeConfig } from '@/app/config/runtime';
@@ -212,9 +213,10 @@ export default function UserLoginPage() {
 
       {/* Footer */}
       <div
-        className="px-8 py-3 flex justify-between items-center"
+        className="px-8 py-3"
         style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderTop: '1px solid var(--border)' }}
       >
+      <div className="flex justify-between items-center">
         <span className="text-[10px] font-mono tracking-[0.15em]" style={{ color: 'var(--muted-foreground)' }}>
           {t('login.footerAccess')}
         </span>
@@ -228,6 +230,19 @@ export default function UserLoginPage() {
           <TerminalIcon />
           {t('login.footerCliGuide')}
         </a>
+      </div>
+        {/* specs/license-identity ID-02: the sign-in page is one of the four
+            surfaces that must render this row byte-identically. It sits here,
+            below the fold of the form, because it is attribution — 🚫 the spec
+            forbids presenting identity display as protection, so it must not
+            look like a gate on signing in.
+
+            Colour is inherited rather than passed in: LicensedTo takes no style
+            prop on purpose, so no caller can restyle the row into something the
+            other three surfaces do not show. */}
+        <div className="mt-2" style={{ color: 'var(--muted-foreground)' }}>
+          <LicensedTo className="text-[10px] font-mono tracking-[0.15em]" />
+        </div>
       </div>
     </div>
   );

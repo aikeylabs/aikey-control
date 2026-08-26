@@ -63,6 +63,10 @@ const MASTER_PAGE_GLYPH: Record<string, GlyphName> = {
   'control-events': 'history',
   'conversation-audit': 'conversation',
   'dashboard': 'dashboard',
+  // Licence — 'shield' matches the sidebar's ShieldIcon in AppShell. Unused
+  // elsewhere in THIS table; the user tree's 'vault' also uses it, which is a
+  // different console with a different nav, so the two never appear together.
+  'license': 'shield',
   'nodes': 'server',
   'oauth-groups': 'layers',
   'packs': 'library',
