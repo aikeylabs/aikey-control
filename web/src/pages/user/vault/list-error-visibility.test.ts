@@ -3,42 +3,56 @@ import { describe, expect, it } from 'vitest';
 const source = await import('./index.tsx?raw').then((module) => module.default);
 
 /**
- * Regression fence for the vault records-list error branch (2026-08-17).
+ * Regression fence for the vault records-list error branch.
  *
- * The list query (`listError`) renders its own inline error instead of going
- * through PageQueryErrors — that split is intentional and documented at the
- * `<PageQueryErrors sources={...} />` call site. What was NOT intentional is
- * what the inline branch rendered:
+ * ## History — read this before "restoring" anything
  *
- *     <EmptyState message={`${t('vault.loadFailed')}${(listError as Error).message}`} />
- *     →  "加载失败: Network Error"
+ * 2026-08-17: the branch rendered `加载失败: Network Error` — a bare
+ * `err.message` with no code and no next step, which R2 of
+ * workflow/CI/requirements/2026-07-26-read-path-error-visibility.md forbids.
+ * The fix routed it through parseApiError + ApiErrorDisplay, and THIS FILE used
+ * to assert that block existed inside the table.
  *
- * R2 of workflow/CI/requirements/2026-07-26-read-path-error-visibility.md
- * forbids exactly this shape — "禁止裸 err.message、禁止只写『加载失败』" — because
- * it gives the user no error code and no next step. The 2026-07-26 pass that
- * introduced R2 explicitly left the pre-existing inline branches alone
- * ("已有内联错误处理的地方保留不动"), so this one survived the rule that was
- * written to kill it. This fence is what makes the rule bite for this page.
+ * 2026-08-22: the user looked at the result and rejected the shape, not the
+ * content — the same failure was being drawn three times on one screen (shell
+ * banner, page aggregate, and this in-table block), which reads as broken UI.
+ * Decision: 表格里不显示错误信息; the code + message + next step live in ONE
+ * place, the aggregate at the top of the page. So the assertions inverted.
  *
- * See workflow/CI/bugfix/20260817-vault-list-error-bare-message.md.
+ * ## What is fenced now
+ *
+ * 1. No error display inside the table. `ApiErrorDisplay` must not come back
+ *    here, and neither may the older bare-message shapes R2 already banned.
+ * 2. `listError` must still be REPORTED — it moved into the PageQueryErrors
+ *    aggregate, it was not dropped. Deleting it there is the silent-failure
+ *    regression 2026-07-26 exists to prevent.
+ * 3. The table must not render the ordinary "vault is empty" panel while the
+ *    read is broken. That is the exact disease — a dead backend masquerading
+ *    as an account with no keys — so the empty panel stays gated on !listError
+ *    and the error case renders the neutral `vault.listUnavailable` line.
+ *
+ * 能红: put `<ApiErrorDisplay error={parseApiError(listError)} />` back in the
+ * table → assertion 1 fires. Drop `listError` from the aggregate → 2 fires.
+ * Remove `!listError` from the empty-panel condition → 3 fires.
+ *
+ * See workflow/CI/bugfix/20260817-vault-list-error-bare-message.md and
+ * workflow/CI/bugfix/20260822-vault-page-pullup-covers-error-banner.md.
  */
 describe('vault records-list error visibility (R2)', () => {
-  it('renders the list error through parseApiError + ApiErrorDisplay', () => {
-    expect(source).toContain("import { ApiErrorDisplay } from '@/shared/ui/ApiErrorDisplay';");
-    expect(source).toContain("import { parseApiError } from '@/shared/utils/api-error';");
-    expect(source).toContain('<ApiErrorDisplay error={parseApiError(listError)} />');
-  });
-
-  it('never renders a raw Error message or a bare "failed to load" label', () => {
-    // Red-fence check: restore the old EmptyState line and either assertion fires.
+  it('renders no error display inside the table', () => {
+    expect(source).not.toContain('ApiErrorDisplay');
+    expect(source).not.toContain('parseApiError');
+    // The pre-2026-08-17 shapes R2 banned outright.
     expect(source).not.toContain('(listError as Error).message');
     expect(source).not.toContain("t('vault.loadFailed')");
   });
 
-  it('keeps the list error OUT of the PageQueryErrors aggregate (no double-report)', () => {
-    // R6 dedupes by code inside the aggregate, but the aggregate and this
-    // inline branch are separate surfaces — adding listError to both would
-    // print the same failure twice on one page.
-    expect(source).toContain('<PageQueryErrors sources={[vaultStatusError, rulesError]} />');
+  it('still reports the list error — in the page aggregate, once', () => {
+    expect(source).toContain('<PageQueryErrors sources={[vaultStatusError, rulesError, listError]} />');
+  });
+
+  it('never lets a failed read render as an empty vault', () => {
+    expect(source).toContain("{listError && <EmptyState message={t('vault.listUnavailable')} />}");
+    expect(source).toContain('!listLoading && !listError && records.length === 0');
   });
 });

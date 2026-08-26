@@ -781,13 +781,23 @@ export function UserShell() {
   // (no otherBaseUrl), we fall back to internal navigation so the gear
   // button doesn't dead-end — master/web's router will surface a 404
   // which is a better failure than a silent no-op click.
-  const onOpenSettings = React.useCallback(() => {
+  // 2026-08-25 generalized from onOpenSettings (bugfix
+  // 20260825-team-page-topbar-navigates-to-unregistered-route): the Invite
+  // CTA next to the gear did a raw `navigate('/user/invites')` — on the B
+  // (team) bundle that path is unregistered and there is no catch-all, so the
+  // click rendered the raw "Unexpected Application Error! 404 Not Found".
+  // Every top-bar jump to a personal-side page now goes through this ONE
+  // helper: SPA navigation on the side that owns the page, full-document
+  // cross-jump from the team side (relative under the gateway, absolute
+  // cross-origin otherwise). Fenced by usershell-personal-nav-helper.test.ts.
+  const openPersonalPage = React.useCallback((path: string) => {
     if (!IS_PERSONAL_SIDE && otherBaseUrl) {
-      window.location.href = buildCrossAppUrl((crossAppLinkBase ?? otherBaseUrl).replace(/\/$/, ''), '/user/settings');
+      window.location.href = buildCrossAppUrl((crossAppLinkBase ?? otherBaseUrl).replace(/\/$/, ''), path);
       return;
     }
-    navigate('/user/settings');
-  }, [navigate, otherBaseUrl]);
+    navigate(path);
+  }, [navigate, otherBaseUrl, crossAppLinkBase]);
+  const onOpenSettings = React.useCallback(() => openPersonalPage('/user/settings'), [openPersonalPage]);
 
   const visState = useVisibilityState();
 
@@ -1688,7 +1698,7 @@ export function UserShell() {
               <SettingsIcon />
             </button>
             <button
-              onClick={() => navigate('/user/invites')}
+              onClick={() => openPersonalPage('/user/invites')}
               className="btn btn-outline text-[10px] px-3 py-1.5 flex items-center gap-1.5"
               style={{ borderColor: 'rgba(250,204,21,0.3)', color: 'var(--primary)' }}
             >

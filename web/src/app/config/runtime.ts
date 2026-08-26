@@ -61,15 +61,19 @@ export interface RuntimeConfig {
    *  performance/overview. Gate `isLocalMode` on `!teamGateway` so the
    *  forwarded page uses the member's account_id instead. */
   teamGateway?: boolean;
-  /** 2026-08-18 App install guide (/user/app-guide, master-repo-local page):
-   *  optional URLs of the desktop packages a TEAM deployment hosts. Declared
-   *  here only because the two repos' RuntimeConfig interfaces share one
-   *  global `window.__AIKEY_CONFIG__` declaration and must stay identical
-   *  (TS2717 otherwise). The Personal console itself never reads it. */
-  appDownloads?: {
-    darwinDmg?: string;
-    windowsZip?: string;
-  };
+  /* appDownloads REMOVED (2026-08-21). It was a config field the server was
+   * supposed to fill with desktop-package URLs — but nothing ever filled it,
+   * and it could not: the SPA is injected with window.__AIKEY_CONFIG__ only in
+   * the editions where Go serves it (Personal, Trial). Production and Cluster
+   * serve these assets as PLAIN STATIC FILES from nginx, so there is no render
+   * step to inject anything — and those are exactly the editions that host a
+   * download page.
+   *
+   * Replaced by downloads/manifest.json, written by the installer FROM the
+   * packages that actually landed. A manifest needs no injection point, and it
+   * cannot disagree with the disk: config says what SHOULD be there, a manifest
+   * reports what IS. See cluster-install.sh and pages/user/app-guide. */
+
   featureFlags: {
     usageLedger: boolean;
     controlEvents: boolean;

@@ -1225,10 +1225,26 @@ export default function MyAgentsPage() {
               {isLoading && (
                 <tr><td colSpan={7} className="px-5 py-8 text-center" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.loading')}</td></tr>
               )}
+              {/* 🔴 Fills the row, and is deliberately NOT a second red box
+                  (2026-08-22 user: 样式不太好看，需要100%填充).
+                  Two things were wrong with the 231px red pill this replaces:
+                  it floated in the middle of a 1180px cell, and it was the
+                  SECOND loud red block on screen — the shell's
+                  DataFetchErrorBanner is already reporting the same failure
+                  above, with the error code the user actually needs to report
+                  it. Per R7 of the read-path error-visibility spec, one failure
+                  gets one loud surface; what belongs HERE is the thing the
+                  banner cannot offer — the retry, next to the content it
+                  reloads. So: full width, calm framing, action kept. */}
               {isError && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center">
-                    <div role="alert" aria-live="assertive" className="inline-flex items-center gap-3 rounded px-3 py-2" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.38)' }}>
+                  <td colSpan={7} className="px-5 py-6">
+                    <div
+                      role="alert"
+                      aria-live="assertive"
+                      className="flex w-full items-center justify-center gap-3 rounded px-4 py-3"
+                      style={{ color: 'var(--muted-foreground)', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}
+                    >
                       <span>{t('accessTokens.loadError')}</span>
                       <button type="button" className="row-use-btn" onClick={() => void refetch()}>{t('accessTokens.retry')}</button>
                     </div>

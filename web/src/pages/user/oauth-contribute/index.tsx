@@ -230,6 +230,7 @@ export default function OAuthContributePage() {
     refetchOnReconnect: true,
   });
   const ownerGroupsErr = ownerGroupsQ.data && isTeamFetchError(ownerGroupsQ.data) ? ownerGroupsQ.data : undefined;
+
   const myGroups: MyOauthGroup[] = useMemo(() => (Array.isArray(ownerGroupsQ.data) ? ownerGroupsQ.data : []), [ownerGroupsQ.data]);
   const ownerPools: MyOauthGroup[] = useMemo(() => {
     return myGroups.filter((g) => g.is_owner);
@@ -311,7 +312,7 @@ export default function OAuthContributePage() {
   const ready = !listQ.isLoading && !fetchErr && !listQueryError;
 
   return (
-    <div className="vault-page h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
+    <div className="vault-page page-under-header h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
       <style>{KEYS_PAGE_CSS}</style>
       <div className="vault-page-scroll flex-1 overflow-y-auto">
         <div className="px-6 py-5 space-y-5">
