@@ -21,6 +21,17 @@
  *   - Source tree absent (external checkout) → keep committed output, warn.
  *   - A markdown line shape this mini-renderer does not understand → HARD
  *     FAIL, so new syntax in the doc can never render as silent garbage.
+ *
+ * 2026-08-25 — TABLES. §4 grew a "这一段的三个关卡" summary table and a
+ * capability/compatibility matrix, and this renderer threw on every `|` line,
+ * which blocked `npm run build` in BOTH control webs (their `prebuild` runs this
+ * script) and therefore release.sh's Web-user and Web-prod builds too.
+ *
+ * 🔴 The throw was right and stays. The bug was not "it fails loudly", it was
+ * "it cannot render a table" — so the fix teaches it tables rather than making
+ * the fence lenient. A renderer that skips shapes it does not know would have
+ * dropped a compatibility matrix off the employee walkthrough and told no one.
+ * Docs: workflow/CI/bugfix/20260825-step-by-step-codegen-cannot-render-tables.md
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,13 +39,25 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../../..'); // aikeylabs/
-const SRC_MD = path.join(repoRoot, 'workflow/Docs/enterprise-delivery/快速开始.md');
-const SRC_ASSETS = path.join(repoRoot, 'workflow/Docs/enterprise-delivery');
-const OUT_TREES = [
-  path.join(repoRoot, 'aikey-control/web/public/step-by-step'),
-  path.join(repoRoot, 'aikey-control-master/web/public/step-by-step'),
-  path.join(repoRoot, 'aikey-trial-server/web/public/step-by-step'),
-];
+
+// Test-only overrides, same convention as generate-provider-registry.mjs
+// (AIKEY_CODEGEN_*). They exist so the tests can drive THIS script — real child
+// process, real exit codes — over tiny fixtures, instead of re-implementing the
+// renderer in the test and passing whenever both copies share a misunderstanding.
+// 🚫 Never set in any build, make target or release path.
+const SRC_MD =
+  process.env.AIKEY_CODEGEN_STEPBYSTEP_MD ||
+  path.join(repoRoot, 'workflow/Docs/enterprise-delivery/快速开始.md');
+// Screenshots are resolved relative to the markdown, so a fixture that
+// references one only needs to put it next to the fixture.
+const SRC_ASSETS = path.dirname(SRC_MD);
+const OUT_TREES = process.env.AIKEY_CODEGEN_STEPBYSTEP_OUT_DIR
+  ? [process.env.AIKEY_CODEGEN_STEPBYSTEP_OUT_DIR]
+  : [
+      path.join(repoRoot, 'aikey-control/web/public/step-by-step'),
+      path.join(repoRoot, 'aikey-control-master/web/public/step-by-step'),
+      path.join(repoRoot, 'aikey-trial-server/web/public/step-by-step'),
+    ];
 
 if (!fs.existsSync(SRC_MD)) {
   console.warn(
@@ -70,6 +93,22 @@ function inline(s) {
   return out;
 }
 
+/** Split one `| a | b |` row into its cells.
+ *
+ *  A `\|` inside a cell is an escaped pipe (the only way markdown lets a cell
+ *  contain one) and is unescaped after the split, so `a \| b` stays ONE cell
+ *  reading `a | b` rather than silently becoming two. */
+function tableCells(row) {
+  const inner = row.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return inner.split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').trim());
+}
+
+/** `|---|:--:|` — the row markdown requires between a header and its body. */
+function isTableDelimiterRow(row) {
+  const cs = tableCells(row);
+  return cs.length > 0 && cs.every((c) => /^:?-+:?$/.test(c));
+}
+
 const images = [];
 const lines = section.split('\n');
 const body = [];
@@ -82,6 +121,41 @@ while (i < lines.length) {
     while (i < lines.length && !lines[i].startsWith('```')) buf.push(lines[i++]);
     i++; // closing fence
     body.push(`<pre><code>${esc(buf.join('\n'))}</code></pre>`);
+    continue;
+  }
+  if (line.startsWith('|')) {
+    // A table is header + delimiter + N body rows; consume the whole run.
+    const rows = [];
+    while (i < lines.length && lines[i].startsWith('|')) rows.push(lines[i++]);
+    // 🔴 Strict on purpose, in both directions:
+    //   · no delimiter row → this is not a table, and guessing what it is would
+    //     be the silent-garbage outcome the fences exist to prevent;
+    //   · a body row with a different cell count → markdown viewers silently
+    //     drop or pad the extras, so the doc author would never learn that the
+    //     page they shipped is missing a column.
+    if (rows.length < 2 || !isTableDelimiterRow(rows[1])) {
+      throw new Error(
+        `step-by-step: table without a |---| delimiter row (line: ${rows[0]})`,
+      );
+    }
+    const header = tableCells(rows[0]);
+    const bodyRows = rows.slice(2).map(tableCells);
+    for (const r of bodyRows) {
+      if (r.length !== header.length) {
+        throw new Error(
+          `step-by-step: table row has ${r.length} cells, header has ${header.length} (row: ${r.join(' | ')})`,
+        );
+      }
+    }
+    const head = header.map((c) => `<th>${inline(c)}</th>`).join('');
+    const rowsHtml = bodyRows
+      .map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`)
+      .join('');
+    // Wrapped: these matrices are wider than the 820px column on a phone, and a
+    // table that scrolls inside its own box beats a page that scrolls sideways.
+    body.push(
+      `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`,
+    );
     continue;
   }
   if (/^#### /.test(line)) body.push(`<h4>${inline(line.slice(5))}</h4>`);
@@ -110,28 +184,10 @@ while (i < lines.length) {
     continue;
   } else if (line.trim() === '' || line.trim() === '---') {
     // blank / rule: paragraph separation handled by block tags
-  } else if (/^\s*\|/.test(line) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] ?? '')) {
-    // GFM pipe table. Recognised only when the NEXT line is the delimiter row,
-    // so a stray line that merely starts with "|" still reaches the fail-loud
-    // branch below instead of being silently swallowed as a one-column table.
-    const cells = (l) =>
-      l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
-    const head = cells(line);
-    i += 2; // consume the header and delimiter rows
-    const rows = [];
-    while (i < lines.length && /^\s*\|/.test(lines[i])) {
-      rows.push(cells(lines[i]));
-      i++;
-    }
-    body.push(
-      `<div class="table-scroll"><table><thead><tr>${head
-        .map((c) => `<th>${inline(c)}</th>`)
-        .join('')}</tr></thead><tbody>${rows
-        .map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`)
-        .join('')}</tbody></table></div>`,
-    );
-    continue;
-  } else if (/^[#|]/.test(line)) {
+  } else if (/^#/.test(line)) {
+    // Heading levels this page has no style for (h1, h5+). `|` is no longer
+    // listed here because the branch above consumes every table row before
+    // anything can reach this point.
     throw new Error(`step-by-step: unrenderable markdown line shape: ${line}`);
   } else {
     body.push(`<p>${inline(line)}</p>`);
@@ -184,17 +240,14 @@ blockquote{margin:14px 0;padding:10px 14px;border-left:3px solid var(--primary-d
   border-radius:0 7px 7px 0;background:rgba(250,204,21,.05);color:var(--muted);font-size:13.5px}
 blockquote p{margin:4px 0;color:inherit}
 ul{margin:10px 0;padding-left:22px;color:#d4d4d8}
-/* Tables mirror the project's own treatment (web/src/index.css "-- Table --"):
-   muted small header over a faint wash, hairline row rules, none on the last
-   row. Every colour is one of this page's existing tokens - no new values. */
-.table-scroll{overflow-x:auto;margin:14px 0;border:1px solid var(--border);border-radius:8px}
-table{border-collapse:collapse;width:100%;min-width:520px}
-table th{font:600 11.5px var(--mono);letter-spacing:.02em;color:var(--muted);text-align:left;
-  padding:9px 12px;background:rgba(0,0,0,.2);border-bottom:1px solid var(--border);white-space:nowrap}
-table td{font-size:13.5px;color:#d4d4d8;padding:9px 12px;border-bottom:1px solid var(--border);
-  vertical-align:top}
-table tr:last-child td{border-bottom:none}
-table tbody tr:hover{background:rgba(255,255,255,.02)}
+.table-wrap{margin:16px 0;overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:9px 12px;text-align:left;vertical-align:top;
+  border-bottom:1px solid rgba(255,255,255,.06)}
+th{font:700 11px var(--mono);letter-spacing:.06em;color:var(--muted);
+  background:rgba(0,0,0,.25);white-space:nowrap}
+td{color:#d4d4d8}
+tbody tr:last-child td{border-bottom:0}
 figure{margin:18px 0}
 figure img{max-width:100%;border:1px solid var(--border);border-radius:8px;
   box-shadow:0 18px 50px rgba(0,0,0,.35)}
