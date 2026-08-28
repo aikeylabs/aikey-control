@@ -37,8 +37,15 @@ const (
 	// unset, this deployment names factors that are unstable where it runs, and
 	// the vendor refuses the activation with a message about primary_mac that
 	// points at no setting on this side.
-	EventControlLicenseEnvironmentUnset          = "control.license.environment_unset"
-	EventControlLicenseEnvironmentInvalid        = "control.license.environment_invalid"
+	EventControlLicenseEnvironmentUnset   = "control.license.environment_unset"
+	EventControlLicenseEnvironmentInvalid = "control.license.environment_invalid"
+	// EventControlLicenseClusterAdmitBadCount: the cluster hub reported a
+	// negative live node count on POST /v1/license/cluster/admit. The count is
+	// clamped to zero rather than refused — the hub is a service-token caller and
+	// turning a hub bug into "this cluster cannot scale" is the worse failure —
+	// so this WARN is the only trace it leaves. 🚫 Never silent: a clamped input
+	// that nobody logs is how a wrong ceiling reads as a correct one.
+	EventControlLicenseClusterAdmitBadCount      = "control.license.cluster_admit_bad_count"
 	EventControlSnapshotOAuthGroupResolveFailed  = "control.snapshot.oauth_group_resolve_failed"
 	EventControlSnapshotOAuthGroupBumpFailed     = "control.snapshot.oauth_group_bump_failed"
 	EventControlOrgDeliveryAssignmentReadFailed  = "control.org_delivery.assignment_read_failed"
