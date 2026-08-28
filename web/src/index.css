@@ -216,15 +216,40 @@ body {
    full height and its content slides under the glass. Content still starts in
    the same visual place — only what happens above it changes.
 
+   🔴 The pull-up has TWO preconditions. Both are in the selector, because the
+   first version had neither and broke two pages (bugfix
+   20260822-vault-page-pullup-covers-error-banner.md):
+
+   1. `.page-under-header` — the page must OPT IN. `.vault-page` alone does not
+      mean "page root that owns its scroller": /user/access-tokens wears it as a
+      pure SKIN class (shared table / chip / drawer styles) with no inner
+      scroller, so the pulled-up 64px was never handed back and its title sat
+      permanently behind the header. A skin class cannot carry a layout
+      contract — the layout contract needs its own name.
+
+   2. `:first-child` — the page must actually BE at the padding edge. It is not
+      always: UserShell renders SeatPendingBanner and DataFetchErrorBanner as
+      preceding siblings inside the same scroll container. Both render null when
+      idle (so `:first-child` holds in the normal case), but the moment a read
+      fails the banner appears and the page is no longer at the edge — pulling
+      it up then drags the whole page ON TOP of the banner, burying the one
+      piece of UI a user needs while something is broken. While a banner is up
+      we simply skip the effect: content sits below it, the glass loses its
+      under-slide for those seconds. Cheap trade — a header that looks flat
+      beats an error message you cannot read.
+
    `.vault-page-scroll` is an explicit contract, not a utility-class match: the
-   page declares "this element is my scroll region". Keyed off .user-pages so
-   the master console's AppShell is untouched.
+   page declares "this element is my scroll region". It is nested under the same
+   condition so all three declarations turn on and off together — a scroller
+   keeping its 4rem of padding while the page was NOT pulled up would open a
+   64px hole at the top of the page. Keyed off .user-pages so the master
+   console's AppShell is untouched.
    Dual-edit mirror: keep identical in control/web + master/web. */
-.user-pages .vault-page {
+.user-pages .vault-page.page-under-header:first-child {
   margin-top: -4rem;
   height: calc(100% + 4rem);
 }
-.user-pages .vault-page-scroll {
+.user-pages .vault-page.page-under-header:first-child .vault-page-scroll {
   padding-top: 4rem;
 }
 

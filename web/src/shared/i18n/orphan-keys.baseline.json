@@ -113,6 +113,7 @@
     "appShell.routes.control-events",
     "appShell.routes.conversation-audit",
     "appShell.routes.dashboard",
+    "appShell.routes.directory",
     "appShell.routes.license",
     "appShell.routes.migrate",
     "appShell.routes.nodes",

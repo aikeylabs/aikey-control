@@ -19,3 +19,17 @@ export function retryTimeState(retryAt?: number, nowMs = Date.now()): 'none' | '
 export function showRetryTime(routeStatus: string | undefined, retryState: 'none' | 'future' | 'elapsed'): boolean {
   return Boolean(routeStatus) && retryState !== 'none';
 }
+
+/** knownEpoch returns a usable unix-seconds epoch, or undefined.
+ *
+ * Absent / zero / non-finite are all the SAME thing here — "not observed" —
+ * and must stay undefined rather than becoming a timestamp: window resets are
+ * only learned when a request to the account came back carrying the upstream
+ * reset header, so a freshly attached, never-routed, or aggregate-header-only
+ * account legitimately has none. Rendering 0 would print 1970 and read as a
+ * window that already reset.
+ */
+export function knownEpoch(value?: number): number | undefined {
+  if (value == null || !Number.isFinite(value) || value <= 0) return undefined;
+  return value;
+}
