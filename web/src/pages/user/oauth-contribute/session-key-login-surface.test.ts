@@ -27,7 +27,7 @@ describe('Personal Session Key login surface', () => {
     expect(source).toContain('oauthContribute.codexSessionKeyHint');
   });
 
-  it('uses one masked multiline textarea and changes the same action to Confirm again on mismatch', () => {
+  it('uses one masked multiline textarea and never exposes an identity-mismatch override', () => {
     expect(source).toContain('<textarea');
     expect(source).toContain('rows={4}');
     expect(source).toContain('wrap="soft"');
@@ -35,10 +35,10 @@ describe('Personal Session Key login surface', () => {
     expect(source).toContain("WebkitTextSecurity: 'disc'");
     expect(source).toContain('startSessionKeySignIn');
     expect(source).toContain('sessionKeyConfirmMut.mutate');
-    expect(source).toContain("sessionKeyStatus?.tone === 'warning'");
-    expect(source).toContain('oauthContribute.sessionKeyConfirmAgain');
-    expect(source).toContain('identityMismatchConfirmed: true');
-    expect(source).toContain("sessionKeyStatus.tone === 'error' || sessionKeyStatus.tone === 'warning'");
+    expect(source).toContain('SESSION_KEY_IDENTITY_MISMATCH');
+    expect(source).toContain('oauthContribute.loginIdentityMismatchError');
+    expect(source).not.toContain('identityMismatchConfirmed');
+    expect(source).not.toContain('oauthContribute.sessionKeyConfirmAgain');
   });
 
   it('places shared provider-specific acquisition help beside the visible input label', () => {
