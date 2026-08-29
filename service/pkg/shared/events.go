@@ -19,6 +19,11 @@ const (
 	EventControlOAuthGroupAttachMemberListFailed           = "control.oauth_group.attach_member_list_failed"
 	EventControlOAuthGroupEnableMemberListFailed           = "control.oauth_group.enable_member_list_failed"
 	EventControlOAuthGroupUtilizationReadFailed            = "control.oauth_group.utilization_read_failed"
+	// Seat-token hard revoke on membership exit (spec: R-oauth-token-mint-4).
+	// A token that outlives its membership is the state that later reads as a
+	// bug, so both the failure and the successful revoke are nameable.
+	EventControlOAuthSeatTokenRevokeFailed                 = "control.oauth_group.seat_token_revoke_failed"
+	EventControlOAuthSeatTokenRevoked                      = "control.oauth_group.seat_token_revoked"
 	EventControlSnapshotOAuthGroupResolveFailed            = "control.snapshot.oauth_group_resolve_failed"
 	EventControlSnapshotOAuthGroupBumpFailed               = "control.snapshot.oauth_group_bump_failed"
 	EventControlOrgDeliveryAssignmentReadFailed            = "control.org_delivery.assignment_read_failed"
