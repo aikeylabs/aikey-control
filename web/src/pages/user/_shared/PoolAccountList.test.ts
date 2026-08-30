@@ -7,7 +7,7 @@ import * as path from 'node:path';
 import en from '@/shared/i18n/locales/en/common.json';
 import zh from '@/shared/i18n/locales/zh/common.json';
 
-import { knownEpoch, poolAccountTone, quotaPercent, retryTimeState, showRetryTime } from './pool-account-state';
+import { knownEpoch, poolAccountTone, quotaPercent, retryTimeState, ridesSharedFallback, showRetryTime } from './pool-account-state';
 
 describe('PoolAccountList display derivations', () => {
   it('uses danger only for exhausted and authentication-failed accounts', () => {
@@ -225,5 +225,56 @@ describe('compact window-reset display', () => {
     const REFRESH_CW = 'M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15';
     expect(listSource).toContain(REFRESH_CW);
     expect(flat(path.resolve(process.cwd(), 'src/pages/user/import/index.tsx'))).toContain(REFRESH_CW);
+  });
+});
+
+// 「你当前在用共享兜底」提示（铸币源模型 v3.1 P4-B）。
+//
+// 这个提示要解决的是一件**看不见**的事：管理员贴的共享兜底会让一个从没登录过的
+// 成员显示成绿色的「已登录」——他因此永远不知道自己该去登录。对于不能铸造
+// 专属 token 的 provider（Codex），自己登录是拿到专属 token 的**唯一**途径，
+// 所以这条提示是永久性的，不是过渡期措施。
+//
+// 围栏钉住的判据：只有「在服务中 + 材料来自兜底」才提示。
+describe('shared-fallback hint', () => {
+  it('warns exactly the member the shared fallback is covering for', () => {
+    expect(ridesSharedFallback({
+      credential_type: 'oauth_account', login_status: 'logged_in', token_source: 'fallback',
+    })).toBe(true);
+  });
+
+  it('stays silent for a member serving on his own token', () => {
+    expect(ridesSharedFallback({
+      credential_type: 'oauth_account', login_status: 'logged_in', token_source: 'seat',
+    })).toBe(false);
+  });
+
+  it('does not guess when the server never sent a source', () => {
+    // Older master (no token_source on the wire): nagging everyone would be
+    // worse than staying quiet — most of them are fine.
+    expect(ridesSharedFallback({
+      credential_type: 'oauth_account', login_status: 'logged_in',
+    })).toBe(false);
+  });
+
+  it('does not stack onto states that already ask the member to act', () => {
+    for (const login_status of ['needs_login', 'auth_failed', 'revoked']) {
+      expect(ridesSharedFallback({
+        credential_type: 'oauth_account', login_status, token_source: 'fallback',
+      })).toBe(false);
+    }
+  });
+
+  it('never fires for an api_key account, which has no login concept', () => {
+    expect(ridesSharedFallback({
+      credential_type: 'api_key', login_status: 'logged_in', token_source: 'fallback',
+    })).toBe(false);
+  });
+
+  it('carries the hint wording in both locales', () => {
+    for (const bundle of [en, zh]) {
+      expect(bundle.poolAccount.sharedFallback).toBeTruthy();
+      expect(bundle.poolAccount.sharedFallbackHelp).toBeTruthy();
+    }
   });
 });

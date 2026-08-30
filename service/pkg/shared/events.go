@@ -22,18 +22,34 @@ const (
 	// Seat-token hard revoke on membership exit (spec: R-oauth-token-mint-4).
 	// A token that outlives its membership is the state that later reads as a
 	// bug, so both the failure and the successful revoke are nameable.
-	EventControlOAuthSeatTokenRevokeFailed                 = "control.oauth_group.seat_token_revoke_failed"
-	EventControlOAuthSeatTokenRevoked                      = "control.oauth_group.seat_token_revoked"
-	EventControlSnapshotOAuthGroupResolveFailed            = "control.snapshot.oauth_group_resolve_failed"
-	EventControlSnapshotOAuthGroupBumpFailed               = "control.snapshot.oauth_group_bump_failed"
-	EventControlOrgDeliveryAssignmentReadFailed            = "control.org_delivery.assignment_read_failed"
-	EventControlUsageReportingTimeZoneReadFailed           = "control.usage.reporting_time_zone_read_failed"
-	EventControlUsageReportingTimeZoneInvalid              = "control.usage.reporting_time_zone_invalid"
+	EventControlOAuthSeatTokenRevokeFailed = "control.oauth_group.seat_token_revoke_failed"
+	EventControlOAuthSeatTokenRevoked      = "control.oauth_group.seat_token_revoked"
+	// The admin seat list could not read a pool account's per-member token state.
+	// Display-only degradation: the seat list still renders, minus the coverage
+	// column. Failing the whole list over a side signal would be self-inflicted.
+	EventOauthGroupMemberStateUnreadable = "control.oauth_group.member_state_unreadable"
+	// 401 signal named a layer whose bearer no longer matches either layer —
+	// a stale report from before a re-login. Consumed, but nameable.
+	EventControlOAuthAuthFailureStaleBearer = "control.oauth_group.auth_failure_stale_bearer"
+	// Seat-token minting (spec: R-oauth-token-mint-3/5/7). Every branch is
+	// nameable: a sweep that mints nothing must be distinguishable from a
+	// sweep whose gate is closed, whose CAS lost, or that failed upstream.
+	EventControlOAuthMintGateClosed              = "control.oauth_mint.gate_closed"
+	EventControlOAuthMintFailed                  = "control.oauth_mint.failed"
+	EventControlOAuthMintSourceCondemned         = "control.oauth_mint.source_condemned"
+	EventControlOAuthMintLostCAS                 = "control.oauth_mint.lost_version_guard"
+	EventControlOAuthMintNoRenewalPath           = "control.oauth_mint.no_renewal_path"
+	EventControlOAuthMintIdentityMismatch        = "control.oauth_mint.identity_mismatch"
+	EventControlSnapshotOAuthGroupResolveFailed  = "control.snapshot.oauth_group_resolve_failed"
+	EventControlSnapshotOAuthGroupBumpFailed     = "control.snapshot.oauth_group_bump_failed"
+	EventControlOrgDeliveryAssignmentReadFailed  = "control.org_delivery.assignment_read_failed"
+	EventControlUsageReportingTimeZoneReadFailed = "control.usage.reporting_time_zone_read_failed"
+	EventControlUsageReportingTimeZoneInvalid    = "control.usage.reporting_time_zone_invalid"
 	// EventControlConvAuditSeatSearchFailed fires when the usage facade cannot
 	// resolve a conversation-audit seat-name search (?q=) against org_seats. The
 	// request is answered with an explicit 500 (never silently forwarded
 	// unfiltered — a failed search must not masquerade as "everyone matched").
-	EventControlConvAuditSeatSearchFailed      = "control.conversation_audit.seat_search_failed"
+	EventControlConvAuditSeatSearchFailed = "control.conversation_audit.seat_search_failed"
 	// EventControlConvAuditSeatSearchNarrowed fires when a seat search resolved
 	// more keys than query-service accepts and the facade intersected them with
 	// the keys that actually carry conversation rows. INFO, not WARN: the search

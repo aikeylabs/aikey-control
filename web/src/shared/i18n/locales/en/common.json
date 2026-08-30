@@ -53,7 +53,9 @@
       "needs_login": "Sign-in needed",
       "auth_failed": "Sign in again",
       "revoked": "Revoked"
-    }
+    },
+    "sharedFallback": "Borrowing the admin's credential",
+    "sharedFallbackHelp": "This account works right now because it is borrowing the admin's credential — you have not signed in yourself. Sign in to get a token of your own."
   },
   "errorDisplay": {
     "field": "Field",

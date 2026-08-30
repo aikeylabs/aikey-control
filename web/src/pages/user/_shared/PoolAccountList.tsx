@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { routedGroupAccount, type GroupAccountRef } from '@/shared/api/user/delivery';
 import { formatDateShort, formatDateTime, formatRelativeTime, formatTime } from '@/shared/utils/datetime-intl';
 import { providerBrandColor } from './provider-brand';
-import { knownEpoch, poolAccountTone, quotaPercent, retryTimeState, showRetryTime } from './pool-account-state';
+import { knownEpoch, poolAccountTone, quotaPercent, retryTimeState, ridesSharedFallback, showRetryTime } from './pool-account-state';
 
 interface PoolAccountListProps {
   accounts?: GroupAccountRef[] | null;
@@ -257,6 +257,30 @@ export function PoolAccountList({ accounts, loginHref, loginTitle, loginLabel, s
                   {loginStatusLabel(account.login_status)}
                 </span>
               )}
+              {/* Riding the admin's shared fallback: the account works right now, but
+                  this member has never signed in himself. Without saying so, a
+                  green "signed in" chip actively hides that from him — and for
+                  providers that cannot mint per-seat tokens (Codex) signing in
+                  yourself is the ONLY way to ever get your own token, so this
+                  hint is permanent, not transitional. */}
+              {ridesSharedFallback(account) &&
+                (loginHref ? (
+                  // Actionable on purpose: telling someone he is on the shared
+                  // fallback without handing him the way off it is a dead end.
+                  <Link
+                    to={loginHref(account.credential_id)}
+                    className="chip warning"
+                    style={{ textDecoration: 'none', cursor: 'pointer' }}
+                    title={t('poolAccount.sharedFallbackHelp')}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {t('poolAccount.sharedFallback')} →
+                  </Link>
+                ) : (
+                  <span className="chip warning" title={t('poolAccount.sharedFallbackHelp')}>
+                    {t('poolAccount.sharedFallback')}
+                  </span>
+                ))}
               {loginHref && account.credential_type === 'oauth_account' && account.login_status === 'needs_login' && (
                 <Link
                   to={loginHref(account.credential_id)}

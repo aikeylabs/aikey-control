@@ -53,7 +53,9 @@
       "needs_login": "待登录",
       "auth_failed": "需要重新登录",
       "revoked": "已吊销"
-    }
+    },
+    "sharedFallback": "暂借管理员凭据",
+    "sharedFallbackHelp": "这个账号现在能用，是因为暂时借用了管理员的凭据——你本人还没登录过。点这里用自己的账号登录，拿到属于你自己的令牌。"
   },
   "errorDisplay": {
     "field": "字段",
