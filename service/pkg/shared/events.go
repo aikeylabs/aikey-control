@@ -40,6 +40,28 @@ const (
 	EventControlOAuthMintLostCAS                 = "control.oauth_mint.lost_version_guard"
 	EventControlOAuthMintNoRenewalPath           = "control.oauth_mint.no_renewal_path"
 	EventControlOAuthMintIdentityMismatch        = "control.oauth_mint.identity_mismatch"
+
+	// The deployment has a persisted state directory configured but could not
+	// mint or read its install id there. 🔴 Logged rather than fatal: the
+	// downstream symptom is an activation refused for "too few factors",
+	// which names the effect and not this cause.
+	EventControlLicenseInstallIDUnavailable = "control.license.install_id_unavailable"
+	// No deployment environment was configured, or the configured one is not a
+	// value fingerprint knows. 🔴 WARN rather than fatal: a control plane that
+	// refuses to boot over this is worse than one that boots unable to activate,
+	// and the deployment may already be activated. But it must not be silent —
+	// unset, this deployment names factors that are unstable where it runs, and
+	// the vendor refuses the activation with a message about primary_mac that
+	// points at no setting on this side.
+	EventControlLicenseEnvironmentUnset   = "control.license.environment_unset"
+	EventControlLicenseEnvironmentInvalid = "control.license.environment_invalid"
+	// EventControlLicenseClusterAdmitBadCount: the cluster hub reported a
+	// negative live node count on POST /v1/license/cluster/admit. The count is
+	// clamped to zero rather than refused — the hub is a service-token caller and
+	// turning a hub bug into "this cluster cannot scale" is the worse failure —
+	// so this WARN is the only trace it leaves. 🚫 Never silent: a clamped input
+	// that nobody logs is how a wrong ceiling reads as a correct one.
+	EventControlLicenseClusterAdmitBadCount      = "control.license.cluster_admit_bad_count"
 	EventControlSnapshotOAuthGroupResolveFailed  = "control.snapshot.oauth_group_resolve_failed"
 	EventControlSnapshotOAuthGroupBumpFailed     = "control.snapshot.oauth_group_bump_failed"
 	EventControlOrgDeliveryAssignmentReadFailed  = "control.org_delivery.assignment_read_failed"

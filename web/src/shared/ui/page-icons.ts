@@ -63,6 +63,10 @@ const MASTER_PAGE_GLYPH: Record<string, GlyphName> = {
   'control-events': 'history',
   'conversation-audit': 'conversation',
   'dashboard': 'dashboard',
+  // Licence — 'shield' matches the sidebar's ShieldIcon in AppShell. Unused
+  // elsewhere in THIS table; the user tree's 'vault' also uses it, which is a
+  // different console with a different nav, so the two never appear together.
+  'license': 'shield',
   // Organisation structure (阶段8 · Feishu directory). 'team-kind' — the
   // organisation's people as a body, distinct from Seats' 'users' (the
   // individual roster) sitting directly beneath it in the same group.

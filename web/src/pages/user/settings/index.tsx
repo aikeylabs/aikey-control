@@ -29,6 +29,7 @@
  * No horizontal dividers between cards — 24px vertical gap only.
  */
 import { useEffect, useState } from 'react';
+import { LicensedTo } from '@/shared/components/LicensedTo';
 import { apiErrorMessage, isProxyUnavailable } from '@/shared/api/error-message';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -620,7 +621,7 @@ export default function SettingsPage() {
           {t('settings.title')}
         </h1>
         <p
-          className="mb-8"
+          className="mb-2"
           style={{
             fontSize: 14,
             color: 'var(--muted-foreground)',
@@ -628,6 +629,18 @@ export default function SettingsPage() {
         >
           {t('settings.subtitle')}
         </p>
+
+        {/* specs/license-identity ID-02: the settings page is one of the four
+            surfaces that must render this row byte-identically with the sign-in
+            page, `aikey status` and `aikey doctor`.
+
+            🚫 Nothing else about the licence belongs here. This is a MEMBER
+            surface, and design D12 keeps the term, the maintenance date, the
+            ceilings and the enforcement mode off it — the endpoint behind the
+            row returns one field for exactly that reason. */}
+        <div className="mb-8" style={{ color: 'var(--muted-foreground)' }}>
+          <LicensedTo className="text-xs font-mono" />
+        </div>
 
         {/* ── Card 0: Current Account ─────────────────────────────────
             Surface the logged-in email at the top so users can confirm
