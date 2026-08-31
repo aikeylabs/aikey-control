@@ -1,6 +1,6 @@
 /**
- * Team OAuth / pool sign-in — /user/team-oauth (C11 / RW9, per-member
- * pool-login model). Shows the member's logged-into-account HISTORY (kept over
+ * Team OAuth / pool sign-in — /user/team-oauth (C11 / RW9, shared-account
+ * pool-login model). Shows the member's authorized account HISTORY (kept over
  * time) with the account the allocation engine currently routes them to HIGHLIGHTED
  * — only that current-route account can reveal its admin-stored password and run a
  * pool sign-in. Past accounts are read-only history.
@@ -54,6 +54,7 @@ import {
   poolSubmitCode,
   poolStatus,
   isPoolLoginError,
+  SESSION_KEY_IDENTITY_MISMATCH,
 } from '@/shared/api/user/pool-login';
 import { copyText } from '@/shared/utils/clipboard';
 import { sessionKeyProviderKind } from '@/shared/session-key-capability';
@@ -230,6 +231,7 @@ export default function OAuthContributePage() {
     refetchOnReconnect: true,
   });
   const ownerGroupsErr = ownerGroupsQ.data && isTeamFetchError(ownerGroupsQ.data) ? ownerGroupsQ.data : undefined;
+
   const myGroups: MyOauthGroup[] = useMemo(() => (Array.isArray(ownerGroupsQ.data) ? ownerGroupsQ.data : []), [ownerGroupsQ.data]);
   const ownerPools: MyOauthGroup[] = useMemo(() => {
     return myGroups.filter((g) => g.is_owner);
@@ -311,7 +313,7 @@ export default function OAuthContributePage() {
   const ready = !listQ.isLoading && !fetchErr && !listQueryError;
 
   return (
-    <div className="vault-page h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
+    <div className="vault-page page-under-header h-full flex flex-col min-w-0 min-h-0 overflow-hidden">
       <style>{KEYS_PAGE_CSS}</style>
       <div className="vault-page-scroll flex-1 overflow-y-auto">
         <div className="px-6 py-5 space-y-5">
@@ -854,9 +856,8 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   const [code, setCode] = useState('');
   const [sessionKey, setSessionKey] = useState('');
   const [sessionKeyOperationID, setSessionKeyOperationID] = useState('');
-  const [sessionKeyIdentityMismatch, setSessionKeyIdentityMismatch] = useState(false);
   const [sessionKeyStatus, setSessionKeyStatus] = useState<{
-    tone: 'success' | 'error' | 'pending' | 'warning';
+    tone: 'success' | 'error' | 'pending';
     message: string;
   } | null>(null);
   const [err, setErr] = useState('');
@@ -1043,6 +1044,23 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         setErr(res.message);
         return;
       }
+      // Rolling-upgrade fence: an older Proxy may still return a reviewable
+      // mismatch. Never surface a confirm action for it because the token would
+      // become the shared login for every authorized member.
+      if (res.identity_mismatch) {
+        setErr(
+          t('oauthContribute.loginIdentityMismatchError', {
+            actual: res.identity || t('oauthContribute.sessionKeyIdentityUnknown'),
+            expected: res.expected_identity || account.identity,
+          }),
+        );
+        setSignedInAs('');
+        setAwaitingConfirm(false);
+        setSessionId('');
+        setCode('');
+        setSessionFlow('');
+        return;
+      }
       setErr('');
       setSignedInAs(res.identity ?? '');
       setAwaitingConfirm(true); // keep sessionId + code so Confirm can replay the token
@@ -1082,6 +1100,10 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       poolSessionKey(account.credential_id, value, operationID, false),
     onSuccess: (res, variables) => {
       if (isPoolLoginError(res)) {
+        if (res.code === SESSION_KEY_IDENTITY_MISMATCH) {
+          setSessionKey('');
+          setSessionKeyOperationID('');
+        }
         setSessionKeyStatus({
           tone: 'error',
           message: `[${res.code}] ${res.message}`,
@@ -1096,32 +1118,33 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       setSyncWarning('');
       const confirmedOperationID = res.operation_id || variables.operationID;
       setSessionKeyOperationID(confirmedOperationID);
+      // Rolling-upgrade fence for an older local Proxy. The current Proxy
+      // returns SESSION_KEY_IDENTITY_MISMATCH before creating an operation;
+      // either way, the user must paste the matching account's key.
       if (res.identity_mismatch) {
-        setSessionKeyIdentityMismatch(true);
+        setSessionKeyOperationID('');
         setSessionKeyStatus({
-          tone: 'warning',
-          message: t('oauthContribute.sessionKeyIdentityMismatchWarning', {
+          tone: 'error',
+          message: t('oauthContribute.loginIdentityMismatchError', {
             actual: res.identity || t('oauthContribute.sessionKeyIdentityUnknown'),
             expected: res.expected_identity || account.identity,
           }),
         });
         return;
       }
-      setSessionKeyIdentityMismatch(false);
       setSessionKeyStatus({
         tone: 'pending',
         message: t('oauthContribute.sessionKeySaving'),
       });
       sessionKeyConfirmMut.mutate({
         operationID: confirmedOperationID,
-        identityMismatchConfirmed: false,
       });
     },
   });
 
   const sessionKeyConfirmMut = useMutation({
-    mutationFn: ({ operationID, identityMismatchConfirmed }: { operationID: string; identityMismatchConfirmed: boolean }) =>
-      poolSessionKey(account.credential_id, '', operationID, true, identityMismatchConfirmed),
+    mutationFn: ({ operationID }: { operationID: string }) =>
+      poolSessionKey(account.credential_id, '', operationID, true),
     onSuccess: (res) => {
       if (isPoolLoginError(res)) {
         setSessionKeyStatus({
@@ -1144,7 +1167,6 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       setSignedInAs('');
       setAwaitingConfirm(false);
       setSessionKeyOperationID('');
-      setSessionKeyIdentityMismatch(false);
       setSessionKeyStatus({
         tone: 'success',
         message: t('oauthContribute.sessionKeyLoginSuccess', {
@@ -1202,7 +1224,6 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     setSessionFlow('');
     setSessionKey('');
     setSessionKeyOperationID('');
-    setSessionKeyIdentityMismatch(false);
     setSessionKeyStatus(null);
     setExpectedLoginIdentity(account.identity);
   }
@@ -1231,9 +1252,9 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     sessionKeyStartMut.mutate({ value, operationID });
   }
 
-  // Team-account match check (advisory, not enforced): the token IS written either
-  // way; we only warn (yellow) so the member notices they logged into the wrong
-  // Claude account. Compare case-insensitively against this slot's expected email.
+  // Current Proxy builds reject a mismatch before this review state. Retain the
+  // comparison as a rolling-upgrade safety fence and never enable confirmation
+  // if an older Proxy still returns mismatched identity metadata.
   const expectedEmail = expectedLoginIdentity.trim().toLowerCase();
   const actualEmail = signedInAs.trim().toLowerCase();
   const emailMismatch = !!actualEmail && !!expectedEmail && actualEmail !== expectedEmail;
@@ -1518,7 +1539,6 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                   onChange={(e) => {
                     setSessionKey(e.target.value);
                     setSessionKeyOperationID('');
-                    setSessionKeyIdentityMismatch(false);
                     setSessionKeyStatus(null);
                   }}
                   placeholder={sessionKeyPlaceholder}
@@ -1528,28 +1548,18 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
               <button
                 type="button"
                 className="row-use-btn"
-                onClick={
-                  sessionKeyOperationID && sessionKeyStatus?.tone === 'warning'
-                    ? () =>
-                        sessionKeyConfirmMut.mutate({
-                          operationID: sessionKeyOperationID,
-                          identityMismatchConfirmed: true,
-                        })
-                    : startSessionKeySignIn
-                }
+                onClick={startSessionKeySignIn}
                 disabled={
                   !supportsSessionKey ||
                   sessionKeyStartMut.isPending ||
                   sessionKeyConfirmMut.isPending ||
-                  (!sessionKey.trim() && sessionKeyStatus?.tone !== 'warning')
+                  !sessionKey.trim()
                 }
               >
-                <ZapIcon className="w-3 h-3" />
+                <ZapIcon className="w-3 h-3" aria-hidden="true" />
                 {sessionKeyStartMut.isPending || sessionKeyConfirmMut.isPending
                   ? t('oauthContribute.sessionKeySigningIn')
-                  : sessionKeyStatus?.tone === 'warning'
-                    ? t('oauthContribute.sessionKeyConfirmAgain')
-                    : t('oauthContribute.sessionKeyConfirmLogin')}
+                  : t('oauthContribute.sessionKeyConfirmLogin')}
               </button>
               {sessionKeyOperationID && sessionKeyStatus?.tone === 'error' && !sessionKey.trim() && (
                 <button
@@ -1558,7 +1568,6 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                   onClick={() =>
                     sessionKeyConfirmMut.mutate({
                       operationID: sessionKeyOperationID,
-                      identityMismatchConfirmed: sessionKeyIdentityMismatch,
                     })
                   }
                   disabled={sessionKeyConfirmMut.isPending}
@@ -1569,7 +1578,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             </div>
             {sessionKeyStatus && (
               <div
-                role={sessionKeyStatus.tone === 'error' || sessionKeyStatus.tone === 'warning' ? 'alert' : 'status'}
+                role={sessionKeyStatus.tone === 'error' ? 'alert' : 'status'}
                 className="rounded border px-3 py-2 text-[11px] font-mono"
                 style={{
                   color:
@@ -1577,25 +1586,19 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                       ? '#4ade80'
                       : sessionKeyStatus.tone === 'error'
                         ? '#fca5a5'
-                        : sessionKeyStatus.tone === 'warning'
-                          ? '#facc15'
-                          : 'var(--muted-foreground)',
+                        : 'var(--muted-foreground)',
                   borderColor:
                     sessionKeyStatus.tone === 'success'
                       ? 'rgba(74,222,128,0.35)'
                       : sessionKeyStatus.tone === 'error'
                         ? 'rgba(239,68,68,0.4)'
-                        : sessionKeyStatus.tone === 'warning'
-                          ? 'rgba(250,204,21,0.4)'
-                          : 'var(--border)',
+                        : 'var(--border)',
                   background:
                     sessionKeyStatus.tone === 'success'
                       ? 'rgba(74,222,128,0.06)'
                       : sessionKeyStatus.tone === 'error'
                         ? 'rgba(239,68,68,0.08)'
-                        : sessionKeyStatus.tone === 'warning'
-                          ? 'rgba(250,204,21,0.08)'
-                          : 'rgba(0,0,0,0.15)',
+                        : 'rgba(0,0,0,0.15)',
                 }}
               >
                 {sessionKeyStatus.message}
@@ -1608,8 +1611,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         )}
 
         {/* Step-2 review + confirm: the token is exchanged + held but NOT written yet.
-          Show which Claude account resolved (green = matches this slot, yellow warning
-          = mismatch) and require an explicit Confirm before writing it to the server. */}
+          A mismatch is zero-write and never reaches this state on current builds. */}
         {awaitingConfirm && signedInAs && (
           <div className="space-y-3">
             <div
@@ -1636,7 +1638,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                 : t('oauthContribute.signedInMatch', { actual: signedInAs })}
             </div>
             <div className="flex items-center gap-3">
-              <button type="button" className="row-use-btn" onClick={() => confirmMut.mutate()} disabled={confirmMut.isPending}>
+              <button type="button" className="row-use-btn" onClick={() => confirmMut.mutate()} disabled={confirmMut.isPending || emailMismatch}>
                 {confirmMut.isPending ? t('oauthContribute.submitting') : t('oauthContribute.confirmSubmit')}
               </button>
               <button

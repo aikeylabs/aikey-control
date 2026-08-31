@@ -18,12 +18,28 @@ const (
 	EventControlOAuthGroupVKInvalidationCompensationFailed = "control.oauth_group.vk_invalidation_compensation_failed"
 	EventControlOAuthGroupAttachMemberListFailed           = "control.oauth_group.attach_member_list_failed"
 	EventControlOAuthGroupEnableMemberListFailed           = "control.oauth_group.enable_member_list_failed"
-	// Read-side projection lookups behind the OAuth-group account list. Both the
-	// utilization and the upstream-forbidden reads WARN under this name and then
-	// continue with the account unannotated — 🚫 a failed projection read must not
-	// drop the account from the list, but it must not be silent either
-	// (principles/logging-conventions: a fallback path always carries a WARN).
-	EventControlOAuthGroupUtilizationReadFailed = "control.oauth_group.utilization_read_failed"
+	EventControlOAuthGroupUtilizationReadFailed            = "control.oauth_group.utilization_read_failed"
+	// Seat-token hard revoke on membership exit (spec: R-oauth-token-mint-4).
+	// A token that outlives its membership is the state that later reads as a
+	// bug, so both the failure and the successful revoke are nameable.
+	EventControlOAuthSeatTokenRevokeFailed = "control.oauth_group.seat_token_revoke_failed"
+	EventControlOAuthSeatTokenRevoked      = "control.oauth_group.seat_token_revoked"
+	// The admin seat list could not read a pool account's per-member token state.
+	// Display-only degradation: the seat list still renders, minus the coverage
+	// column. Failing the whole list over a side signal would be self-inflicted.
+	EventOauthGroupMemberStateUnreadable = "control.oauth_group.member_state_unreadable"
+	// 401 signal named a layer whose bearer no longer matches either layer —
+	// a stale report from before a re-login. Consumed, but nameable.
+	EventControlOAuthAuthFailureStaleBearer = "control.oauth_group.auth_failure_stale_bearer"
+	// Seat-token minting (spec: R-oauth-token-mint-3/5/7). Every branch is
+	// nameable: a sweep that mints nothing must be distinguishable from a
+	// sweep whose gate is closed, whose CAS lost, or that failed upstream.
+	EventControlOAuthMintGateClosed              = "control.oauth_mint.gate_closed"
+	EventControlOAuthMintFailed                  = "control.oauth_mint.failed"
+	EventControlOAuthMintSourceCondemned         = "control.oauth_mint.source_condemned"
+	EventControlOAuthMintLostCAS                 = "control.oauth_mint.lost_version_guard"
+	EventControlOAuthMintNoRenewalPath           = "control.oauth_mint.no_renewal_path"
+	EventControlOAuthMintIdentityMismatch        = "control.oauth_mint.identity_mismatch"
 
 	// The deployment has a persisted state directory configured but could not
 	// mint or read its install id there. 🔴 Logged rather than fatal: the

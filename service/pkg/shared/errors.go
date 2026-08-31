@@ -183,6 +183,7 @@ var zhMessages = map[string]string{
 	CodeBizRefreshTokenInvalid:          "刷新令牌无效或已过期，请重新运行 aikey login",
 	CodeBizRefreshTokenRevoked:          "刷新令牌已被吊销，请重新运行 aikey login",
 	CodeBizOauthLoginBindingChanged:     "登录期间账号与供应商绑定已变化，请刷新账号列表后重新登录",
+	CodeBizOauthLoginEvidenceRequired:   "本机 AiKey Proxy 版本过旧（登录请求未携带身份证据），不能覆盖已绑定身份的账号；请升级或重启本机 AiKey Proxy，或由管理员在 Master 重新登录该账号",
 	CodeBizOauthLoginContextUnavailable: "该账号的登录上下文不完整，请刷新账号列表或联系管理员",
 	CodeBizOauthRoutedAccountAmbiguous:  "当前存在多个账号池路由，旧版未指定账号的请求无法安全选择；请刷新页面或升级客户端后重试",
 	CodeSysAllocationEngineUnavailable:  "动态分配引擎暂时无法完成账号删除对账；目标账号已停止接收新分配，请稍后重试删除",
@@ -201,8 +202,9 @@ var zhMessages = map[string]string{
 	CodeBizProvCodeTaken:  "已存在使用该代码的供应商",
 
 	// BIZ — Credential
-	CodeBizCredNotFound:      "凭据 {{id}} 不存在",
-	CodeBizCredInactive:      "凭据 {{id}} 未激活",
+	CodeBizCredNotFound:          "凭据 {{id}} 不存在",
+	CodeBizCredInactive:          "凭据 {{id}} 未激活",
+	CodeBizOAuthAccountReclaimed: "账号 {{id}} 已回收，不能通过重新登录恢复；请改用其他账号",
 	CodeBizCredHasActiveRefs: "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、OAuth 账号池 {{group_count}} 个），请先迁移通道或将账号移出账号池，再移入回收站",
 
 	// BIZ — Provider
@@ -332,6 +334,14 @@ const (
 	// BIZ — Credential
 	CodeBizCredNotFound = "BIZ_CRED_NOT_FOUND"
 	CodeBizCredInactive = "BIZ_CRED_INACTIVE"
+	// CodeBizOAuthAccountReclaimed: a login / re-auth side effect tried to write
+	// authoritative material (OAuth token, login password) into a RECLAIMED pool
+	// account. R40: the recycle bin is view-only — there is no restore, so the
+	// remedy is "use a different account", never "sign in again". A reclaimed
+	// row is a tombstone; resurrecting its material would silently re-arm an
+	// account the admin deliberately retired (P2-1/P2-1b, review backlog
+	// 20260827-OAuth账号池Token权威迁移-评审遗留backlog.md).
+	CodeBizOAuthAccountReclaimed = "BIZ_OAUTH_ACCOUNT_RECLAIMED"
 	// CodeBizCredHasActiveRefs: a provider credential/account could not be moved to
 	// the recycle bin because live references still point at it — active direct-bind
 	// channels (managed_provider_bindings) and/or a seat-group attachment
@@ -476,6 +486,14 @@ const (
 	// written under a different provider model; the proxy keeps the session so the
 	// member can refresh/retry without silently corrupting account attribution. 409.
 	CodeBizOauthLoginBindingChanged = "BIZ_OAUTH_LOGIN_BINDING_CHANGED"
+	// CodeBizOauthLoginEvidenceRequired: an evidence-less member writeback (the
+	// pre-identity-field proxy wire shape) targeted an account that already has
+	// a bound identity. The rolling-upgrade allowance covers only identity-less
+	// accounts; a bound account's shared generation must never be replaced
+	// without identity evidence (P2-4, bugfix
+	// 20260828-evidence-less-writeback-bound.md). Remedy: upgrade/restart the
+	// local AiKey Proxy, or recover via the admin Master central login.
+	CodeBizOauthLoginEvidenceRequired = "BIZ_OAUTH_LOGIN_EVIDENCE_REQUIRED"
 	// CodeBizOauthLoginContextUnavailable: the target credential is authorized but
 	// lacks a complete enabled group/provider binding, so a provider login cannot
 	// be initialized deterministically. This is configuration/state, not an empty
@@ -675,6 +693,15 @@ func BizCredNotFound(id string) *DomainError {
 func BizCredInactive(id string) *DomainError {
 	return &DomainError{Code: CodeBizCredInactive,
 		Message: fmt.Sprintf("credential %q is not active", id),
+		Meta:    map[string]any{"id": id}}
+}
+
+// BizOAuthAccountReclaimed — lifecycle write guard: the target pool account is
+// reclaimed (tombstone). No restore exists (R40 view-only recycle bin), so the
+// message must steer the admin to a different account, not to a retry.
+func BizOAuthAccountReclaimed(id string) *DomainError {
+	return &DomainError{Code: CodeBizOAuthAccountReclaimed,
+		Message: fmt.Sprintf("account %q has been reclaimed; it cannot be restored by signing in again — use a different account", id),
 		Meta:    map[string]any{"id": id}}
 }
 
@@ -910,6 +937,15 @@ func BizOauthExitIPAdminManaged() *DomainError {
 func BizOauthLoginCredNotProvisioned() *DomainError {
 	return &DomainError{Code: CodeBizOauthLoginCredNotProvisioned,
 		Message: "no login credential has been provisioned for this account"}
+}
+
+// BizOauthLoginEvidenceRequired — an evidence-less (old-proxy) writeback hit a
+// BOUND account. expected is the account's bound identity (email/external id,
+// never a secret).
+func BizOauthLoginEvidenceRequired(credentialID, expected string) *DomainError {
+	return &DomainError{Code: CodeBizOauthLoginEvidenceRequired,
+		Message: "this login did not carry identity evidence (old local proxy); the account is already bound to an identity, so the write was refused — upgrade/restart the local AiKey Proxy, or recover via the admin Master central login",
+		Meta:    map[string]any{"credential_id": credentialID, "expected": expected}}
 }
 
 // BizOauthLoginBindingChanged reports a stale or inconsistent OAuth login

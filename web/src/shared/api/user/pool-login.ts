@@ -1,6 +1,6 @@
 // pool-login.ts — same-origin client for the pool sign-in relay (C10/RW8). The
 // local-server forwards these to the local aikey-proxy's memory-store broker,
-// which exchanges the code and writes the per-member token back to master. The
+// which exchanges the code and writes the shared account token back to master. The
 // browser only ever sends the pasted code; no token reaches the browser.
 //
 // (Same-origin: these hit the local-server at /api/user/oauth/pool/*, unlike the
@@ -76,6 +76,7 @@ export function poolSubmitCode(sessionID: string, code: string, confirm = false)
     identity?: string;
     expected_identity?: string;
     provider_code?: string;
+    identity_mismatch?: boolean;
     sync_status?: 'ok' | 'pending';
     sync_error?: string;
   }>('submit-code', {
@@ -96,23 +97,22 @@ export interface PoolSessionKeyResult {
   sync_error?: string;
 }
 
-/** Exchange a Claude web session key locally on Windows or macOS. The first call keeps
+/** Exchange a Claude or ChatGPT web session key locally on Windows or macOS. The first call keeps
  * the resulting OAuth token inside aikey-proxy for identity review; the second
- * call writes that held token to the existing member-token endpoint. Neither
+ * call writes that held token to the shared account-token endpoint. Identity
+ * mismatch is a hard zero-write error and has no client override. Neither
  * call returns token material to the browser. */
 export function poolSessionKey(
   credentialID: string,
   sessionKey: string,
   operationID: string,
   confirm = false,
-  identityMismatchConfirmed = false,
 ) {
   return postPool<PoolSessionKeyResult>('session-key', {
     credential_id: credentialID,
     session_key: sessionKey,
     operation_id: operationID,
     confirm,
-    identity_mismatch_confirmed: identityMismatchConfirmed,
   });
 }
 

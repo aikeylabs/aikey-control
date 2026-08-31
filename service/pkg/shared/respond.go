@@ -156,6 +156,12 @@ func DomainErrorHTTPStatus(code string) int {
 		// R39 recycle-bin guard: live references block deletion — a resource-state
 		// conflict the admin resolves (migrate channels / detach from group).
 		CodeBizCredHasActiveRefs,
+		// R40 tombstone guard (P2-1/P2-1b): a login/re-auth side effect targeted a
+		// RECLAIMED account. Same 409 family as the R39 guard above — the request
+		// is well formed, the state it conflicts with is deliberate, and the remedy
+		// (use a different account) is the admin's. 🚫 Not 422: nothing about the
+		// submitted body is wrong.
+		CodeBizOAuthAccountReclaimed,
 		CodeBizLoginSessionTerminated, CodeBizSSOIdentityConflict,
 		// The virtual key ALREADY has an active binding for this
 		// (protocol_type, provider_id) pair. Like the R39 guard above this is a
@@ -188,6 +194,10 @@ func DomainErrorHTTPStatus(code string) int {
 
 	// ── 422 Unprocessable ─────────────────────────────────────────────────────
 	case CodeBizSeatAlreadyClaimed, CodeBizKeyNotActive,
+		// P2-4 evidence gate: the submitted writeback body is missing the
+		// identity evidence a bound account requires — a request-content gap
+		// (old client), not a state conflict. 422, matching this family.
+		CodeBizOauthLoginEvidenceRequired,
 		CodeBizKeyDuplicateProtocol, CodeBizBindProtocolMismatch,
 		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
 		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,

@@ -177,6 +177,26 @@ func verifyCSRFToken(token string, key []byte) error {
 	return nil
 }
 
+// maybeRenewCSRFCookie re-issues the CSRF cookie when the verified request's
+// token is past half-life. Called only after verifyCSRFDoubleSubmit accepted
+// the request, so the cookie is present and well-formed; parse failures just
+// mean "renew now". Best-effort — a mint failure leaves the still-valid old
+// cookie in place, and the recovery mint on the 403 path is the backstop.
+func maybeRenewCSRFCookie(w http.ResponseWriter, r *http.Request, cfg LocalAPIConfig) {
+	cookie, err := r.Cookie(CSRFCookieName)
+	if err == nil {
+		parts := strings.Split(cookie.Value, ".")
+		if len(parts) == 3 {
+			if expiry, perr := strconvParseInt(parts[1]); perr == nil {
+				if time.Until(time.Unix(expiry, 0)) > csrfTTL/2 {
+					return // young token — no rotation, no race window
+				}
+			}
+		}
+	}
+	_, _ = issueCSRFToken(w, cfg, csrfTTL)
+}
+
 // strconvParseInt is a thin wrapper so verifyCSRFToken can fail explicitly
 // on a non-numeric expiry without dragging strconv into the imports
 // (kept the import list tight for readability).
@@ -238,10 +258,32 @@ func WrapLocalAPI(cfg LocalAPIConfig, h http.Handler) http.Handler {
 		// so it cannot mint a
 		// matching header value.
 		if err := verifyCSRFDoubleSubmit(r, cfg.CSRFKey); err != nil {
+			// Recovery mint (2026-08-25, bugfix
+			// 20260825-tray-popover-csrf-expiry): tokens live csrfTTL (8h)
+			// but a consumer page can live for DAYS — the tray popover is a
+			// resident webview that loads its page exactly once, so past the
+			// TTL every request here (the 2s status poll included) 403'd
+			// forever, with no path back to a valid cookie short of a page
+			// reload the popover never performs. Setting a FRESH cookie on
+			// the rejection lets the very next request pass. Security holds:
+			// THIS request stays rejected, and a cross-site caller still
+			// cannot read the new cookie (SameSite=Strict + same-origin
+			// policy), so it cannot echo it into the header — the
+			// double-submit proof is unchanged.
+			_, _ = issueCSRFToken(w, cfg, csrfTTL)
 			writeLocalAPIError(w, http.StatusForbidden, "csrf_denied", "csrf cookie + header mismatch or invalid")
 			auditLocalAPIDenied(cfg, r, "csrf_denied:"+err.Error())
 			return
 		}
+
+		// Sliding renewal (same bugfix): rotate the cookie once the token has
+		// crossed half-life, so a page that keeps polling never reaches the
+		// expiry cliff at all. Deliberately NOT on every request: the page
+		// reads document.cookie immediately before each send, and a rotation
+		// landing between that read and the send would fail the
+		// equality check — renewing at most twice per TTL keeps that race
+		// window negligible instead of hitting it on every poll.
+		maybeRenewCSRFCookie(w, r, cfg)
 
 		// 5. Audit (accepted POST). Reject-path audits are emitted by
 		// the per-failure branches above.

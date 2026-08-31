@@ -122,37 +122,89 @@ export function DataFetchErrorBanner() {
   const first = summary.errors[0];
   const extra = summary.errors.length - 1;
 
+  // ## Framing (2026-08-22 restyle)
+  //
+  // This is now the page's ONLY error surface — PageQueryErrors stands down for
+  // anything the cache already holds — so it had to stop looking like a stray
+  // debug line and start looking like a considered piece of the console.
+  //
+  // Every value below is an existing anchor, nothing invented (UI 改版规范:
+  // 同页面 → 同类页面 → 设计模板库):
+  //  - Card surface + `--border`, with ONE 16px destructive icon carrying the
+  //    alarm. Copied verbatim from RouteErrorBoundary's page fallback and for
+  //    the same documented reason (2026-08-11): a fully red-outlined box argues
+  //    "the console is down" when the truth is "one read failed". The wording
+  //    stays blunt; the chrome does not shout.
+  //  - The code moves out of the prose into a mono chip, so the one string a
+  //    user has to quote when reporting is the one thing that is easy to grab.
+  //    Chip geometry matches the vault/keys chips (10px mono, 2px radius pill).
+  //  - `→ suggestion` keeps ApiErrorDisplay's form, so the next step reads the
+  //    same here as it does everywhere else in the console.
+  //  - Dismiss uses the global `.btn btn-outline` (index.css), same as every
+  //    other real action — 前端UI规则: 带边框的才是可以点的。
+  //
+  // `mx-6` is deliberate, not lazy centring: it lands the banner on the exact
+  // left edge of the page content below it (measured against the vault card),
+  // so the failure reads as part of the page rather than floating over it.
+  // `role="alert"` and the error CODE appearing in this element's textContent
+  // are CONTRACT — the release probe (workflow/CI/scripts/data-error-banner-
+  // probe.mjs) finds this element by role and regex-matches the code out of its
+  // text. The brackets around the code went away in this restyle (the chip
+  // frames it now) and the probe still matches, because it looks for the code
+  // prefix, not for `[`. Dropping the role, or moving the code out of the text,
+  // would silently blind the release gate.
   return (
     <div
-      className="mx-6 mt-4 px-4 py-3 rounded border text-xs font-mono flex items-start justify-between gap-3"
-      style={{
-        // Same alert palette the compliance/audit pages use for failure text
-        // (#f87171) — no new colors, red family because data on screen may be
-        // INCOMPLETE, which outranks a mere notice.
-        borderColor: 'rgba(248,113,113,0.4)',
-        backgroundColor: 'rgba(248,113,113,0.06)',
-        color: 'var(--foreground)',
-      }}
+      className="mx-6 mt-4 px-4 py-3.5 rounded border flex items-start gap-3"
+      style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}
       role="alert"
     >
-      <div className="space-y-1 min-w-0">
-        <div className="font-bold" style={{ color: '#f87171' }}>
+      <span
+        className="flex-shrink-0 mt-[1px]"
+        style={{ color: 'var(--destructive, #ef4444)' }}
+        aria-hidden="true"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7.5v5.5" />
+          <path d="M12 16.2v.3" />
+        </svg>
+      </span>
+
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div
+          className="text-sm font-mono font-bold"
+          style={{ color: 'var(--display-foreground, var(--foreground))' }}
+        >
           {summary.hasAuth ? t('dataFetchError.titleAuth') : t('dataFetchError.title')}
         </div>
-        <div style={{ color: 'var(--muted-foreground)' }} className="break-words">
-          [{first.code}] {first.message}
-          {extra > 0 && ` · ${t('dataFetchError.more', { count: extra })}`}
+
+        <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px] font-mono">
+          <span
+            className="px-1.5 py-0.5 rounded-sm"
+            style={{ backgroundColor: 'rgba(248,113,113,0.12)', color: '#f87171' }}
+          >
+            {first.code}
+          </span>
+          <span className="break-words min-w-0" style={{ color: 'var(--muted-foreground)' }}>
+            {first.message}
+          </span>
+          {extra > 0 && (
+            <span style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>
+              · {t('dataFetchError.more', { count: extra })}
+            </span>
+          )}
         </div>
+
         {first.suggestion && (
-          <div style={{ color: 'var(--muted-foreground)' }}>{first.suggestion}</div>
+          <div className="text-[11px] font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+            → {first.suggestion}
+          </div>
         )}
       </div>
+
       {!summary.hasAuth && (
-        <button
-          onClick={dismiss}
-          className="shrink-0 px-2 py-0.5 rounded border text-[10px]"
-          style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
-        >
+        <button onClick={dismiss} className="btn btn-outline shrink-0 text-[10px] px-3 py-1.5">
           {t('dataFetchError.dismiss')}
         </button>
       )}

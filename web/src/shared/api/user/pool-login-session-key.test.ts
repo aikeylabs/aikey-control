@@ -36,20 +36,18 @@ describe('pool session key client', () => {
       session_key: 'sk-ant-sid02-fixture',
       operation_id: 'operation-123456',
       confirm: false,
-      identity_mismatch_confirmed: false,
     });
   });
 
-  it('sends a separate identity mismatch acknowledgement only on reconfirmation', async () => {
+  it('never sends an identity-mismatch override on confirmation', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(response(200, { status: 'ok', operation_id: 'operation-123456' }));
 
-    await poolSessionKey('credential-1', '', 'operation-123456', true, true);
+    await poolSessionKey('credential-1', '', 'operation-123456', true);
 
     const [, init] = vi.mocked(globalThis.fetch).mock.calls[0];
-    expect(JSON.parse(String(init?.body))).toMatchObject({
-      confirm: true,
-      identity_mismatch_confirmed: true,
-    });
+    const body = JSON.parse(String(init?.body));
+    expect(body).toMatchObject({ confirm: true });
+    expect(body).not.toHaveProperty('identity_mismatch_confirmed');
   });
 
   it('preserves stable error code and retry operation id', async () => {
