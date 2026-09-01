@@ -2630,7 +2630,14 @@
     "dimAction": "动作",
     "dimCategory": "类型",
     "reset": "重置",
-    "dimEntityType": "检出类型"
+    "dimEntityType": "检出类型",
+    "passwordTier": {
+      "rowLabel": "密码档级别",
+      "basicBadge": "简易级",
+      "advancedBadge": "高级级",
+      "basicDesc": "简易级——仅明确写出前缀的密码（password= / 密码：…）打码；模型推断的命中只记录、不改内容。管理员可对全组织强制高级级。",
+      "advancedDesc": "高级级——模型推断的密码命中也一并打码（全量执法）。"
+    }
   },
   "browserProfileGuide": {
     "title": "为每个账号使用独立的浏览器 Profile",

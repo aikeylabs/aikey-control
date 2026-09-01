@@ -2630,7 +2630,14 @@
     "dimAction": "Action",
     "dimCategory": "Category",
     "reset": "Reset",
-    "dimEntityType": "Entity type"
+    "dimEntityType": "Entity type",
+    "passwordTier": {
+      "rowLabel": "Password lane level",
+      "basicBadge": "BASIC",
+      "advancedBadge": "ADVANCED",
+      "basicDesc": "Basic — only explicitly prefixed passwords (password= / 密码：…) are masked; model-inferred hits are recorded but never rewritten. Admins can enforce Advanced org-wide.",
+      "advancedDesc": "Advanced — model-inferred password hits are masked as well (full enforcement)."
+    }
   },
   "browserProfileGuide": {
     "title": "Use a separate browser profile per account",

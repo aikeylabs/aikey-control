@@ -33,6 +33,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { complianceApi, type ComplianceEventDTO, type ComplianceFindingDTO } from '@/shared/api/user/compliance';
+import { derivePasswordTier } from './password-tier-state';
 import { appsApi } from '@/shared/api/user/apps';
 import { Badge } from '@/shared/ui/Badge';
 import { PageHeader } from '@/shared/ui/PageHeader';
@@ -411,6 +412,9 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
     enabled: packsOpen,
   });
   const packsReport = packsQuery.data?.available ? packsQuery.data.report : undefined;
+  // Password-lane level — single exit in password-tier-state.ts (fenced there):
+  // absent/unknown ⇒ undefined ⇒ the drawer renders nothing for it.
+  const passwordTier = derivePasswordTier(packsReport);
 
   // Per-action breakdown, rendered inline in the table header (2026-08-11 user
   // decision: 「概况挪到表头位置，折叠展开不需要了」).
@@ -952,6 +956,21 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
           <p className="text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('effectivePacks.unavailable')}</p>
         ) : (
           <div className="space-y-4">
+            {/* Password-lane level (阶段8/合规密码档分级). Rendered only when the
+                enforcing node reported it — see passwordTier derivation. */}
+            {passwordTier && (
+              <div className="flex items-start gap-2 rounded border px-2.5 py-1.5" style={{ borderColor: 'var(--border)' }}>
+                <Badge variant={passwordTier === 'advanced' ? 'yellow' : 'gray'} className="shrink-0">
+                  {t(passwordTier === 'advanced' ? 'compliancePage.passwordTier.advancedBadge' : 'compliancePage.passwordTier.basicBadge')}
+                </Badge>
+                <div className="min-w-0">
+                  <div className="text-xs font-mono" style={{ color: 'var(--foreground)' }}>{t('compliancePage.passwordTier.rowLabel')}</div>
+                  <div className="text-[10px] font-mono mt-0.5 break-words" style={{ color: 'var(--muted-foreground)' }}>
+                    {t(passwordTier === 'advanced' ? 'compliancePage.passwordTier.advancedDesc' : 'compliancePage.passwordTier.basicDesc')}
+                  </div>
+                </div>
+              </div>
+            )}
             <div>
               <h3 className="text-[10px] font-mono tracking-wider mb-2" style={{ color: 'var(--muted-foreground)' }}>{t('effectivePacks.builtInSection')}</h3>
               <div className="grid grid-cols-2 gap-2">

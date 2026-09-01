@@ -126,6 +126,13 @@ export interface EffectivePacksReport {
   engines: BuiltInEngineDTO[];
   pulled: PulledPackDTO[];
   cursor: number;
+  /** Effective runtime action-policy state on the ENFORCING node. The local
+   *  lane relays it verbatim from the proxy admin endpoint; the team mirror
+   *  serves identity-only packs and omits it (one org has N enforcing nodes),
+   *  so every reader must guard on absence. `lane_grade_ceilings` carries the
+   *  password-lane level as `password.credential_password.tier_inferred`:
+   *  "audit" = Basic (simple), "mask" = Advanced (阶段8/合规密码档分级 R6). */
+  action_policy?: { lane_grade_ceilings?: Record<string, string> };
 }
 
 export interface FilterLatencyLaneDTO {

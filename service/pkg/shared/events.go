@@ -31,15 +31,18 @@ const (
 	// 401 signal named a layer whose bearer no longer matches either layer —
 	// a stale report from before a re-login. Consumed, but nameable.
 	EventControlOAuthAuthFailureStaleBearer = "control.oauth_group.auth_failure_stale_bearer"
+	// 每条 401 上报被消费时记一次，带上游有界证据（状态码 + 错误类型）。
+	// 没有它，降级后只剩 auth_failed 一个状态，「为什么被拒」无从归因。
+	EventControlOAuthAuthFailureReported = "control.oauth_group.auth_failure_reported"
 	// Seat-token minting (spec: R-oauth-token-mint-3/5/7). Every branch is
 	// nameable: a sweep that mints nothing must be distinguishable from a
 	// sweep whose gate is closed, whose CAS lost, or that failed upstream.
-	EventControlOAuthMintGateClosed              = "control.oauth_mint.gate_closed"
-	EventControlOAuthMintFailed                  = "control.oauth_mint.failed"
-	EventControlOAuthMintSourceCondemned         = "control.oauth_mint.source_condemned"
-	EventControlOAuthMintLostCAS                 = "control.oauth_mint.lost_version_guard"
-	EventControlOAuthMintNoRenewalPath           = "control.oauth_mint.no_renewal_path"
-	EventControlOAuthMintIdentityMismatch        = "control.oauth_mint.identity_mismatch"
+	EventControlOAuthMintGateClosed       = "control.oauth_mint.gate_closed"
+	EventControlOAuthMintFailed           = "control.oauth_mint.failed"
+	EventControlOAuthMintSourceCondemned  = "control.oauth_mint.source_condemned"
+	EventControlOAuthMintLostCAS          = "control.oauth_mint.lost_version_guard"
+	EventControlOAuthMintNoRenewalPath    = "control.oauth_mint.no_renewal_path"
+	EventControlOAuthMintIdentityMismatch = "control.oauth_mint.identity_mismatch"
 
 	// The deployment has a persisted state directory configured but could not
 	// mint or read its install id there. 🔴 Logged rather than fatal: the
