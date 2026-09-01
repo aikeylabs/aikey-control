@@ -1,0 +1,117 @@
+# Clone the sibling repos that this repo's builds resolve through RELATIVE
+# paths, so a CI workspace reproduces the layout a developer has on disk.
+#
+# Why this exists (2026-08-25):
+#   Nothing in aikey-control is self-contained. service/go.mod replaces four
+#   modules with `../../pkg/...`, `../../aikey-config-tool` and
+#   `../../aikey-data/baseline`; web/scripts/generate-provider-registry.mjs
+#   reads `../../aikey-cli/data/*.yaml`; and 22 of web's vitest fences compare
+#   this repo against `../../aikey-control-master/web` and
+#   `../../aikey-trial-server/web`. Both CI jobs checked out at the workspace
+#   ROOT, so every one of those paths pointed ABOVE the workspace. CI had been
+#   red on every branch — develop included — for reasons unrelated to whatever
+#   change was under review.
+#
+#   The policy for WHICH sibling revision to use rots the moment it is written
+#   twice, so it lives here once. The list of siblings, and the paths that
+#   prove the checkout worked, stay in the calling job where they belong.
+#
+#   Callers MUST check themselves out with `path: aikey-control` — the sibling
+#   layout only exists if this repo is one level down from the workspace.
+#
+# See workflow/CI/bugfix/2026-08-25-aikey-control-ci-has-no-sibling-checkout.md
+name: Sibling checkout
+description: Clone the sibling AiKeyLabs repos that this repo resolves by relative path.
+
+inputs:
+  repos:
+    description: Whitespace-separated sibling repo names under AiKeyLabs/.
+    required: true
+  require:
+    description: >
+      Whitespace-separated paths, relative to the workspace, that MUST exist and
+      be non-empty once cloning is done. This is the real precondition. Asserting
+      it here turns "a sibling never arrived" into one named error instead of a
+      pile of unrelated-looking failures a hundred lines further down the job.
+    required: true
+  token:
+    description: >
+      Token used ONLY for siblings that are not readable anonymously. Leave empty
+      when every sibling is public; a sibling that turns out to be private then
+      fails loudly naming itself, rather than being skipped.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        REPOS: ${{ inputs.repos }}
+        REQUIRE: ${{ inputs.require }}
+        TOKEN: ${{ inputs.token }}
+        BRANCH: ${{ github.head_ref || github.ref_name }}
+        BASE: ${{ github.base_ref }}
+      run: |
+        set -euo pipefail
+
+        # Which revision of a sibling? In order:
+        #   1. the same branch name — a cross-repo change lands as same-named
+        #      branches in each repo, and those must be tested together;
+        #   2. the release line this PR targets (base_ref) — v1.0.x work lives on
+        #      develop-v1.0.5 in every repo, and several siblings do NOT carry the
+        #      relevant files on their default branch at all (aikey-cli/data/ is
+        #      absent from main), so falling straight to the default is wrong;
+        #   3. the sibling's default branch, as a last resort.
+        pick_ref() {
+          for ref in "${BRANCH}" "${BASE}"; do
+            [ -n "${ref}" ] || continue
+            if git ls-remote --exit-code --heads "$1" "${ref}" >/dev/null 2>&1; then
+              printf '%s' "${ref}"
+              return 0
+            fi
+          done
+          return 1
+        }
+
+        for repo in ${REPOS}; do
+          anon="https://github.com/AiKeyLabs/${repo}.git"
+          auth="https://x-access-token:${TOKEN}@github.com/AiKeyLabs/${repo}.git"
+
+          # Probe for anonymous readability instead of hard-coding a table of
+          # which siblings are private. A table is correct only until someone
+          # flips a repo's visibility, and it rots silently — the failure it
+          # produces afterwards reads like a network blip.
+          if git ls-remote "${anon}" HEAD >/dev/null 2>&1; then
+            url="${anon}"
+          elif [ -n "${TOKEN}" ]; then
+            url="${auth}"
+          else
+            echo "::error::AiKeyLabs/${repo} is not readable anonymously and no" \
+                 "token was passed to the sibling-checkout action. Configure the" \
+                 "AIKEY_CI_TOKEN repository secret with read access to it, or make" \
+                 "${repo} public. Refusing to continue into a job that would then" \
+                 "check less than it claims to."
+            exit 1
+          fi
+
+          if ref="$(pick_ref "${url}")"; then
+            echo "· ${repo} @ ${ref}"
+            git clone --quiet --depth 1 --branch "${ref}" "${url}" "${repo}"
+          else
+            echo "· ${repo} @ (default branch)"
+            git clone --quiet --depth 1 "${url}" "${repo}"
+          fi
+        done
+
+        # Assert the precondition, not that `git clone` exited 0. What the job
+        # needs is these exact paths; a clone that succeeds against a repo whose
+        # layout has moved is a green step that delivered nothing.
+        missing=0
+        for want in ${REQUIRE}; do
+          if [ -d "${want}" ] || [ -s "${want}" ]; then continue; fi
+          echo "::error::${want} is absent or empty after the sibling checkout."
+          missing=1
+        done
+        [ "${missing}" -eq 0 ]

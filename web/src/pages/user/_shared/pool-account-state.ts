@@ -33,3 +33,30 @@ export function knownEpoch(value?: number): number | undefined {
   if (value == null || !Number.isFinite(value) || value <= 0) return undefined;
   return value;
 }
+
+/** ridesSharedFallback: this member is being served by the ADMIN's shared
+ * credential, not by a token of his own.
+ *
+ * Why this is a named function and not an inline condition: "is he on the
+ * fallback" gets re-derived at every place that wants to warn about it, and a
+ * hand-rolled copy that forgets one of the three inputs silently warns nobody.
+ * One exit, one place to fence.
+ *
+ * Only `logged_in` qualifies: a `needs_login` / `auth_failed` account already
+ * tells the member to act, and stacking a second warning on it just adds noise.
+ * An absent token_source (older server) is NOT treated as fallback — guessing
+ * would nag members who are perfectly fine.
+ *
+ * spec: R-oauth-token-mint-6 三层失效独立可见（呈现腿）
+ */
+export function ridesSharedFallback(account: {
+  credential_type?: string;
+  login_status?: string;
+  token_source?: string;
+}): boolean {
+  return (
+    account.credential_type === 'oauth_account' &&
+    account.login_status === 'logged_in' &&
+    account.token_source === 'fallback'
+  );
+}

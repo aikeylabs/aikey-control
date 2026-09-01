@@ -1,5 +1,6 @@
 {
   "user/web": [
+    "accessTokens.create.poolEmptyWarn",
     "account.seatCount_plural",
     "accountRole.admin",
     "accountRole.member",
@@ -8,7 +9,6 @@
     "language.name",
     "language.zh",
     "masterLogin.subtitle",
-    "accessTokens.create.poolEmptyWarn",
     "oauthContribute.addSuccess",
     "oauthContribute.colProvider",
     "oauthContribute.emailHint",
@@ -80,9 +80,9 @@
     "userShell.groupQuality",
     "userShell.navAccount",
     "userShell.navImport",
-    "userShell.navSwitchLog",
     "userShell.navOverview",
     "userShell.navSettings",
+    "userShell.navSwitchLog",
     "userShell.navTeamKeys",
     "userShell.navTeamUsage",
     "userShell.navUsageDetail",

@@ -54,6 +54,13 @@ export interface GroupAccountRef {
   credential_type?: string; // 'api_key' | 'oauth_account' — drawer labels KEY vs OAuth
   credential_id?: string;
   login_status?: 'logged_in' | 'needs_login' | 'auth_failed' | 'revoked' | string;
+  // token_source says WHICH LAYER produced login_status: 'seat' = the member's
+  // own exclusive token, 'fallback' = the account-level shared bearer the admin
+  // pasted. Without it a 'logged_in' is ambiguous — someone riding the shared
+  // fallback looks identical to someone who signed in, so he never learns he
+  // still needs to. Permanently relevant for providers that cannot mint
+  // per-seat tokens (Codex). Absent on older servers → no source hint shown.
+  token_source?: 'seat' | 'fallback' | string;
   // Local proxy cooldown projection. These fields explain the same skip-set
   // that determines current_routed; they never drive routing in the browser.
   route_status?: 'window_exhausted' | 'window_protected' | 'rate_limited' | 'auth_failed' | 'upstream_unavailable' | string;

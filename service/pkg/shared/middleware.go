@@ -64,6 +64,16 @@ func AccountID(ctx context.Context) string {
 	return ""
 }
 
+// AccountEmail returns the authenticated email claim from context. Privileged
+// handlers use this instead of reparsing the Bearer token so authorization is
+// based on the same verified claims installed by JWTMiddleware.
+func AccountEmail(ctx context.Context) string {
+	if c, ok := ctx.Value(claimsKey).(*Claims); ok && c != nil {
+		return c.Email
+	}
+	return ""
+}
+
 // LocalIdentityMiddleware provides a permissive auth layer for local/trial modes.
 // If the request carries a valid Bearer JWT, it extracts the real account identity
 // (needed for CLI sync where each member must see their own keys). Otherwise it

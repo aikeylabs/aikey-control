@@ -3,6 +3,18 @@
 # The Go module lives under service/ (not repo root), so the job runs there.
 # Scope: native `go test ./...` only (no docker/PG); heavier integration is
 # left to nightly/opt-in so this gate needs nothing beyond a hosted runner.
+#
+# 2026-08-25 — BOTH jobs now check this repo out at `path: aikey-control`
+# instead of at the workspace root, and clone their sibling repos beside it.
+# Nothing here is self-contained: service/go.mod replaces four modules with
+# `../../pkg/...` / `../../aikey-config-tool` / `../../aikey-data/baseline`,
+# the codegen reads `../../aikey-cli/data/*.yaml`, and 22 of web's vitest
+# fences compare this repo against `../../aikey-control-master/web` and
+# `../../aikey-trial-server/web`. Checked out at the root, every one of those
+# paths pointed ABOVE the workspace — so CI was red on every branch, develop
+# included, for reasons that had nothing to do with the change under review.
+# Do not remove the `path:` inputs; without them the relative paths break again.
+# See workflow/CI/bugfix/2026-08-25-aikey-control-ci-has-no-sibling-checkout.md
 name: CI
 
 on:
@@ -18,13 +30,30 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: service
+        working-directory: aikey-control/service
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: aikey-control
+
+      # Keep `repos` and `require` in step with the `replace` block in
+      # service/go.mod — those directories ARE the build inputs. aikey-config-tool
+      # is the only private one; it is why this job needs the secret at all.
+      - name: Check out sibling modules (service/go.mod replace targets)
+        uses: ./aikey-control/.github/actions/sibling-checkout
+        with:
+          repos: pkg aikey-data aikey-config-tool
+          require: >-
+            pkg/aikeycompat
+            pkg/providerroutes
+            aikey-config-tool/go.mod
+            aikey-data/baseline
+          token: ${{ secrets.AIKEY_CI_TOKEN }}
+
       - uses: actions/setup-go@v5
         with:
-          go-version-file: service/go.mod
-          cache-dependency-path: service/go.sum
+          go-version-file: aikey-control/service/go.mod
+          cache-dependency-path: aikey-control/service/go.sum
       - name: go vet
         run: go vet ./...
       - name: go test
@@ -45,35 +74,36 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        # The repo is checked out under aikey-control/ so aikey-cli can sit
-        # beside it — the generator resolves its YAML through `../../aikey-cli`.
         working-directory: aikey-control/web
     steps:
       - uses: actions/checkout@v4
         with:
           path: aikey-control
 
-      # The generator reads aikey-cli/data/{provider_registry,provider_fingerprint}.yaml
-      # from the sibling checkout. Without it the script cannot run at all.
-      - name: Check out aikey-cli (yaml source of truth)
-        working-directory: ${{ github.workspace }}
-        env:
-          BRANCH: ${{ github.head_ref || github.ref_name }}
-          TOKEN: ${{ secrets.AIKEY_CI_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${TOKEN}" ]; then
-            echo "::error::AIKEY_CI_TOKEN is not configured. The provider-registry" \
-                 "codegen reads its YAML source of truth from the private sibling" \
-                 "aikey-cli. Refusing to run a job that would silently check nothing."
-            exit 1
-          fi
-          url="https://x-access-token:${TOKEN}@github.com/AiKeyLabs/aikey-cli.git"
-          if git ls-remote --exit-code --heads "$url" "$BRANCH" >/dev/null 2>&1; then
-            git clone --depth 1 --branch "$BRANCH" "$url" aikey-cli
-          else
-            git clone --depth 1 "$url" aikey-cli
-          fi
+      # aikey-cli carries the YAML source of truth. aikey-control-master and
+      # aikey-trial-server are read by the cross-repo parity fences in `npm test`
+      # — the dual-edit byte-equality checks, the i18n catalogue coverage, the
+      # three-vite-config shared-dir parity. Without them 22 of the 88 vitest
+      # files fail; several of those fences deliberately assert their own
+      # subject exists ("the master catalog exists (fence is not vacuous)"), so
+      # a missing sibling shows up as red rather than as a quiet pass — but it
+      # shows up a hundred lines late, which is why `require` names them here.
+      #
+      # ⚠ 2026-08-25 correction: the previous version of this step refused to run
+      # unless AIKEY_CI_TOKEN was set, calling aikey-cli "the private sibling".
+      # aikey-cli is public. The secret IS still required by this job — but for
+      # aikey-control-master and aikey-trial-server, which are private. The guard
+      # now sits on the real precondition instead of on a proxy for it.
+      - name: Check out siblings (yaml source of truth + parity-fence subjects)
+        uses: ./aikey-control/.github/actions/sibling-checkout
+        with:
+          repos: aikey-cli aikey-control-master aikey-trial-server
+          require: >-
+            aikey-cli/data/provider_registry.yaml
+            aikey-cli/data/provider_fingerprint.yaml
+            aikey-control-master/web/src
+            aikey-trial-server/web/src
+          token: ${{ secrets.AIKEY_CI_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
