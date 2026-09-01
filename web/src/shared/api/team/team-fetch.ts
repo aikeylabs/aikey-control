@@ -1,11 +1,21 @@
-// team-fetch.ts — shared "local web (8090) → remote team master" fetch helper.
+// team-fetch.ts — shared "local web (8090) → team master" fetch helper.
 //
-// The local web is served same-origin by the local-server; the team master is
-// remote. The proven pattern (see managed-keys.ts) is a two-hop:
-//   1. same-origin GET /system/team-url + /system/team-jwt  (local-server reads
-//      them from the CLI vault; the JWT endpoint omits CORS so only same-origin
-//      can read it)
-//   2. cross-origin GET {teamUrl}{path} with Authorization: Bearer {jwt}
+// Two modes, decided by the SAME authoritative /system/team-url response:
+//
+//   COMPOSING GATEWAY (`gateway: true`, Personal local-server since 2026-07-03):
+//     the team side is same-origin — fetch `{path}` relatively, send NO token;
+//     the gateway injects the member JWT on every proxied request. The team JWT
+//     never enters the browser on this mode, ON PURPOSE.
+//
+//   LEGACY (no gateway): the original two-hop —
+//     1. same-origin GET /system/team-url + /system/team-jwt
+//     2. cross-origin GET {teamUrl}{path} with Authorization: Bearer {jwt}
+//
+// 🔴 2026-08-31: this helper originally knew only the LEGACY mode, while
+// managed-keys.ts (which predates it) already honoured the gateway. Every page
+// built on this helper therefore bypassed the gateway — on the desktop app the
+// Team OAuth page said "暂时无法连接团队服务器" while Team Keys, in the same
+// window, worked — and pulled the team JWT into the browser besides.
 //
 // This module factors that pattern into a generic teamGetJSON so new team-scoped
 // reads (oauth-contribute's account list + routed-credential pull) don't
@@ -85,10 +95,27 @@ async function readLocalSystemValue(
   }
 }
 
-function readTeamURL(): Promise<LocalRead> {
-  return readLocalSystemValue(TEAM_URL_ENDPOINT, (d) =>
-    String(d.team_url || '').trim().replace(/\/$/, ''),
-  );
+/** The /system/team-url answer: the URL plus the composing-gateway capability.
+ *
+ * 🔴 `gateway` was advertised by the backend since 2026-07-03 and consumed by
+ * managed-keys.ts — but THIS module, written later as the shared helper that
+ * managed-keys was supposed to fold into, never read it. Every page built on
+ * this helper therefore did the legacy cross-origin hop even when the local
+ * server composes the team side, which failed on the desktop app ("暂时无法
+ * 连接团队服务器" while the Team Keys page, on managed-keys, worked in the
+ * same window) AND handed the team JWT to the browser that the gateway path
+ * exists to keep it out of (2026-08-31). */
+type TeamTarget = { read: LocalRead; gateway: boolean };
+
+async function readTeamTarget(): Promise<TeamTarget> {
+  let gateway = false;
+  const read = await readLocalSystemValue(TEAM_URL_ENDPOINT, (d) => {
+    // Same authoritative response carries the capability — no extra request,
+    // no second source of truth (same pattern as managed-keys.ts).
+    gateway = d.gateway === true;
+    return String(d.team_url || '').trim().replace(/\/$/, '');
+  });
+  return { read, gateway };
 }
 
 function readTeamJWT(): Promise<LocalRead> {
@@ -103,19 +130,31 @@ function readTeamJWT(): Promise<LocalRead> {
 async function resolveTeamHandshake(): Promise<
   { ok: true; teamUrl: string; jwt: string } | { ok: false; err: TeamFetchError }
 > {
-  const [urlRead, jwtRead] = await Promise.all([readTeamURL(), readTeamJWT()]);
-  // Transport failure on either local hop → unreachable, NOT not-logged-in.
-  if (!urlRead.ok || !jwtRead.ok) {
-    const detail = [!urlRead.ok ? urlRead.detail : '', !jwtRead.ok ? jwtRead.detail : '']
-      .filter(Boolean)
-      .join('; ');
-    return { ok: false, err: { kind: 'unreachable', detail } };
+  const target = await readTeamTarget();
+  // Transport failure on the local hop → unreachable, NOT not-logged-in.
+  if (!target.read.ok) {
+    return { ok: false, err: { kind: 'unreachable', detail: target.read.detail } };
   }
-  // Endpoints answered, but there is no team configured / no session yet.
-  if (!urlRead.value || !jwtRead.value) {
+  if (!target.read.value) {
     return { ok: false, err: { kind: 'not-logged-in' } };
   }
-  return { ok: true, teamUrl: urlRead.value, jwt: jwtRead.value };
+  // Composing gateway: the team side is SAME-ORIGIN — fetch relatively and
+  // send no token; the gateway injects the member JWT on every proxied
+  // request (proxy.go, any method). /system/team-jwt is deliberately not
+  // even read here: the whole point of the gateway path is that the team
+  // JWT never enters the browser (same contract as managed-keys.ts).
+  if (target.gateway) {
+    return { ok: true, teamUrl: '', jwt: '' };
+  }
+  // Legacy (no gateway): the original cross-origin hop with the member JWT.
+  const jwtRead = await readTeamJWT();
+  if (!jwtRead.ok) {
+    return { ok: false, err: { kind: 'unreachable', detail: jwtRead.detail } };
+  }
+  if (!jwtRead.value) {
+    return { ok: false, err: { kind: 'not-logged-in' } };
+  }
+  return { ok: true, teamUrl: target.read.value, jwt: jwtRead.value };
 }
 
 /**
@@ -132,7 +171,9 @@ export async function teamGetJSON<T>(path: string): Promise<T | TeamFetchError> 
   try {
     const res = await fetch(`${teamUrl}${path}`, {
       method: 'GET',
-      headers: { Accept: 'application/json', Authorization: `Bearer ${jwt}` },
+      headers: jwt
+        ? { Accept: 'application/json', Authorization: `Bearer ${jwt}` }
+        : { Accept: 'application/json' },
       signal: ctrl.signal,
       credentials: 'omit',
     });
@@ -199,11 +240,13 @@ async function teamWriteJSON<T>(
   try {
     const res = await fetch(`${teamUrl}${path}`, {
       method,
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${jwt}`,
-      },
+      headers: jwt
+        ? {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${jwt}`,
+          }
+        : { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal: ctrl.signal,
       credentials: 'omit',
@@ -251,7 +294,9 @@ export async function teamDeleteJSON(
   try {
     const res = await fetch(`${teamUrl}${path}`, {
       method: 'DELETE',
-      headers: { Accept: 'application/json', Authorization: `Bearer ${jwt}` },
+      headers: jwt
+        ? { Accept: 'application/json', Authorization: `Bearer ${jwt}` }
+        : { Accept: 'application/json' },
       signal: ctrl.signal,
       credentials: 'omit',
     });

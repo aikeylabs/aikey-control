@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { teamGetJSON, teamPostJSON, isTeamFetchError, isTeamWriteError } from './team-fetch';
+import {
+  teamGetJSON,
+  teamPostJSON,
+  teamPutJSON,
+  teamDeleteJSON,
+  isTeamFetchError,
+  isTeamWriteError,
+} from './team-fetch';
 
 /**
  * Transport-vs-not-logged-in classification fence (2026-07-12 bugfix).
@@ -158,5 +165,108 @@ describe('teamPostJSON — actionable domain errors', () => {
     // the two-hop helper from collapsing it to the generic add failure.
     expect(res.message).toContain('BoleadTechOffice');
     expect(res.message).toContain('agent-pool-335923591-anthropic');
+  });
+});
+
+// ── composing-gateway: EVERY verb honours the capability (2026-08-31) ───────
+//
+// 🔴 Why this block exists, and why it enumerates verbs instead of testing the
+// one function that was fixed. The backend has advertised `gateway:true` on
+// /system/team-url since 2026-07-03 and managed-keys.ts consumed it — but this
+// module, the SHARED helper meant to replace managed-keys' private copy, was
+// written without it. Every page on this helper bypassed the local gateway:
+// on the desktop app the Team OAuth page reported "暂时无法连接团队服务器"
+// while Team Keys worked in the same window, and the member's team JWT was
+// pulled into the browser that the gateway mode exists to keep it out of.
+// Third same-shape defect that day (hook --yes fixed on one platform only;
+// servability re-derived by one consumer) — a capability consumed by SOME
+// exits of a concept is how it happens, so the fence walks ALL of them.
+describe('composing gateway (gateway:true on /system/team-url)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  type Seen = { url: string; auth: string | null };
+
+  /** Capturing mock: gateway-mode local server + a recorder for team calls. */
+  function gatewayFetch(seen: Seen[], jwtHits: { n: number }) {
+    const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/system/team-url')) {
+        return jsonRes({ team_url: 'http://team.example', gateway: true });
+      }
+      if (url.includes('/system/team-jwt')) {
+        jwtHits.n += 1;
+        return jsonRes({ jwt: 'must-never-be-read' });
+      }
+      const headers = new Headers(init?.headers as HeadersInit | undefined);
+      seen.push({ url, auth: headers.get('Authorization') });
+      return jsonRes({ ok: true });
+    });
+    vi.stubGlobal('fetch', fn);
+    return fn;
+  }
+
+  it('GET / POST / PUT / DELETE all go same-origin with no token', async () => {
+    const seen: Seen[] = [];
+    const jwtHits = { n: 0 };
+    gatewayFetch(seen, jwtHits);
+
+    await teamGetJSON('/accounts/me/oauth-groups');
+    await teamPostJSON('/accounts/me/oauth-accounts', {});
+    await teamPutJSON('/accounts/me/oauth-accounts/x', {});
+    await teamDeleteJSON('/accounts/me/oauth-accounts/x');
+
+    expect(seen.map((s) => s.url)).toEqual([
+      '/accounts/me/oauth-groups',
+      '/accounts/me/oauth-accounts',
+      '/accounts/me/oauth-accounts/x',
+      '/accounts/me/oauth-accounts/x',
+    ]);
+    for (const s of seen) {
+      // A cross-origin URL here = the verb bypassed the gateway = the desktop
+      // failure; an Authorization header = the JWT leaked into the browser.
+      expect(s.url.startsWith('http')).toBe(false);
+      expect(s.auth).toBeNull();
+    }
+    // The security half: in gateway mode the token endpoint must not even be
+    // consulted. Reading it "just in case" is how the JWT ends up in browser
+    // memory for a mode whose whole point is that it never gets there.
+    expect(jwtHits.n).toBe(0);
+  });
+
+  it('gateway with an EMPTY team_url is not-logged-in, not a free pass', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/system/team-url')) return jsonRes({ team_url: '', gateway: true });
+        throw new Error(`unrouted fetch: ${url}`);
+      }),
+    );
+    const out = await teamGetJSON('/accounts/me/oauth-groups');
+    expect(isTeamFetchError(out) && out.kind === 'not-logged-in').toBe(true);
+  });
+
+  it('legacy servers (no gateway field) keep the original cross-origin hop', async () => {
+    const seen: Seen[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes('/system/team-url')) return jsonRes(OK_URL);
+        if (url.includes('/system/team-jwt')) return jsonRes(OK_JWT);
+        const headers = new Headers(init?.headers as HeadersInit | undefined);
+        seen.push({ url, auth: headers.get('Authorization') });
+        return jsonRes({ ok: true });
+      }),
+    );
+    await teamGetJSON('/accounts/me/oauth-groups');
+    // Old wire behavior must survive byte for byte: absolute team URL + Bearer.
+    // Breaking THIS while adding the gateway would trade one edition's outage
+    // for another's.
+    expect(seen).toEqual([
+      { url: 'http://team.example/accounts/me/oauth-groups', auth: 'Bearer jwt-123' },
+    ]);
   });
 });
