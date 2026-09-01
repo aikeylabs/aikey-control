@@ -27,7 +27,11 @@ describe('Personal Session Key login surface', () => {
     expect(source).toContain('oauthContribute.codexSessionKeyHint');
   });
 
-  it('uses one masked multiline textarea and never exposes an identity-mismatch override', () => {
+  // 拍板 2026-09-01 (supersedes 08-27 "no override"): a cross-account Session Key
+  // is allowed behind an EXPLICIT second confirmation. The fence now pins the
+  // review shape: a mismatch never auto-confirms, the override travels only
+  // through the dedicated confirm button, and the warning copy is surfaced.
+  it('uses one masked multiline textarea and gates the identity-mismatch override behind explicit confirmation', () => {
     expect(source).toContain('<textarea');
     expect(source).toContain('rows={4}');
     expect(source).toContain('wrap="soft"');
@@ -36,9 +40,15 @@ describe('Personal Session Key login surface', () => {
     expect(source).toContain('startSessionKeySignIn');
     expect(source).toContain('sessionKeyConfirmMut.mutate');
     expect(source).toContain('SESSION_KEY_IDENTITY_MISMATCH');
-    expect(source).toContain('oauthContribute.loginIdentityMismatchError');
-    expect(source).not.toContain('identityMismatchConfirmed');
-    expect(source).not.toContain('oauthContribute.sessionKeyConfirmAgain');
+    // Review state: a mismatched exchange sets the review state and RETURNS —
+    // the auto-confirm below the guard can never fire with a mismatch pending.
+    expect(source).toContain('if (res.identity_mismatch) {');
+    expect(source).toContain('setSessionKeyMismatch({');
+    expect(source).toContain('oauthContribute.sessionKeyMismatchWarning');
+    // The override flag is passed ONLY by the dedicated confirm button.
+    expect(source).toContain('identityMismatchConfirmed: true');
+    expect(source).toContain('oauthContribute.sessionKeyConfirmMismatch');
+    expect(source.split('identityMismatchConfirmed: true')).toHaveLength(2);
   });
 
   it('places shared provider-specific acquisition help beside the visible input label', () => {

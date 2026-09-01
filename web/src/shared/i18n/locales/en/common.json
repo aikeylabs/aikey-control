@@ -2752,6 +2752,8 @@
     "sessionKeySaving": "Account verified. Saving the token…",
     "loginIdentityMismatchError": "This login belongs to {{actual}}, but the selected pool account is {{expected}}. No token was changed. Select the matching account or sign in with that account, then retry.",
     "sessionKeyIdentityUnknown": "an unidentified provider account",
+    "sessionKeyMismatchWarning": "This Session Key belongs to {{actual}}, not the selected pool account {{expected}}. Nothing has been saved. Confirm below to use it anyway — the token is bound to your seat only, and the pool account's registered identity is not changed.",
+    "sessionKeyConfirmMismatch": "Confirm cross-account sign-in",
     "sessionKeyRetrySave": "Retry save",
     "sessionKeyLoginSuccess": "✓ Login succeeded for {{identity}}. The OAuth token was saved to the account pool.",
     "sessionKeyHint": "Paste the active Claude web session key. This device exchanges it locally through the account's configured egress; no browser page opens.",

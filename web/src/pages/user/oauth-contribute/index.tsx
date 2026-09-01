@@ -860,6 +860,13 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     tone: 'success' | 'error' | 'pending';
     message: string;
   } | null>(null);
+  // Cross-account review state (拍板 2026-09-01): the exchanged key belongs to a
+  // different provider account. The pending operation is held by the proxy; the
+  // member must explicitly confirm before it binds — to their own seat only.
+  const [sessionKeyMismatch, setSessionKeyMismatch] = useState<{
+    actual: string;
+    expected: string;
+  } | null>(null);
   const [err, setErr] = useState('');
   // A successful OAuth writeback can still be waiting for the local runtime
   // rail. Keep that distinction visible without forcing the user to repeat
@@ -1118,20 +1125,26 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       setSyncWarning('');
       const confirmedOperationID = res.operation_id || variables.operationID;
       setSessionKeyOperationID(confirmedOperationID);
-      // Rolling-upgrade fence for an older local Proxy. The current Proxy
-      // returns SESSION_KEY_IDENTITY_MISMATCH before creating an operation;
-      // either way, the user must paste the matching account's key.
+      // Cross-account review (拍板 2026-09-01): the proxy now holds the mismatched
+      // exchange as a pending operation. Surface the warning and require the
+      // member's explicit confirmation — never auto-confirm a mismatch. The
+      // confirmed token binds to this member's own seat only; the pool account's
+      // identity (email) is not changed.
       if (res.identity_mismatch) {
-        setSessionKeyOperationID('');
+        setSessionKeyMismatch({
+          actual: res.identity || t('oauthContribute.sessionKeyIdentityUnknown'),
+          expected: res.expected_identity || account.identity,
+        });
         setSessionKeyStatus({
           tone: 'error',
-          message: t('oauthContribute.loginIdentityMismatchError', {
+          message: t('oauthContribute.sessionKeyMismatchWarning', {
             actual: res.identity || t('oauthContribute.sessionKeyIdentityUnknown'),
             expected: res.expected_identity || account.identity,
           }),
         });
         return;
       }
+      setSessionKeyMismatch(null);
       setSessionKeyStatus({
         tone: 'pending',
         message: t('oauthContribute.sessionKeySaving'),
@@ -1143,8 +1156,13 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   });
 
   const sessionKeyConfirmMut = useMutation({
-    mutationFn: ({ operationID }: { operationID: string }) =>
-      poolSessionKey(account.credential_id, '', operationID, true),
+    mutationFn: ({
+      operationID,
+      identityMismatchConfirmed = false,
+    }: {
+      operationID: string;
+      identityMismatchConfirmed?: boolean;
+    }) => poolSessionKey(account.credential_id, '', operationID, true, identityMismatchConfirmed),
     onSuccess: (res) => {
       if (isPoolLoginError(res)) {
         setSessionKeyStatus({
@@ -1167,6 +1185,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       setSignedInAs('');
       setAwaitingConfirm(false);
       setSessionKeyOperationID('');
+      setSessionKeyMismatch(null);
       setSessionKeyStatus({
         tone: 'success',
         message: t('oauthContribute.sessionKeyLoginSuccess', {
@@ -1225,6 +1244,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     setSessionKey('');
     setSessionKeyOperationID('');
     setSessionKeyStatus(null);
+    setSessionKeyMismatch(null);
     setExpectedLoginIdentity(account.identity);
   }
 
@@ -1540,6 +1560,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                     setSessionKey(e.target.value);
                     setSessionKeyOperationID('');
                     setSessionKeyStatus(null);
+                    setSessionKeyMismatch(null);
                   }}
                   placeholder={sessionKeyPlaceholder}
                   disabled={!supportsSessionKey || sessionKeyStartMut.isPending || sessionKeyConfirmMut.isPending}
@@ -1561,7 +1582,22 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                   ? t('oauthContribute.sessionKeySigningIn')
                   : t('oauthContribute.sessionKeyConfirmLogin')}
               </button>
-              {sessionKeyOperationID && sessionKeyStatus?.tone === 'error' && !sessionKey.trim() && (
+              {sessionKeyOperationID && sessionKeyMismatch && (
+                <button
+                  type="button"
+                  className="row-use-btn"
+                  onClick={() =>
+                    sessionKeyConfirmMut.mutate({
+                      operationID: sessionKeyOperationID,
+                      identityMismatchConfirmed: true,
+                    })
+                  }
+                  disabled={sessionKeyConfirmMut.isPending}
+                >
+                  {t('oauthContribute.sessionKeyConfirmMismatch')}
+                </button>
+              )}
+              {sessionKeyOperationID && !sessionKeyMismatch && sessionKeyStatus?.tone === 'error' && !sessionKey.trim() && (
                 <button
                   type="button"
                   className="row-use-btn"

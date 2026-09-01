@@ -36,18 +36,23 @@ describe('pool session key client', () => {
       session_key: 'sk-ant-sid02-fixture',
       operation_id: 'operation-123456',
       confirm: false,
+      identity_mismatch_confirmed: false,
     });
   });
 
-  it('never sends an identity-mismatch override on confirmation', async () => {
+  // 拍板 2026-09-01 (supersedes 08-27 "no override"): a plain confirm carries
+  // identity_mismatch_confirmed=false — the override is sent ONLY when the
+  // member explicitly acknowledged the cross-account warning.
+  it('sends the identity-mismatch acknowledgement only when explicitly requested', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(response(200, { status: 'ok', operation_id: 'operation-123456' }));
 
     await poolSessionKey('credential-1', '', 'operation-123456', true);
+    let [, init] = vi.mocked(globalThis.fetch).mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toMatchObject({ confirm: true, identity_mismatch_confirmed: false });
 
-    const [, init] = vi.mocked(globalThis.fetch).mock.calls[0];
-    const body = JSON.parse(String(init?.body));
-    expect(body).toMatchObject({ confirm: true });
-    expect(body).not.toHaveProperty('identity_mismatch_confirmed');
+    await poolSessionKey('credential-1', '', 'operation-123456', true, true);
+    [, init] = vi.mocked(globalThis.fetch).mock.calls[1];
+    expect(JSON.parse(String(init?.body))).toMatchObject({ confirm: true, identity_mismatch_confirmed: true });
   });
 
   it('preserves stable error code and retry operation id', async () => {

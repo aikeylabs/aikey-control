@@ -2752,6 +2752,8 @@
     "sessionKeySaving": "账号已核对，正在保存 Token…",
     "loginIdentityMismatchError": "本次登录属于 {{actual}}，但当前选中的账号池账号是 {{expected}}。Token 未发生变更。请选择匹配的账号，或使用该账号的登录信息后重试。",
     "sessionKeyIdentityUnknown": "无法识别的 Provider 账号",
+    "sessionKeyMismatchWarning": "该 Session Key 属于 {{actual}}，与所选池账号 {{expected}} 不一致。目前未写入任何内容。如确认继续，点击下方按钮：Token 仅绑定到你自己的席位使用，池账号登记身份不会被修改。",
+    "sessionKeyConfirmMismatch": "确认使用其他账号登录",
     "sessionKeyRetrySave": "重试保存",
     "sessionKeyLoginSuccess": "✓ {{identity}} 登录成功，OAuth Token 已写入账号池。",
     "sessionKeyHint": "粘贴仍有效的 Claude Web Session Key。本机服务会通过此账号配置的出口换取令牌，不会打开浏览器页面。",
