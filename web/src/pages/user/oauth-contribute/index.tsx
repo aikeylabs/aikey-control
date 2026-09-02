@@ -70,6 +70,7 @@ import { SessionKeyHelp } from '../../../shared/components/SessionKeyHelp';
 import { KEYS_PAGE_CSS } from '../_shared/keys-page-css';
 import { ToolGlyph } from '../_shared/tool-glyph';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
+import { TokenExpiryBadge } from '@/shared/ui/TokenExpiryBadge';
 
 // Provider display profile only. Login provider + flow are intentionally absent:
 // master resolves and binds those at session initialization. Keeping display
@@ -520,11 +521,12 @@ export default function OAuthContributePage() {
                   <table className="vault">
                     <thead>
                       <tr>
-                        <th style={{ width: '34%' }}>{t('oauthContribute.colEmail')}</th>
-                        <th style={{ width: '18%' }}>{t('oauthContribute.colPoolGroup')}</th>
-                        <th style={{ width: '16%' }}>{t('oauthContribute.colLastLogin')}</th>
+                        <th style={{ width: '28%' }}>{t('oauthContribute.colEmail')}</th>
+                        <th style={{ width: '16%' }}>{t('oauthContribute.colPoolGroup')}</th>
+                        <th style={{ width: '14%' }}>{t('oauthContribute.colLastLogin')}</th>
+                        <th style={{ width: '14%' }}>{t('oauthContribute.colTokenExpiry')}</th>
                         <th style={{ width: '12%' }}>{t('oauthContribute.colStatus')}</th>
-                        <th style={{ width: '20%', textAlign: 'right' }} aria-hidden="true" />
+                        <th style={{ width: '16%', textAlign: 'right' }} aria-hidden="true" />
                       </tr>
                     </thead>
                     <tbody>
@@ -567,11 +569,12 @@ export default function OAuthContributePage() {
                     <table className="vault">
                       <thead>
                         <tr>
-                          <th style={{ width: '34%' }}>{t('oauthContribute.colEmail')}</th>
-                          <th style={{ width: '18%' }}>{t('oauthContribute.colPoolGroup')}</th>
-                          <th style={{ width: '16%' }}>{t('oauthContribute.colLastLogin')}</th>
+                          <th style={{ width: '28%' }}>{t('oauthContribute.colEmail')}</th>
+                          <th style={{ width: '16%' }}>{t('oauthContribute.colPoolGroup')}</th>
+                          <th style={{ width: '14%' }}>{t('oauthContribute.colLastLogin')}</th>
+                          <th style={{ width: '14%' }}>{t('oauthContribute.colTokenExpiry')}</th>
                           <th style={{ width: '12%' }}>{t('oauthContribute.colStatus')}</th>
-                          <th style={{ width: '20%', textAlign: 'right' }} aria-hidden="true" />
+                          <th style={{ width: '16%', textAlign: 'right' }} aria-hidden="true" />
                         </tr>
                       </thead>
                       <tbody>
@@ -773,6 +776,13 @@ function AccountRow({
         </td>
         <td className="font-mono text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>
           {fmtDate(account.last_login_at)}
+        </td>
+        {/* Provider-signed token expiry. The field always rode this DTO and was
+            never rendered, so a member could not tell a 7-day token from a
+            1-hour one — exactly the evidence the 2026-08-31 "登录成功一会儿就失效"
+            report needed (bugfix: workflow/CI/bugfix/2026-09-02-token到期时间到达前端却从不显示.md). */}
+        <td>
+          <TokenExpiryBadge expiresAtUnixSeconds={account.expires_at} />
         </td>
         <td>
           <span className={`chip ${sc.cls}`}>

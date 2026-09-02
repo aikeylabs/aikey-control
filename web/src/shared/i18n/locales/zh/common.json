@@ -2693,24 +2693,6 @@
     "copyFailed": "复制失败，请手动选择并复制文本。",
     "instructionsText": "在已经登录 {{provider}} 的浏览器中打开 {{officialURL}}。打开开发者工具，然后进入 Application（或 Storage）> Cookies > {{cookieOrigin}}。找到名为 {{cookieName}} 的 Cookie，只复制它的 Value 并粘贴到 AiKey。请像密码一样保护该值；不要复制整个 Cookie 请求头，不要放入 URL，也不要分享给他人。"
   },
-  "sessionKeyHelp": {
-    "trigger": "如何获取 Session Key",
-    "providerClaude": "Claude",
-    "providerChatGPT": "ChatGPT",
-    "intro": "请使用已经登录 {{provider}} 的浏览器。这里仅帮助定位 Cookie，Token 换取仍由本机 AiKey 服务完成。",
-    "stepOpen": "打开 {{provider}} 官方网站。",
-    "stepDevTools": "打开开发者工具，然后进入 Application（或 Storage）> Cookies > {{cookieOrigin}}。",
-    "stepCopyPrefix": "找到名为",
-    "stepCopySuffix": "的 Cookie，只复制它的 Value 并粘贴到下方输入框。",
-    "security": "请像密码一样保护该值。不要复制整个 Cookie 请求头，不要放入 URL，也不要分享给他人。",
-    "openProvider": "打开 {{provider}}",
-    "copyCookieName": "复制 Cookie 名",
-    "copyInstructions": "复制操作说明",
-    "cookieNameCopied": "Cookie 名已复制。",
-    "instructionsCopied": "操作说明已复制。",
-    "copyFailed": "复制失败，请手动选择并复制文本。",
-    "instructionsText": "在已经登录 {{provider}} 的浏览器中打开 {{officialURL}}。打开开发者工具，然后进入 Application（或 Storage）> Cookies > {{cookieOrigin}}。找到名为 {{cookieName}} 的 Cookie，只复制它的 Value 并粘贴到 AiKey。请像密码一样保护该值；不要复制整个 Cookie 请求头，不要放入 URL，也不要分享给他人。"
-  },
   "oauthContribute": {
     "pageTitle": "团队OAuth",
     "pageDescription": "登录到分配给你的团队账号；用过的账号会保留为历史。",
@@ -2727,6 +2709,7 @@
     "colPoolGroup": "池组",
     "clearPoolFilter": "清除池组筛选",
     "colLastLogin": "最后登录",
+    "colTokenExpiry": "剩余有效期",
     "colStatus": "状态",
     "empty": "暂无账号。",
     "noRoutedAccount": "你当前未被路由到任何账号池账号。",
@@ -3097,5 +3080,12 @@
     "errUnauth": "团队会话已过期或被撤销。请重新执行 `aikey login` 后重试。",
     "errParse": "团队服务器返回了意外格式，请检查团队服务器版本。",
     "errUnreachable": "团队服务器不可达。请检查与团队服务器的连接（aikey status）后重试。"
+  },
+  "tokenExpiry": {
+    "expired": "已过期",
+    "inMinutes": "剩 {{count}} 分钟",
+    "inHours": "剩 {{count}} 小时",
+    "inDays": "剩 {{count}} 天",
+    "absoluteHint": "上游签发的 token 到期时间：{{at}}"
   }
 }
