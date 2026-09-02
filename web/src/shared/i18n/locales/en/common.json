@@ -2787,6 +2787,7 @@
       "logged_in": "Logged in",
       "needs_login": "Needs login",
       "auth_failed": "Sign in again",
+      "auth_failed_session_renewal": "Session Key exchange failed — sign in again",
       "revoked": "Revoked"
     },
     "addButton": "Enroll OAuth account",

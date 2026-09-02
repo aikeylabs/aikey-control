@@ -2787,6 +2787,7 @@
       "logged_in": "已登录",
       "needs_login": "待登录",
       "auth_failed": "需要重新登录",
+      "auth_failed_session_renewal": "Session Key 兑换失败，请重新登录",
       "revoked": "已吊销"
     },
     "addButton": "录入 OAuth 账号",

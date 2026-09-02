@@ -92,6 +92,13 @@ export interface MyPoolAccount {
   identity: string;
   /** logged_in | needs_login | auth_failed | revoked */
   status: string;
+  /** durable cause behind an auth_failed status (server enum; e.g.
+   * `session_renewal_rejected` = the central pump's Session Key re-exchange
+   * was rejected upstream). Sent ONLY with status=auth_failed; omitted by
+   * older servers → the page falls back to the generic "sign in again" label.
+   * Never guess a cause from other fields
+   * (spec: R-oauth-token-mint-6.S5 成员看得出 auth_failed 的原因). */
+  status_reason?: string;
   last_login_at: number;
   expires_at: number;
   /** the account the allocation engine currently routes the member to — the page

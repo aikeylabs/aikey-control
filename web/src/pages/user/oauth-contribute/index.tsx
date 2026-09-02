@@ -38,6 +38,7 @@ import {
   type MemberEgressTestResult,
 } from '@/shared/api/team/oauth-contribute';
 import { deriveEgressPresentation } from './egress-presentation';
+import { showsSessionRenewalLabel } from '../_shared/pool-account-state';
 import {
   accountScopeCounts,
   accountScopeSections,
@@ -697,7 +698,15 @@ function AccountRow({
       case 'needs_login':
         return t('oauthContribute.status.needs_login');
       case 'auth_failed':
-        return t('oauthContribute.status.auth_failed');
+        // Show the specific cause ONLY when the server named the Session Key
+        // re-exchange rejection — the one case where the generic "sign in
+        // again" hid WHY (2026-08-31 incident). Every other cause (refresh /
+        // usage-401 / give-up) and older servers with no reason fall back to
+        // the generic label; the boundary decision lives in showsSessionRenewalLabel.
+        // spec: R-oauth-token-mint-6.S5 成员看得出 auth_failed 的原因
+        return showsSessionRenewalLabel(account.status, account.status_reason)
+          ? t('oauthContribute.status.auth_failed_session_renewal')
+          : t('oauthContribute.status.auth_failed');
       case 'revoked':
         return t('oauthContribute.status.revoked');
       default:
