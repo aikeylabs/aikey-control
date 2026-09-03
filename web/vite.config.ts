@@ -5,6 +5,9 @@ import { renderBlockingEntry } from './vite-plugin-render-blocking-entry';
 
 // User-edition Vite config.
 
+// Backend the dev proxy forwards to. Default preserves the historical value.
+const API_TARGET = process.env.AIKEY_API_TARGET || 'http://localhost:8080';
+
 export default defineConfig({
   plugins: [react(), renderBlockingEntry()],
   resolve: {
@@ -22,11 +25,18 @@ export default defineConfig({
     port: 3000,
     proxy: {
       // Proxy backend API routes to the local Go service in dev.
-      '/accounts': { target: 'http://localhost:8080', changeOrigin: true },
-      '/v1': { target: 'http://localhost:8080', changeOrigin: true },
-      '/auth': { target: 'http://localhost:8080', changeOrigin: true },
-      '/health': { target: 'http://localhost:8080', changeOrigin: true },
-      '/internal': { target: 'http://localhost:8080', changeOrigin: true },
+      //
+      // 2026-09-04: honour AIKEY_API_TARGET, matching master/web. The target was
+      // hardcoded here, so pointing this console at a local-server on any port
+      // other than 8080 silently did nothing — every request went to 8080 and
+      // the page rendered as if the backend were down. The DEFAULT is unchanged,
+      // so existing setups behave exactly as before.
+      ...Object.fromEntries(
+        ['/accounts', '/v1', '/auth', '/health', '/internal'].map((p) => [
+          p,
+          { target: API_TARGET, changeOrigin: true },
+        ]),
+      ),
       // NOTE: '/user' is NOT proxied — it's a React SPA route, not a backend API.
     },
   },

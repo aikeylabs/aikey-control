@@ -70,7 +70,7 @@ const PROVIDER_COLORS: Record<string, string> = {
 };
 function providerColor(name: string): string {
   const k = (name || '').toLowerCase();
-  return PROVIDER_COLORS[k] ?? '#52525b';
+  return PROVIDER_COLORS[k] ?? 'var(--border-strong)';
 }
 
 /** 2026-05-28 — added '1D'. When range === '1D' the hero timeline
@@ -596,7 +596,7 @@ export default function UserOverviewPage() {
             }}
           >
             <div className="text-sm">
-              <span className="font-mono font-bold mr-2" style={{ color: 'var(--primary)' }}>
+              <span className="font-mono font-bold mr-2" style={{ color: 'var(--primary-text)' }}>
                 {t('overview.vaultNotSetUp')}
               </span>
               <span style={{ color: 'var(--muted-foreground)' }}>
@@ -607,7 +607,7 @@ export default function UserOverviewPage() {
               className="text-xs font-mono px-3 py-1 rounded border whitespace-nowrap"
               style={{
                 borderColor: 'rgba(250,204,21,0.4)',
-                color: 'var(--primary)',
+                color: 'var(--primary-text)',
                 background: 'transparent',
               }}
               onClick={() => navigate('/user/vault')}
@@ -642,7 +642,7 @@ export default function UserOverviewPage() {
                     {t('overview.statusSessionExpired')}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5" style={{ color: '#4ade80' }}>
+                  <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--success-text)' }}>
                     <span className="status-dot" />
                     {t('overview.statusActive')}
                   </span>
@@ -1301,7 +1301,7 @@ export default function UserOverviewPage() {
                             className="chip font-mono text-[11px]"
                             style={{
                               color: ok ? '#4ade80' : '#f87171',
-                              borderColor: ok ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)',
+                              borderColor: ok ? 'rgba(var(--success-rgb), 0.3)' : 'rgba(var(--destructive-rgb), 0.3)',
                             }}
                           >
                             {status || (rr.request_status || '—')}
@@ -1446,7 +1446,7 @@ export default function UserOverviewPage() {
                           <button
                             type="button"
                             className="ov-btn ov-btn-outline text-[11px]"
-                            style={{ borderColor: 'rgba(250, 204, 21,0.5)', color: 'var(--primary)' }}
+                            style={{ borderColor: 'rgba(250, 204, 21,0.5)', color: 'var(--primary-text)' }}
                             onClick={() => handleClaim(k.virtual_key_id)}
                           >
                             {t('overview.claim')}
@@ -1569,21 +1569,21 @@ function KeyStatusChip({ keyStatus, shareStatus }: { keyStatus: string; shareSta
   // historical row still in the wild.
   if (keyStatus === 'revoked' || keyStatus === 'expired') {
     return (
-      <span className="chip" style={{ color: '#f87171', background: 'rgba(248,113,113,0.08)', borderColor: 'rgba(248,113,113,0.3)' }}>
+      <span className="chip" style={{ color: 'var(--destructive-text)', background: 'rgba(var(--destructive-rgb), 0.08)', borderColor: 'rgba(var(--destructive-rgb), 0.3)' }}>
         {keyStatus.toUpperCase()}
       </span>
     );
   }
   if (shareStatus === 'pending_claim') {
     return (
-      <span className="chip" style={{ color: 'var(--primary)', background: 'rgba(250, 204, 21,0.08)', borderColor: 'rgba(250, 204, 21,0.3)' }}>
+      <span className="chip" style={{ color: 'var(--primary-text)', background: 'rgba(250, 204, 21,0.08)', borderColor: 'rgba(250, 204, 21,0.3)' }}>
         <ClockIcon /> {t('overview.statusPending')}
       </span>
     );
   }
   if (keyStatus === 'active') {
     return (
-      <span className="chip" style={{ color: '#4ade80', background: 'rgba(74,222,128,0.08)', borderColor: 'rgba(74,222,128,0.3)' }}>
+      <span className="chip" style={{ color: 'var(--success-text)', background: 'rgba(var(--success-rgb), 0.08)', borderColor: 'rgba(var(--success-rgb), 0.3)' }}>
         <span className="status-dot" style={{ width: 5, height: 5 }} />
         {t('overview.statusActive')}
       </span>
@@ -1651,7 +1651,7 @@ function ActivityIcon({ className }: { className?: string }) {
 function SparklesIcon({ size }: { size?: number }) {
   const s = size ?? 14;
   return (
-    <svg width={s} height={s} className="flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: '#4ade80' }}>
+    <svg width={s} height={s} className="flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--success-text)' }}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.562L16.5 21.75l-.398-1.188a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.188-.398a2.25 2.25 0 001.423-1.423L16.5 15.75l.398 1.188a2.25 2.25 0 001.423 1.423L19.5 18.75l-1.188.398a2.25 2.25 0 00-1.423 1.423z" />
     </svg>
   );
@@ -1691,7 +1691,7 @@ const OVERVIEW_CSS = `
 .overview-page .status-dot {
   width: 6px; height: 6px; border-radius: 999px;
   background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+  box-shadow: 0 0 6px rgba(var(--success-rgb), 0.7);
   display: inline-block;
   flex-shrink: 0;
 }
@@ -1700,13 +1700,13 @@ const OVERVIEW_CSS = `
   display: flex; align-items: center; gap: 0.75rem;
   padding: 0.55rem 0.9rem;
   border-radius: 6px;
-  background: rgba(74, 222, 128, 0.05);
-  border: 1px solid rgba(74, 222, 128, 0.25);
+  background: rgba(var(--success-rgb), 0.05);
+  border: 1px solid rgba(var(--success-rgb), 0.25);
 }
 .overview-page .info-banner .dot {
   width: 6px; height: 6px; border-radius: 999px;
   background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+  box-shadow: 0 0 6px rgba(var(--success-rgb), 0.7);
   flex-shrink: 0;
 }
 
@@ -1800,9 +1800,9 @@ const OVERVIEW_CSS = `
   letter-spacing: 0.05em;
   padding: 1px 5px;
   border-radius: 3px;
-  background: rgba(74, 222, 128, 0.08);
-  color: #4ade80;
-  border: 1px solid rgba(74, 222, 128, 0.25);
+  background: rgba(var(--success-rgb), 0.08);
+  color: var(--success-text);
+  border: 1px solid rgba(var(--success-rgb), 0.25);
 }
 /* Hover-arrow moved 2026-04-25 from top-right to vertical-center
    right side — top-right collided with the per-card title icon (key /
@@ -1820,7 +1820,7 @@ const OVERVIEW_CSS = `
 .overview-page .seg {
   display: inline-flex;
   padding: 2px;
-  background: rgba(0,0,0,0.25);
+  background: rgba(var(--sink-rgb), 0.25);
   border: 1px solid var(--border);
   border-radius: 6px;
 }
@@ -1855,7 +1855,7 @@ const OVERVIEW_CSS = `
   font-size: 11px;
   font-family: monospace;
   border-radius: 4px;
-  background: rgba(0,0,0,0.2);
+  background: rgba(var(--sink-rgb), 0.2);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
 }
@@ -1872,7 +1872,7 @@ const OVERVIEW_CSS = `
 .overview-page .prov-bar {
   position: relative;
   height: 8px;
-  background: rgba(255,255,255,0.04);
+  background: rgba(var(--lift-rgb), 0.04);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -1890,7 +1890,7 @@ const OVERVIEW_CSS = `
   color: var(--muted-foreground);
   font-weight: 600;
   text-align: left;
-  background: rgba(0,0,0,0.2);
+  background: rgba(var(--sink-rgb), 0.2);
   border-bottom: 1px solid var(--border);
 }
 .overview-page table.vault td { border-bottom: 1px solid var(--border); font-size: 13px; }
@@ -1912,20 +1912,20 @@ const OVERVIEW_CSS = `
   background: transparent;
 }
 .overview-page .ov-btn-outline {
-  background: rgba(0,0,0,0.25);
+  background: rgba(var(--sink-rgb), 0.25);
   color: var(--foreground);
   border-color: var(--border);
 }
 .overview-page .ov-btn-outline:hover {
   border-color: var(--muted-foreground);
-  background: rgba(255,255,255,0.03);
+  background: rgba(var(--lift-rgb), 0.03);
 }
 .overview-page .ov-btn-ghost {
   color: var(--muted-foreground);
 }
 .overview-page .ov-btn-ghost:hover {
   color: var(--foreground);
-  background: rgba(255,255,255,0.03);
+  background: rgba(var(--lift-rgb), 0.03);
 }
 
 .overview-page .icon-btn {
@@ -1940,7 +1940,7 @@ const OVERVIEW_CSS = `
 }
 .overview-page .icon-btn:hover {
   color: var(--foreground);
-  background: rgba(0,0,0,0.25);
+  background: rgba(var(--sink-rgb), 0.25);
   border-color: var(--border);
 }
 

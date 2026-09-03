@@ -68,11 +68,46 @@
 //     top/bottom border, which matches v1's `rgba(19,19,22,0.42)` band.
 
 export const VAULT_PAGE_SKIN_V1 = `
+/* ── Skin-local surface tokens (2026-09-04) ─────────────────────────────────
+ * 🔴 These five near-black tints were hardcoded, and each carried !important,
+ * so they beat the inline token on the element and painted a grey slab across
+ * the light theme (user-reported on /user/vault). They were also invisible to
+ * no-raw-neutral.test.ts, whose regex ENUMERATED known neutrals — #171719 and
+ * friends were simply not on the list. The fence now detects low-chroma colours
+ * instead of matching a list.
+ *
+ * Kept as skin-local tokens rather than folded into --sink-rgb so the DARK
+ * values stay byte-identical: this family has five distinct steps (19/23/31/35/
+ * 38) that a single global token cannot reproduce.
+ * ─────────────────────────────────────────────────────────────────────────── */
+.vault-page.vault-skin-v1 {
+  --skin-well: 19, 19, 22;
+  --skin-head: 23, 23, 25;
+  --skin-row: 31, 31, 33;
+  --skin-row-alt: 35, 35, 39;
+  --skin-row-hi: 38, 38, 42;
+  --skin-edge: var(--skin-edge);
+}
+[data-theme='light'] .vault-page.vault-skin-v1 {
+  /* 🔴 WHITE — the vault table must match every other table in the console.
+     A first attempt set these to near-white GREYS, which re-created the grey
+     slab the light theme exists to avoid: because each is applied at its own
+     alpha over a white card, any non-white hue shows through as a tint. White
+     makes every one of them a no-op, and structure comes from --border, exactly
+     as it does on the master console's tables. */
+  --skin-well: 255, 255, 255;
+  --skin-head: 255, 255, 255;
+  --skin-row: 255, 255, 255;
+  --skin-row-alt: 255, 255, 255;
+  --skin-row-hi: 255, 255, 255;
+  --skin-edge: #e4e2de; /* theme-literal-ok: hairline, the only structure left */
+  --skin-field: 255, 255, 255; /* theme-literal-ok: fields are white in light */
+}
 /* ── Body atmosphere — amber radial glow + soft vertical gradient ── */
 .vault-page.vault-skin-v1 {
   background:
     radial-gradient(circle at 78% -10%, rgba(250, 204, 21, 0.05), transparent 32rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.012) 0%, transparent 42rem),
+    linear-gradient(180deg, rgba(var(--lift-rgb), 0.012) 0%, transparent 42rem),
     var(--background);
 }
 
@@ -88,59 +123,59 @@ export const VAULT_PAGE_SKIN_V1 = `
 
 /* ── Card chrome: float above body with soft border + outer shadow ── */
 .vault-page.vault-skin-v1 .card {
-  background: rgba(32, 32, 36, 0.86) !important;
-  border: 1px solid rgba(244, 244, 245, 0.085) !important;
+  background: rgba(var(--surface-alt-rgb), 0.86) !important;
+  border: 1px solid rgba(var(--fg-rgb), 0.085) !important;
   border-radius: 11px !important;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.025) inset,
-    0 18px 50px rgba(0, 0, 0, 0.22) !important;
+    0 1px 0 rgba(var(--lift-rgb), 0.025) inset,
+    0 18px 50px rgba(var(--sink-rgb), 0.22) !important;
 }
 
 /* ── Card head: softer divider + slightly tinted band ────────────── */
 .vault-page.vault-skin-v1 .card > div:first-of-type {
-  background-color: rgba(23, 23, 25, 0.2) !important;
-  border-bottom: 1px solid rgba(244, 244, 245, 0.04) !important;
+  background-color: rgba(var(--skin-head), 0.2) !important;
+  border-bottom: 1px solid rgba(var(--fg-rgb), 0.04) !important;
 }
 
 /* ── Search input: tactile bg + inset top highlight ─────────────── */
 .vault-page.vault-skin-v1 .search-input {
-  background: rgba(52, 52, 60, 0.9);
-  border: 1px solid rgba(244, 244, 245, 0.065);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  background: rgba(var(--skin-field), 0.9);
+  border: 1px solid rgba(var(--fg-rgb), 0.065);
+  box-shadow: inset 0 1px 0 rgba(var(--lift-rgb), 0.035);
 }
 .vault-page.vault-skin-v1 .search-input:focus {
   border-color: rgba(250, 204, 21, 0.5);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(var(--lift-rgb), 0.05),
     0 0 0 2px rgba(250, 204, 21, 0.15);
 }
 
 /* ── Table thead: warmer dark band + softer bottom border ───────── */
 .vault-page.vault-skin-v1 table.vault th {
-  background: rgba(23, 23, 25, 0.32) !important;
-  border-bottom: 1px solid rgba(244, 244, 245, 0.04) !important;
+  background: rgba(var(--skin-head), 0.32) !important;
+  border-bottom: 1px solid rgba(var(--fg-rgb), 0.04) !important;
   letter-spacing: 0.08em;
 }
 .vault-page.vault-skin-v1 table.vault th.th-sortable:hover {
-  background: rgba(23, 23, 25, 0.48) !important;
+  background: rgba(var(--skin-head), 0.48) !important;
 }
 
 /* ── Data rows: zebra striping + super-faint bottom border ──────── */
 .vault-page.vault-skin-v1 table.vault tbody tr:not(.group-row):not(:hover):not(.in-use) {
-  background: rgba(38, 38, 42, 0.42);
+  background: rgba(var(--skin-row-hi), 0.42);
 }
 .vault-page.vault-skin-v1 table.vault tbody tr:not(.group-row):not(:hover):not(.in-use):nth-of-type(even) {
-  background: rgba(35, 35, 39, 0.42);
+  background: rgba(var(--skin-row-alt), 0.42);
 }
 .vault-page.vault-skin-v1 table.vault td {
-  border-bottom: 1px solid rgba(244, 244, 245, 0.025) !important;
+  border-bottom: 1px solid rgba(var(--fg-rgb), 0.025) !important;
 }
 
 /* ── Group row: slightly stronger separator band ────────────────── */
 .vault-page.vault-skin-v1 table.vault tbody tr.group-row > td {
-  background: rgba(19, 19, 22, 0.55) !important;
-  border-top: 1px solid rgba(244, 244, 245, 0.04) !important;
-  border-bottom: 1px solid rgba(244, 244, 245, 0.04) !important;
+  background: rgba(var(--skin-well), 0.55) !important;
+  border-top: 1px solid rgba(var(--fg-rgb), 0.04) !important;
+  border-bottom: 1px solid rgba(var(--fg-rgb), 0.04) !important;
 }
 
 /* ── Alias hierarchy boost: bigger/heavier alias, dimmer sub ──── */

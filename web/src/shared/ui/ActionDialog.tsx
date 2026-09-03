@@ -50,8 +50,8 @@ export function ActionDialog({
 
   const confirmDisabled = loading || (requireInput !== undefined && inputValue !== requireInput);
   const confirmColor = variant === 'danger' ? '#ef4444' : '#f59e0b';
-  const confirmBg = variant === 'danger' ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)';
-  const confirmBorder = variant === 'danger' ? 'rgba(239,68,68,0.4)' : 'rgba(245,158,11,0.4)';
+  const confirmBg = variant === 'danger' ? 'rgba(var(--destructive-rgb), 0.12)' : 'rgba(245,158,11,0.12)';
+  const confirmBorder = variant === 'danger' ? 'rgba(var(--destructive-rgb), 0.4)' : 'rgba(245,158,11,0.4)';
 
   // Portal to document.body for the same reason as DetailDrawer: the
   // backdrop + dialog are siblings in a fragment, and caller pages
@@ -64,12 +64,12 @@ export function ActionDialog({
     <>
       <div
         className="fixed inset-0"
-        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'rgba(0,0,0,0.6)' }}
+        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'var(--overlay-sink)' }}
         onClick={onClose}
       />
       <div
         className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border p-6"
-        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.7)' }}
       >
         {/* Icon + Title */}
         <div className="flex items-start gap-3 mb-4">

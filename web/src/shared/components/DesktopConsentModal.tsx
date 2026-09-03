@@ -143,7 +143,7 @@ export function DesktopConsentModal({ open, replay, onClose, onGranted }: Deskto
     <ModalPortal>
       <div
         className="fixed inset-0 z-50"
-        style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+        style={{ backgroundColor: 'var(--overlay-sink)' }}
         onClick={handleCancel}
       />
       <div
@@ -151,7 +151,7 @@ export function DesktopConsentModal({ open, replay, onClose, onGranted }: Deskto
         style={{
           backgroundColor: 'var(--card)',
           borderColor: 'var(--border)',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+          boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.7)',
         }}
         role="dialog"
         aria-modal="true"
@@ -175,8 +175,8 @@ export function DesktopConsentModal({ open, replay, onClose, onGranted }: Deskto
           <div
             className="p-2 rounded border mb-4 text-xs font-mono"
             style={{
-              borderColor: 'rgba(239,68,68,0.4)',
-              backgroundColor: 'rgba(239,68,68,0.08)',
+              borderColor: 'rgba(var(--destructive-rgb), 0.4)',
+              backgroundColor: 'rgba(var(--destructive-rgb), 0.08)',
               color: '#ef4444',
             }}
           >
@@ -213,8 +213,8 @@ export function DesktopConsentModal({ open, replay, onClose, onGranted }: Deskto
             disabled={busy}
             className="px-4 py-2 text-xs font-mono font-bold tracking-wider rounded border transition-colors disabled:opacity-40"
             style={{
-              backgroundColor: 'rgba(34,197,94,0.12)',
-              borderColor: 'rgba(34,197,94,0.4)',
+              backgroundColor: 'rgba(var(--success-rgb), 0.12)',
+              borderColor: 'rgba(var(--success-rgb), 0.4)',
               color: '#22c55e',
             }}
           >

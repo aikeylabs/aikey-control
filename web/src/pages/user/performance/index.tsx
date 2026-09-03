@@ -891,7 +891,7 @@ const COST_CSS = `
 /* Drill-to-detail row labels (by-key / by-model): look clickable — brighten +
    underline on hover so users know they jump to the Usage Detail page. */
 .performance-page .detail-link { cursor: pointer; transition: color 120ms ease; }
-.performance-page .detail-link:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.performance-page .detail-link:hover { color: var(--primary-text); text-decoration: underline; text-underline-offset: 2px; }
 .performance-page .chart-title {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -946,7 +946,7 @@ const COST_CSS = `
   position: relative;
   height: 10px;
   border-radius: 3px;
-  background: rgba(255,255,255,0.04);
+  background: rgba(var(--lift-rgb), 0.04);
   overflow: hidden;
 }
 .performance-page .key-bar > .key-bar-fill {
@@ -1051,7 +1051,7 @@ const COST_CSS = `
  * itself is just a 2px line. Far more discoverable than relying on
  * cursor: pointer alone. */
 .performance-page .trend7d-bar:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--lift-rgb), 0.04);
 }
 .performance-page .trend7d-fill {
   display: block;
@@ -1079,7 +1079,7 @@ const COST_CSS = `
   box-shadow: 0 0 6px rgba(202, 138, 4, 0.45);
 }
 .performance-page .trend7d-bar.is-today .trend7d-fill {
-  outline: 1px dashed rgba(74, 222, 128, 0.7);
+  outline: 1px dashed rgba(var(--success-rgb), 0.7);
   outline-offset: 1px;
 }
 .performance-page .trend7d-label {
@@ -1137,7 +1137,7 @@ const COST_CSS = `
   transition: background 120ms ease;
 }
 .performance-page .session-row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--lift-rgb), 0.04);
 }
 
 /* Filter chip — small inline tag with × close button. Pinned date /

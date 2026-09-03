@@ -15,7 +15,7 @@
 export const APPS_DETAIL_CSS = `
 .connected-app-page {
   --cap-token-bar:    #ca8a04;  /* dark amber, matches usage-ledger token bars */
-  --cap-request-line: #71717a;  /* zinc-500, muted secondary signal */
+  --cap-request-line: var(--faint-foreground);  /* zinc-500, muted secondary signal */
 }
 
 .connected-app-page .cap-mono-label {
@@ -99,7 +99,7 @@ export const APPS_DETAIL_CSS = `
 .connected-app-page .cap-btn-primary {
   background: #ca8a04;
   border: 1px solid #ca8a04;
-  color: #18181b;
+  color: var(--primary-foreground);
 }
 .connected-app-page .cap-btn-secondary {
   background: transparent;
@@ -111,11 +111,11 @@ export const APPS_DETAIL_CSS = `
 }
 .connected-app-page .cap-btn-danger {
   background: transparent;
-  border: 1px solid rgba(239, 68, 68, 0.5);
+  border: 1px solid rgba(var(--destructive-rgb), 0.5);
   color: #ef4444;
 }
 .connected-app-page .cap-btn-danger:not(:disabled):hover {
-  background: rgba(239, 68, 68, 0.08);
+  background: rgba(var(--destructive-rgb), 0.08);
 }
 
 /* ── Section header + body ────────────────────────────────────────── */

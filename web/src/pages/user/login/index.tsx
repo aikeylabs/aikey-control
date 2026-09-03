@@ -61,14 +61,14 @@ export default function UserLoginPage() {
       style={{
         backgroundColor: 'var(--card)',
         border: '1px solid var(--border)',
-        boxShadow: '0 20px 40px -10px rgba(0,0,0,0.8), 0 0 30px rgba(250, 204, 21,0.03)',
+        boxShadow: '0 20px 40px -10px rgba(var(--scrim-rgb), 0.8), 0 0 30px rgba(250, 204, 21,0.03)',
       }}
     >
       {/* Top highlight */}
       <div className="absolute top-0 left-0 w-full h-[2px]" style={{ background: 'linear-gradient(90deg, transparent, var(--primary), transparent)', opacity: 0.6 }} />
 
       {/* Header */}
-      <div className="p-8 pb-6 text-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.01)' }}>
+      <div className="p-8 pb-6 text-center" style={{ borderBottom: '1px solid rgba(var(--lift-rgb), 0.05)', backgroundColor: 'rgba(var(--lift-rgb), 0.01)' }}>
         {/* 2026-07-18 (user request): standard brand lockup (AK chip +
             wordmark + tagline), same treatment as the sidebar brand —
             replaces the KeyIcon box + "AIKEY USER" mono heading. The
@@ -100,7 +100,7 @@ export default function UserLoginPage() {
               <div className="text-[10px] font-mono font-bold tracking-wider mb-1" style={{ color: 'var(--muted-foreground)' }}>
                 {t('login.inviteLabel')}
               </div>
-              <div className="text-sm font-mono font-bold" style={{ color: 'var(--primary)' }}>
+              <div className="text-sm font-mono font-bold" style={{ color: 'var(--primary-text)' }}>
                 {inviteEmail}
               </div>
             </div>
@@ -111,11 +111,11 @@ export default function UserLoginPage() {
         {!inviteEmail && referrerId && (
           <div
             className="p-4 rounded border flex items-start gap-3"
-            style={{ backgroundColor: 'rgba(74,222,128,0.05)', borderColor: 'rgba(74,222,128,0.2)' }}
+            style={{ backgroundColor: 'rgba(var(--success-rgb), 0.05)', borderColor: 'rgba(var(--success-rgb), 0.2)' }}
           >
             <div
               className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
-              style={{ backgroundColor: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' }}
+              style={{ backgroundColor: 'rgba(var(--success-rgb), 0.1)', border: '1px solid rgba(var(--success-rgb), 0.3)' }}
             >
               <UserPlusIcon />
             </div>
@@ -123,7 +123,7 @@ export default function UserLoginPage() {
               <div className="text-[10px] font-mono font-bold tracking-wider mb-1" style={{ color: 'var(--muted-foreground)' }}>
                 {t('login.referralLabel')}
               </div>
-              <div className="text-xs font-mono" style={{ color: '#4ade80' }}>
+              <div className="text-xs font-mono" style={{ color: 'var(--success-text)' }}>
                 {t('login.referralMessage')}
               </div>
             </div>
@@ -140,9 +140,9 @@ export default function UserLoginPage() {
           </div>
           <div
             className="rounded border p-3 flex items-center justify-between gap-2"
-            style={{ backgroundColor: '#000', borderColor: 'var(--border)' }}
+            style={{ backgroundColor: 'var(--input-well)', borderColor: 'var(--border)' }}
           >
-            <code className="text-xs font-mono truncate" style={{ color: 'var(--primary)' }}>
+            <code className="text-xs font-mono truncate" style={{ color: 'var(--primary-text)' }}>
               curl -fsSL https://github.com/aikeylabs/launch/releases/latest/download/latest-install.sh | sh
             </code>
             <CopyBtn
@@ -156,7 +156,7 @@ export default function UserLoginPage() {
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-[10px] font-mono tracking-wider"
-            style={{ color: 'var(--primary)' }}
+            style={{ color: 'var(--primary-text)' }}
           >
             <BookIcon />
             {t('login.fullInstallGuide')}
@@ -182,9 +182,9 @@ export default function UserLoginPage() {
           </p>
           <div
             className="rounded border p-3 flex items-center justify-between"
-            style={{ backgroundColor: '#000', borderColor: 'var(--border)' }}
+            style={{ backgroundColor: 'var(--input-well)', borderColor: 'var(--border)' }}
           >
-            <code className="text-sm font-mono font-bold" style={{ color: 'var(--primary)' }}>
+            <code className="text-sm font-mono font-bold" style={{ color: 'var(--primary-text)' }}>
               {cliCommand}
             </code>
             <CopyBtn
@@ -214,7 +214,7 @@ export default function UserLoginPage() {
       {/* Footer */}
       <div
         className="px-8 py-3"
-        style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderTop: '1px solid var(--border)' }}
+        style={{ backgroundColor: 'rgba(var(--sink-rgb), 0.3)', borderTop: '1px solid var(--border)' }}
       >
       <div className="flex justify-between items-center">
         <span className="text-[10px] font-mono tracking-[0.15em]" style={{ color: 'var(--muted-foreground)' }}>
@@ -225,7 +225,7 @@ export default function UserLoginPage() {
           target="_blank"
           rel="noopener noreferrer"
           className="text-[10px] font-mono tracking-[0.15em] flex items-center gap-1"
-          style={{ color: 'var(--primary)', textDecoration: 'none' }}
+          style={{ color: 'var(--primary-text)', textDecoration: 'none' }}
         >
           <TerminalIcon />
           {t('login.footerCliGuide')}
@@ -254,7 +254,7 @@ function StepBadge({ n }: { n: number }) {
   return (
     <div
       className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-bold flex-shrink-0"
-      style={{ backgroundColor: 'rgba(250, 204, 21,0.15)', color: 'var(--primary)', border: '1px solid rgba(250, 204, 21,0.3)' }}
+      style={{ backgroundColor: 'rgba(250, 204, 21,0.15)', color: 'var(--primary-text)', border: '1px solid rgba(250, 204, 21,0.3)' }}
     >
       {n}
     </div>
@@ -269,7 +269,7 @@ function CopyBtn({ text, copied, onCopy }: { text: string; copied: boolean; onCo
       className="text-[10px] font-mono px-2 py-0.5 rounded border flex-shrink-0 ml-2"
       style={{
         color: copied ? '#4ade80' : 'var(--muted-foreground)',
-        borderColor: copied ? 'rgba(74,222,128,0.3)' : 'var(--border)',
+        borderColor: copied ? 'rgba(var(--success-rgb), 0.3)' : 'var(--border)',
         backgroundColor: 'transparent',
       }}
     >
@@ -282,10 +282,10 @@ function CopyBtn({ text, copied, onCopy }: { text: string; copied: boolean; onCo
 // KeyIcon removed 2026-07-18: the header now renders the shared BrandLockup
 // (AK chip + wordmark) instead of the key glyph box.
 function MailIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>;
+  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--primary-text)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>;
 }
 function UserPlusIcon() {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: '#4ade80' }}><path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" /></svg>;
+  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} style={{ color: 'var(--success-text)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" /></svg>;
 }
 function BookIcon() {
   return <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>;

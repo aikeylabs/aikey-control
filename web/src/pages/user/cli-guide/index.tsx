@@ -27,32 +27,43 @@ import { Trans, useTranslation } from 'react-i18next';
 import { copyText } from '@/shared/utils/clipboard';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
 
+// Page-local palette, pointed at the global tokens (2026-09-03) so this
+// standalone guide follows the theme like the rest of the console. Every entry
+// resolves to exactly the hex it replaced in dark, so this is a no-op there.
+//
+// 🔴 This object is WHY the page stayed fully charcoal after the first light
+// pass: ~200 rendered elements read their colour from here, and a key like
+// `bg:` carries no CSS signal, so a property-aware scan cannot recognise it as
+// styling. A page-local palette has to be converted deliberately.
 const PALETTE = {
-  bg:      '#18181b',
-  surface: '#202024',
-  card:    '#27272a',
-  muted:   '#3f3f46',
-  border:  '#3f3f46',
-  borderSoft:  'rgba(244, 244, 245, 0.085)',
-  borderFaint: 'rgba(244, 244, 245, 0.04)',
-  text:    '#f4f4f5',
-  display: '#c8c4ba',
-  subtle:  '#a1a1aa',
-  faint:   '#71717a',
-  primary: '#facc15',
-  primaryDim: '#ca8a04',
-  success: '#4ade80',
+  bg:      'var(--background)',
+  surface: 'var(--surface-alt)',
+  card:    'var(--card)',
+  muted:   'var(--surface-inset)',
+  border:  'var(--border)',
+  borderSoft:  'rgba(var(--fg-rgb), 0.085)',
+  borderFaint: 'rgba(var(--fg-rgb), 0.04)',
+  text:    'var(--foreground)',
+  display: 'var(--display-foreground)',
+  subtle:  'var(--muted-foreground)',
+  faint:   'var(--faint-foreground)',
+  // --primary-text, not --primary: this palette's accent paints COMMAND TEXT,
+  // and --primary (#e8502a) is only 3.14:1 on the canvas — fine for a fill,
+  // failing for text. No-op in dark, where the two tokens are the same amber.
+  primary: 'var(--primary-text)',
+  primaryDim: 'var(--primary-dim)',
+  success: 'var(--success)',
 } as const;
 
 const BG_ATMOSPHERE =
   `radial-gradient(circle at 78% -10%, rgba(250, 204, 21, 0.05), transparent 32rem), ` +
-  `linear-gradient(180deg, rgba(255, 255, 255, 0.012) 0%, transparent 42rem), ` +
+  `linear-gradient(180deg, rgba(var(--lift-rgb), 0.012) 0%, transparent 42rem), ` +
   PALETTE.bg;
 
 const CARD_LIFT =
-  '0 1px 0 rgba(255, 255, 255, 0.025) inset, 0 18px 50px rgba(0, 0, 0, 0.22)';
+  '0 1px 0 rgba(var(--lift-rgb), 0.025) inset, 0 18px 50px rgba(var(--sink-rgb), 0.22)';
 const SUB_CARD_LIFT =
-  '0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 6px 20px rgba(0, 0, 0, 0.14)';
+  '0 1px 0 rgba(var(--lift-rgb), 0.02) inset, 0 6px 20px rgba(var(--sink-rgb), 0.14)';
 
 const MONO = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
 const SANS = '"Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -80,8 +91,8 @@ function CodeBlock({ code, lang = 'bash' }: { code: string; lang?: string }) {
         overflow: 'hidden',
         border: `1px solid ${PALETTE.borderSoft}`,
         borderRadius: 8,
-        background: 'rgba(22, 22, 26, 0.88)',
-        boxShadow: 'inset 0 1px 0 rgba(0, 0, 0, 0.25)',
+        background: 'rgba(var(--bg-rgb), 0.88)',
+        boxShadow: 'inset 0 1px 0 rgba(var(--sink-rgb), 0.25)',
       }}
     >
       <span
@@ -102,7 +113,7 @@ function CodeBlock({ code, lang = 'bash' }: { code: string; lang?: string }) {
         }}
         style={{
           position: 'absolute', top: 7, right: 7, minHeight: 25, padding: '0 9px',
-          border: `1px solid ${copied ? 'rgba(74,222,128,0.4)' : PALETTE.borderSoft}`,
+          border: `1px solid ${copied ? 'rgba(var(--success-rgb), 0.4)' : PALETTE.borderSoft}`,
           borderRadius: 6, background: PALETTE.card,
           color: copied ? PALETTE.success : PALETTE.subtle,
           fontFamily: MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer',
@@ -176,7 +187,7 @@ function Section({
           style={{
             border: `1px solid ${PALETTE.borderSoft}`,
             borderRadius: 10,
-            background: 'rgba(32, 32, 36, 0.86)',
+            background: 'rgba(var(--surface-alt-rgb), 0.86)',
             boxShadow: CARD_LIFT,
             padding: 18,
           }}
@@ -349,15 +360,15 @@ export default function CLIGuidePage() {
       <nav
         style={{
           height: 64, padding: '0 32px', display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', background: 'rgba(0,0,0,0.4)',
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
+          justifyContent: 'space-between', background: 'var(--backdrop-chrome)',
+          borderBottom: '1px solid rgba(var(--lift-rgb), 0.05)',
           position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(12px)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
-              width: 32, height: 32, borderRadius: 6, background: '#0c0c0e',
+              width: 32, height: 32, borderRadius: 6, background: 'var(--code-bg)',
               border: `1px solid ${PALETTE.primaryDim}`, display: 'flex',
               alignItems: 'center', justifyContent: 'center',
               fontFamily: DISPLAY, fontWeight: 700, fontSize: 12, color: '#fef3c7',
@@ -388,8 +399,8 @@ export default function CLIGuidePage() {
         className="cli-guide-strip"
         style={{
           position: 'sticky', top: 64, zIndex: 40,
-          background: 'rgba(24, 24, 27, 0.8)', backdropFilter: 'blur(14px)',
-          borderBottom: '1px solid rgba(255,255,255,0.05)', padding: '0 32px',
+          background: 'rgba(var(--bg-rgb), 0.8)', backdropFilter: 'blur(14px)',
+          borderBottom: '1px solid rgba(var(--lift-rgb), 0.05)', padding: '0 32px',
         }}
       >
         <nav
@@ -674,7 +685,7 @@ export default function CLIGuidePage() {
         {/* Footer */}
         <footer
           style={{
-            marginTop: 72, paddingTop: 28, borderTop: '1px solid rgba(255,255,255,0.05)',
+            marginTop: 72, paddingTop: 28, borderTop: '1px solid rgba(var(--lift-rgb), 0.05)',
             display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
             color: PALETTE.faint, fontFamily: MONO, fontSize: 11,
           }}

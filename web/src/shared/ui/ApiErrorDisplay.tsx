@@ -35,29 +35,29 @@ export function ApiErrorDisplay({ error, compact = false }: ApiErrorDisplayProps
       <details className="group">
         <summary
           className="cursor-pointer text-[10px] font-mono font-bold list-none flex items-center gap-1.5"
-          style={{ color: '#f87171' }}
+          style={{ color: 'var(--destructive-text)' }}
         >
           <span
             className="inline-block transition-transform group-open:rotate-90"
-            style={{ color: '#fca5a5' }}
+            style={{ color: 'var(--destructive-text-soft)' }}
           >
             ▶
           </span>
           {friendlyLabelFor(error.code)}
         </summary>
-        <div className="mt-1.5 space-y-1 pl-3 border-l" style={{ borderColor: 'rgba(239,68,68,0.3)' }}>
-          <p className="text-[10px] font-mono" style={{ color: '#f87171' }}>
+        <div className="mt-1.5 space-y-1 pl-3 border-l" style={{ borderColor: 'rgba(var(--destructive-rgb), 0.3)' }}>
+          <p className="text-[10px] font-mono" style={{ color: 'var(--destructive-text)' }}>
             [{error.code}] {error.message}
           </p>
           {isExt && error.upstream_message && (
-            <p className="text-[10px] font-mono" style={{ color: '#fca5a5' }}>
+            <p className="text-[10px] font-mono" style={{ color: 'var(--destructive-text-soft)' }}>
               ↳ {error.provider && <>{error.provider}: </>}
               {error.upstream_status && <>{error.upstream_status} — </>}
               {error.upstream_message}
             </p>
           )}
           {isData && error.field && (
-            <p className="text-[10px] font-mono" style={{ color: '#fca5a5' }}>
+            <p className="text-[10px] font-mono" style={{ color: 'var(--destructive-text-soft)' }}>
               ↳ field: {error.field}{error.rule && ` (${error.rule})`}
             </p>
           )}
@@ -74,10 +74,10 @@ export function ApiErrorDisplay({ error, compact = false }: ApiErrorDisplayProps
   return (
     <div
       className="px-3 py-2.5 rounded border space-y-2"
-      style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.3)' }}
+      style={{ backgroundColor: 'rgba(var(--destructive-rgb), 0.08)', borderColor: 'rgba(var(--destructive-rgb), 0.3)' }}
     >
       {/* Code + message */}
-      <p className="text-[10px] font-mono font-bold" style={{ color: '#f87171' }}>
+      <p className="text-[10px] font-mono font-bold" style={{ color: 'var(--destructive-text)' }}>
         [{error.code}] {error.message}
       </p>
 

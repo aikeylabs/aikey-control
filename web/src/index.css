@@ -26,6 +26,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 🔴 Accent TEXT uses --primary-text, never --primary. In dark the two are the
+   same amber so this reads as a no-op; in light --primary (#f2801a) is a FILL
+   colour at 2.67:1 and fails AA for text, which is what --primary-text exists
+   to fix. Measured in a browser 2026-09-04 on the active nav item.            */
+
 /* ── AiKey Control – Industrial Vault Theme (aligned with theme_2.css) ── */
 :root {
   /* Exact values from theme_2.css */
@@ -53,7 +58,7 @@
      treatments where the full --primary reads as too loud: top divider
      lines, faint state borders, low-emphasis indicator strokes. Matches
      the value already used by the existing .vault-header box-shadow halo
-     `rgba(202, 138, 4, .1)` so the divider line + its glow now share the
+     `rgba(var(--primary-dim-rgb), .1)` so the divider line + its glow now share the
      same hue basis. Single source of truth — add new amber-dim uses
      here. */
   --primary-dim: #ca8a04;      /* yellow-600 */
@@ -92,6 +97,17 @@
      dimmest): --foreground #f4f4f5 → --display-foreground #c8c4ba →
      --muted-foreground #a1a1aa. */
   --display-foreground: #c8c4ba;
+  /* Tailwind radius scale, now themeable (2026-09-04). Dark values are EXACTLY
+     the numbers previously hardcoded in tailwind.config.js (2/4/4/6px), so the
+     dark console's geometry does not move by a pixel.
+     🔴 This is a DELIBERATE departure from "geometry is shared": the user asked
+     for light to match the reference design's large radii while dark stays put.
+     The two themes therefore have different geometry — accepted, on request. */
+  --rad-sm: 2px;
+  --rad: 4px;
+  --rad-md: 4px;
+  --rad-lg: 6px;
+
   --radius: 0.375rem;
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
@@ -99,9 +115,407 @@
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
-  --glow-primary: 0 0 15px rgba(250, 204, 21, 0.15);
-  --glow-primary-hover: 0 0 25px rgba(250, 204, 21, 0.3);
+  --glow-primary: 0 0 15px rgba(var(--primary-rgb), 0.15);
+  --glow-primary-hover: 0 0 25px rgba(var(--primary-rgb), 0.3);
   --glow-destructive: 0 0 10px rgba(239, 68, 68, 0.4);
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * LIGHT-THEME SUPPORT TOKENS (2026-09-03) — see
+   * roadmap20260320/技术实现/UI/resources/theme_3.css for the full rationale
+   * and roadmap20260320/技术实现/update/20260903-控制台新增浅色主题-深色不变.md
+   *
+   * 🔴 EVERY VALUE BELOW IS EXACTLY WHAT THE LITERAL IT REPLACES ALREADY
+   *    EVALUATES TO TODAY. Substituting a literal for its token is therefore a
+   *    byte-identical no-op in dark — which is what makes it safe to tokenize
+   *    page by page without ever regressing the dark theme. If you change a
+   *    value here, you are changing the DARK theme, which is out of scope for
+   *    the light-theme work and needs its own decision.
+   *
+   * WHY TWO DIFFERENT SHAPES BELOW:
+   *   - CHROMATIC families are RGB triplets used as rgba( var(--<name>-rgb) , alpha ).
+   *     A chromatic tint at a fixed alpha reads correctly on either ground —
+   *     10% green is a pale green on white and a deep green on charcoal — so
+   *     only the hue needs to change per theme, and the call sites keep their
+   *     own alphas.
+   *   - NEUTRAL overlays are FULL values, not triplets. Their alpha cannot
+   *     carry across: rgba(0,0,0,.2) is a correct table header on charcoal and
+   *     a filthy grey slab on white. The per-theme value has to include the
+   *     alpha, so these are whole-token swaps.
+   * ═══════════════════════════════════════════════════════════════════════ */
+
+  /* Chromatic — hue swaps per theme, call sites keep their alphas */
+  --primary-rgb: 250, 204, 21;        /* #facc15 */
+  --primary-dim-rgb: 202, 138, 4;     /* #ca8a04 */
+  --success-rgb: 34, 197, 94;
+  --warning-rgb: 249, 115, 22;
+  --destructive-rgb: 239, 68, 68;
+  --info-rgb: 96, 165, 250;
+
+  /* Accent TEXT tier. In dark the accent carries text at 11.57:1 so this is
+     simply --primary. In light it must be darker than --primary to clear AA
+     (see theme_3.css). Page code should always say "accent text" via this
+     token so it is correct in both themes. */
+  --primary-text: #facc15;
+
+  /* Status text tiers. Badges and alerts deliberately sit at different
+     brightnesses today (#fb923c vs #fdba74); both are preserved exactly. */
+  --success-text: #4ade80;
+  --warning-text: #fb923c;
+  --warning-text-soft: #fdba74;
+  --destructive-text: #f87171;
+  --destructive-text-soft: #fca5a5;
+  --info: #60a5fa;
+  --info-text: #60a5fa;
+
+  /* Neutral overlays — FULL values. 🔴 A "lift" (white at low alpha) is a
+     DARK-ONLY device: on a white card it is literally invisible. In light
+     these all invert to ink-at-low-alpha so hover/raise still read. */
+  --overlay-faint: rgba(255, 255, 255, 0.015);
+  --overlay-hover: rgba(255, 255, 255, 0.02);
+  --overlay-raise: rgba(255, 255, 255, 0.035);
+  --overlay-active: rgba(255, 255, 255, 0.05);
+  --overlay-sink: rgba(0, 0, 0, 0.2);
+  --overlay-sink-strong: rgba(0, 0, 0, 0.25);
+
+  /* Surfaces the literals were faking — no token existed for these. */
+  --surface-sunken: #1f1f23;
+  --surface-raised: #27272a;
+  --surface-inset: #3f3f46;
+  --border-strong: #52525b;
+
+  /* Frosted header glass (.user-pages .vault-header) — a translucent dark
+     gradient; in light it becomes a translucent white one. */
+  --glass-top: rgba(39, 39, 42, 0.72);
+  --glass-bottom: rgba(24, 24, 27, 0.55);
+
+  /* Floating shadow for tooltips/popovers. Pure-black at 45% is right on a
+     dark ground and reads as dirt on a warm light one. */
+  --shadow-pop: 0 6px 18px rgba(0, 0, 0, 0.45);
+
+  /* Sidebar / panel edge shadow. Its own token because the value is not just a
+     hue swap: `4px 0 24px rgba(0,0,0,.5)` separates a dark rail from dark
+     content, but beside a light sidebar it renders as a black bar down the
+     page (user-reported, 2026-09-04). Light gets a soft ink lift instead. */
+  --shadow-panel: 4px 0 24px rgba(0, 0, 0, 0.5);
+
+  /* .btn-primary is deliberately one shade dimmer than --primary (2026-06-09
+     user feedback); .btn-primary-dim is the heavyweight-action tier. Both had
+     their fills hardcoded, so both need tokens to theme. */
+  --btn-primary-bg: #eab308;
+  --btn-primary-border-rgb: 234, 179, 8;
+  --btn-primary-dim-bg: #ca8a04;
+  --btn-primary-dim-fg: #0b0b0b;
+  --link-hover: #fde047;
+
+  /* ── Overlay triplets (2026-09-03, P2) ─────────────────────────────────────
+     ~250 call sites paint translucent neutrals at 48 different alphas. Giving
+     each alpha its own token would fossilise an accidental ladder; instead the
+     HUE is tokenised and each call site keeps its own alpha:
+         rgba(255,255,255,α) -> rgba(var(--lift-rgb), α)
+         rgba(0,0,0,α)       -> rgba(var(--sink-rgb), α)
+     Dark values are literally 255,255,255 and 0,0,0, so every substitution is
+     an exact no-op here.
+
+     🔴 WHY ONE HUE CAN SERVE A WHOLE ALPHA RANGE. On a dark ground "lift"
+     (toward white) and "sink" (toward black) are opposite directions. On a
+     light ground white is already the ceiling, so BOTH collapse to the same
+     move — toward ink — and a single light hue serves both. Checked across the
+     band actually in use: ink-over-white lands on rgb(250,251,251) at α=.02
+     through rgb(175,177,182) at α=.35, i.e. a usable grey at every tier.
+
+     🔴 THE BAND MATTERS. This holds for α < 0.4 only. Above that the overlay
+     stops being a surface tint and becomes a SCRIM or a drop shadow — and a
+     scrim is supposed to be black in light mode too. Those keep --scrim-rgb,
+     which is 0,0,0 in BOTH themes; the token exists so the intent reads as
+     deliberate rather than as a literal somebody forgot. */
+  --lift-rgb: 255, 255, 255;
+  --sink-rgb: 0, 0, 0;
+  --scrim-rgb: 0, 0, 0;
+
+  /* Triplets for the ink tiers, needed by page CSS that tints with a text
+     colour at some alpha. Dark values equal the tokens they mirror. */
+  --surface-inset-rgb: 63, 63, 70;   /* = --surface-inset #3f3f46 */
+  --muted-rgb: 161, 161, 170;        /* = --muted-foreground #a1a1aa */
+  --faint-rgb: 113, 113, 122;        /* = --faint-foreground #71717a */
+  --code-bg-rgb: 12, 12, 14;         /* = --code-bg #0c0c0e */
+  /* Warm neutral for categorical chart scales — distinct from --faint-foreground
+     so two series in the same palette stay distinguishable. */
+  --chart-stone: #78716c;
+
+  /* Deep input well (Settings' proxy-URL / master-password / compliance fields).
+     Pure black, DARKER than --surface-sunken, giving those fields a terminal
+     feel on purpose. It needed its own token because #000000 is neither the
+     page ground nor the sunken surface. */
+  --input-well: #000000;
+
+  /* One step above --background, one below --card. The standalone guide pages
+     (cli-guide / app-guide) use it as their section ground. Its own token
+     because it matches neither neighbour exactly and rounding it to
+     --surface-sunken (#1f1f23) would have shifted dark by a step. */
+  --surface-alt: #202024;
+
+  /* Brand-mark tile. 🔴 NAME IS HISTORICAL: despite "code", the only consumers
+     are BrandWordmark's tile/glyph and the guide pages' logo square — NOT
+     command blocks, which use --card / --input-well and therefore follow the
+     theme. Kept dark in BOTH palettes because a dark logo tile on light chrome
+     is deliberate. Do not repurpose it for code without checking what else it
+     paints.
+     🔴 It is also a REGRESSION GUARD: these call sites carry no var() fallback,
+     and while this token was missing the tile only looked right by accident —
+     an invalid `fill` falls back to SVG's default BLACK. Deleting this
+     definition silently re-breaks the mark rather than failing loudly. */
+  --code-bg: #0c0c0e;
+  --code-foreground: #e8e6e3;
+
+  /* Two roles that a --lift/--sink triplet CANNOT express, because their alpha
+     has to change with the theme as well as their hue. Whole-token swaps.
+
+     --backdrop-chrome: a sticky nav/toolbar sitting over scrolling content.
+       It moves AWAY from the content toward the chrome: darker on dark, LIGHTER
+       on light. Painted with --sink-rgb it composited to rgb(152,153,158) — a
+       grey slab across the top of a light page (measured in-browser).
+     --well-recessed: a slightly sunken content surface (code block, search
+       field, inset panel). Ink at 0.4 is far too dark on white; the light value
+       is retuned rather than re-hued. */
+  --backdrop-chrome: rgba(0, 0, 0, 0.4);
+  --well-recessed: rgba(0, 0, 0, 0.4);
+
+  /* 🔴 White in BOTH themes, deliberately. Marks that sit on a COLOURED ground
+     — the toggle knob on its track, label text on the red sign-out button —
+     stay white whichever theme is active, exactly as a physical switch does.
+     The token exists so the fence can tell "white on purpose" apart from "white
+     because someone forgot a token". Do NOT theme this. */
+  --fixed-white: #ffffff;
+
+  /* Brand wordmark fill. Its own token rather than --foreground because the
+     wordmark is PURE white in dark (#ffffff) while --foreground is zinc-50
+     (#f4f4f5); folding them would shift the logo by 11/255, which is a brand
+     change however small. Found 2026-09-03 by looking at the light console in
+     a browser: the wordmark was hardcoded #ffffff and vanished on the light
+     sidebar. It sits on the sidebar, NOT on the dark brand chip. */
+  --brand-wordmark: #ffffff;
+
+  /* Foreground-tinted overlay. Distinct from --lift-rgb: these 14 call sites
+     tint with the TEXT colour (#f4f4f5, very slightly warm) rather than pure
+     white. The difference is about 1/255 on a charcoal ground — imperceptible,
+     but folding them into --lift-rgb would still have been a change to dark,
+     and the commitment was "unchanged", not "nearly unchanged". */
+  --fg-rgb: 244, 244, 245;
+
+  /* Opaque-surface triplets, for translucent backdrops (sticky nav bars behind
+     backdrop-filter). Same reasoning as --lift/--sink: tokenise the hue, let
+     each site keep its alpha. Dark values are the surfaces they replace. */
+  --bg-rgb: 24, 24, 27;          /* = --background #18181b */
+  --card-rgb: 39, 39, 42;        /* = --card #27272a       */
+  --surface-alt-rgb: 32, 32, 36; /* = --surface-alt #202024 */
+}
+
+
+/* ═════════════════════════════════════════════════════════════════════════════
+ * LIGHT THEME (2026-09-03) — purely additive. Dark is everything above, on bare
+ * :root, and is NOT modified by this block.
+ *
+ * 🔴 DARK IS THE UN-ATTRIBUTED STATE, ON PURPOSE. The dark palette lives on
+ *    `:root`, not on `[data-theme='dark']`. That makes "dark is unchanged" a
+ *    STRUCTURAL guarantee rather than a promise: every path that fails to run
+ *    the boot script in index.html — a stale cached bundle, the frame before JS
+ *    settles, the Trial composer's forwarded user pages, a screenshot harness —
+ *    lands on :root and renders today's console exactly. The failure mode of
+ *    this theme system is "you get what you already had".
+ *
+ * 🔴 GEOMETRY AND TYPE ARE DELIBERATELY ABSENT BELOW. --radius-*, --font-* and
+ *    density are shared by both palettes; there is one set of values. Because
+ *    the dark theme must not change, light INHERITS its 2/4/6px radii and its
+ *    JetBrains Mono chrome. Light is the reference design's PALETTE on the
+ *    current console's BONES. Do not add a radius or font override here — that
+ *    would change dark too, which is a separate decision.
+ *
+ * Accent: see theme_3.css. #facc15 is 1.53:1 on white and cannot be reused;
+ * light uses a two-tier orange — --primary (#e8502a, 3.74:1) for fills, icons
+ * and rails, --primary-text (#c53f1e, 5.12:1) for accent TEXT. Using --primary
+ * for text here would ship a label that fails WCAG AA.
+ *
+ * 🔴 DUAL-EDIT: byte-identical with aikey-control-master/web/src/index.css.
+ * ═════════════════════════════════════════════════════════════════════════════ */
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* Rounder — the reference design is built on large radii and pill controls.
+     Light-only; dark keeps 2/4/4/6px. */
+  --rad-sm: 8px;
+  --rad: 12px;
+  --rad-md: 14px;
+  --rad-lg: 20px;
+  --radius-sm: 0.5rem;
+  --radius: 0.75rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+
+  /* Surfaces — near-white, warm-biased (not blue-grey: it has to sit under a
+     warm accent without going green). Lightened three times against real
+     screens; the canvas is now only ~5/255 from the card, so cards earn their
+     edge from --border + --shadow rather than from a colour step. */
+  --background: #f4f3f0;
+  --card: #ffffff;
+  --card-foreground: #1b1f2e;
+  --popover: #ffffff;
+  --popover-foreground: #1b1f2e;
+  --secondary: #f4f4f2;
+  --secondary-foreground: #1b1f2e;
+  --muted: #f4f4f2;
+  --accent: #f4f4f2;
+  --accent-foreground: #1b1f2e;
+  --input: #ffffff;
+  --surface-sunken: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-inset: #f4f4f2;
+
+  /* Ink — the same four-tier hierarchy dark documents, re-pitched for a light
+     ground (body → row content → headings → captions → faintest). */
+  --foreground: #1b1f2e;
+  --soft-foreground: #333849;
+  --display-foreground: #12162a;
+  --muted-foreground: #55596a;
+  /* Sized against the RAIL (#eceae6), the darkest ground light-mode text sits
+     on. At #656a79 the nav group labels measured 4.49:1 — a hair under AA once
+     the rail deepened for the three-step ladder. */
+  --faint-foreground: #5f6472;
+
+  --border: #e4e2de;
+  --border-strong: #d5d2cd;
+
+  /* 🔴 THREE-STEP LADDER (2026-09-04, settled after six passes):
+       rail            #eceae6  deepest — the navigation reads as a distinct block
+       content ground  #f4f3f0  tinted  — the surface cards sit ON
+       card / table / input  #ffffff    — pure white, pops against the ground
+
+     🔴 THE CONSTRAINT THAT DRIVES THIS, stated so nobody re-flattens it: a white
+     card can only stand out against a NON-white ground. Two earlier attempts
+     failed on exactly that — content ground set to #ffffff made the white table
+     invisible no matter how white the table itself was made, and setting rail
+     and ground to the same grey made the rail stop reading as navigation.
+     Each of the three steps is load-bearing; collapsing any two re-creates one
+     of those two failures. */
+  --sidebar: #eceae6;
+  --sidebar-foreground: #6b7080;
+  --sidebar-border: #e6e4e0;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #1b1f2e;
+
+  /* Accent — two-tier, see header note. */
+  /* 🔴 Orange-yellow with a DARK ink label — the same pattern the dark theme
+     already uses for its amber button, and the only way to go this warm. White
+     text fails on an orange-yellow fill (#f2801a + white = 2.7:1); dark ink on
+     it is 6.14:1. Going warmer than this would keep failing white text. */
+  --primary: #f2801a;
+  --primary-foreground: #1b1f2e;
+  --primary-dim: #d96f10;
+  /* 🔴 Sized against the CANVAS (#ecebe9), not the card. An earlier pass sized
+     these against #ffffff and shipped three tiers that failed AA on the page
+     ground — measured in a browser: muted 4.14:1, faint 2.24:1, accent-text
+     4.30:1. The canvas is the harsher ground and is what most text sits on. */
+  --primary-text: #9a4f0a;
+  --primary-rgb: 242, 128, 26;
+  --primary-dim-rgb: 217, 111, 16;
+  --ring: #f2801a;
+  --link-hover: #7d3f08;
+
+  /* Status — solids darken so they carry on white; the TEXT tier reverses
+     direction (lighter than the solid on dark, darker than it on light). */
+  --success: #16a34a;
+  --success-rgb: 22, 163, 74;
+  --success-text: #15803d;
+  --warning: #ea7317;
+  --warning-rgb: 234, 115, 23;
+  /* Sized against its OWN 10% tint (the banner/chip ground), not against the
+     canvas: #c2560b measured 3.92:1 there. Orange is the one status hue light
+     enough for that difference to matter. */
+  --warning-text: #a8480a;
+  --warning-text-soft: #9a4408;
+  --warning-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-rgb: 220, 38, 38;
+  --destructive-text: #b91c1c;
+  --destructive-text-soft: #991b1b;
+  --destructive-foreground: #ffffff;
+  --info: #4a7fd0;
+  --info-rgb: 74, 127, 208;
+  --info-text: #2f5fa8;
+
+  /* Overlays invert: a white lift is invisible on a white card, so hover and
+     raise become ink-at-low-alpha. Alphas are retuned per ground, which is why
+     these are whole-token swaps rather than RGB triplets. */
+  --overlay-faint: rgba(27, 31, 46, 0.025);
+  --overlay-hover: rgba(27, 31, 46, 0.04);
+  --overlay-raise: rgba(27, 31, 46, 0.05);
+  --overlay-active: rgba(27, 31, 46, 0.07);
+  --overlay-sink: #ffffff;
+  --overlay-sink-strong: #ffffff;
+
+  /* Frosted header glass — translucent white instead of translucent charcoal. */
+  --glass-top: rgba(255, 255, 255, 0.78);
+  --glass-bottom: rgba(236, 235, 233, 0.62);
+
+  /* Shadows tint with the ink hue, not pure black — black shadows on a warm
+     grey canvas read as dirt. Two-part (tight contact + wide ambient). */
+  --shadow-sm: 0 1px 2px rgba(27, 31, 46, 0.06);
+  --shadow: 0 1px 3px rgba(27, 31, 46, 0.07), 0 8px 20px -12px rgba(27, 31, 46, 0.14);
+  --shadow-md: 0 2px 4px rgba(27, 31, 46, 0.05), 0 16px 32px -16px rgba(27, 31, 46, 0.16);
+  --shadow-pop: 0 8px 24px -8px rgba(27, 31, 46, 0.22);
+  --shadow-panel: 1px 0 0 var(--border), 6px 0 18px -12px rgba(27, 31, 46, 0.10);
+
+  /* Glow is a DARK-GROUND device (light bleeding off a bright element on a dark
+     field); on a light ground it renders as a smudge. The token names are kept
+     so the existing call sites don't break — they resolve to a ring / a plain
+     shadow instead. */
+  --glow-primary: none;
+  --glow-primary-hover: var(--shadow);
+  --glow-destructive: 0 0 0 3px rgba(220, 38, 38, 0.2);
+
+  /* Buttons: the dark theme deliberately runs .btn-primary one shade dimmer
+     than --primary. On light that distinction inverts into saturation rather
+     than brightness, so the CTA still reads as primary without shouting. */
+  --btn-primary-bg: #f2801a;
+  --btn-primary-border-rgb: 217, 111, 16;
+  --btn-primary-dim-bg: #d96f10;
+  --btn-primary-dim-fg: #1b1f2e;
+
+  /* Both collapse to ink on a light ground — see the note in :root. --scrim-rgb
+     deliberately stays black: a modal backdrop is dark in light mode too. */
+  --lift-rgb: 27, 31, 46;
+  /* 🔴 MID-GREY, not ink. The ~250 call sites choose their own alpha, and those
+     alphas were tuned against a CHARCOAL ground where "sink" has lots of
+     headroom. Reusing ink here made a 0.2 card-header render as rgb(209,210,213)
+     — a heavy grey slab (user-reported, 2026-09-04). A mid-grey hue keeps the
+     🔴 WHITE. Six passes against real screens (ink → 140,144,155 → 200,203,210
+     → white → 214,210,202 → white). Final call: tables, card header strips and
+     inputs are PURE WHITE, so every sink overlay resolves to a no-op on a white
+     surface. Structure comes from --border alone — a table header reads from its
+     bottom hairline and its uppercase muted label, not from a fill. The nav rail
+     is the only grey block on the light screen.
+     --lift-rgb stays ink because a hover must actually be felt. */
+  --sink-rgb: 255, 255, 255;
+  --scrim-rgb: 0, 0, 0;
+  --surface-inset-rgb: 242, 241, 238;
+  --muted-rgb: 85, 89, 106;
+  --faint-rgb: 95, 100, 114;
+  --code-bg-rgb: 27, 31, 46;
+  --chart-stone: #6b645e;
+  --input-well: #f4f3f1;
+  --surface-alt: #f4f3f1;
+  --code-bg: #1b1f2e;
+  --code-foreground: #e8e6e3;
+  --backdrop-chrome: rgba(255, 255, 255, 0.80);
+  --brand-wordmark: #1b1f2e;
+  --canvas: #f4f3f0;
+  --well-recessed: rgba(27, 31, 46, 0.05);
+  --fg-rgb: 27, 31, 46;
+  --bg-rgb: 236, 235, 233;
+  --card-rgb: 255, 255, 255;
+  /* White: this triplet paints CARD surfaces (the vault skin fills its .card
+     with rgba(var(--surface-alt-rgb), .86)). Any tint here shows through as a
+     grey card — cards are white in light. */
+  --surface-alt-rgb: 255, 255, 255;
 }
 
 /* /user pages share the global --primary (bright yellow-400 #facc15)
@@ -276,7 +690,7 @@ body {
      below. Reduces the "billboard amber" feel of the original
      full-strength stroke while keeping it readable as an accent. */
   border-bottom: 1px solid var(--primary-dim);
-  box-shadow: 0 1px 10px rgba(202, 138, 4, 0.1);
+  box-shadow: 0 1px 10px rgba(var(--primary-dim-rgb), 0.1);
 }
 
 /* ── Sidebar nav (shared base — AppShell / master side) ──
@@ -311,8 +725,8 @@ body {
 }
 .nav-item.active {
   background-color: var(--sidebar-accent);
-  color: var(--primary);
-  border-color: rgba(250, 204, 21, 0.2);
+  color: var(--primary-text);
+  border-color: rgba(var(--primary-rgb), 0.2);
   box-shadow: inset 2px 0 0 0 var(--primary);
 }
 .nav-group-title {
@@ -385,27 +799,27 @@ body {
      hover-then-click transition feels continuous. */
   background: linear-gradient(
     90deg,
-    rgba(250, 204, 21, 0.11) 0,
-    rgba(250, 204, 21, 0.05) 45%,
+    rgba(var(--primary-rgb), 0.11) 0,
+    rgba(var(--primary-rgb), 0.05) 45%,
     transparent 100%
   );
   color: var(--foreground);
-  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.45);
+  box-shadow: 0 0 0 1px rgba(var(--primary-rgb), 0.45);
 }
 .user-sidebar .nav-item:hover svg { opacity: 1; }
 
 .user-sidebar .nav-item.active {
   background: linear-gradient(
     90deg,
-    rgba(250, 204, 21, 0.11) 0,
-    rgba(250, 204, 21, 0.05) 45%,
+    rgba(var(--primary-rgb), 0.11) 0,
+    rgba(var(--primary-rgb), 0.05) 45%,
     transparent 100%
   );
-  color: var(--primary);
+  color: var(--primary-text);
   border-color: transparent;
   box-shadow: none;
 }
-.user-sidebar .nav-item.active svg { color: var(--primary); opacity: 1; }
+.user-sidebar .nav-item.active svg { color: var(--primary-text); opacity: 1; }
 .user-sidebar .nav-item.active::before {
   content: "";
   position: absolute;
@@ -415,11 +829,11 @@ body {
   width: 2.5px;
   border-radius: 0 2px 2px 0;
   background: var(--primary);
-  box-shadow: 0 0 8px rgba(250, 204, 21, 0.55);
+  box-shadow: 0 0 8px rgba(var(--primary-rgb), 0.55);
 }
 .user-sidebar .nav-item:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.32);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.32);
 }
 
 .user-sidebar .nav-group-title {
@@ -464,8 +878,8 @@ body {
   gap: 10px;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.035),
-    rgba(255, 255, 255, 0.015)
+    var(--overlay-raise),
+    var(--overlay-faint)
   );
   border-radius: 10px;
   transition: background 120ms ease;
@@ -473,8 +887,8 @@ body {
 .user-sidebar .nav-user:hover {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.05),
-    rgba(255, 255, 255, 0.02)
+    var(--overlay-active),
+    var(--overlay-hover)
   );
 }
 .user-sidebar .nav-user-avatar {
@@ -482,7 +896,7 @@ body {
   height: 30px;
   border-radius: 7px;
   background:
-    linear-gradient(135deg, rgba(202, 138, 4, 0.12), rgba(202, 138, 4, 0.02)),
+    linear-gradient(135deg, rgba(var(--primary-dim-rgb), 0.12), rgba(var(--primary-dim-rgb), 0.02)),
     var(--secondary);
   display: flex;
   align-items: center;
@@ -490,7 +904,7 @@ body {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
-  color: var(--primary);
+  color: var(--primary-text);
   flex-shrink: 0;
 }
 .user-sidebar .nav-user-name {
@@ -535,7 +949,7 @@ body {
   background:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.015) 0,
+      var(--overlay-faint) 0,
       transparent 40%,
       transparent 100%
     ),
@@ -695,13 +1109,13 @@ body {
   position: relative;
 }
 .user-sidebar .sidebar-toggle:hover {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--overlay-raise);
   color: var(--foreground);
 }
 .user-sidebar .sidebar-toggle:focus-visible {
   outline: none;
-  border-color: rgba(202, 138, 4, 0.55);
-  box-shadow: 0 0 0 2px rgba(202, 138, 4, 0.12);
+  border-color: rgba(var(--primary-dim-rgb), 0.55);
+  box-shadow: 0 0 0 2px rgba(var(--primary-dim-rgb), 0.12);
 }
 .user-sidebar .sidebar-toggle svg {
   flex-shrink: 0;
@@ -753,18 +1167,18 @@ body {
    their borders as the click affordance. .badge-dim is the exception
    below: it has no fill, so its border IS the chip. */
 .badge-active {
-  background-color: rgba(34, 197, 94, 0.1);
-  color: #4ade80;
+  background-color: rgba(var(--success-rgb), 0.1);
+  color: var(--success-text);
   border: 1px solid transparent;
 }
 .badge-suspended {
-  background-color: rgba(249, 115, 22, 0.1);
-  color: #fb923c;
+  background-color: rgba(var(--warning-rgb), 0.1);
+  color: var(--warning-text);
   border: 1px solid transparent;
 }
 .badge-revoked {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #f87171;
+  background-color: rgba(var(--destructive-rgb), 0.1);
+  color: var(--destructive-text);
   border: 1px solid transparent;
 }
 .badge-neutral {
@@ -775,8 +1189,8 @@ body {
 /* Blue protocol chip (2026-07-29, superdesign V1 spec user-picked for the
    bindings 协议 column): same .badge base as the status pills, blue family. */
 .badge-protocol {
-  background-color: rgba(96, 165, 250, 0.1);
-  color: #60a5fa;
+  background-color: rgba(var(--info-rgb), 0.1);
+  color: var(--info-text);
   border: 1px solid transparent;
 }
 /* Dim chip (2026-08-01 user request): SECONDARY type labels (e.g. bindings
@@ -817,13 +1231,13 @@ body {
    rings, chart accents, in-use indicators) where the brighter hue is
    correct. This dim is scoped to .btn-primary only. */
 .btn-primary {
-  background-color: #eab308;
+  background-color: var(--btn-primary-bg);
   color: var(--primary-foreground);
   box-shadow: var(--glow-primary);
-  border: 1px solid rgba(234, 179, 8, 0.55);
+  border: 1px solid rgba(var(--btn-primary-border-rgb), 0.55);
 }
 .btn-primary:hover {
-  background-color: var(--primary);
+  background-color: var(--primary-text);
   box-shadow: var(--glow-primary-hover);
   transform: translateY(-1px);
 }
@@ -833,13 +1247,13 @@ body {
    the same dark amber-600 family used by in-use indicators, charts,
    and the vault-page accent stripe (#ca8a04). 2026-04-25. */
 .btn-primary-dim {
-  background-color: #ca8a04 !important;
-  color: #0b0b0b !important;
-  border-color: rgba(202, 138, 4, 0.7) !important;
-  box-shadow: 0 0 0 1px rgba(202, 138, 4, 0.18), 0 6px 20px -10px rgba(202, 138, 4, 0.55) !important;
+  background-color: var(--btn-primary-dim-bg) !important;
+  color: var(--btn-primary-dim-fg) !important;
+  border-color: rgba(var(--primary-dim-rgb), 0.7) !important;
+  box-shadow: 0 0 0 1px rgba(var(--primary-dim-rgb), 0.18), 0 6px 20px -10px rgba(var(--primary-dim-rgb), 0.55) !important;
 }
 .btn-primary-dim:hover:not(:disabled) {
-  background-color: #eab308 !important;
+  background-color: var(--btn-primary-bg) !important;
 }
 .btn-primary-dim:disabled {
   background-color: var(--muted) !important;
@@ -874,8 +1288,8 @@ body {
   background-color: var(--destructive);
 }
 .dot-glow-green {
-  box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
-  background-color: #4ade80;
+  box-shadow: 0 0 8px rgba(var(--success-rgb), 0.5);
+  background-color: var(--success);
 }
 
 /* ── Table ── */
@@ -885,7 +1299,7 @@ table th {
   color: var(--muted-foreground);
   font-weight: 600;
   border-bottom: 1px solid var(--border);
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: var(--overlay-sink);
   white-space: nowrap;
 }
 table td {
@@ -896,7 +1310,7 @@ table tr:last-child td {
   border-bottom: none;
 }
 table tbody tr:hover {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--overlay-hover);
 }
 
 /* ── Form inputs ── */
@@ -904,7 +1318,10 @@ input,
 select,
 textarea {
   font-family: var(--font-sans) !important;
-  background-color: var(--muted) !important;
+  /* --input, not --muted (2026-09-04). Both are #3f3f46 in dark so this is a
+     byte-identical no-op there; it exists so light can make FIELDS white without
+     also whitening --muted, which paints neutral chips and would erase them. */
+  background-color: var(--input) !important;
   color: var(--foreground) !important;
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-sm) !important;
@@ -915,7 +1332,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--primary) !important;
-  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.2) !important;
+  box-shadow: 0 0 0 1px rgba(var(--primary-rgb), 0.2) !important;
 }
 input::placeholder {
   color: var(--muted-foreground) !important;
@@ -992,4 +1409,310 @@ select.page-size-select {
     animation-duration: 0s !important;
     animation-delay: 0s !important;
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Console page primitives (阶段8 P8 pages + P14 first review)
+ *
+ * 🔴 These class names were in use across all five MCP console pages —
+ * `alert`, `card`, `field`, `metric-*`, `diff-*`, `empty`, `hint`, `mono` —
+ * and NONE of them had a rule anywhere. Every banner, every diff and every
+ * empty state on those pages rendered as bare text on the page background.
+ * `tsc` passed, `vitest` passed and the production build succeeded the entire
+ * time, because none of those can see a stylesheet that simply lacks a
+ * selector. It took the first browser render (P14.3) to find it — which is
+ * precisely what fence 8.F2 was for, and 8.F2 has been blocked since P8.
+ *
+ * 🚫 Nothing above this block was changed: these rules are purely additive, so
+ * no page that already looked right can regress.
+ *
+ * Values are taken from the anchors already in this file — chip radius 4px,
+ * `--radius-sm` on controls, tinted-transparent fills paired with a matching
+ * text colour (`.badge-active`), `--font-mono` for chrome, `--border` hairlines.
+ * 🚫 No new colours are introduced; every one resolves to an existing token.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ── Alerts ──
+ * 🔴 A banner has to out-weigh body copy. On these pages it carries the most
+ * urgent fact — a frozen write tool is an outage somebody is feeling, and a
+ * backend awaiting first review is serving nothing — so it gets a fill, a
+ * hairline and a left rule in the state's own hue rather than bold text. */
+.alert {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  background-color: var(--overlay-hover);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.alert strong {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+.alert p {
+  color: var(--muted-foreground);
+  margin: 0;
+}
+.alert ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+.alert li {
+  margin: 0.15rem 0;
+}
+.alert-warning {
+  border-color: rgba(var(--warning-rgb), 0.35);
+  border-left-color: var(--warning);
+  background-color: rgba(var(--warning-rgb), 0.08);
+}
+.alert-warning strong {
+  color: var(--warning-text-soft);
+}
+.alert-error {
+  border-color: rgba(var(--destructive-rgb), 0.35);
+  border-left-color: var(--destructive);
+  background-color: rgba(var(--destructive-rgb), 0.08);
+  color: var(--destructive-text-soft);
+}
+.alert-info {
+  border-color: rgba(var(--primary-rgb), 0.3);
+  border-left-color: var(--primary-text);
+  background-color: rgba(var(--primary-rgb), 0.06);
+}
+.alert-info strong {
+  color: var(--primary-text);
+}
+
+/* ── Text tiers ── */
+.hint {
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+}
+.muted {
+  color: var(--muted-foreground);
+}
+.small {
+  font-size: 0.75rem;
+}
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* ── Containers ── */
+.card {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+/* ── Forms ── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+.field > label {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground);
+}
+.field input,
+.field select,
+.field textarea {
+  padding: 0.45rem 0.6rem;
+  font-size: 0.875rem;
+}
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+.check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.75rem;
+}
+.check-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* ── Metric tiles ── */
+.metric-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+.metric-card {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+}
+.metric-label {
+  display: block;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground);
+}
+.metric-value {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+/* ── Definition / detail lists ── */
+.detail-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1rem;
+  font-size: 0.875rem;
+}
+.detail-list dt {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+.detail-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── Manifest review ──
+ * 🔴 `white-space: pre-wrap` and `overflow-wrap: anywhere` are the load-bearing
+ * declarations here, not the colours. A tool description is the thing a
+ * reviewer is reading for a prompt-injection payload, and a bare <pre> does not
+ * wrap: the first render of the first-review drawer showed the payload line
+ * running off the right edge of the modal and being clipped. An attacker only
+ * has to pad the front of the sentence to push the dangerous half out of view.
+ * 🚫 Never give these a fixed height or `overflow: hidden`. */
+.diff-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+.diff-grid h4 {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground);
+  margin-bottom: 0.35rem;
+}
+.diff-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  background-color: var(--overlay-sink-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.7rem;
+  margin: 0.35rem 0;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 0.75rem 0;
+  padding: 0;
+  list-style: none;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+.review-list > li {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.75rem;
+  background-color: var(--overlay-hover);
+}
+.review-list > li > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-mono);
+}
+/* 🔴 A deselected tool stays fully legible — it is dimmed, not hidden. The
+   reviewer may be untick-ing precisely the one they need to keep reading. */
+.review-list > li.is-dropped {
+  opacity: 0.55;
+}
+
+/* ── Wizard / impact preview ── */
+.wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.impact-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+  background-color: var(--overlay-hover);
+}
+
+/* ── Button variants used by the console pages ── */
+.btn-sm {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.78rem;
+}
+/* 🔴 A link-shaped button still has to look clickable. These sit inside
+   sentences ("github — 3"), where an unstyled <button> is indistinguishable
+   from the text around it. */
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary-text);
+  font-family: var(--font-mono);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.btn-link:hover:not(:disabled) {
+  color: var(--link-hover);
+}
+.btn-link:disabled {
+  color: var(--muted-foreground);
+  text-decoration: none;
+  cursor: default;
 }

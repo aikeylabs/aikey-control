@@ -181,7 +181,7 @@ export default function MyAccountPage() {
                 style={{ color: 'var(--muted-foreground)' }}
               >
                 {t('account.lastRefresh')}{' '}
-                <span style={{ color: '#d4d4d8' }}>{lastRefreshed ?? '—'}</span>
+                <span style={{ color: 'var(--soft-foreground)' }}>{lastRefreshed ?? '—'}</span>
               </span>
             </div>
           </div>
@@ -262,7 +262,7 @@ export default function MyAccountPage() {
                         </div>
                         <div
                           className="text-[13px] font-mono font-semibold truncate"
-                          style={{ color: '#d4d4d8' }}
+                          style={{ color: 'var(--soft-foreground)' }}
                           title={s.org_id}
                         >
                           {truncateId(s.org_id)}
@@ -282,14 +282,14 @@ export default function MyAccountPage() {
                       <div>
                         <div className="field-label">{t('account.allocatedKeys')}</div>
                         <div className="text-[13px] font-mono">
-                          <span style={{ color: '#4ade80', fontWeight: 600 }}>
+                          <span style={{ color: 'var(--success-text)', fontWeight: 600 }}>
                             {t('account.keysActive', { count: counts.active })}
                           </span>
                           <span className="mx-2" style={{ color: 'var(--muted-foreground)' }}>
                             ·
                           </span>
                           {counts.pending > 0 ? (
-                            <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                            <span style={{ color: 'var(--primary-text)', fontWeight: 600 }}>
                               {t('account.keysPending', { count: counts.pending })}
                             </span>
                           ) : (
@@ -363,7 +363,7 @@ function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="field-label">{label}</div>
-      <div className="text-[13px] font-mono" style={{ color: '#d4d4d8' }}>
+      <div className="text-[13px] font-mono" style={{ color: 'var(--soft-foreground)' }}>
         {value}
       </div>
     </div>
@@ -401,15 +401,15 @@ function chipColors(color: string) {
     color,
     background:
       color === '#4ade80'
-        ? 'rgba(74,222,128,0.08)'
+        ? 'rgba(var(--success-rgb), 0.08)'
         : color === '#f87171'
-          ? 'rgba(248,113,113,0.08)'
+          ? 'rgba(var(--destructive-rgb), 0.08)'
           : 'rgba(250, 204, 21,0.08)',
     borderColor:
       color === '#4ade80'
-        ? 'rgba(74,222,128,0.3)'
+        ? 'rgba(var(--success-rgb), 0.3)'
         : color === '#f87171'
-          ? 'rgba(248,113,113,0.3)'
+          ? 'rgba(var(--destructive-rgb), 0.3)'
           : 'rgba(250, 204, 21,0.3)',
   };
 }
@@ -494,7 +494,7 @@ const ACCOUNT_CSS = `
   display: flex; align-items: center; justify-content: space-between;
   padding: 0.75rem 1.1rem;
   border-bottom: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(var(--sink-rgb), 0.15);
 }
 .account-page .card-title {
   display: inline-flex; align-items: center; gap: 0.5rem;
@@ -510,7 +510,7 @@ const ACCOUNT_CSS = `
 .account-page .status-dot {
   width: 6px; height: 6px; border-radius: 999px;
   background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+  box-shadow: 0 0 6px rgba(var(--success-rgb), 0.7);
 }
 
 .account-page .field-label {
@@ -523,7 +523,7 @@ const ACCOUNT_CSS = `
 }
 .account-page .field-value {
   font-size: 15px;
-  color: #d4d4d8;
+  color: var(--soft-foreground);
   font-weight: 500;
   word-break: break-all;
 }
@@ -543,14 +543,14 @@ const ACCOUNT_CSS = `
   font-family: monospace;
   font-size: 11px;
   letter-spacing: 0.05em;
-  background: rgba(0,0,0,0.25);
+  background: rgba(var(--sink-rgb), 0.25);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
 }
 .account-page .role-badge .dot {
   width: 6px; height: 6px; border-radius: 999px;
   background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+  box-shadow: 0 0 6px rgba(var(--success-rgb), 0.6);
 }
 
 /* 2a: seat-card loading skeleton — reserves ~1 seat-row of height so the
@@ -566,9 +566,9 @@ const ACCOUNT_CSS = `
   border-radius: 8px;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.035) 25%,
-    rgba(255, 255, 255, 0.07) 37%,
-    rgba(255, 255, 255, 0.035) 63%
+    rgba(var(--lift-rgb), 0.035) 25%,
+    rgba(var(--lift-rgb), 0.07) 37%,
+    rgba(var(--lift-rgb), 0.035) 63%
   );
   background-size: 400% 100%;
   animation: seat-skeleton-shimmer 1.4s ease infinite;
@@ -591,7 +591,7 @@ const ACCOUNT_CSS = `
   width: 44px; height: 44px;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 999px;
-  background: rgba(0,0,0,0.25);
+  background: rgba(var(--sink-rgb), 0.25);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
   margin-bottom: 0.8rem;
@@ -634,7 +634,7 @@ const ACCOUNT_CSS = `
   font-family: monospace;
   font-size: 10px;
   letter-spacing: 0.05em;
-  background: rgba(255,255,255,0.03);
+  background: rgba(var(--lift-rgb), 0.03);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
 }
@@ -652,18 +652,18 @@ const ACCOUNT_CSS = `
 }
 .account-page .ov-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .account-page .ov-btn-outline {
-  background: rgba(0,0,0,0.25);
+  background: rgba(var(--sink-rgb), 0.25);
   color: var(--muted-foreground);
   border-color: var(--border);
 }
 .account-page .ov-btn-outline:hover:not(:disabled) {
   color: var(--foreground);
   border-color: var(--muted-foreground);
-  background: rgba(255,255,255,0.03);
+  background: rgba(var(--lift-rgb), 0.03);
 }
 .account-page .ov-btn-ghost { color: var(--muted-foreground); }
 .account-page .ov-btn-ghost:hover {
   color: var(--foreground);
-  background: rgba(255,255,255,0.03);
+  background: rgba(var(--lift-rgb), 0.03);
 }
 `;

@@ -98,10 +98,10 @@ export function ModalShell({
   const { t } = useTranslation();
   return createPortal(
     <>
-      <div className="fixed inset-0" style={{ zIndex: DIALOG_LAYER.content, backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={onClose} />
+      <div className="fixed inset-0" style={{ zIndex: DIALOG_LAYER.content, backgroundColor: 'rgba(var(--scrim-rgb), 0.6)' }} onClick={onClose} />
       <div
         className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border"
-        style={{ zIndex: DIALOG_LAYER.content, backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+        style={{ zIndex: DIALOG_LAYER.content, backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.7)' }}
       >
         <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-mono font-bold" style={{ color: 'var(--foreground)' }}>

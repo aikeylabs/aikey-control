@@ -2283,7 +2283,7 @@ function UnlockBanner(props: {
   if (!props.initialized) {
     return (
       <div className="unlock-banner locked">
-        <LockIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--primary)' }} />
+        <LockIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--primary-text)' }} />
         <span className="flex-1 flex items-center gap-2 min-w-0">
           <span
             className="font-mono text-sm font-bold uppercase tracking-wider"
@@ -2356,7 +2356,7 @@ function UnlockBanner(props: {
             {props.initError && (
               <span
                 className="text-[11px] font-mono"
-                style={{ color: '#fca5a5' }}
+                style={{ color: 'var(--destructive-text-soft)' }}
               >
                 {props.initError}
               </span>
@@ -2410,7 +2410,7 @@ function UnlockBanner(props: {
   }
   return (
     <div className="unlock-banner locked">
-      <LockIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--primary)' }} />
+      <LockIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--primary-text)' }} />
       {/* Casing + structure aligned with /user/import's Vault Locked
           banner (2026-04-24): uppercase bold status label + sentence-
           case descriptive clause separated by an em-dash. Matches the
@@ -2478,7 +2478,7 @@ function UnlockBanner(props: {
           {props.unlockError && (
             <span
               className="text-[11px] font-mono"
-              style={{ color: '#fca5a5' }}
+              style={{ color: 'var(--destructive-text-soft)' }}
             >
               {props.unlockError}
             </span>
@@ -2519,7 +2519,7 @@ function CardHeader({
         /* Darker header band (rgba(0,0,0,0.2) over var(--card)) gives
            the table body the same "lighter panel / darker lid"
            hierarchy used across the design system. */
-        backgroundColor: 'rgba(0,0,0,0.2)',
+        backgroundColor: 'rgba(var(--sink-rgb), 0.2)',
       }}
     >
       <div className="flex items-center gap-3 min-w-0 flex-wrap">
@@ -2815,9 +2815,9 @@ function TeamFetchBanner(props: {
         alignItems: 'flex-start',
         gap: '0.75rem',
         padding: '0.625rem 0.875rem',
-        border: '1px solid rgba(249,115,22,0.35)',
+        border: '1px solid rgba(var(--warning-rgb), 0.35)',
         borderRadius: 6,
-        background: 'rgba(249,115,22,0.06)',
+        background: 'rgba(var(--warning-rgb), 0.06)',
         color: 'var(--warning)',
         fontSize: 12,
       }}
@@ -3483,7 +3483,7 @@ const Row = React.memo(function Row(props: {
           <div className="flex items-center gap-1 justify-end">
             <span
               className="text-[11px] font-mono mr-1"
-              style={{ color: '#fca5a5' }}
+              style={{ color: 'var(--destructive-text-soft)' }}
             >
               {t('vault.deleteForever')}
             </span>
@@ -3757,7 +3757,7 @@ function CardFooter({
            bottom lid" so the tbody reads as the lighter content band
            between. Was var(--surface-1) which looked like an odd
            dark strip; the overlay matches master's rhythm. */
-        background: 'rgba(0,0,0,0.2)',
+        background: 'rgba(var(--sink-rgb), 0.2)',
       }}
     >
       <span>
@@ -4146,7 +4146,7 @@ function DetailDrawer(props: {
                   marginTop: 10,
                   padding: '8px 10px',
                   borderRadius: 6,
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'rgba(var(--lift-rgb), 0.02)',
                   border: '1px solid var(--border)',
                 }}
               >
@@ -4543,7 +4543,7 @@ function DetailDrawer(props: {
                         <div className="secret-view masked" style={{ width: '100%' }}>
                           <div className="plain">
                             {undecryptable ? (
-                              <span className="mid" style={{ color: '#fca5a5' }}>
+                              <span className="mid" style={{ color: 'var(--destructive-text-soft)' }}>
                                 {t('vault.undecryptableSecret')}
                               </span>
                             ) : personal.secret_prefix === null ? (
@@ -5101,14 +5101,14 @@ function DetailDrawer(props: {
                   // Same rationale as the row chip — see there.
                   <>
                     <span className="status-dot error" style={{ width: 5, height: 5 }} />
-                    <span style={{ color: '#fca5a5' }} title={t('vault.undecryptableTitle')}>
+                    <span style={{ color: 'var(--destructive-text-soft)' }} title={t('vault.undecryptableTitle')}>
                       {t('vault.statusUndecryptable')}
                     </span>
                   </>
                 ) : (
                   <>
                     <span className="status-dot error" style={{ width: 5, height: 5 }} />
-                    <span style={{ color: '#fca5a5' }}>{String(r.status)}</span>
+                    <span style={{ color: 'var(--destructive-text-soft)' }}>{String(r.status)}</span>
                   </>
                 )}
               </span>
@@ -5246,7 +5246,7 @@ function TestConnectionPopup(props: {
           background: 'var(--card)',
           border: '1px solid var(--border)',
           borderRadius: 10,
-          boxShadow: '0 25px 60px rgba(0,0,0,0.55)',
+          boxShadow: '0 25px 60px rgba(var(--scrim-rgb), 0.55)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -5389,8 +5389,8 @@ function TestConnectionPopup(props: {
                   alignItems: 'center',
                   gap: 10,
                   padding: '12px 14px',
-                  background: isPass ? 'rgba(34, 197, 94, 0.08)' : 'rgba(220, 38, 38, 0.08)',
-                  border: `1px solid ${isPass ? 'rgba(34, 197, 94, 0.35)' : 'rgba(220, 38, 38, 0.35)'}`,
+                  background: isPass ? 'rgba(var(--success-rgb), 0.08)' : 'rgba(220, 38, 38, 0.08)',
+                  border: `1px solid ${isPass ? 'rgba(var(--success-rgb), 0.35)' : 'rgba(220, 38, 38, 0.35)'}`,
                   borderRadius: 8,
                   marginBottom: 12,
                 }}
@@ -6221,7 +6221,7 @@ function AddKeyModal(props: {
       <div className="modal-panel modal-panel-guided">
         <div className="modal-header">
           <span className="inline-flex items-center gap-2 font-semibold text-[13.5px]">
-            <PlusCircleIcon className="w-4 h-4" style={{ color: 'var(--primary)' }} />
+            <PlusCircleIcon className="w-4 h-4" style={{ color: 'var(--primary-text)' }} />
             {t('vault.addKeyHeading')}
             <span
               className="text-[10px] font-mono tracking-widest uppercase ml-1"
@@ -6636,7 +6636,7 @@ function ApiFields(props: AddKeyFieldShared & { showAlias: boolean; aliasPlaceho
         </span>
       </div>
       {props.err && (
-        <span className="text-[12px] font-mono" style={{ color: '#fca5a5' }}>
+        <span className="text-[12px] font-mono" style={{ color: 'var(--destructive-text-soft)' }}>
           {props.err}
         </span>
       )}
@@ -7098,7 +7098,7 @@ function GuidedBody(props: AddKeyFieldShared & {
             </div>
           </div>
           {props.err && (
-            <span className="text-[12px] font-mono" style={{ color: '#fca5a5' }}>
+            <span className="text-[12px] font-mono" style={{ color: 'var(--destructive-text-soft)' }}>
               {props.err}
             </span>
           )}
@@ -7609,7 +7609,7 @@ function OAuthGuide({
           <code
             className="flex-1 p-2 font-mono text-[12px]"
             style={{
-              background: 'rgba(0,0,0,0.5)',
+              background: 'var(--overlay-sink)',
               border: '1px solid var(--border)',
             }}
           >
@@ -7621,9 +7621,9 @@ function OAuthGuide({
             style={
               copied
                 ? {
-                    borderColor: 'rgba(74,222,128,0.4)',
-                    color: '#4ade80',
-                    backgroundColor: 'rgba(74,222,128,0.08)',
+                    borderColor: 'rgba(var(--success-rgb), 0.4)',
+                    color: 'var(--success-text)',
+                    backgroundColor: 'rgba(var(--success-rgb), 0.08)',
                   }
                 : undefined
             }

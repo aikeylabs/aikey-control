@@ -554,7 +554,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 8,
                     padding: '6px 12px 6px 8px', borderRadius: 6,
-                    background: '#1f1f23', border: '1px solid var(--border)',
+                    background: 'var(--surface-sunken)', border: '1px solid var(--border)',
                     color: 'var(--foreground)', fontSize: 12,
                     fontFamily: "var(--font-mono, 'JetBrains Mono', ui-monospace, monospace)",
                     fontWeight: 600, letterSpacing: '0.04em',
@@ -565,7 +565,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                 >
                   <span aria-hidden style={{
                     position: 'relative', display: 'inline-block', width: 28, height: 16,
-                    background: filterState.enabled ? 'var(--primary-dim)' : '#3f3f46',
+                    background: filterState.enabled ? 'var(--primary-dim)' : 'var(--surface-inset)',
                     borderRadius: 999, flexShrink: 0, transition: 'background 140ms ease',
                   }}>
                     <span style={{
@@ -588,7 +588,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
             )}
             <button
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs font-mono transition-colors"
-              style={{ borderColor: 'rgba(250,204,21,0.35)', color: 'var(--primary)', backgroundColor: 'rgba(250,204,21,0.06)' }}
+              style={{ borderColor: 'rgba(250,204,21,0.35)', color: 'var(--primary-text)', backgroundColor: 'rgba(250,204,21,0.06)' }}
               onClick={() => setPacksOpen(true)}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -654,7 +654,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
               </span>
             ))}
           </div>
-          <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full border shrink-0" style={{ color: 'var(--primary)', borderColor: 'rgba(250,204,21,0.35)', backgroundColor: 'rgba(250,204,21,0.06)' }}>
+          <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full border shrink-0" style={{ color: 'var(--primary-text)', borderColor: 'rgba(250,204,21,0.35)', backgroundColor: 'rgba(250,204,21,0.06)' }}>
             {t('compliancePage.recordCount', { count: total })}
           </span>
         </div>
@@ -677,7 +677,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                   'compliancePage.columnPreview',
                   'compliancePage.columnModel',
                 ].map((k) => (
-                  <th key={k} className="px-4 py-3 text-[10px] font-mono font-semibold tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.35)', position: 'sticky', top: 0, zIndex: 1 }}>
+                  <th key={k} className="px-4 py-3 text-[10px] font-mono font-semibold tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(var(--sink-rgb), 0.35)', position: 'sticky', top: 0, zIndex: 1 }}>
                     {t(k)}
                   </th>
                 ))}
@@ -687,7 +687,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
               {isLoading ? (
                 <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.loading')}</td></tr>
               ) : isError ? (
-                <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: '#f87171' }}>{t('compliancePage.loadFailed')}</td></tr>
+                <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--destructive-text)' }}>{t('compliancePage.loadFailed')}</td></tr>
               ) : events.length === 0 ? (
                 <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.noEvents')}</td></tr>
               ) : (
@@ -699,7 +699,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                       <div className="flex items-center gap-2">
                         {topSeverity(e) && <Badge variant={severityVariant(topSeverity(e))}>{topSeverity(e).toUpperCase()}</Badge>}
                         {[...new Set(e.findings.map((f) => f.category))].map((c) => (
-                          <span key={c} className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--muted-foreground)' }}>{c}</span>
+                          <span key={c} className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(var(--lift-rgb), 0.05)', color: 'var(--muted-foreground)' }}>{c}</span>
                         ))}
                         <span className="text-[10px] font-mono tabular-nums" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>×{e.findings.length}</span>
                       </div>
@@ -835,7 +835,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                   // point at.
                   const focus = shown === masked ? resolveWireLabelFocus(f, selected.findings) : null;
                   return (
-                  <div key={f.finding_id} className="rounded-md border p-2.5" style={{ position: 'relative', borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                  <div key={f.finding_id} className="rounded-md border p-2.5" style={{ position: 'relative', borderColor: 'var(--border)', backgroundColor: 'rgba(var(--lift-rgb), 0.02)' }}>
                     {/* sequence badge — overhangs the card's top-left corner (出框) */}
                     <span
                       className="inline-flex items-center justify-center text-[10px] font-mono font-bold rounded-full shrink-0"

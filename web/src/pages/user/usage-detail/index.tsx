@@ -381,7 +381,7 @@ export default function UserUsageDetailPage() {
         .ud-icon {
           width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
           display: flex; align-items: center; justify-content: center;
-          background: rgba(202,138,4,0.10); border: 1px solid rgba(202,138,4,0.28); color: var(--primary);
+          background: rgba(202,138,4,0.10); border: 1px solid rgba(202,138,4,0.28); color: var(--primary-text);
         }
         .ud-icon svg { width: 18px; height: 18px; }
         .ud-title { font-family: var(--font-mono); font-size: 18px; font-weight: 700; letter-spacing: 0.02em; color: var(--display-foreground); line-height: 1.25; }
@@ -389,15 +389,15 @@ export default function UserUsageDetailPage() {
         .ud-meta i { opacity: 0.4; font-style: normal; }
 
         .ud-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 26px; margin-bottom: 14px; font-family: var(--font-mono); font-size: 11.5px; }
-        .ud-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: rgba(0,0,0,0.22); border: 1px solid var(--border); }
+        .ud-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: rgba(var(--sink-rgb), 0.22); border: 1px solid var(--border); }
         .ud-tab { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 6px; background: none; border: none; cursor: pointer; color: var(--muted-foreground); font: inherit; transition: background 110ms ease, color 110ms ease; }
         .ud-tab:hover { color: var(--foreground); }
-        .ud-tab.on { background: rgba(202,138,4,0.16); color: var(--primary); }
+        .ud-tab.on { background: rgba(202,138,4,0.16); color: var(--primary-text); }
         .ud-tab-n { font-size: 10px; opacity: 0.65; }
         .ud-tab.on .ud-tab-n { opacity: 1; }
         .ud-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; background: rgba(202,138,4,0.14); border: 1px solid rgba(202,138,4,0.36); color: var(--foreground); }
-        .ud-chip button { background: rgba(0,0,0,0.18); border: none; color: var(--muted-foreground); cursor: pointer; width: 16px; height: 16px; border-radius: 999px; line-height: 1; font-size: 13px; }
-        .ud-chip button:hover { color: #facc15; background: rgba(0,0,0,0.3); }
+        .ud-chip button { background: rgba(var(--sink-rgb), 0.18); border: none; color: var(--muted-foreground); cursor: pointer; width: 16px; height: 16px; border-radius: 999px; line-height: 1; font-size: 13px; }
+        .ud-chip button:hover { color: #facc15; background: rgba(var(--sink-rgb), 0.3); }
         .ud-reset { background: none; border: none; color: var(--muted-foreground); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 0; font: inherit; }
         .ud-reset:hover { color: #facc15; }
 
@@ -410,16 +410,16 @@ export default function UserUsageDetailPage() {
         .ud-table thead th {
           font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
           color: var(--muted-foreground); text-align: left; padding: 11px 16px; white-space: nowrap;
-          background: rgba(0,0,0,0.22); border-bottom: 1px solid var(--border);
+          background: rgba(var(--sink-rgb), 0.22); border-bottom: 1px solid var(--border);
         }
         .ud-table th.num, .ud-table td.num { text-align: right; }
         .ud-table th.ud-sortable { cursor: pointer; user-select: none; transition: color 110ms ease; }
         .ud-table th.ud-sortable:hover { color: var(--foreground); }
-        .ud-table th.ud-sortable.on { color: var(--primary); }
+        .ud-table th.ud-sortable.on { color: var(--primary-text); }
         .ud-table tbody td {
           font-family: var(--font-mono); font-size: 12.5px; padding: 9px 16px; white-space: nowrap;
           overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
-          border-bottom: 1px solid rgba(255,255,255,0.035); color: var(--foreground);
+          border-bottom: 1px solid rgba(var(--lift-rgb), 0.035); color: var(--foreground);
         }
         .ud-table tbody tr.ud-row { cursor: pointer; transition: background 110ms ease, box-shadow 110ms ease; }
         .ud-table tbody tr.ud-row:hover { background: rgba(250,204,21,0.045); box-shadow: inset 2px 0 0 0 rgba(202,138,4,0.7); }
@@ -437,7 +437,7 @@ export default function UserUsageDetailPage() {
 
         .ud-session { color: var(--muted-foreground); position: relative; }
         .ud-session .ud-caret { display: inline-block; width: 12px; color: var(--muted-foreground); opacity: 0.5; font-size: 9px; }
-        .ud-table tbody tr.ud-row:hover .ud-caret { opacity: 1; color: var(--primary); }
+        .ud-table tbody tr.ud-row:hover .ud-caret { opacity: 1; color: var(--primary-text); }
         .ud-session em { display: block; font-style: normal; font-size: 10px; opacity: 0.55; padding-left: 12px; }
 
         /* The expanded panel must NOT inherit the dense row-cell's nowrap/clip
@@ -445,10 +445,10 @@ export default function UserUsageDetailPage() {
            rule + 1 (…tbody tr.ud-expand > td = 0,2,3 beats .ud-table tbody td =
            0,1,2) so white-space:normal actually wins — otherwise long error
            reasons / endpoint URLs overflow horizontally (verified via DevTools). */
-        .ud-table tbody tr.ud-expand > td { padding: 0 16px 14px 16px; background: rgba(0,0,0,0.16); white-space: normal; overflow: visible; }
+        .ud-table tbody tr.ud-expand > td { padding: 0 16px 14px 16px; background: rgba(var(--sink-rgb), 0.16); white-space: normal; overflow: visible; }
         .ud-detail { border: 1px solid var(--border); border-radius: 8px; padding: 13px 15px; background: var(--card); margin-top: 2px; }
         .ud-tokbar-wrap { margin-bottom: 12px; }
-        .ud-tokbar { display: flex; height: 6px; border-radius: 4px; overflow: hidden; background: rgba(255,255,255,0.05); }
+        .ud-tokbar { display: flex; height: 6px; border-radius: 4px; overflow: hidden; background: rgba(var(--lift-rgb), 0.05); }
         .ud-tokbar > span { display: block; height: 100%; }
         .ud-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted-foreground); }
         .ud-legend span { display: inline-flex; align-items: center; gap: 5px; }

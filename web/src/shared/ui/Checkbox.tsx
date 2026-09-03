@@ -169,7 +169,7 @@ export function Checkbox({
             // the favicon-aligned sidebar AK mark uses, gives the filled box a
             // hint of depth instead of reading flat-yellow.
             boxShadow: filled
-              ? 'inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 0 rgba(250, 204, 21, 0)'
+              ? 'inset 0 1px 0 rgba(var(--lift-rgb), 0.08), 0 0 0 0 rgba(250, 204, 21, 0)'
               : 'none',
             display: 'flex',
             alignItems: 'center',
