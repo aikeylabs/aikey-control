@@ -325,7 +325,7 @@ export function snippetBoxStyle(variant: SnippetBoxVariant): React.CSSProperties
   // The base is the ONLY place the box's geometry and fill are written down.
   const base: React.CSSProperties = {
     color: 'var(--foreground)',
-    backgroundColor: 'rgba(0,0,0,0.28)',
+    backgroundColor: 'rgba(var(--sink-rgb), 0.28)',
     border: '1px solid var(--border)',
   };
   if (variant === 'masked') return base;

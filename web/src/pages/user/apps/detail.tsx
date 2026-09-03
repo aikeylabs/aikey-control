@@ -975,9 +975,9 @@ export default function UserAppDetailPage() {
                               />
                               <XAxis
                                 dataKey="date"
-                                stroke="#a1a1aa"
+                                stroke="var(--muted-foreground)"
                                 tick={{
-                                  fill: '#a1a1aa',
+                                  fill: 'var(--muted-foreground)',
                                   fontFamily: 'JetBrains Mono, monospace',
                                   fontSize: 10,
                                 }}
@@ -988,9 +988,9 @@ export default function UserAppDetailPage() {
                               <YAxis
                                 yAxisId="tokens"
                                 orientation="left"
-                                stroke="#a1a1aa"
+                                stroke="var(--muted-foreground)"
                                 tick={{
-                                  fill: '#a1a1aa',
+                                  fill: 'var(--muted-foreground)',
                                   fontFamily: 'JetBrains Mono, monospace',
                                   fontSize: 10,
                                 }}
@@ -1000,9 +1000,9 @@ export default function UserAppDetailPage() {
                               <YAxis
                                 yAxisId="requests"
                                 orientation="right"
-                                stroke="#a1a1aa"
+                                stroke="var(--muted-foreground)"
                                 tick={{
-                                  fill: '#a1a1aa',
+                                  fill: 'var(--muted-foreground)',
                                   fontFamily: 'JetBrains Mono, monospace',
                                   fontSize: 10,
                                 }}
@@ -1010,7 +1010,7 @@ export default function UserAppDetailPage() {
                                 width={36}
                               />
                               <Tooltip
-                                cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                                cursor={{ fill: 'rgba(var(--lift-rgb), 0.04)' }}
                                 contentStyle={{
                                   background: 'var(--card)',
                                   border: '1px solid var(--border)',

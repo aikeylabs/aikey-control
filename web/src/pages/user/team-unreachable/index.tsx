@@ -32,7 +32,7 @@ function CopyButton({ text }: { text: string }) {
       className="text-[10px] font-mono px-2 py-1 rounded border shrink-0"
       style={{
         color: copied ? '#4ade80' : 'var(--muted-foreground)',
-        borderColor: copied ? 'rgba(74,222,128,0.3)' : 'var(--border)',
+        borderColor: copied ? 'rgba(var(--success-rgb), 0.3)' : 'var(--border)',
         backgroundColor: 'transparent',
       }}
     >
@@ -68,7 +68,7 @@ export default function TeamUnreachablePage() {
         style={{
           backgroundColor: 'var(--card)',
           borderColor: 'var(--border)',
-          boxShadow: '0 0 40px rgba(0,0,0,0.6)',
+          boxShadow: '0 0 40px rgba(var(--scrim-rgb), 0.6)',
         }}
       >
         <div className="flex flex-col items-center mb-8">
@@ -95,7 +95,7 @@ export default function TeamUnreachablePage() {
         <div className="flex justify-center mb-6">
           <div
             className="w-14 h-14 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}
+            style={{ backgroundColor: 'rgba(var(--destructive-rgb), 0.1)', border: '1px solid rgba(var(--destructive-rgb), 0.3)' }}
           >
             <svg className="w-7 h-7" fill="none" stroke="#f87171" viewBox="0 0 24 24" strokeWidth={1.5}>
               <path
@@ -125,9 +125,9 @@ export default function TeamUnreachablePage() {
           </p>
           <div
             className="rounded border p-4 flex items-center justify-between gap-3"
-            style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderColor: 'var(--border)' }}
+            style={{ backgroundColor: 'rgba(var(--sink-rgb), 0.3)', borderColor: 'var(--border)' }}
           >
-            <code className="text-sm font-mono font-bold break-all" style={{ color: 'var(--primary)' }}>
+            <code className="text-sm font-mono font-bold break-all" style={{ color: 'var(--primary-text)' }}>
               {setUrlCmd}
             </code>
             <CopyButton text={setUrlCmd} />
@@ -148,7 +148,7 @@ export default function TeamUnreachablePage() {
           <button
             onClick={() => window.location.reload()}
             className="font-mono px-3 py-1.5 rounded border shrink-0"
-            style={{ color: 'var(--primary)', borderColor: 'var(--border)', backgroundColor: 'transparent' }}
+            style={{ color: 'var(--primary-text)', borderColor: 'var(--border)', backgroundColor: 'transparent' }}
           >
             {t('teamUnreachable.retryButton')}
           </button>

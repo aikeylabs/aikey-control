@@ -1638,13 +1638,13 @@ export default function UserBulkImportPage() {
         <div
           className="px-6 py-2 flex items-center justify-between flex-shrink-0"
           style={{
-            background: 'rgba(239,68,68,0.08)',
-            borderBottom: '1px solid rgba(239,68,68,0.35)',
+            background: 'rgba(var(--destructive-rgb), 0.08)',
+            borderBottom: '1px solid rgba(var(--destructive-rgb), 0.35)',
           }}
           role="alert"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: '#f87171' }}>
+            <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--destructive-text)' }}>
               {pageError.code ?? t('import.errorFallbackCode')}
             </span>
             <span className="text-[12px] font-mono truncate" style={{ color: 'var(--foreground)' }} title={pageError.message}>
@@ -1670,7 +1670,7 @@ export default function UserBulkImportPage() {
         <div className="unlock-banner-ok px-6 py-2 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <UnlockIcon />
-            <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: '#4ade80' }}>{t('import.vaultUnlocked')}</span>
+            <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--success-text)' }}>{t('import.vaultUnlocked')}</span>
             {liveRemainingSec !== null && (
               <span className="text-[12px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
                 {t('import.autoLockIn')}{' '}
@@ -1694,7 +1694,7 @@ export default function UserBulkImportPage() {
               {t('import.importedCredentials', { count: confirmResp.inserted + confirmResp.replaced })}
             </span>
             {confirmResp.failed && confirmResp.failed.length > 0 && (
-              <span className="text-[12px] font-mono" style={{ color: '#fca5a5' }}>{t('import.nFailed', { count: confirmResp.failed.length })}</span>
+              <span className="text-[12px] font-mono" style={{ color: 'var(--destructive-text-soft)' }}>{t('import.nFailed', { count: confirmResp.failed.length })}</span>
             )}
           </div>
           <button className="btn btn-primary px-3 py-1.5 text-[11px]" onClick={startNewImport}>{t('import.startNewImport')}</button>
@@ -1715,7 +1715,7 @@ export default function UserBulkImportPage() {
             >
               ×
             </button>
-            <span className="font-mono" style={{ color: 'var(--primary)', fontWeight: 700 }}>{suggestPctTop}%</span>
+            <span className="font-mono" style={{ color: 'var(--primary-text)', fontWeight: 700 }}>{suggestPctTop}%</span>
             <span style={{ color: 'var(--foreground)' }}>{t('import.draftsLookLike')}</span>
             <span className={`chip ${providerChipClassFromId(suggestEntryTop[0])}`}>
               {suggestEntryTop[0].toUpperCase()}
@@ -1750,8 +1750,8 @@ export default function UserBulkImportPage() {
           (2026-05-06 user request). */}
       <div className="flex-1 flex min-h-0 overflow-hidden pl-6">
         {/* LEFT pane: textarea (empty) or readonly source (working/done) */}
-        <section className="w-[42%] flex flex-col" style={{ background: 'rgba(0,0,0,0.15)' }}>
-          <div className="h-10 px-5 flex items-center justify-between flex-shrink-0" style={{ background: 'rgba(23, 23, 25, 0.2)', borderBottom: '1px solid rgba(244, 244, 245, 0.04)' }}>
+        <section className="w-[42%] flex flex-col" style={{ background: 'rgba(var(--sink-rgb), 0.15)' }}>
+          <div className="h-10 px-5 flex items-center justify-between flex-shrink-0" style={{ background: 'rgba(var(--sink-rgb), 0.2)', borderBottom: '1px solid rgba(var(--fg-rgb), 0.04)' }}>
             <span className="pane-header">{state === 'empty' ? t('import.sourcePasteOrAdd') : state === 'working' ? t('import.sourceDetected', { count: parseResp?.candidates.length ?? 0 }) : t('import.sourceArchived')}</span>
             <div className="flex items-center gap-3">
               {/* v4.2: working 态显式 Edit 按钮 —— 把 edit-mode 入口和 "click 行联动右侧"
@@ -1856,7 +1856,7 @@ export default function UserBulkImportPage() {
         <div className="pane-divider" />
 
         {/* RIGHT pane: drafts list / empty card / done summary */}
-        <section className="flex-1 flex flex-col min-w-0" style={{ background: 'rgba(0,0,0,0.05)' }}>
+        <section className="flex-1 flex flex-col min-w-0" style={{ background: 'rgba(var(--sink-rgb), 0.05)' }}>
           {state === 'empty' && <EmptyDraftsCard onPasteSample={() => setInput(SAMPLE_TEXT)} unlocked={unlocked} />}
           {state === 'working' && (
             <WorkingDrafts
@@ -2408,8 +2408,8 @@ function WorkingDrafts({
                 title={t('import.jumpToFirstMissingProtocol')}
               >
                 <span className="tier-dot" style={{ background: '#f87171' }} />
-                <span className="font-bold" style={{ color: '#fca5a5' }}>{missingProviderCount}</span>
-                <span style={{ color: '#fca5a5' }}>{t('import.statMissingProtocol')}</span>
+                <span className="font-bold" style={{ color: 'var(--destructive-text-soft)' }}>{missingProviderCount}</span>
+                <span style={{ color: 'var(--destructive-text-soft)' }}>{t('import.statMissingProtocol')}</span>
               </button>
             </>
           )}
@@ -2442,7 +2442,7 @@ function WorkingDrafts({
         )}
       </div>
       {orphans.length > 0 && (
-        <div className="px-5 py-2.5 flex items-center gap-2 flex-wrap flex-shrink-0" style={{ background: 'rgba(23, 23, 25, 0.2)', borderTop: '1px solid rgba(244, 244, 245, 0.04)' }}>
+        <div className="px-5 py-2.5 flex items-center gap-2 flex-wrap flex-shrink-0" style={{ background: 'rgba(var(--sink-rgb), 0.2)', borderTop: '1px solid rgba(var(--fg-rgb), 0.04)' }}>
           <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'var(--muted-foreground)' }}>{t('import.orphans')}</span>
           {orphans.map((o, i) => (<span key={i} className="orphan-chip">{typeof o === 'string' ? o : o.value}</span>))}
         </div>
@@ -2605,7 +2605,7 @@ function renderGroupedDrafts({
         return (
           <div key={`g-${g.id}-${ri}`} className="endpoint-group">
             <EndpointGroupHeader group={g} />
-            <div className="space-y-1.5 pl-3 border-l border-dashed" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+            <div className="space-y-1.5 pl-3 border-l border-dashed" style={{ borderColor: 'rgba(var(--lift-rgb), 0.08)' }}>
               {r.units.map((u) => renderDraft(u.draft))}
             </div>
           </div>
@@ -2745,7 +2745,7 @@ function DraftRowCard({
         <span className={`check ${row.selected ? 'checked' : ''}`} onClick={onToggleSelect}>
           {row.selected && <span className="text-[10px]">✓</span>}
         </span>
-        <span className="text-[12px] font-mono w-6 text-right" style={{ color: '#71717a' }}>#{idx}</span>
+        <span className="text-[12px] font-mono w-6 text-right" style={{ color: 'var(--faint-foreground)' }}>#{idx}</span>
         {/* Title moved right after `#` per 2026-04-25 UX: title is the
             card's primary identifier so it belongs next to the index.
             Gray-bold font-mono echoes master's table column-header
@@ -2788,7 +2788,7 @@ function DraftRowCard({
             tier=confirmed/suggested/unknown 都降低饱和度(70% 不饱和绿/蓝/灰) */}
         <span
           className="text-[11px] font-mono font-bold"
-          style={{ color: tier === 'confirmed' ? 'rgba(74,222,128,0.7)' : tier === 'suggested' ? 'rgba(56,189,248,0.7)' : '#71717a' }}
+          style={{ color: tier === 'confirmed' ? 'rgba(var(--success-rgb), 0.7)' : tier === 'suggested' ? 'rgba(56,189,248,0.7)' : 'var(--faint-foreground)' }}
         >
           {confidencePct}%
         </span>
@@ -3532,12 +3532,12 @@ function DoneSummary({
         <div className="done-stat">
           <span className="done-stat-ico done-stat-ico-sky">↗</span>
           <span className="done-stat-lbl">{t('import.doneOauthPending')}</span>
-          <span className="done-stat-val" style={{ color: '#60a5fa' }}>{oauthDrafts.length}</span>
+          <span className="done-stat-val" style={{ color: 'var(--info-text)' }}>{oauthDrafts.length}</span>
         </div>
         <div className="done-stat">
           <span className="done-stat-ico done-stat-ico-red">!</span>
           <span className="done-stat-lbl">{t('import.doneFailed')}</span>
-          <span className="done-stat-val" style={{ color: '#f87171' }}>{failedItems.length}</span>
+          <span className="done-stat-val" style={{ color: 'var(--destructive-text)' }}>{failedItems.length}</span>
         </div>
         <div className="done-stat">
           <span className="done-stat-ico done-stat-ico-dim">»</span>
@@ -3771,7 +3771,7 @@ function OAuthHandoffCard({ row, step }: { row: DraftRow; step: number }) {
 
 function LockIcon() {
   return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ color: 'var(--primary)' }}>
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ color: 'var(--primary-text)' }}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
     </svg>
   );
@@ -3779,7 +3779,7 @@ function LockIcon() {
 
 function UnlockIcon() {
   return (
-    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ color: '#4ade80' }}>
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ color: 'var(--success-text)' }}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
     </svg>
   );
@@ -3882,28 +3882,35 @@ const IMPORT_CSS = `
  * and don't need the prefix.
  */
 .import-page{
-  --imp-surface-2: #1f1f23;
-  --imp-surface-3: #2a2a2f;
-  --imp-line: rgba(255,255,255,0.06);
-  --imp-line-strong: rgba(255,255,255,0.10);
-  --imp-text-dim: #8b8b94;
+  --imp-surface-2: var(--surface-sunken);
+  /* One step above --imp-surface-2. No global token matches it exactly, so it
+     stays local and gets an explicit light counterpart below — a page-local
+     token with only a dark value is precisely how the vault page shipped a grey
+     slab into the light theme (2026-09-04). */
+  --imp-surface-3: #2a2a2f; /* theme-literal-ok: paired with the light value below */
+  --imp-line: rgba(var(--lift-rgb), 0.06);
+  --imp-line-strong: rgba(var(--lift-rgb), 0.10);
+  --imp-text-dim: var(--faint-foreground);
   /* Dim the page-wide foreground so the working-state source pane and
      draft panel don't read as harsh pure-white against the dark canvas.
      One zinc step down (50 -> 300) — noticeable but not muted. */
-  --foreground: #d4d4d8;
+  --foreground: var(--soft-foreground);
+}
+[data-theme='light'] .import-page{
+  --imp-surface-3: #ececea; /* theme-literal-ok: light counterpart of --imp-surface-3 */
 }
 .import-page .btn{display:inline-flex;align-items:center;justify-content:center;gap:0.375rem;border-radius:6px;font-family:var(--font-mono);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing: 0.05em;padding:8px 14px;border:1px solid transparent;transition:all 180ms ease;cursor:pointer}
 .import-page .btn-primary{background:var(--primary);color:var(--primary-foreground);border-color:rgba(250, 204, 21,0.6);box-shadow:0 0 0 1px rgba(250, 204, 21,0.15),0 6px 20px -10px rgba(250, 204, 21,0.5)}
 .import-page .btn-primary:hover{background:#fde047;transform:translateY(-1px)}
 .import-page .btn-primary:disabled{background:var(--muted);color:var(--muted-foreground);box-shadow:none;border-color:var(--border);cursor:not-allowed;transform:none;opacity:0.7}
 .import-page .btn-outline{background:transparent;color:var(--foreground);border-color:var(--imp-line-strong)}
-.import-page .btn-outline:hover{background:rgba(255,255,255,0.04);border-color:var(--imp-text-dim)}
+.import-page .btn-outline:hover{background:rgba(var(--lift-rgb), 0.04);border-color:var(--imp-text-dim)}
 .import-page .btn-ghost{background:transparent;color:var(--imp-text-dim)}
-.import-page .btn-ghost:hover{background:rgba(255,255,255,0.04);color:var(--foreground)}
+.import-page .btn-ghost:hover{background:rgba(var(--lift-rgb), 0.04);color:var(--foreground)}
 
 .pane-header{font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing: 0.05em;color:var(--imp-text-dim)}
 .pane-divider{width:1px;background:var(--imp-line)}
-.offline-pill{display:inline-flex;align-items:center;gap:0.375rem;font-family:var(--font-mono);font-size:10.5px;font-weight:600;color:var(--imp-text-dim);letter-spacing: 0.05em;text-transform:uppercase;padding:5px 10px;border:1px solid var(--imp-line-strong);border-radius:3px;background:rgba(0,0,0,0.2)}
+.offline-pill{display:inline-flex;align-items:center;gap:0.375rem;font-family:var(--font-mono);font-size:10.5px;font-weight:600;color:var(--imp-text-dim);letter-spacing: 0.05em;text-transform:uppercase;padding:5px 10px;border:1px solid var(--imp-line-strong);border-radius:3px;background:rgba(var(--sink-rgb), 0.2)}
 
 /* ── Unlock banners ──────────────────────────────────────────────
  * Locked: gold inset bar + gold-tinted gradient (call-to-action).
@@ -3933,7 +3940,7 @@ const IMPORT_CSS = `
 /* Stage 14+: 用 inset box-shadow 代替 border-left 实现左侧色条,零 layout 影响
    (border-left:2px 透明也占 2px 宽度,会让 pre 里的文字比 textarea 右移 2px) */
 .src-line{display:block;padding:0 0.5rem;margin-left:-0.5rem;position:relative;transition:background-color 120ms ease,box-shadow 120ms ease}
-.src-line-hover{background:rgba(255,255,255,0.06);box-shadow:inset 2px 0 0 rgba(255,255,255,0.3)}
+.src-line-hover{background:rgba(var(--lift-rgb), 0.06);box-shadow:inset 2px 0 0 rgba(var(--lift-rgb), 0.3)}
 /* 2026-04-23 用户反馈第五轮:bg(背景色)和 bar(色条)解耦,各自由不同动作触发:
      - 勾选 (selected) → bg-{state}  : 仅显示**背景色**,RGB+α 完全等于 .draft-row.{state} 的 bg
      - 点击 (pinned)   → hl-{state}  : 仅显示**3px 色条**,RGB 与卡片状态 border 同源
@@ -3952,8 +3959,8 @@ const IMPORT_CSS = `
    的高优先级规则覆盖为框边。 */
 .src-line.hl-key   {--state-color:rgba(250, 204, 21,0.65); box-shadow:inset 3px 0 0 rgba(250, 204, 21,0.55)}
 .src-line.hl-weak  {--state-color:#fde047;                  box-shadow:inset 3px 0 0 #fde047}
-.src-line.hl-oauth {--state-color:rgba(96,165,250,0.65);    box-shadow:inset 3px 0 0 rgba(96,165,250,0.55)}
-.src-line.hl-failed{--state-color:rgba(248,113,113,0.7);    box-shadow:inset 3px 0 0 rgba(248,113,113,0.65)}
+.src-line.hl-oauth {--state-color:rgba(var(--info-rgb), 0.65);    box-shadow:inset 3px 0 0 rgba(var(--info-rgb), 0.55)}
+.src-line.hl-failed{--state-color:rgba(var(--destructive-rgb), 0.7);    box-shadow:inset 3px 0 0 rgba(var(--destructive-rgb), 0.65)}
 
 /* === src-line-group (wrapper 模型 v3, 2026-05-06) ===
    多行属于同一 pinned/hovered draft → 包在一个 .src-line-group <span> 里,
@@ -3975,8 +3982,8 @@ const IMPORT_CSS = `
 }
 .src-line-group.hl-key   {--state-color:rgba(250, 204, 21,0.65)}
 .src-line-group.hl-weak  {--state-color:#fde047}
-.src-line-group.hl-oauth {--state-color:rgba(96,165,250,0.65)}
-.src-line-group.hl-failed{--state-color:rgba(248,113,113,0.7)}
+.src-line-group.hl-oauth {--state-color:rgba(var(--info-rgb), 0.65)}
+.src-line-group.hl-failed{--state-color:rgba(var(--destructive-rgb), 0.7)}
 
 /* pin only: 2px inset border (state 色),无 glow */
 .src-line-group.src-line-group-pinned:not(.src-line-group-hover){
@@ -3994,9 +4001,9 @@ const IMPORT_CSS = `
 /* === 旧 bg-{state} / src-line-hover 保留但不再被 push (防外部引用) === */
 .src-line.bg-key   {background:rgba(250, 204, 21,0.04)}
 .src-line.bg-weak  {background:rgba(234,179,8,0.04)}
-.src-line.bg-oauth {background:rgba(96,165,250,0.06)}
-.src-line.bg-failed{background:rgba(248,113,113,0.06)}
-.src-line.src-line-hover{background:rgba(255,255,255,0.06);box-shadow:inset 3px 0 0 rgba(255,255,255,0.3)}
+.src-line.bg-oauth {background:rgba(var(--info-rgb), 0.06)}
+.src-line.bg-failed{background:rgba(var(--destructive-rgb), 0.06)}
+.src-line.src-line-hover{background:rgba(var(--lift-rgb), 0.06);box-shadow:inset 3px 0 0 rgba(var(--lift-rgb), 0.3)}
 
 /* ── Empty-state card ─────────────────────────────────────────── */
 /* Empty-state card — fills the entire right pane with surface-2 fill
@@ -4014,22 +4021,22 @@ const IMPORT_CSS = `
 .nothing-parse-title{font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing: 0.05em;text-transform:uppercase;color:var(--imp-text-dim);align-self:flex-start;margin-bottom:12px}
 .nothing-parse-list{list-style:none;margin:0;padding:0;align-self:stretch}
 .nothing-parse-list li{display:flex;align-items:flex-start;gap:10px;padding:7px 0;font-family:var(--font-sans);font-size:13px;color:var(--muted-foreground);text-align:left}
-.nothing-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px rgba(74,222,128,0.5);margin-top:7px;flex-shrink:0}
+.nothing-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px rgba(var(--success-rgb), 0.5);margin-top:7px;flex-shrink:0}
 
 /* ── Working toolbar + sub-row ─────────────────────────────────── */
-.toolbar{background:rgba(0,0,0,0.15);border-bottom:1px solid var(--imp-line)}
+.toolbar{background:rgba(var(--sink-rgb), 0.15);border-bottom:1px solid var(--imp-line)}
 
 /* ── Tier dots ────────────────────────────────────────────────── */
 .tier-dot{display:inline-block;width:6px;height:6px;border-radius:50%;flex-shrink:0}
-.tier-confirmed{background:#4ade80;box-shadow:0 0 6px rgba(74,222,128,0.5)}
+.tier-confirmed{background:#4ade80;box-shadow:0 0 6px rgba(var(--success-rgb), 0.5)}
 .tier-suggested{background:#38bdf8;box-shadow:0 0 6px rgba(56,189,248,0.5)}
-.tier-warn{background:#f97316;box-shadow:0 0 6px rgba(249,115,22,0.5)}
+.tier-warn{background:#f97316;box-shadow:0 0 6px rgba(var(--warning-rgb), 0.5)}
 .tier-unknown{background:var(--imp-text-dim)}
 
 /* ── Chips ────────────────────────────────────────────────────── */
 /* 2026-04-23 用户反馈:卡片标题 provider chip + KEY/OAUTH 类型 chip 视觉过于突出,
    弱化边框/底色透明度,让卡片标题区视觉重心回归到 alias 文案。文字色保留(provider 识别度) */
-.chip{display:inline-flex;align-items:center;gap:0.25rem;font-family:var(--font-mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;text-transform:uppercase;letter-spacing: 0.05em;border:1px solid rgba(255,255,255,0.06);flex-shrink:0}
+.chip{display:inline-flex;align-items:center;gap:0.25rem;font-family:var(--font-mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;text-transform:uppercase;letter-spacing: 0.05em;border:1px solid rgba(var(--lift-rgb), 0.06);flex-shrink:0}
 /* Anthropic/Claude → brand gold. v3 consolidates anthropic as the primary
    provider swatch; we keep .chip-claude as the class name for API stability
    but shift the colour from indigo to gold. */
@@ -4041,19 +4048,19 @@ const IMPORT_CSS = `
    几乎完全融入卡片背景 #2a2a2f,只在认真看时显出 provider 的色相提示。 */
 .chip-claude{background:transparent;color:rgba(202,165,17,0.65);border-color:rgba(250, 204, 21,0.12)}
 .chip-openai{background:transparent;color:rgba(140,118,200,0.65);border-color:rgba(167,139,250,0.12)}
-.chip-oauth{background:transparent;color:rgba(80,140,200,0.65);border-color:rgba(96,165,250,0.12)}
+.chip-oauth{background:transparent;color:rgba(80,140,200,0.65);border-color:rgba(var(--info-rgb), 0.12)}
 /* v4.2: 国产模型 (kimi/deepseek/zhipu/doubao/siliconflow/qwen/baichuan/minimax) — 暖珊瑚红系 */
 .chip-china{background:transparent;color:rgba(210,125,95,0.65);border-color:rgba(239,157,129,0.14)}
 /* v4.2: 其他海外厂商 (gemini/groq/xai/hf/perplexity/mistral) — 冷青蓝系 */
 .chip-overseas{background:transparent;color:rgba(95,170,175,0.65);border-color:rgba(110,193,201,0.14)}
 /* v4.2: 聚合网关 (openrouter/yunwu/zeroeleven) — 中性石板灰 */
 .chip-gateway{background:transparent;color:rgba(135,145,160,0.62);border-color:rgba(148,163,184,0.14)}
-.chip-unknown{background:transparent;color:rgba(140,140,150,0.65);border-color:rgba(113,113,122,0.16)}
+.chip-unknown{background:transparent;color:rgba(var(--faint-rgb), 0.65);border-color:rgba(var(--faint-rgb), 0.16)}
 /* Dimmer gray than --imp-text-dim so the kind dropdown (KEY / OAUTH)
    reads quieter than the draft title to its left — title is
    --muted-foreground (#a1a1aa), chip-kind drops two zinc steps to
    #52525b (zinc-600) per 2026-04-25 UX. */
-.chip-kind{font-family:var(--font-mono);font-size:10px;font-weight:700;color:#52525b;padding:3px 8px;background:transparent;border:1px solid rgba(255,255,255,0.045);border-radius:3px;text-transform:uppercase;letter-spacing: 0.05em}
+.chip-kind{font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--border-strong);padding:3px 8px;background:transparent;border:1px solid rgba(var(--lift-rgb), 0.045);border-radius:3px;text-transform:uppercase;letter-spacing: 0.05em}
 /* 规则 3: 下拉切换的 chip-kind 专属样式 —— 小改 appearance/hover,尽量和静态 chip 视觉一致。
    Chevron drawn via two linear-gradient triangles (pre-2026-04-25
    SVG-url experiment broke the <style> block layout — browser's CSS
@@ -4065,15 +4072,15 @@ const IMPORT_CSS = `
    IMPORTANT: the override rules below use background-color rather
    than the background shorthand, otherwise the chevron background-
    image is reset alongside the color. */
-.chip-kind-select{appearance:none;-webkit-appearance:none;-moz-appearance:none;cursor:pointer;padding-right:20px;background-image:linear-gradient(45deg,transparent 50%,#8b8b94 50%),linear-gradient(135deg,#8b8b94 50%,transparent 50%);background-position:calc(100% - 10px) 50%,calc(100% - 6px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+.chip-kind-select{appearance:none;-webkit-appearance:none;-moz-appearance:none;cursor:pointer;padding-right:20px;background-image:linear-gradient(45deg,transparent 50%,var(--faint-foreground) 50%),linear-gradient(135deg,var(--faint-foreground) 50%,transparent 50%);background-position:calc(100% - 10px) 50%,calc(100% - 6px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
 /* 全局 src/index.css 的 input/select/textarea !important 也压 chip-kind-select(它是个 <select>),
    所以这里 idle/hover/focus 的 bg/border/box-shadow 全部加 !important 反覆盖。
    color needs !important because global src/index.css forces
    select { color: var(--foreground) !important }. Without it the
    KEY/OAUTH text overrides back to bright white. */
-.chip-kind-select{background-color:transparent !important;color:#52525b !important;border:1px solid rgba(255,255,255,0.045) !important}
-.chip-kind-select:hover{color:#71717a !important;background-color:rgba(255,255,255,0.025) !important;border-color:rgba(255,255,255,0.10) !important}
-.chip-kind-select:focus{outline:none;background-color:rgba(255,255,255,0.05) !important;border-color:rgba(255,255,255,0.28) !important;box-shadow:0 0 0 2px rgba(255,255,255,0.06) !important}
+.chip-kind-select{background-color:transparent !important;color:var(--border-strong) !important;border:1px solid rgba(var(--lift-rgb), 0.045) !important}
+.chip-kind-select:hover{color:var(--faint-foreground) !important;background-color:rgba(var(--lift-rgb), 0.025) !important;border-color:rgba(var(--lift-rgb), 0.10) !important}
+.chip-kind-select:focus{outline:none;background-color:rgba(var(--lift-rgb), 0.05) !important;border-color:rgba(var(--lift-rgb), 0.28) !important;box-shadow:0 0 0 2px rgba(var(--lift-rgb), 0.06) !important}
 
 /* ── Draft rows ───────────────────────────────────────────────── */
 /* v4.1 Stage 7+ fix: overflow visible 允许 Provider 下拉弹出卡片边界外(原 overflow:hidden 裁剪了下拉);
@@ -4084,17 +4091,17 @@ const IMPORT_CSS = `
 /* Inset bottom box-shadow + outer border = two adjacent 1px horizontal
    lines at the card bottom, mirroring master's "double-line" table
    ending (last-row border stacked with card outer border). */
-.draft-row{background:var(--imp-surface-3);border:1px solid rgba(255,255,255,0.05);border-radius:6px;box-shadow:inset 0 -1px 0 0 rgba(255,255,255,0.05);transition:all 150ms ease;overflow:visible;position:relative;--state-color:rgba(255,255,255,0.4)}
-.draft-row:hover{border-color:rgba(255,255,255,0.14)}
+.draft-row{background:var(--imp-surface-3);border:1px solid rgba(var(--lift-rgb), 0.05);border-radius:6px;box-shadow:inset 0 -1px 0 0 rgba(var(--lift-rgb), 0.05);transition:all 150ms ease;overflow:visible;position:relative;--state-color:rgba(var(--lift-rgb), 0.4)}
+.draft-row:hover{border-color:rgba(var(--lift-rgb), 0.14)}
 .draft-row.selected{border-color:rgba(250, 204, 21,0.22);box-shadow:0 0 0 1px rgba(250, 204, 21,0.06),inset 0 -1px 0 0 rgba(250, 204, 21,0.18);--state-color:rgba(250, 204, 21,0.65)}
 /* 2026-04-23 第七轮:右侧卡片 bg 回滚到原浅色(weak 0.03 / oauth 0.04 / failed 0.05 /
    missing-provider 0.04)。用户决策:右侧弱化保持(卡片不抢眼),左侧 src-line bg 单独加深
    (源文本要让用户一眼能看到选中范围)。不再追求左右 1:1 同色,左右各自承担不同视觉职责。 */
 .draft-row.weak{border-color:#fde047;border-style:dashed;background:rgba(234,179,8,0.03);--state-color:#fde047}
-.draft-row.oauth{border-color:rgba(96,165,250,0.35);background:rgba(96,165,250,0.04);--state-color:rgba(96,165,250,0.65)}
-.draft-row.failed{border-color:rgba(248,113,113,0.4);background:rgba(248,113,113,0.05);box-shadow:0 0 0 1px rgba(248,113,113,0.06),inset 0 -1px 0 0 rgba(248,113,113,0.3);--state-color:rgba(248,113,113,0.7)}
+.draft-row.oauth{border-color:rgba(var(--info-rgb), 0.35);background:rgba(var(--info-rgb), 0.04);--state-color:rgba(var(--info-rgb), 0.65)}
+.draft-row.failed{border-color:rgba(var(--destructive-rgb), 0.4);background:rgba(var(--destructive-rgb), 0.05);box-shadow:0 0 0 1px rgba(var(--destructive-rgb), 0.06),inset 0 -1px 0 0 rgba(var(--destructive-rgb), 0.3);--state-color:rgba(var(--destructive-rgb), 0.7)}
 /* Stage 7+ 规则 1: selected KEY draft 缺 Provider(必填),红框 + 淡红底提示导入会被阻止 */
-.draft-row.missing-provider{border-color:rgba(248,113,113,0.45);background:rgba(248,113,113,0.04);box-shadow:0 0 0 1px rgba(248,113,113,0.08),inset 0 -1px 0 0 rgba(248,113,113,0.3);--state-color:rgba(248,113,113,0.7)}
+.draft-row.missing-provider{border-color:rgba(var(--destructive-rgb), 0.45);background:rgba(var(--destructive-rgb), 0.04);box-shadow:0 0 0 1px rgba(var(--destructive-rgb), 0.08),inset 0 -1px 0 0 rgba(var(--destructive-rgb), 0.3);--state-color:rgba(var(--destructive-rgb), 0.7)}
 
 /* === 2026-05-06: 双向联动视觉 ===
    .draft-row-soft-hover: hover 状态(无论左侧源行触发还是右侧鼠标触发)→ 卡片外发光
@@ -4102,10 +4109,10 @@ const IMPORT_CSS = `
      - 与现有 .draft-row.selected 等的 box-shadow 共存:多 shadow 列表,glow 在最后一段
    .draft-row-pinned: pin 状态(左右都按 pinnedDraft === idx 命中)→ border 加粗
      - border-width 从 1px → 2px,与左侧 .src-line-boxed 的"框框"语义对齐 */
-.draft-row.draft-row-soft-hover{box-shadow:0 0 8px 0 var(--state-color), inset 0 -1px 0 0 rgba(255,255,255,0.05)}
+.draft-row.draft-row-soft-hover{box-shadow:0 0 8px 0 var(--state-color), inset 0 -1px 0 0 rgba(var(--lift-rgb), 0.05)}
 .draft-row.draft-row-soft-hover.selected{box-shadow:0 0 8px 0 var(--state-color), 0 0 0 1px rgba(250, 204, 21,0.06), inset 0 -1px 0 0 rgba(250, 204, 21,0.18)}
 .draft-row.draft-row-soft-hover.failed,
-.draft-row.draft-row-soft-hover.missing-provider{box-shadow:0 0 8px 0 var(--state-color), 0 0 0 1px rgba(248,113,113,0.08), inset 0 -1px 0 0 rgba(248,113,113,0.3)}
+.draft-row.draft-row-soft-hover.missing-provider{box-shadow:0 0 8px 0 var(--state-color), 0 0 0 1px rgba(var(--destructive-rgb), 0.08), inset 0 -1px 0 0 rgba(var(--destructive-rgb), 0.3)}
 /* 2026-05-06 (用户反馈): pin 不仅加粗,也要"亮一点",和左侧 src-line-group-pinned
    的 inset 2px var(--state-color) 视觉同源。直接用 state-color 覆盖原 border-color
    (selected 0.22 → 0.65,oauth/failed 同 var,加粗后更显眼)。 */
@@ -4113,11 +4120,11 @@ const IMPORT_CSS = `
 /* Stage 13.1+: IMPORT 拦截时在被拦 draft 上闪烁(2s 2 个回合),注意焦点落在这一条 */
 .draft-row.flash-warn{animation:draft-flash 1s ease-in-out 2}
 @keyframes draft-flash{
-  0%,100%{box-shadow:0 0 0 1px rgba(248,113,113,0.08)}
-  50%{box-shadow:0 0 0 3px rgba(248,113,113,0.55),0 0 18px rgba(248,113,113,0.45);background:rgba(248,113,113,0.10)}
+  0%,100%{box-shadow:0 0 0 1px rgba(var(--destructive-rgb), 0.08)}
+  50%{box-shadow:0 0 0 3px rgba(var(--destructive-rgb), 0.55),0 0 18px rgba(var(--destructive-rgb), 0.45);background:rgba(var(--destructive-rgb), 0.10)}
 }
 /* Provider 字段 "Required" 提示(FieldRow hint 位置) */
-.provider-required-hint{font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing: 0.05em;color:#fca5a5;white-space:nowrap;text-transform:uppercase}
+.provider-required-hint{font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing: 0.05em;color:var(--destructive-text-soft);white-space:nowrap;text-transform:uppercase}
 /* Stage 14+: action-bar 里可点击的 stat(needs review / missing provider);hover 加下划线暗示可点 */
 .stat-clickable{background:transparent;border:none;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;text-align:left}
 .stat-clickable:hover:not(:disabled){text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
@@ -4126,22 +4133,22 @@ const IMPORT_CSS = `
    vault-page table pattern (dark CardHeader over lighter tbody). The
    bottom border shows only when the body is expanded below — collapsed
    cards just read as a single dark bar. */
-.draft-header{display:flex;align-items:center;gap:0.5rem;padding:0.625rem 0.875rem;cursor:pointer;min-height:42px;background:rgba(0,0,0,0.2);border-top-left-radius:6px;border-top-right-radius:6px}
+.draft-header{display:flex;align-items:center;gap:0.5rem;padding:0.625rem 0.875rem;cursor:pointer;min-height:42px;background:rgba(var(--sink-rgb), 0.2);border-top-left-radius:6px;border-top-right-radius:6px}
 .draft-row:not(.expanded) .draft-header{border-bottom-left-radius:6px;border-bottom-right-radius:6px}
 .draft-row.expanded .draft-header{border-bottom:1px solid var(--imp-line)}
 .check{width:16px;height:16px;border:1.5px solid var(--imp-line-strong);border-radius:3px;display:inline-flex;align-items:center;justify-content:center;background:transparent;flex-shrink:0;cursor:pointer;color:var(--primary-foreground);font-size:10px}
-.check.checked{background:var(--primary);border-color:var(--primary)}
+.check.checked{background:var(--primary);border-color: var(--primary-text)}
 /* Stage 13+: indeterminate 半选态(部分勾选)— 用 primary 淡色 + hyphen 符号 */
-.check.indeterminate{background:rgba(250, 204, 21,0.3);border-color:var(--primary);color:var(--primary-foreground)}
+.check.indeterminate{background:rgba(250, 204, 21,0.3);border-color: var(--primary-text);color:var(--primary-foreground)}
 /* Select all 按钮里的 inline check —— 尺寸稍小,不影响 btn padding 对齐 */
 .check-inline{width:14px;height:14px;font-size:9px}
 .select-all-btn{display:inline-flex;align-items:center;gap:8px}
 
 /* ── Orphans row ─────────────────────────────────────────────── */
-.orphan-chip{display:inline-flex;align-items:center;gap:0.25rem;font-family:var(--font-mono);font-size:11px;padding:3px 8px;border:1px dashed var(--imp-line-strong);background:rgba(0,0,0,0.3);color:var(--imp-text-dim);border-radius:10px}
+.orphan-chip{display:inline-flex;align-items:center;gap:0.25rem;font-family:var(--font-mono);font-size:11px;padding:3px 8px;border:1px dashed var(--imp-line-strong);background:rgba(var(--sink-rgb), 0.3);color:var(--imp-text-dim);border-radius:10px}
 
 /* ── Action bar (bottom) ──────────────────────────────────────── */
-.action-bar{background:rgba(24,24,27,0.92);backdrop-filter:saturate(140%) blur(10px);-webkit-backdrop-filter:saturate(140%) blur(10px);border-top:1px solid var(--imp-line-strong);box-shadow:0 -8px 24px -12px rgba(0,0,0,0.6)}
+.action-bar{background:rgba(var(--bg-rgb), 0.92);backdrop-filter:saturate(140%) blur(10px);-webkit-backdrop-filter:saturate(140%) blur(10px);border-top:1px solid var(--imp-line-strong);box-shadow:0 -8px 24px -12px rgba(var(--scrim-rgb), 0.6)}
 
 /* ── Field editing (expanded draft body) ──────────────────────── */
 /* 2026-04-23 用户反馈第十轮:全局 src/index.css 给 input/select/textarea 加了
@@ -4153,8 +4160,8 @@ const IMPORT_CSS = `
 /* 第十一轮:idle 边框完全透明(输入框在 idle 态跟 .draft-body 100% 融合,肉眼不可见)。
    hover 时边框浮现提示"这里有输入框",focus 时进一步加强。 */
 .field-input{background:transparent !important;border:1px solid transparent !important;border-radius:3px !important;padding:0.375rem 0.5rem;color:var(--foreground);font-family:var(--font-mono) !important;font-size:12.5px;outline:none;width:100%;transition:background 120ms ease,border-color 120ms ease,box-shadow 120ms ease}
-.field-input:hover:not(:focus):not(:disabled){background:rgba(255,255,255,0.025) !important;border-color:rgba(255,255,255,0.10) !important}
-.field-input:focus{background:rgba(255,255,255,0.05) !important;border-color:rgba(255,255,255,0.28) !important;box-shadow:0 0 0 2px rgba(255,255,255,0.06) !important}
+.field-input:hover:not(:focus):not(:disabled){background:rgba(var(--lift-rgb), 0.025) !important;border-color:rgba(var(--lift-rgb), 0.10) !important}
+.field-input:focus{background:rgba(var(--lift-rgb), 0.05) !important;border-color:rgba(var(--lift-rgb), 0.28) !important;box-shadow:0 0 0 2px rgba(var(--lift-rgb), 0.06) !important}
 /* Body reads as the lighter "tbody" surface — inherits --imp-surface-3
    from the outer .draft-row (no extra dark overlay). The header border
    above carries the visual separator. */
@@ -4171,7 +4178,7 @@ const IMPORT_CSS = `
 .field-input-wrap{position:relative;width:100%;min-width:0}
 .field-input-has-reveal{padding-right:28px !important}
 .field-reveal-btn{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:transparent;border:none;cursor:pointer;padding:4px;color:var(--muted-foreground);display:inline-flex;align-items:center;justify-content:center;border-radius:3px}
-.field-reveal-btn:hover{color:var(--foreground);background:rgba(255,255,255,0.04)}
+.field-reveal-btn:hover{color:var(--foreground);background:rgba(var(--lift-rgb), 0.04)}
 /* 2026-04-25 — label column right-aligned so every colon lines up at
    the same x-coordinate, giving values a uniform left-aligned start.
    Colon suffix applied via ::after so JSX call sites stay clean. */
@@ -4185,8 +4192,8 @@ const IMPORT_CSS = `
 /* 规则 4: 非当前 effectiveType 的字段整行灰掉,input 禁止交互 */
 .field-row-disabled{opacity:0.4}
 /* disabled:bg 比 idle 略暗一档(rgba 黑色叠加)区别于活跃输入框 */
-.field-row-disabled .field-input{background:rgba(0,0,0,0.10) !important;cursor:not-allowed;color:var(--imp-text-dim) !important;border-color:rgba(255,255,255,0.04) !important}
-.field-row-disabled .field-input:focus{background:rgba(0,0,0,0.10) !important;border-color:rgba(255,255,255,0.04) !important;box-shadow:none !important}
+.field-row-disabled .field-input{background:rgba(var(--sink-rgb), 0.10) !important;cursor:not-allowed;color:var(--imp-text-dim) !important;border-color:rgba(var(--lift-rgb), 0.04) !important}
+.field-row-disabled .field-input:focus{background:rgba(var(--sink-rgb), 0.10) !important;border-color:rgba(var(--lift-rgb), 0.04) !important;box-shadow:none !important}
 /* v4.1 Stage 5+: Provider multi-select row (替换 Provider FieldRow) */
 .field-row-multi{align-items:start}
 .field-row-multi .field-label{padding-top:6px}
@@ -4197,16 +4204,16 @@ const IMPORT_CSS = `
    input text column below (KIMI ↔ kimi11 ↔ sk-... ↔ https://...). */
 .field-row-multi .provider-ms{padding-left:9px}
 .protocol-multiselect{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-height:28px;position:relative}
-.protocol-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(250, 204, 21,0.08);border:1px solid rgba(250, 204, 21,0.3);border-radius:3px;padding:2px 4px 2px 8px;font-family:var(--font-mono);font-size:11px;color:var(--primary);text-transform:uppercase;letter-spacing: 0.05em;font-weight:700}
-.protocol-chip-x{background:transparent;border:none;color:var(--primary);cursor:pointer;padding:0 3px;font-size:14px;line-height:1;opacity:0.7;font-family:inherit}
-.protocol-chip-x:hover{opacity:1;color:#f87171}
+.protocol-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(250, 204, 21,0.08);border:1px solid rgba(250, 204, 21,0.3);border-radius:3px;padding:2px 4px 2px 8px;font-family:var(--font-mono);font-size:11px;color: var(--primary-text);text-transform:uppercase;letter-spacing: 0.05em;font-weight:700}
+.protocol-chip-x{background:transparent;border:none;color: var(--primary-text);cursor:pointer;padding:0 3px;font-size:14px;line-height:1;opacity:0.7;font-family:inherit}
+.protocol-chip-x:hover{opacity:1;color:var(--destructive-text)}
 .protocol-add-btn{background:transparent;border:1px dashed var(--imp-line-strong);border-radius:3px;color:var(--imp-text-dim);font-family:var(--font-mono);font-size:10.5px;padding:3px 10px;cursor:pointer;letter-spacing: 0.05em}
-.protocol-add-btn:hover{color:var(--foreground);border-color:var(--primary);border-style:solid}
+.protocol-add-btn:hover{color:var(--foreground);border-color: var(--primary-text);border-style:solid}
 .protocol-add-box{position:relative;display:flex;flex-direction:column;flex:1;min-width:180px}
-.protocol-search{background:rgba(0,0,0,0.4);border:1px solid var(--primary);border-radius:3px;padding:0.25rem 0.5rem;color:var(--foreground);font-family:var(--font-mono);font-size:12px;outline:none;width:100%}
-.protocol-dropdown{position:absolute;top:100%;left:0;right:0;margin-top:2px;background:var(--imp-surface-2);border:1px solid var(--imp-line-strong);border-radius:3px;box-shadow:0 4px 12px rgba(0,0,0,0.5);max-height:240px;overflow-y:auto;z-index:100}
-.protocol-option{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--foreground);font-family:var(--font-mono);font-size:12px;padding:0.375rem 0.625rem;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.03)}
-.protocol-option:hover{background:rgba(250, 204, 21,0.08);color:var(--primary)}
+.protocol-search{background:var(--well-recessed);border:1px solid var(--primary);border-radius:3px;padding:0.25rem 0.5rem;color:var(--foreground);font-family:var(--font-mono);font-size:12px;outline:none;width:100%}
+.protocol-dropdown{position:absolute;top:100%;left:0;right:0;margin-top:2px;background:var(--imp-surface-2);border:1px solid var(--imp-line-strong);border-radius:3px;box-shadow:0 4px 12px rgba(var(--scrim-rgb), 0.5);max-height:240px;overflow-y:auto;z-index:100}
+.protocol-option{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--foreground);font-family:var(--font-mono);font-size:12px;padding:0.375rem 0.625rem;cursor:pointer;border-bottom:1px solid rgba(var(--lift-rgb), 0.03)}
+.protocol-option:hover{background:rgba(250, 204, 21,0.08);color: var(--primary-text)}
 .protocol-option:last-child{border-bottom:none}
 .protocol-option-custom{color:#86efac;font-style:italic}
 .protocol-option-custom:hover{background:rgba(134,239,172,0.1);color:#86efac}
@@ -4218,7 +4225,7 @@ const IMPORT_CSS = `
    idle: transparent + 低 α 浅金边 + 暗金文字(融入卡片);
    hover: 淡金 bg + 稍明显边 + 文字恢复原金色(明确"正在被指向"),与 field-input hover 视觉档位一致。 */
 .baseurl-official-btn{flex-shrink:0;background:transparent;border:1px solid rgba(250, 204, 21,0.18);border-radius:3px;color:rgba(202,165,17,0.75);font-family:var(--font-mono);font-size:10.5px;padding:3px 8px;cursor:pointer;letter-spacing: 0.05em;text-transform:uppercase;white-space:nowrap;transition:all 120ms ease}
-.baseurl-official-btn:hover:not(.is-disabled){background:rgba(250, 204, 21,0.05);border-color:rgba(250, 204, 21,0.32);color:var(--primary)}
+.baseurl-official-btn:hover:not(.is-disabled){background:rgba(250, 204, 21,0.05);border-color:rgba(250, 204, 21,0.32);color: var(--primary-text)}
 .baseurl-official-btn.is-disabled{border-color:var(--imp-line-strong);color:var(--imp-text-dim);opacity:0.5;cursor:not-allowed}
 /* v4.1 Stage 9+: Pending OAuth handoffs (Done page) */
 /* v4.1 Stage 10+: Done page — 按 design_iterations/user_bulk_import_done_3.html 模板 */
@@ -4227,9 +4234,9 @@ const IMPORT_CSS = `
 .done-summary .done-stat-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.25rem}
 .done-stat{background:var(--imp-surface-2);border:1px solid var(--imp-line);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px}
 .done-stat-ico{font-family:var(--font-mono);font-size:14px;font-weight:700;width:16px;text-align:center}
-.done-stat-ico-ok{color:#4ade80}
-.done-stat-ico-sky{color:#60a5fa}
-.done-stat-ico-red{color:#f87171}
+.done-stat-ico-ok{color:var(--success-text)}
+.done-stat-ico-sky{color:var(--info-text)}
+.done-stat-ico-red{color:var(--destructive-text)}
 .done-stat-ico-dim{color:var(--imp-text-dim)}
 .done-stat-lbl{font-family:var(--font-mono);font-size:10.5px;font-weight:600;letter-spacing: 0.05em;text-transform:uppercase;color:var(--imp-text-dim)}
 .done-stat-val{font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--foreground);margin-left:auto;line-height:1}
@@ -4243,41 +4250,41 @@ const IMPORT_CSS = `
 .done-rows{display:flex;flex-direction:column;gap:6px;margin-bottom:0.75rem}
 .done-row{background:var(--imp-surface-3);border:1px solid var(--imp-line-strong);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:12px}
 .done-row-imported{border-color:rgba(16,185,129,0.22);background:linear-gradient(90deg,rgba(16,185,129,0.04) 0%,var(--imp-surface-3) 40%)}
-.done-row-failed{border-color:rgba(248,113,113,0.3);background:rgba(248,113,113,0.04)}
+.done-row-failed{border-color:rgba(var(--destructive-rgb), 0.3);background:rgba(var(--destructive-rgb), 0.04)}
 .done-row-idx{color:var(--imp-text-dim);width:26px;font-size:12px}
 .done-row-preview{flex:1;color:var(--foreground);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .done-row-alias{color:var(--foreground);font-weight:600}
 .done-row-alias-mono{color:var(--imp-text-dim);font-size:12px;margin-left:auto}
-.done-row-err-code{color:#fca5a5;font-size:11.5px;font-weight:700;letter-spacing: 0.05em}
+.done-row-err-code{color:var(--destructive-text-soft);font-size:11.5px;font-weight:700;letter-spacing: 0.05em}
 .done-row-err-msg{font-family:var(--font-sans);color:var(--imp-text-dim);font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* Chip variants used on Done rows */
-.chip-failed{color:#fca5a5;background:rgba(248,113,113,0.08);border-color:rgba(248,113,113,0.3)}
+.chip-failed{color:var(--destructive-text-soft);background:rgba(var(--destructive-rgb), 0.08);border-color:rgba(var(--destructive-rgb), 0.3)}
 .chip-imported{color:#6ee7b7;background:rgba(16,185,129,0.08);border-color:rgba(16,185,129,0.3)}
-.chip-skipped{color:var(--imp-text-dim);background:rgba(255,255,255,0.03)}
+.chip-skipped{color:var(--imp-text-dim);background:rgba(var(--lift-rgb), 0.03)}
 
 /* OAuth notice banner */
-.oauth-notice{margin:0 0 0.75rem;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.25);border-left:3px solid #60a5fa;border-radius:6px}
-.oauth-notice-ico{color:#60a5fa;font-size:16px;line-height:1.3;flex-shrink:0}
+.oauth-notice{margin:0 0 0.75rem;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;background:rgba(var(--info-rgb), 0.06);border:1px solid rgba(var(--info-rgb), 0.25);border-left:3px solid #60a5fa;border-radius:6px}
+.oauth-notice-ico{color:var(--info-text);font-size:16px;line-height:1.3;flex-shrink:0}
 .oauth-notice-body{flex:1}
 .oauth-notice-title{font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing: 0.05em;text-transform:uppercase;color:#93c5fd;margin-bottom:4px}
 .oauth-notice-desc{font-family:var(--font-sans);font-size:12.5px;line-height:1.55;color:var(--foreground)}
 .oauth-notice-desc strong{color:#93c5fd}
 
 /* OAuth handoff card (带 step 序号 + Open login page 按钮) */
-.oauth-card{background:var(--imp-surface-3);border:1px solid rgba(96,165,250,0.25);border-radius:8px;overflow:hidden;position:relative;padding:0}
-.oauth-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#60a5fa;box-shadow:0 0 8px rgba(96,165,250,0.35)}
+.oauth-card{background:var(--imp-surface-3);border:1px solid rgba(var(--info-rgb), 0.25);border-radius:8px;overflow:hidden;position:relative;padding:0}
+.oauth-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#60a5fa;box-shadow:0 0 8px rgba(var(--info-rgb), 0.35)}
 .oauth-card.is-unsupported{border-color:var(--imp-line-strong);opacity:0.75}
 .oauth-card.is-unsupported::before{background:var(--imp-line-strong);box-shadow:none}
 .oauth-card-head{padding:12px 14px 10px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--imp-line);flex-wrap:wrap}
-.oauth-step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.4);color:#60a5fa;font-family:var(--font-mono);font-size:11px;font-weight:700;flex-shrink:0}
+.oauth-step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(var(--info-rgb), 0.12);border:1px solid rgba(var(--info-rgb), 0.4);color:var(--info-text);font-family:var(--font-mono);font-size:11px;font-weight:700;flex-shrink:0}
 .oauth-card-title{font-family:var(--font-mono);font-size:13px;font-weight:700;letter-spacing: 0.05em;color:var(--foreground)}
 .oauth-card-title-dim{color:var(--imp-text-dim);font-weight:500;letter-spacing:0.04em}
 .oauth-meta-grid{padding:10px 14px 10px;display:grid;grid-template-columns:80px 1fr;gap:4px 14px;font-family:var(--font-mono);font-size:12px}
 .oauth-meta-k{color:var(--imp-text-dim);letter-spacing: 0.05em;text-transform:uppercase;font-size:10.5px;align-self:center}
 .oauth-meta-v{color:var(--foreground)}
 .oauth-meta-v-ok{color:#6ee7b7}
-.oauth-cli{margin:0 14px 10px;background:rgba(0,0,0,0.4);border:1px solid var(--imp-line);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:10px;font-family:var(--font-mono);font-size:12.5px}
+.oauth-cli{margin:0 14px 10px;background:var(--well-recessed);border:1px solid var(--imp-line);border-radius:6px;padding:10px 12px;display:flex;align-items:center;gap:10px;font-family:var(--font-mono);font-size:12.5px}
 .oauth-cli-cmd{flex:1;color:#86efac;user-select:all;white-space:nowrap;overflow-x:auto}
 .oauth-cli-prompt{color:var(--imp-text-dim);user-select:none;margin-right:4px}
 .oauth-cli-copy{flex-shrink:0;background:transparent;border:1px solid var(--imp-line-strong);color:var(--imp-text-dim);padding:4px 10px;border-radius:4px;font-family:var(--font-mono);font-size:10px;letter-spacing: 0.05em;text-transform:uppercase;font-weight:600;cursor:pointer}
@@ -4285,15 +4292,15 @@ const IMPORT_CSS = `
 .oauth-actions{padding:0 14px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .oauth-actions-note{font-family:var(--font-sans);font-size:11.5px;color:var(--imp-text-dim);letter-spacing:0.02em;flex:1;min-width:200px}
 .oauth-actions-btns{display:flex;gap:8px;flex-shrink:0}
-.btn-open-login{background:#60a5fa;color:#0c1e3a;border:1px solid rgba(96,165,250,0.7);border-radius:4px;padding:6px 12px;font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing: 0.05em;text-transform:uppercase;cursor:pointer;box-shadow:0 0 0 1px rgba(96,165,250,0.15),0 6px 20px -10px rgba(96,165,250,0.6);transition:all 180ms ease}
+.btn-open-login{background:#60a5fa;color:#0c1e3a;border:1px solid rgba(var(--info-rgb), 0.7);border-radius:4px;padding:6px 12px;font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing: 0.05em;text-transform:uppercase;cursor:pointer;box-shadow:0 0 0 1px rgba(var(--info-rgb), 0.15),0 6px 20px -10px rgba(var(--info-rgb), 0.6);transition:all 180ms ease}
 .btn-open-login:hover{background:#93c5fd;transform:translateY(-1px)}
 /* Stage 8+ 规则 2: revert 用中性灰(区分 use official 的 primary gold,但不抢视觉) */
 .baseurl-official-btn.is-revert{border-color:var(--imp-line-strong);color:var(--imp-text-dim)}
-.baseurl-official-btn.is-revert:hover:not(.is-disabled){background:rgba(255,255,255,0.04);color:var(--foreground);box-shadow:none}
+.baseurl-official-btn.is-revert:hover:not(.is-disabled){background:rgba(var(--lift-rgb), 0.04);color:var(--foreground);box-shadow:none}
 
 /* ── Confidence bar ───────────────────────────────────────────── */
 /* 2026-04-23: 进度条颜色与百分比一同弱化,跟卡片整体视觉强度对齐 */
-.conf-bar{width:64px;height:3px;background:rgba(255,255,255,0.05);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0}
+.conf-bar{width:64px;height:3px;background:rgba(var(--lift-rgb), 0.05);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0}
 .conf-bar>span{display:block;height:100%;background:rgba(250, 204, 21,0.45)}
 
 /* ── Provider suggest bar ─────────────────────────────────────── */
@@ -4302,8 +4309,8 @@ const IMPORT_CSS = `
    selectors but swapping tokens. */
 .suggest-bar{background:rgba(250, 204, 21,0.04);border-bottom:1px solid var(--imp-line)}
 /* Stage 14+: suggest 横幅左侧关闭按钮(小圆 × 按钮,dismiss 当前 provider 建议) */
-.suggest-close{width:20px;height:20px;border-radius:50%;border:1px solid rgba(250, 204, 21,0.3);background:transparent;color:var(--primary);font-family:var(--font-mono);font-size:14px;line-height:1;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:0;margin-right:4px;transition:all 120ms ease}
-.suggest-close:hover{background:rgba(250, 204, 21,0.12);border-color:var(--primary);color:#fde047}
+.suggest-close{width:20px;height:20px;border-radius:50%;border:1px solid rgba(250, 204, 21,0.3);background:transparent;color: var(--primary-text);font-family:var(--font-mono);font-size:14px;line-height:1;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:0;margin-right:4px;transition:all 120ms ease}
+.suggest-close:hover{background:rgba(250, 204, 21,0.12);border-color: var(--primary-text);color:#fde047}
 /* Darker yellow (#ca8a04 = amber-600) than the bright --primary
    (#facc15) — these two bulk-action buttons (Apply-to-all + the big
    Import commit) carry heavier consequences than modal Save / Unlock,
@@ -4326,15 +4333,15 @@ const IMPORT_CSS = `
 .endpoint-group{margin-bottom:0.5rem}
 
 /* ── Confirm modal (Stage 13+: Clear / Re-PARSE) ──────────────── */
-.confirm-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:1000;animation:confirm-fade-in 120ms ease-out}
-.confirm-modal{background:var(--imp-surface-2);border:1px solid var(--imp-line-strong);border-radius:8px;padding:24px 28px;min-width:420px;max-width:520px;box-shadow:0 20px 60px -20px rgba(0,0,0,0.7);animation:confirm-pop-in 140ms ease-out}
+.confirm-modal-overlay{position:fixed;inset:0;background:rgba(var(--scrim-rgb), 0.55);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:1000;animation:confirm-fade-in 120ms ease-out}
+.confirm-modal{background:var(--imp-surface-2);border:1px solid var(--imp-line-strong);border-radius:8px;padding:24px 28px;min-width:420px;max-width:520px;box-shadow:0 20px 60px -20px rgba(var(--scrim-rgb), 0.7);animation:confirm-pop-in 140ms ease-out}
 .confirm-modal-title{font-family:var(--font-mono);font-size:15px;font-weight:700;letter-spacing:0.02em;color:var(--foreground);margin-bottom:8px}
 .confirm-modal-desc{font-family:var(--font-sans);font-size:12.5px;line-height:1.6;color:var(--foreground);margin-bottom:18px}
 .confirm-modal-btns{display:flex;justify-content:flex-end;gap:8px}
 @keyframes confirm-fade-in{from{opacity:0}to{opacity:1}}
 @keyframes confirm-pop-in{from{opacity:0;transform:translateY(-6px) scale(0.98)}to{opacity:1;transform:none}}
 /* Danger variant for destructive confirms (Clear) */
-.btn-danger{background:#dc2626;color:#fff;border:1px solid rgba(220,38,38,0.7);border-radius:6px;cursor:pointer;font-family:var(--font-mono);font-weight:700;letter-spacing: 0.05em;text-transform:uppercase}
+.btn-danger{background:var(--destructive);color:var(--fixed-white);border:1px solid rgba(220,38,38,0.7);border-radius:6px;cursor:pointer;font-family:var(--font-mono);font-weight:700;letter-spacing: 0.05em;text-transform:uppercase}
 .btn-danger:hover{background:#ef4444}
 `;
 

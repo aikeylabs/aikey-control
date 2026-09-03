@@ -98,7 +98,7 @@ export function BrandWordmark({
         aria-label="AiKey"
         style={{ display: 'block' }}
       >
-        <path d={WORDMARK_PATH} fill="#ffffff" />
+        <path d={WORDMARK_PATH} fill="var(--brand-wordmark)" />
         <path d={WORDMARK_DOT_PATH} fill="var(--primary)" />
       </svg>
       {tagline && (
@@ -136,9 +136,9 @@ export function BrandMark({ size = 32, className = '' }: { size?: number; classN
         width: size,
         height: size,
         borderRadius: Math.round(size * 0.25),
-        background: '#0c0c0e',
+        background: 'var(--code-bg)',
         border: '1.5px solid var(--primary)',
-        boxShadow: '0 0 10px rgba(250, 204, 21, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+        boxShadow: '0 0 10px rgba(var(--primary-rgb), 0.10), inset 0 1px 0 rgba(var(--lift-rgb), 0.04)',
       }}
       aria-hidden="true"
     >
@@ -206,7 +206,7 @@ export function BrandLockup({
         width="30.5"
         height="30.5"
         rx="7.25"
-        fill="#0c0c0e"
+        fill="var(--code-bg)"
         stroke="var(--primary)"
         strokeWidth="1.5"
         filter="url(#brand-chip-glow)"
@@ -215,9 +215,10 @@ export function BrandLockup({
       <svg x="8" y="11.4" width="16" height="9.2" viewBox={BRAND_AK_VIEWBOX}>
         <path d={BRAND_AK_PATH} fill="var(--primary)" />
       </svg>
-      {/* "AiKey" wordmark (white) + yellow i-dot. */}
+      {/* "AiKey" wordmark + accent i-dot. Sits on the sidebar/page ground, not on
+          the brand chip, so it must follow the theme — see --brand-wordmark. */}
       <svg x="39" y="1.24" width="56.4" height="22.8" viewBox="0 0 47 19">
-        <path d={WORDMARK_PATH} fill="#ffffff" />
+        <path d={WORDMARK_PATH} fill="var(--brand-wordmark)" />
         <path d={WORDMARK_DOT_PATH} fill="var(--primary)" />
       </svg>
       {/* Tagline. */}

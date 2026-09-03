@@ -79,7 +79,7 @@ export function PageTitleTile() {
       style={{
         background: 'var(--card)',
         border: '1px solid var(--border)',
-        color: 'var(--primary)',
+        color: 'var(--primary-text)',
       }}
     >
       <PageTitleGlyph />
@@ -105,7 +105,7 @@ export function PageHeader({ title, description, actions, titleHint, icon }: Pag
               background: 'var(--card)',
               border: '1px solid var(--border)',
               // NavGlyph strokes with currentColor, so the accent is set here.
-              color: 'var(--primary)',
+              color: 'var(--primary-text)',
             }}
           >
             <NavGlyph name={glyph} className="w-4 h-4" />

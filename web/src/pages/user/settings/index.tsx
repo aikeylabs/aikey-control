@@ -698,7 +698,7 @@ export default function SettingsPage() {
               spellCheck={false}
               className="flex-1"
               style={{
-                background: '#000000',
+                background: 'var(--input-well)',
                 border: '1px solid var(--border)',
                 borderRadius: 6,
                 color: accountCopyText ? 'var(--foreground)' : 'var(--muted-foreground)',
@@ -793,7 +793,7 @@ export default function SettingsPage() {
               </span>
             )}
             {usageTimeZoneSave.kind === 'ok' && (
-              <span style={{ color: '#4ade80' }}>{t('settings.usageTimeZone.saved')}</span>
+              <span style={{ color: 'var(--success-text)' }}>{t('settings.usageTimeZone.saved')}</span>
             )}
             {usageTimeZoneSave.kind === 'fail' && (
               <span role="alert" style={{ color: '#ef4444' }}>
@@ -855,7 +855,7 @@ export default function SettingsPage() {
             spellCheck={false}
             className="w-full mb-2"
             style={{
-              background: '#000000',
+              background: 'var(--input-well)',
               border: '1px solid var(--border)',
               borderRadius: 6,
               padding: '10px 12px',
@@ -882,7 +882,7 @@ export default function SettingsPage() {
               </span>
             )}
             {probeStatus.kind === 'ok' && saveStatus.kind === 'idle' && (
-              <span style={{ color: '#4ade80' }}>
+              <span style={{ color: 'var(--success-text)' }}>
                 {t('settings.controlUrl.statusReachable', {
                   status: probeStatus.status,
                   ms: probeStatus.elapsedMs,
@@ -900,7 +900,7 @@ export default function SettingsPage() {
               </span>
             )}
             {saveStatus.kind === 'ok' && (
-              <span style={{ color: '#4ade80' }}>
+              <span style={{ color: 'var(--success-text)' }}>
                 {t('settings.controlUrl.statusSaved')}
               </span>
             )}
@@ -984,13 +984,13 @@ export default function SettingsPage() {
               <div
                 className="flex items-center justify-between"
                 style={{
-                  background: '#000000',
+                  background: 'var(--input-well)',
                   border: '1px solid var(--border)',
                   borderRadius: 6,
                   padding: '10px 12px',
                   fontFamily: 'var(--font-mono)',
                   fontSize: 13,
-                  color: 'var(--primary)',
+                  color: 'var(--primary-text)',
                 }}
               >
                 <span>{COMPLIANCE_INSTALL_CMD}</span>
@@ -1053,7 +1053,7 @@ export default function SettingsPage() {
                       width: 20,
                       height: 20,
                       borderRadius: '50%',
-                      background: '#ffffff',
+                      background: 'var(--fixed-white)',
                       transition: 'left 0.15s ease',
                     }}
                   />
@@ -1075,7 +1075,7 @@ export default function SettingsPage() {
                   </span>
                 )}
                 {complianceSave.kind === 'applied' && (
-                  <span style={{ color: '#4ade80' }}>
+                  <span style={{ color: 'var(--success-text)' }}>
                     {t('settings.compliance.statusApplied')}
                   </span>
                 )}
@@ -1127,7 +1127,7 @@ export default function SettingsPage() {
                           width: 20,
                           height: 20,
                           borderRadius: '50%',
-                          background: '#ffffff',
+                          background: 'var(--fixed-white)',
                           transition: 'left 0.15s ease',
                         }}
                       />
@@ -1145,7 +1145,7 @@ export default function SettingsPage() {
                       </span>
                     )}
                     {recordAllowSave.kind === 'applied' && (
-                      <span style={{ color: '#4ade80' }}>{t('settings.compliance.statusApplied')}</span>
+                      <span style={{ color: 'var(--success-text)' }}>{t('settings.compliance.statusApplied')}</span>
                     )}
                     {recordAllowSave.kind === 'locked' && (
                       <span style={{ color: '#f59e0b' }}>{t('settings.compliance.statusLocked')}</span>
@@ -1178,7 +1178,7 @@ export default function SettingsPage() {
                       autoComplete="current-password"
                       className="flex-1"
                       style={{
-                        background: '#000000',
+                        background: 'var(--input-well)',
                         border: '1px solid var(--border)',
                         borderRadius: 6,
                         padding: '8px 10px',
@@ -1238,13 +1238,13 @@ export default function SettingsPage() {
           <div
             className="flex items-center justify-between"
             style={{
-              background: '#000000',
+              background: 'var(--input-well)',
               border: '1px solid var(--border)',
               borderRadius: 6,
               padding: '10px 12px',
               fontFamily: 'var(--font-mono)',
               fontSize: 13,
-              color: 'var(--primary)',
+              color: 'var(--primary-text)',
             }}
           >
             <span>{masterPwCmd}</span>
@@ -1275,7 +1275,7 @@ export default function SettingsPage() {
           className="rounded-md"
           style={{
             background: 'var(--card)',
-            border: '1px solid rgba(239, 68, 68, 0.2)',
+            border: '1px solid rgba(var(--destructive-rgb), 0.2)',
             padding: 24,
           }}
         >
@@ -1305,7 +1305,7 @@ export default function SettingsPage() {
             className="text-xs px-4 py-1.5 rounded"
             style={{
               background: '#ef4444',
-              color: '#ffffff',
+              color: 'var(--fixed-white)',
               border: 'none',
               fontFamily: 'var(--font-mono)',
               fontWeight: 600,
@@ -1646,7 +1646,7 @@ function UpstreamProxyCard() {
                   ) || t('settings.upstreamProxy.layerUnset')}
                 </span>
                 {r.active && (
-                  <span style={{ color: '#4ade80', flexShrink: 0 }}>{t('settings.upstreamProxy.layerActive')}</span>
+                  <span style={{ color: 'var(--success-text)', flexShrink: 0 }}>{t('settings.upstreamProxy.layerActive')}</span>
                 )}
               </div>
             ))}
@@ -1677,7 +1677,7 @@ function UpstreamProxyCard() {
                       {accounts.length > 0 ? accounts.join('、') : t('settings.upstreamProxy.layerUnset')}
                     </span>
                     {active && (
-                      <span style={{ color: '#4ade80', flexShrink: 0 }}>{t('settings.upstreamProxy.layerActive')}</span>
+                      <span style={{ color: 'var(--success-text)', flexShrink: 0 }}>{t('settings.upstreamProxy.layerActive')}</span>
                     )}
                   </div>
                   <p style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 6, marginBottom: 0 }}>
@@ -1745,7 +1745,7 @@ function UpstreamProxyCard() {
           setSave({ kind: 'idle' });
         };
         const sharedStyle = {
-          background: '#000000',
+          background: 'var(--input-well)',
           border: '1px solid var(--border)',
           borderRadius: 6,
           padding: '10px 12px',
@@ -1790,7 +1790,7 @@ function UpstreamProxyCard() {
         {save.kind === 'saving' && (
           <span style={{ color: 'var(--muted-foreground)' }}>{t('settings.upstreamProxy.statusSaving')}</span>
         )}
-        {save.kind === 'ok' && <span style={{ color: '#4ade80' }}>{t('settings.upstreamProxy.statusSaved')}</span>}
+        {save.kind === 'ok' && <span style={{ color: 'var(--success-text)' }}>{t('settings.upstreamProxy.statusSaved')}</span>}
         {save.kind === 'fail' && (
           <span style={{ color: '#ef4444' }}>{t('settings.upstreamProxy.statusFail', { msg: save.message })}</span>
         )}
@@ -1805,7 +1805,7 @@ function UpstreamProxyCard() {
           <span style={{ color: 'var(--muted-foreground)' }}>{t('settings.upstreamProxy.statusProbing')}</span>
         )}
         {save.kind === 'idle' && probe.kind === 'ok' && (
-          <span style={{ color: '#4ade80' }}>
+          <span style={{ color: 'var(--success-text)' }}>
             {t('settings.upstreamProxy.statusReachable', { status: probe.status, ms: probe.ms })}
           </span>
         )}

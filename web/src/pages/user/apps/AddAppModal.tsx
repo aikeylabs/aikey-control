@@ -155,7 +155,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
       aria-modal="true"
       aria-labelledby="add-app-title"
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)' }}
+      style={{ background: 'var(--overlay-sink)', backdropFilter: 'blur(2px)' }}
       onClick={onClose}
     >
       <div
@@ -256,7 +256,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                   className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider disabled:opacity-50"
                   style={{
                     background: '#facc15',
-                    color: '#18181b',
+                    color: 'var(--primary-foreground)',
                   }}
                 >
                   {unlockMut.isPending ? t('apps.unlocking') : t('apps.unlock')}

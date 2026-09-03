@@ -70,7 +70,7 @@ export function ModelMappingBanner() {
         fontFamily: 'var(--font-mono)',
       }}
     >
-      <span aria-hidden="true" style={{ color: 'var(--primary)' }}>▲</span>
+      <span aria-hidden="true" style={{ color: 'var(--primary-text)' }}>▲</span>
       <span style={{ flex: 1 }}>
         {reason}
         {digest && (

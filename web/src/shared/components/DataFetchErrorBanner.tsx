@@ -182,7 +182,7 @@ export function DataFetchErrorBanner() {
         <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px] font-mono">
           <span
             className="px-1.5 py-0.5 rounded-sm"
-            style={{ backgroundColor: 'rgba(248,113,113,0.12)', color: '#f87171' }}
+            style={{ backgroundColor: 'rgba(var(--destructive-rgb), 0.12)', color: 'var(--destructive-text)' }}
           >
             {first.code}
           </span>
