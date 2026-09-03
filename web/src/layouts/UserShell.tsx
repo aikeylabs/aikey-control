@@ -13,6 +13,7 @@ import { userAccountsApi } from '@/shared/api/user/accounts';
 // vite alias — one canonical copy, same as userAccountsApi above.
 import { isTeamTokenRejected } from '@/shared/api/user/team-session';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
+import { ThemeToggle } from '@/shared/ui/ThemeToggle';
 import { SeatPendingBanner } from '@/shared/components/SeatPendingBanner';
 import { DataFetchErrorBanner } from '@/shared/components/DataFetchErrorBanner';
 import { memberIdentity } from '@/shared/utils/member-identity';
@@ -1259,7 +1260,7 @@ export function UserShell() {
              request: "立体感 对齐 master"). A rightward drop-shadow
              lifts the rail off the main content so the divide reads
              as volume, not just a 1px hairline. */
-          boxShadow: '4px 0 24px rgba(0,0,0,0.5)',
+          boxShadow: 'var(--shadow-panel)',
         }}
       >
         {/* Brand row — h-16 centered logo + the yellow top-glow line
@@ -1683,6 +1684,11 @@ export function UserShell() {
                 {t('userShell.backToSimple')}
               </button>
             )}
+            {/* Light/dark switch (2026-09-03). Sits beside the language
+                switcher because both are display preferences rather than
+                actions on data — grouping them keeps the action cluster to
+                the right unambiguous. Dark stays the default. */}
+            <ThemeToggle />
             <LanguageSwitcher />
             {/* Phase 4G (2026-06-01): top-bar Settings entry. Gear icon-
                 only button, ghost variant so it sits visually quieter
@@ -1700,7 +1706,7 @@ export function UserShell() {
             <button
               onClick={() => openPersonalPage('/user/invites')}
               className="btn btn-outline text-[10px] px-3 py-1.5 flex items-center gap-1.5"
-              style={{ borderColor: 'rgba(250,204,21,0.3)', color: 'var(--primary)' }}
+              style={{ borderColor: 'rgba(250,204,21,0.3)', color: 'var(--primary-text)' }}
             >
               {/* Icon size bumped from w-3.5 to w-4 (2026-04-22) to match
                   nav-sidebar icons. Prior 3.5 made the Invite glyph look

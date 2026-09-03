@@ -31,6 +31,58 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
+    <!--
+      Theme boot (2026-09-03) — runs BEFORE first paint so a light-mode machine
+      never sees a flash of dark.
+
+      🔴 DARK IS THE ABSENT STATE. This only ever ADDS data-theme="light"; the
+      dark palette is what src/index.css declares on bare :root. So if this
+      script is skipped, blocked by CSP, or throws, the console renders exactly
+      what it renders today. That is the whole safety argument for adding a
+      second theme without touching the first.
+
+      Storage can THROW (Safari private mode, some embedded webviews), not just
+      return null — hence the guards. Any failure degrades to "no preference",
+      which means follow the OS, which means dark unless the OS says light.
+
+      Mirrors src/shared/utils/theme.ts, which owns this logic for the React
+      side. The duplication is unavoidable: a fetched module cannot beat first
+      paint. Keep the storage key and the attribute in sync between the two.
+    -->
+    <script>
+      (function () {
+        var KEY = 'aikey-theme';
+        var el = document.documentElement;
+        function stored() {
+          try {
+            var v = localStorage.getItem(KEY);
+            return v === 'light' || v === 'dark' ? v : null;
+          } catch (e) {
+            return null;
+          }
+        }
+        function apply(theme) {
+          if (theme === 'light') el.setAttribute('data-theme', 'light');
+          else el.removeAttribute('data-theme');
+          var m = document.querySelector('meta[name="theme-color"]:not([media])');
+          if (m) m.setAttribute('content', theme === 'light' ? '#ecebe9' : '#18181b');
+        }
+        var mq = null;
+        try {
+          mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+        } catch (e) {
+          mq = null;
+        }
+        apply(stored() || (mq && mq.matches ? 'light' : 'dark'));
+        if (mq) {
+          var onChange = function (e) {
+            if (stored() === null) apply(e.matches ? 'light' : 'dark');
+          };
+          if (mq.addEventListener) mq.addEventListener('change', onChange);
+          else if (mq.addListener) mq.addListener(onChange);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

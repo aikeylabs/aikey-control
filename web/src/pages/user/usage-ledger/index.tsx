@@ -52,7 +52,9 @@ const PROVIDER_COLORS: Record<string, string> = {
   gemini: '#4ade80',
   google: '#4ade80',
 };
-const IDLE_COLOR = '#52525b';
+// Chart neutral. Tokenised so the series scale follows the theme; the dark
+// value is the #52525b it replaced.
+const IDLE_COLOR = 'var(--border-strong)';
 function providerColor(name: string): string {
   return PROVIDER_COLORS[(name || '').toLowerCase()] ?? IDLE_COLOR;
 }
@@ -60,7 +62,16 @@ function providerColor(name: string): string {
 // Fallback palette for the "by key" list — keys are identified by alias /
 // OAuth identity, not provider, so we use the one-gold + zinc-gradient
 // scheme when we can't map back to a provider.
-const KEY_PALETTE = ['#ca8a04', '#71717a', '#52525b', '#a1a1aa', '#3f3f46', '#d4d4d8'];
+// Categorical scale for per-key series. Ordered light->dark in DARK mode;
+// each token flips with the theme so the ordering survives in light.
+const KEY_PALETTE = [
+  'var(--primary-dim)',
+  'var(--faint-foreground)',
+  'var(--border-strong)',
+  'var(--muted-foreground)',
+  'var(--surface-inset)',
+  'var(--soft-foreground)',
+];
 
 // First-party app slugs hardcoded for the "INTERNAL" badge on the "Usage
 // By App" chart (2026-05-25). MUST stay in sync with the Rust source of
@@ -662,9 +673,9 @@ export default function UserUsageLedgerPage() {
                   <span
                     className="dot"
                     style={{
-                      background: '#71717a',
+                      background: 'var(--faint-foreground)',
                       // Dashed preview fragment to echo the stroke style below.
-                      boxShadow: 'inset 0 0 0 1px #71717a',
+                      boxShadow: 'inset 0 0 0 1px var(--faint-foreground)',
                     }}
                   />
                   {t('usageLedger.legendRequests')}
@@ -760,7 +771,7 @@ export default function UserUsageLedgerPage() {
                       type="monotone"
                       dataKey="request_count"
                       name="Requests"
-                      stroke="#71717a"
+                      stroke="var(--faint-foreground)"
                       strokeWidth={1.4}
                       strokeDasharray="4 2"
                       dot={false}
@@ -843,7 +854,7 @@ export default function UserUsageLedgerPage() {
                       {!idle && (
                         <div
                           className="mt-1.5 h-2 rounded-sm"
-                          style={{ background: 'rgba(255,255,255,0.04)', overflow: 'hidden' }}
+                          style={{ background: 'rgba(var(--lift-rgb), 0.04)', overflow: 'hidden' }}
                         >
                           <span
                             className="block h-full rounded-sm"
@@ -1236,7 +1247,7 @@ const USAGE_CSS = `
 .usage-page .seg {
   display: inline-flex;
   padding: 2px;
-  background: rgba(0,0,0,0.25);
+  background: rgba(var(--sink-rgb), 0.25);
   border: 1px solid var(--border);
   border-radius: 6px;
 }
@@ -1351,7 +1362,7 @@ const USAGE_CSS = `
   position: relative;
   height: 10px;
   border-radius: 3px;
-  background: rgba(255,255,255,0.04);
+  background: rgba(var(--lift-rgb), 0.04);
   overflow: hidden;
 }
 .usage-page .key-bar > span {

@@ -35,11 +35,15 @@ export default {
         sans: ['Inter', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],
       },
+      // Themeable radius (2026-09-04). These were hardcoded 2/4/4/6px, so every
+      // `rounded-*` class in the app ignored the theme. The tokens' DARK values
+      // are exactly those numbers, so dark geometry is unchanged; light
+      // redefines them (8/10/12/16px) to match the reference design.
       borderRadius: {
-        sm: '2px',
-        DEFAULT: '4px',
-        md: '4px',
-        lg: '6px',
+        sm: 'var(--rad-sm)',
+        DEFAULT: 'var(--rad)',
+        md: 'var(--rad-md)',
+        lg: 'var(--rad-lg)',
       },
       boxShadow: {
         card: 'var(--shadow-sm)',

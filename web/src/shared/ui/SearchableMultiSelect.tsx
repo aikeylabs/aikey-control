@@ -158,7 +158,7 @@ export function SearchableMultiSelect({
             style={{
               padding: '2px 4px 2px 8px',
               background: 'rgba(250,204,21,0.1)',
-              color: 'var(--primary)',
+              color: 'var(--primary-text)',
               border: '1px solid rgba(250,204,21,0.35)',
               fontSize: 11,
               letterSpacing: '0.04em',
@@ -221,7 +221,7 @@ export function SearchableMultiSelect({
           style={{
             backgroundColor: 'var(--card)',
             borderColor: 'var(--border)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            boxShadow: '0 8px 32px rgba(var(--scrim-rgb), 0.5)',
           }}
         >
           <div className="px-2 py-2" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -234,7 +234,7 @@ export function SearchableMultiSelect({
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={handleKeyDown}
               style={{
-                backgroundColor: 'rgba(0,0,0,0.2)',
+                backgroundColor: 'rgba(var(--sink-rgb), 0.2)',
                 borderColor: 'var(--border)',
                 color: 'var(--foreground)',
                 fontFamily: 'var(--font-mono, ui-monospace, monospace)',

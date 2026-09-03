@@ -59,9 +59,9 @@ export default function UserReferralsPage() {
 
         <div
           className="rounded border p-3 flex items-center justify-between gap-3"
-          style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderColor: 'var(--border)' }}
+          style={{ backgroundColor: 'rgba(var(--sink-rgb), 0.3)', borderColor: 'var(--border)' }}
         >
-          <code className="text-xs font-mono truncate flex-1" style={{ color: 'var(--primary)' }}>
+          <code className="text-xs font-mono truncate flex-1" style={{ color: 'var(--primary-text)' }}>
             {inviteLink}
           </code>
           <button
@@ -69,7 +69,7 @@ export default function UserReferralsPage() {
             className="btn btn-outline text-[10px] px-3 py-1.5 flex-shrink-0"
             style={{
               color: copied ? '#4ade80' : 'var(--foreground)',
-              borderColor: copied ? 'rgba(74,222,128,0.3)' : 'var(--border)',
+              borderColor: copied ? 'rgba(var(--success-rgb), 0.3)' : 'var(--border)',
             }}
           >
             {copied ? t('referrals.copied') : t('referrals.copyLink')}
@@ -83,14 +83,14 @@ export default function UserReferralsPage() {
           className="rounded border p-4 text-center"
           style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}
         >
-          <div className="text-3xl font-bold font-mono" style={{ color: '#4ade80' }}>{completed.length}</div>
+          <div className="text-3xl font-bold font-mono" style={{ color: 'var(--success-text)' }}>{completed.length}</div>
           <div className="text-[10px] font-mono tracking-wider mt-1" style={{ color: 'var(--muted-foreground)' }}>{t('referrals.statCompleted')}</div>
         </div>
         <div
           className="rounded border p-4 text-center"
           style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}
         >
-          <div className="text-3xl font-bold font-mono" style={{ color: 'var(--primary)' }}>{pending.length}</div>
+          <div className="text-3xl font-bold font-mono" style={{ color: 'var(--primary-text)' }}>{pending.length}</div>
           <div className="text-[10px] font-mono tracking-wider mt-1" style={{ color: 'var(--muted-foreground)' }}>{t('referrals.statPending')}</div>
         </div>
       </div>
@@ -102,7 +102,7 @@ export default function UserReferralsPage() {
       >
         <div
           className="px-5 py-4"
-          style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.2)' }}
+          style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)' }}
         >
           <h2 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
             {t('referrals.historyHeading')}
@@ -118,7 +118,7 @@ export default function UserReferralsPage() {
                   { id: 'invited', label: t('referrals.colInvited') },
                   { id: 'completed', label: t('referrals.colCompleted') },
                 ].map((h) => (
-                  <th key={h.id} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid var(--border)' }}>
+                  <th key={h.id} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)', borderBottom: '1px solid var(--border)' }}>
                     {h.label}
                   </th>
                 ))}

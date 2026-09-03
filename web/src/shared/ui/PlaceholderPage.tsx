@@ -44,7 +44,7 @@ export function PlaceholderPage({
       >
         <svg
           className="w-4 h-4 mt-0.5 flex-shrink-0"
-          style={{ color: 'var(--primary)' }}
+          style={{ color: 'var(--primary-text)' }}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -57,7 +57,7 @@ export function PlaceholderPage({
           />
         </svg>
         <div>
-          <p className="text-xs font-mono font-bold" style={{ color: 'var(--primary)' }}>
+          <p className="text-xs font-mono font-bold" style={{ color: 'var(--primary-text)' }}>
             {t('placeholderPage.phaseNotice')}
           </p>
           {todoNote && (
@@ -77,7 +77,7 @@ export function PlaceholderPage({
           className="px-5 py-4 border-b flex items-center justify-between"
           style={{
             borderColor: 'var(--border)',
-            backgroundColor: 'rgba(0,0,0,0.2)',
+            backgroundColor: 'rgba(var(--sink-rgb), 0.2)',
           }}
         >
           <h2

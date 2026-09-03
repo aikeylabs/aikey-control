@@ -329,7 +329,7 @@ export default function OAuthContributePage() {
               style={{
                 background: 'var(--card)',
                 border: '1px solid var(--border)',
-                color: 'var(--primary)',
+                color: 'var(--primary-text)',
               }}
             >
               <PageTitleGlyph />
@@ -396,9 +396,9 @@ export default function OAuthContributePage() {
               aria-live="assertive"
               className="rounded px-4 py-3 flex items-center justify-between gap-3"
               style={{
-                color: '#fca5a5',
-                background: 'rgba(239,68,68,0.08)',
-                border: '1px solid rgba(239,68,68,0.38)',
+                color: 'var(--destructive-text-soft)',
+                background: 'rgba(var(--destructive-rgb), 0.08)',
+                border: '1px solid rgba(var(--destructive-rgb), 0.38)',
               }}
             >
               <span className="text-[12px] font-mono">{t(fetchErrKey(ownerGroupsErr))}</span>
@@ -733,7 +733,7 @@ function AccountRow({
         style={
           isRouted
             ? {
-                background: 'rgba(74,222,128,0.06)',
+                background: 'rgba(var(--success-rgb), 0.06)',
                 boxShadow: 'inset 3px 0 0 0 var(--primary)',
               }
             : undefined
@@ -1302,7 +1302,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     <div
       className="px-4 py-4 space-y-4"
       style={{
-        background: 'rgba(255,255,255,0.02)',
+        background: 'rgba(var(--lift-rgb), 0.02)',
         borderTop: '1px solid var(--border)',
       }}
     >
@@ -1343,7 +1343,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
           className="rounded px-3 py-3 space-y-2"
           style={{
             border: '1px solid var(--border)',
-            background: 'rgba(0,0,0,0.15)',
+            background: 'rgba(var(--sink-rgb), 0.15)',
           }}
         >
           <div
@@ -1353,7 +1353,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             <span
               className="inline-flex h-5 w-5 items-center justify-center rounded-full"
               style={{
-                color: 'var(--primary)',
+                color: 'var(--primary-text)',
                 border: '1px solid var(--primary)',
               }}
             >
@@ -1407,7 +1407,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             </p>
           )}
           {ipErr && (
-            <p className="text-[11px]" style={{ color: '#fca5a5' }}>
+            <p className="text-[11px]" style={{ color: 'var(--destructive-text-soft)' }}>
               {t('oauthContribute.exitIpTestFailed')}: {ipErr}
             </p>
           )}
@@ -1423,7 +1423,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         className="rounded px-3 py-3 space-y-3"
         style={{
           border: '1px solid var(--border)',
-          background: 'rgba(0,0,0,0.15)',
+          background: 'rgba(var(--sink-rgb), 0.15)',
         }}
       >
         {effectiveLoginMethod === 'browser' && (
@@ -1435,7 +1435,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             <span
               className="inline-flex h-5 w-5 items-center justify-center rounded-full"
               style={{
-                color: 'var(--primary)',
+                color: 'var(--primary-text)',
                 border: '1px solid var(--primary)',
               }}
             >
@@ -1486,7 +1486,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
               style={
                 ipMismatch
                   ? {
-                      color: '#fca5a5',
+                      color: 'var(--destructive-text-soft)',
                       borderColor: 'var(--destructive, #ef4444)',
                     }
                   : undefined
@@ -1536,9 +1536,9 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                 role="alert"
                 className="rounded border px-3 py-2 text-[11px] font-mono"
                 style={{
-                  color: '#fca5a5',
-                  borderColor: 'rgba(239,68,68,0.4)',
-                  background: 'rgba(239,68,68,0.08)',
+                  color: 'var(--destructive-text-soft)',
+                  borderColor: 'rgba(var(--destructive-rgb), 0.4)',
+                  background: 'rgba(var(--destructive-rgb), 0.08)',
                 }}
               >
                 {sessionKeyCapabilityError}
@@ -1644,16 +1644,16 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                         : 'var(--muted-foreground)',
                   borderColor:
                     sessionKeyStatus.tone === 'success'
-                      ? 'rgba(74,222,128,0.35)'
+                      ? 'rgba(var(--success-rgb), 0.35)'
                       : sessionKeyStatus.tone === 'error'
-                        ? 'rgba(239,68,68,0.4)'
+                        ? 'rgba(var(--destructive-rgb), 0.4)'
                         : 'var(--border)',
                   background:
                     sessionKeyStatus.tone === 'success'
-                      ? 'rgba(74,222,128,0.06)'
+                      ? 'rgba(var(--success-rgb), 0.06)'
                       : sessionKeyStatus.tone === 'error'
-                        ? 'rgba(239,68,68,0.08)'
-                        : 'rgba(0,0,0,0.15)',
+                        ? 'rgba(var(--destructive-rgb), 0.08)'
+                        : 'rgba(var(--sink-rgb), 0.15)',
                 }}
               >
                 {sessionKeyStatus.message}
@@ -1679,9 +1679,9 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                       border: '1px solid rgba(250,204,21,0.35)',
                     }
                   : {
-                      color: '#4ade80',
-                      background: 'rgba(74,222,128,0.06)',
-                      border: '1px solid rgba(74,222,128,0.25)',
+                      color: 'var(--success-text)',
+                      background: 'rgba(var(--success-rgb), 0.06)',
+                      border: '1px solid rgba(var(--success-rgb), 0.25)',
                     }
               }
             >
@@ -1720,7 +1720,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-[11px]"
-            style={{ color: 'var(--primary)', textDecoration: 'none' }}
+            style={{ color: 'var(--primary-text)', textDecoration: 'none' }}
           >
             💡 {t('oauthContribute.profileGuideHint')}
             <span aria-hidden="true">→</span>
@@ -1732,9 +1732,9 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             aria-live="assertive"
             className="text-[11px] font-mono rounded px-3 py-2"
             style={{
-              color: '#fca5a5',
-              background: 'rgba(239,68,68,0.08)',
-              border: '1px solid rgba(239,68,68,0.38)',
+              color: 'var(--destructive-text-soft)',
+              background: 'rgba(var(--destructive-rgb), 0.08)',
+              border: '1px solid rgba(var(--destructive-rgb), 0.38)',
             }}
           >
             {err}
@@ -1764,7 +1764,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         <ModalPortal scopeClassName="vault-page">
           <div
             className="fixed inset-0 z-50 flex items-center justify-center"
-            style={{ background: 'rgba(0,0,0,0.5)' }}
+            style={{ background: 'var(--overlay-sink)' }}
             onClick={() => setEgressConfigOpen(false)}
           >
             <div
@@ -1808,7 +1808,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                   className="w-full min-h-[240px] max-h-[55vh] resize-y rounded p-3 text-[11px] font-mono leading-relaxed"
                   style={{
                     color: 'var(--foreground)',
-                    background: 'rgba(0,0,0,0.2)',
+                    background: 'rgba(var(--sink-rgb), 0.2)',
                     border: '1px solid var(--border)',
                   }}
                   value={egressModalDraft}
@@ -1899,7 +1899,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         <ModalPortal scopeClassName="vault-page">
           <div
             className="fixed inset-0 z-50 flex items-center justify-center"
-            style={{ background: 'rgba(0,0,0,0.5)' }}
+            style={{ background: 'var(--overlay-sink)' }}
             onClick={() => setLoginConfirmOpen(false)}
           >
             <div
@@ -1933,7 +1933,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                   type="button"
                   className="row-use-btn"
                   style={{
-                    color: '#fca5a5',
+                    color: 'var(--destructive-text-soft)',
                     borderColor: 'var(--destructive, #ef4444)',
                   }}
                   onClick={() => {
@@ -2017,7 +2017,7 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
   // by user 2026-07-08). Full background: shared/ui/ModalShell.tsx docstring.
   return (
     <ModalPortal scopeClassName="vault-page">
-      <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(var(--scrim-rgb), 0.5)' }} onClick={onClose}>
         <div
           className="card w-[440px] max-w-[92vw] p-5 space-y-4"
           style={{ background: 'var(--surface-1)' }}
@@ -2103,7 +2103,7 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
               // joined any pool" — that masked a real server error (e.g. the
               // GroupsForSeats column-count bug) and sent people to the wrong fix.
               // Surface it as a distinct load error so the actual problem is visible.
-              <div className="text-[11px] font-mono py-2" style={{ color: '#fca5a5' }}>
+              <div className="text-[11px] font-mono py-2" style={{ color: 'var(--destructive-text-soft)' }}>
                 {t('oauthContribute.addGroupsLoadFailed')}
               </div>
             ) : filteredGroups.length === 0 ? (
@@ -2130,7 +2130,7 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
           </p>
 
           {err && (
-            <p className="text-[11px]" style={{ color: '#fca5a5' }}>
+            <p className="text-[11px]" style={{ color: 'var(--destructive-text-soft)' }}>
               {err}
             </p>
           )}
@@ -2188,9 +2188,9 @@ function EmptyState({
       style={
         isError
           ? {
-              color: '#fca5a5',
-              background: 'rgba(239,68,68,0.08)',
-              border: '1px solid rgba(239,68,68,0.38)',
+              color: 'var(--destructive-text-soft)',
+              background: 'rgba(var(--destructive-rgb), 0.08)',
+              border: '1px solid rgba(var(--destructive-rgb), 0.38)',
             }
           : { color: 'var(--muted-foreground)' }
       }
@@ -2281,7 +2281,7 @@ function CopyBtn({ value, label }: { value: string; label: string }) {
           .catch(() => {});
       }}
     >
-      {copied ? <CheckIcon className="w-3.5 h-3.5" style={{ color: '#4ade80' }} /> : <CopyIcon className="w-3.5 h-3.5" />}
+      {copied ? <CheckIcon className="w-3.5 h-3.5" style={{ color: 'var(--success-text)' }} /> : <CopyIcon className="w-3.5 h-3.5" />}
     </button>
   );
 }

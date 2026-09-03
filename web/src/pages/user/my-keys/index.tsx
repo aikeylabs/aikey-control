@@ -18,10 +18,10 @@ import { formatDate, formatDateTime } from '@/shared/utils/datetime-intl';
 function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: () => void }) {
   return (
     <ModalPortal>
-      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }} />
+      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(var(--scrim-rgb), 0.7)' }} />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded border"
-        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.8)' }}
+        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.8)' }}
       >
         <div className="px-6 py-5 space-y-4">
           <div className="flex items-center gap-3">
@@ -53,7 +53,7 @@ function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: (
                   {slot.protocol_type}
                 </div>
                 {slot.targets.map((t) => (
-                  <div key={t.binding_id} className="space-y-1.5 p-3 rounded border" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                  <div key={t.binding_id} className="space-y-1.5 p-3 rounded border" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(var(--lift-rgb), 0.02)' }}>
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono font-bold" style={{ color: 'var(--foreground)' }}>
                         {t.provider_code}
@@ -62,8 +62,8 @@ function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: (
                         className="px-2 py-0.5 rounded text-[10px] font-mono font-bold border"
                         style={{
                           color: t.fallback_role === 'primary' ? '#4ade80' : 'var(--muted-foreground)',
-                          borderColor: t.fallback_role === 'primary' ? 'rgba(74,222,128,0.3)' : 'var(--border)',
-                          backgroundColor: t.fallback_role === 'primary' ? 'rgba(74,222,128,0.08)' : 'transparent',
+                          borderColor: t.fallback_role === 'primary' ? 'rgba(var(--success-rgb), 0.3)' : 'var(--border)',
+                          backgroundColor: t.fallback_role === 'primary' ? 'rgba(var(--success-rgb), 0.08)' : 'transparent',
                         }}
                       >
                         {t.fallback_role}
@@ -104,9 +104,9 @@ function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: (
 
 function KeyStatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, { color: string; bg: string; border: string }> = {
-    active:    { color: '#4ade80', bg: 'rgba(74,222,128,0.08)',   border: 'rgba(74,222,128,0.3)' },
+    active:    { color: 'var(--success-text)', bg: 'rgba(var(--success-rgb), 0.08)',   border: 'rgba(var(--success-rgb), 0.3)' },
     suspended: { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',   border: 'rgba(251,191,36,0.3)' },
-    revoked:   { color: '#f87171', bg: 'rgba(248,113,113,0.08)',  border: 'rgba(248,113,113,0.3)' },
+    revoked:   { color: 'var(--destructive-text)', bg: 'rgba(var(--destructive-rgb), 0.08)',  border: 'rgba(var(--destructive-rgb), 0.3)' },
   };
   const s = colorMap[status] ?? { color: 'var(--muted-foreground)', bg: 'transparent', border: 'var(--border)' };
   return (
@@ -147,7 +147,7 @@ export default function MyKeysPage() {
       </div>
 
       <div className="rounded border overflow-hidden" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}>
-        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)' }}>
           <h2 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>Key List</h2>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded border" style={{ color: 'var(--muted-foreground)', borderColor: 'var(--border)' }}>
             {keys.length} records
@@ -159,7 +159,7 @@ export default function MyKeysPage() {
             <thead>
               <tr>
                 {['Alias', 'Provider', 'Status', 'Share Status', 'Expires', 'Actions'].map((h) => (
-                  <th key={h} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid var(--border)' }}>{h}</th>
+                  <th key={h} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)', borderBottom: '1px solid var(--border)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -167,7 +167,7 @@ export default function MyKeysPage() {
               {isLoading ? (
                 <tr><td colSpan={6} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>Loading...</td></tr>
               ) : isError ? (
-                <tr><td colSpan={6} className="px-5 py-10 text-center text-xs font-mono" style={{ color: '#f87171' }}>Failed to load</td></tr>
+                <tr><td colSpan={6} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--destructive-text)' }}>Failed to load</td></tr>
               ) : keys.length === 0 ? (
                 <tr><td colSpan={6} className="px-5 py-12 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>No keys</td></tr>
               ) : (

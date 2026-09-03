@@ -70,7 +70,7 @@ export function SessionKeyHelp({ providerKind }: { providerKind: SessionKeyProvi
         aria-expanded={expanded}
         aria-controls={panelID}
         className="underline underline-offset-2"
-        style={{ color: 'var(--primary)', background: 'transparent' }}
+        style={{ color: 'var(--primary-text)', background: 'transparent' }}
         onClick={() => {
           setExpanded((value) => !value);
           setCopyStatus('idle');
@@ -86,7 +86,7 @@ export function SessionKeyHelp({ providerKind }: { providerKind: SessionKeyProvi
           style={{
             color: 'var(--muted-foreground)',
             borderColor: 'var(--border)',
-            background: 'rgba(0,0,0,0.18)',
+            background: 'rgba(var(--sink-rgb), 0.18)',
           }}
         >
           <p>{t('sessionKeyHelp.intro', { provider: providerName })}</p>
@@ -108,7 +108,7 @@ export function SessionKeyHelp({ providerKind }: { providerKind: SessionKeyProvi
               target="_blank"
               rel="noopener noreferrer"
               className="rounded border px-2 py-1"
-              style={{ color: 'var(--primary)', borderColor: 'var(--border)' }}
+              style={{ color: 'var(--primary-text)', borderColor: 'var(--border)' }}
             >
               {t('sessionKeyHelp.openProvider', { provider: providerName })}
             </a>
