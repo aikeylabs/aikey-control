@@ -145,7 +145,8 @@
     "navComplianceAudit": "Compliance Audit",
     "sessionExpired": "Signed out",
     "sessionExpiredHint": "SESSION EXPIRED",
-    "backToSimple": "Simple view"
+    "backToSimple": "Simple view",
+    "refresh": "Refresh"
   },
   "teamMenu": {
     "oauthContribute": "Team OAuth",
@@ -2805,6 +2806,8 @@
     "colProvider": "Provider",
     "egressChip": "Egress",
     "egressChipHint": "This account reaches the upstream through an admin-configured dedicated egress line (its own exit IP).",
+    "routedChip": "Routed",
+    "routedChipHint": "Traffic from this pool goes to this account — this is the row to sign in on.",
     "egressSectionTitle": "Egress proxy & login-IP self-check",
     "loginSectionTitle": "Account sign-in",
     "egressLabel": "Egress",

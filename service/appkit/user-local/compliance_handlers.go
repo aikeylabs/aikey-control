@@ -73,8 +73,16 @@ type complianceEventWire struct {
 	// often sub-ms), shown in the self-view drawer. Stored in the events.metadata
 	// JSON column (reuses the existing extension column — no schema change).
 	// 0/absent → not stored/shown.
-	DetectLatencyMs float64                 `json:"detect_latency_ms,omitempty"`
-	Findings        []complianceFindingWire `json:"findings"`
+	DetectLatencyMs float64 `json:"detect_latency_ms,omitempty"`
+	// RouteSource (2026-09-03, optional): which ledger this event ALSO belongs
+	// to. "" / absent = the local (personal / custom-provider) lane, exactly as
+	// every event before this field. "team" = a MIRROR of an event the proxy
+	// uploaded to the team server — recorded here too by user decision (both
+	// team and personal detections are shown on the local page). Stored in the
+	// metadata JSON column with detect_latency_ms — no schema change — and
+	// surfaced on the list DTO so the page can label the row.
+	RouteSource string                  `json:"route_source,omitempty"`
+	Findings    []complianceFindingWire `json:"findings"`
 }
 
 type complianceFindingWire struct {
@@ -310,8 +318,15 @@ func insertComplianceEvent(ctx context.Context, db *sql.DB, ev complianceEventWi
 	// Observability extension fields go in the metadata JSON column (reuses the
 	// existing extension column — no schema change). NULL when nothing to store.
 	var metadata any
+	meta := map[string]any{}
 	if ev.DetectLatencyMs > 0 {
-		if b, err := json.Marshal(map[string]float64{"detect_latency_ms": ev.DetectLatencyMs}); err == nil {
+		meta["detect_latency_ms"] = ev.DetectLatencyMs
+	}
+	if ev.RouteSource != "" {
+		meta["route_source"] = ev.RouteSource
+	}
+	if len(meta) > 0 {
+		if b, err := json.Marshal(meta); err == nil {
 			metadata = string(b)
 		}
 	}
@@ -361,8 +376,11 @@ type complianceAuditEvent struct {
 	ActionTaken  string `json:"action_taken"`
 	// DetectLatencyMs: detection step's own time (ms, float), parsed from the
 	// metadata JSON column. Omitted when absent/zero.
-	DetectLatencyMs float64                  `json:"detect_latency_ms,omitempty"`
-	Findings        []complianceAuditFinding `json:"findings"`
+	DetectLatencyMs float64 `json:"detect_latency_ms,omitempty"`
+	// RouteSource (2026-09-03): "team" for an event the proxy mirrored here from
+	// its team-server upload; absent for the local lane. Parsed from metadata.
+	RouteSource string                   `json:"route_source,omitempty"`
+	Findings    []complianceAuditFinding `json:"findings"`
 }
 
 type complianceAuditFinding struct {
@@ -487,9 +505,11 @@ func complianceListHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 			if metaRaw != "" {
 				var meta struct {
 					DetectLatencyMs float64 `json:"detect_latency_ms"`
+					RouteSource     string  `json:"route_source"`
 				}
 				if err := json.Unmarshal([]byte(metaRaw), &meta); err == nil {
 					e.DetectLatencyMs = meta.DetectLatencyMs
+					e.RouteSource = meta.RouteSource
 				}
 			}
 			e.Findings = []complianceAuditFinding{}

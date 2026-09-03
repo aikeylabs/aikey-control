@@ -145,7 +145,8 @@
     "navComplianceAudit": "合规审计",
     "sessionExpired": "未登录",
     "sessionExpiredHint": "会话已过期",
-    "backToSimple": "简洁版"
+    "backToSimple": "简洁版",
+    "refresh": "刷新"
   },
   "teamMenu": {
     "oauthContribute": "团队OAuth",
@@ -2805,6 +2806,8 @@
     "colProvider": "服务商",
     "egressChip": "专属出口",
     "egressChipHint": "此账号通过管理员配置的专属出口线路访问上游（独立出口 IP）。",
+    "routedChip": "当前路由",
+    "routedChipHint": "本池的流量现在走这个账号——要登录的就是这一行。",
     "egressSectionTitle": "出口代理与登录 IP 自检",
     "loginSectionTitle": "账号登录",
     "egressLabel": "出口代理",

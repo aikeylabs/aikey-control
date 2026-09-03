@@ -191,6 +191,21 @@ body {
    Requires the header to overlay the scroll container (see UserShell.tsx) —
    backdrop-filter over a flat page background produces nothing.
    Dual-edit mirror: keep identical in control/web + master/web. */
+/* 🔴 Root height uses the DYNAMIC viewport (2026-09-01, user request #3).
+   The sidebar's expand/collapse toggle is pinned to the bottom of this
+   full-height root. With 100vh the root is taller than the visible area
+   whenever a browser shows a dynamic address bar, so the toggle sits below
+   the fold and the user cannot reach it to expand a collapsed sidebar — the
+   exact "看不到展开按钮" report. It never reproduced in the app webview,
+   which has no address bar (100vh == real height). 100dvh tracks the real
+   visible height. Two declarations: 信创 / older browsers that do not know
+   dvh keep the 100vh fallback; everyone else gets the correct dynamic height.
+   Rule: prefer min-h-dvh over 100vh (CLAUDE.md frontend / viewport-units). */
+.user-pages {
+  height: 100vh;
+  height: 100dvh;
+}
+
 .user-pages .vault-header {
   background: linear-gradient(
     180deg,

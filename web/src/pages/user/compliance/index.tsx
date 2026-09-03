@@ -270,7 +270,28 @@ const LOCAL_SOURCE: ComplianceViewSource = {
   originalUnavailableKey: 'compliancePage.originalUnavailable',
 };
 
-export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { source?: ComplianceViewSource } = {}) {
+/**
+ * The LOCAL lane's "no original text" note key, DERIVED from LOCAL_SOURCE —
+ * exported (2026-09-03) so the team wrapper's this-machine scope can point at
+ * the local lane's own key without re-typing the literal. Two fences shape
+ * this: snippet-reveal.test.ts R3 (the literal must appear exactly once in
+ * this file, inside LOCAL_SOURCE) and the master repo's
+ * team-lane-original-note.test.ts (the wrapper must not carry the literal at
+ * all — a literal there is how the 2026-08-10 wrong-lane note happened).
+ */
+export const LOCAL_ORIGINAL_UNAVAILABLE_KEY: string = LOCAL_SOURCE.originalUnavailableKey;
+
+/**
+ * `headerExtra` (2026-09-03): an optional node rendered at the head of the
+ * page-header actions, BEFORE the detection switch. The team wrapper uses it
+ * for a team / this-machine scope switch — the gateway-forwarded team page
+ * reads master's member endpoint, while events from personal / custom-provider
+ * routes live only in the local store, so without a switch those records had
+ * no UI at all (winpc2 report 2026-09-03, "compliance page shows nothing" while
+ * the local API held 9 mask events). A prop rather than a source field because
+ * it is presentation the wrapper owns, not data the page reads.
+ */
+export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerExtra }: { source?: ComplianceViewSource; headerExtra?: ReactNode } = {}) {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selected, setSelected] = useState<ComplianceEventDTO | null>(null);
@@ -390,7 +411,13 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   }
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['compliance-self', { severity, category, action, entityType, offset, pageSize }],
+    // source.titleKey in the key (2026-09-03): the team wrapper now SWAPS the
+    // injected source (team server / this machine) at runtime. Without a
+    // source discriminator the key is identical across the swap, and
+    // react-query would keep serving the other ledger's cached page instead of
+    // refetching — a silent wrong-ledger view, the exact confusion the switch
+    // exists to end. titleKey is distinct per source and already on the object.
+    queryKey: ['compliance-self', source.titleKey, { severity, category, action, entityType, offset, pageSize }],
     queryFn: () => source.listEvents({
       severity: severity || undefined,
       category: category || undefined,
@@ -407,7 +434,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   // Effective packs (built-in + server-distributed) — lazily fetched when the
   // drawer opens. Relayed local-server → proxy → live detector IPC.
   const packsQuery = useQuery({
-    queryKey: ['compliance-packs'],
+    queryKey: ['compliance-packs', source.titleKey],
     queryFn: () => source.getEffectivePacks(),
     enabled: packsOpen,
   });
@@ -500,6 +527,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
         description={t(source.descriptionKey)}
         actions={
           <div className="flex items-center gap-3">
+            {headerExtra}
             {/* Feature master switch — distinct from the pack-level info (layered:
                 whole-detection on/off here, which packs are effective in the drawer). */}
             {filterState.kind === 'ready' && (

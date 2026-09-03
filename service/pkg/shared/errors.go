@@ -1,6 +1,8 @@
 package shared
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -183,6 +185,7 @@ var zhMessages = map[string]string{
 	CodeBizRefreshTokenInvalid:          "刷新令牌无效或已过期，请重新运行 aikey login",
 	CodeBizRefreshTokenRevoked:          "刷新令牌已被吊销，请重新运行 aikey login",
 	CodeBizOauthLoginBindingChanged:     "登录期间账号与供应商绑定已变化，请刷新账号列表后重新登录",
+	CodeBizOauthRevokedTokenReused:      "供应商返回的仍是那枚已被上游拒绝的 token（指纹 {{fingerprint_prefix}}…）。请先在供应商网页端登出该账号再重新登录，让它签发一枚新的 token，然后再回来登录。",
 	CodeBizOauthLoginEvidenceRequired:   "本机 AiKey Proxy 版本过旧（登录请求未携带身份证据），不能覆盖已绑定身份的账号；请升级或重启本机 AiKey Proxy，或由管理员在 Master 重新登录该账号",
 	CodeBizOauthLoginContextUnavailable: "该账号的登录上下文不完整，请刷新账号列表或联系管理员",
 	CodeBizOauthRoutedAccountAmbiguous:  "当前存在多个账号池路由，旧版未指定账号的请求无法安全选择；请刷新页面或升级客户端后重试",
@@ -486,6 +489,13 @@ const (
 	// written under a different provider model; the proxy keeps the session so the
 	// member can refresh/retry without silently corrupting account attribution. 409.
 	CodeBizOauthLoginBindingChanged = "BIZ_OAUTH_LOGIN_BINDING_CHANGED"
+	// CodeBizOauthRevokedTokenReused (2026-09-03): a login "succeeded" upstream
+	// but handed back the very bearer the upstream already rejected in use
+	// (same SHA-256 fingerprint the demotion recorded). Accepting it would mark
+	// the row logged_in while every request keeps failing — the deadlock seen
+	// on PC2 where N re-logins changed nothing. The member must obtain a NEW
+	// token (sign out of the provider's web session, sign in again).
+	CodeBizOauthRevokedTokenReused = "BIZ_OAUTH_REVOKED_TOKEN_REUSED"
 	// CodeBizOauthLoginEvidenceRequired: an evidence-less member writeback (the
 	// pre-identity-field proxy wire shape) targeted an account that already has
 	// a bound identity. The rolling-upgrade allowance covers only identity-less
@@ -960,6 +970,17 @@ func BizOauthLoginBindingChanged(expectedProvider, actualProvider, expectedGroup
 		}}
 }
 
+// BizOauthRevokedTokenReused refuses a writeback whose access token is the
+// bearer the upstream already rejected. fingerprintPrefix is the first 12 hex
+// chars of the SHA-256 of a DEAD token — safe to show, useful to correlate
+// with the proxy's auth-demotions ring and aikey doctor output.
+func BizOauthRevokedTokenReused(credentialID, fingerprintPrefix string) *DomainError {
+	return &DomainError{Code: CodeBizOauthRevokedTokenReused,
+		Message: "the provider returned the same access token the upstream already rejected (fingerprint " + fingerprintPrefix + "…); sign out of the provider web session, sign in again to obtain a NEW token, then retry",
+		Meta: map[string]any{"credential_id": credentialID, "fingerprint_prefix": fingerprintPrefix,
+			"next_step": "sign out of the provider web session and sign in again, then redo the AiKey login"}}
+}
+
 func BizOauthLoginContextUnavailable(credentialID string) *DomainError {
 	return &DomainError{Code: CodeBizOauthLoginContextUnavailable,
 		Message: "OAuth login context is incomplete for this account; refresh the account list or contact an administrator",
@@ -1207,4 +1228,18 @@ func SysConfig() *DomainError {
 func SysMailNotConfigured() *DomainError {
 	return &DomainError{Code: CodeSysMailNotConfigured,
 		Message: "email delivery is not configured on this server — the login email was NOT sent; ask your administrator to configure SMTP"}
+}
+
+// TokenFingerprint is the SHA-256 hex of a bearer. ONE definition for every
+// side that compares fingerprints — the proxy's auth tombstone / demotion
+// report, Master's revoked-fingerprint stamp, and the writeback guards — so a
+// fingerprint recorded from a Worker signal compares byte-for-byte with one
+// computed here. Lives in the leaf package on purpose: membertoken and
+// oauthaccount both need it and must not import each other.
+func TokenFingerprint(token string) string {
+	if token == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }

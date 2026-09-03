@@ -753,6 +753,23 @@ function AccountRow({
               return g ? <ToolGlyph slug={g.slug} title={g.labelKey ? t(g.labelKey) : g.slug} /> : null;
             })()}
             <span style={{ wordBreak: 'break-all' }}>{account.identity || account.credential_id}</span>
+            {/* 「当前路由」chip (2026-09-03). The routed row already had a visual
+                treatment — a 3px --primary left stripe + 6% green wash — but NO
+                WORDS, so nobody could tell that stripe meant "traffic goes here,
+                sign in on THIS row". A member whose pool had several accounts
+                signed into the wrong one twice in a row, each time seeing the
+                proxy's LOGIN_REQUIRED again with no idea which account it meant.
+                A stripe is a decoration until it is labelled.
+                bugfix: workflow/CI/bugfix/2026-09-03-登录提示不说是哪个账号.md */}
+            {isRouted && (
+              <span
+                className="chip"
+                style={{ padding: '1px 6px', fontSize: 9.5, color: 'var(--primary)' }}
+                title={t('oauthContribute.routedChipHint')}
+              >
+                {t('oauthContribute.routedChip')}
+              </span>
+            )}
             {/* Egress presence chip (2026-07-19): this account exits through a
                 configured egress line (admin per-account override OR inherited
                 group default, R46 effective egress). PRESENCE ONLY — the URL is

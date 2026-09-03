@@ -151,6 +151,7 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizAgentLimitReached, CodeBizAgentNonClusterOrg,
 		CodeBizAgentParentSeatRequired, CodeBizAgentStatusConflict,
 		CodeBizOauthLoginBindingChanged,
+		CodeBizOauthRevokedTokenReused,
 		CodeBizOauthLoginContextUnavailable,
 		CodeBizOauthRoutedAccountAmbiguous,
 		// R39 recycle-bin guard: live references block deletion — a resource-state

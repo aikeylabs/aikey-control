@@ -1239,7 +1239,7 @@ export function UserShell() {
   const sidedNavGroups: NavGroup[] = navGroups;
 
   return (
-    <div className="user-pages flex h-screen overflow-hidden antialiased" style={{ backgroundColor: 'var(--background)' }}>
+    <div className="user-pages flex overflow-hidden antialiased" style={{ backgroundColor: 'var(--background)' }}>
       {/* ── Sidebar ──
           Design re-aligned 2026-04-24 with user_vault_3_1_1.html:
           zero horizontal divider lines anywhere inside the sidebar.
@@ -1684,6 +1684,24 @@ export function UserShell() {
               </button>
             )}
             <LanguageSwitcher />
+            {/* Refresh (2026-09-01, user request #1): a full-page reload from
+                the top bar. Deliberately window.location.reload, not a
+                react-query refetch — the user's expectation of a refresh button
+                is "start over", which reload gives without having to enumerate
+                every query on the page. Ghost variant, left of the gear, so it
+                reads as a quiet utility next to the louder Invite CTA. */}
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="btn btn-ghost text-[10px] px-2 py-1.5 flex items-center"
+              title={t('userShell.refresh')}
+              aria-label={t('userShell.refresh')}
+            >
+              {/* heroicons v2 arrow-path (outline). */}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992V4.356M2.985 19.644v-4.992h4.992M4.06 9.349a8.003 8.003 0 0114.898-1.658M19.94 14.651a8.003 8.003 0 01-14.898 1.658" />
+              </svg>
+            </button>
             {/* Phase 4G (2026-06-01): top-bar Settings entry. Gear icon-
                 only button, ghost variant so it sits visually quieter
                 than the Invite CTA next to it. `onOpenSettings`
