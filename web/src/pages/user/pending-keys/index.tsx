@@ -150,7 +150,7 @@ export default function PendingKeysPage() {
             <thead>
               <tr>
                 {['Alias', 'Provider', 'Expires', 'Actions'].map((h) => (
-                  <th key={h} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)', borderBottom: '1px solid var(--border)' }}>{h}</th>
+                  <th key={h} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'var(--table-header)', borderBottom: '1px solid var(--border)' }}>{h}</th>
                 ))}
               </tr>
             </thead>

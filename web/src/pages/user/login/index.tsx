@@ -61,7 +61,7 @@ export default function UserLoginPage() {
       style={{
         backgroundColor: 'var(--card)',
         border: '1px solid var(--border)',
-        boxShadow: '0 20px 40px -10px rgba(var(--scrim-rgb), 0.8), 0 0 30px rgba(250, 204, 21,0.03)',
+        boxShadow: '0 20px 40px -10px rgba(var(--scrim-rgb), 0.8), 0 0 30px rgba(var(--primary-rgb), 0.03)',
       }}
     >
       {/* Top highlight */}
@@ -88,11 +88,11 @@ export default function UserLoginPage() {
         {inviteEmail && (
           <div
             className="p-4 rounded border flex items-start gap-3"
-            style={{ backgroundColor: 'rgba(250, 204, 21,0.05)', borderColor: 'rgba(250, 204, 21,0.2)' }}
+            style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.05)', borderColor: 'rgba(var(--primary-rgb), 0.2)' }}
           >
             <div
               className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
-              style={{ backgroundColor: 'rgba(250, 204, 21,0.1)', border: '1px solid rgba(250, 204, 21,0.3)' }}
+              style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.1)', border: '1px solid rgba(var(--primary-rgb), 0.3)' }}
             >
               <MailIcon />
             </div>
@@ -254,7 +254,7 @@ function StepBadge({ n }: { n: number }) {
   return (
     <div
       className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-bold flex-shrink-0"
-      style={{ backgroundColor: 'rgba(250, 204, 21,0.15)', color: 'var(--primary-text)', border: '1px solid rgba(250, 204, 21,0.3)' }}
+      style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.15)', color: 'var(--primary-text)', border: '1px solid rgba(var(--primary-rgb), 0.3)' }}
     >
       {n}
     </div>

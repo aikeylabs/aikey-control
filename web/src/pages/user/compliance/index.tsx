@@ -618,7 +618,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
             )}
             <button
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs font-mono transition-colors"
-              style={{ borderColor: 'rgba(250,204,21,0.35)', color: 'var(--primary-text)', backgroundColor: 'rgba(250,204,21,0.06)' }}
+              style={{ borderColor: 'rgba(var(--primary-rgb), 0.35)', color: 'var(--primary-text)', backgroundColor: 'rgba(var(--primary-rgb), 0.06)' }}
               onClick={() => setPacksOpen(true)}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -684,7 +684,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
               </span>
             ))}
           </div>
-          <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full border shrink-0" style={{ color: 'var(--primary-text)', borderColor: 'rgba(250,204,21,0.35)', backgroundColor: 'rgba(250,204,21,0.06)' }}>
+          <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full border shrink-0" style={{ color: 'var(--primary-text)', borderColor: 'rgba(var(--primary-rgb), 0.35)', backgroundColor: 'rgba(var(--primary-rgb), 0.06)' }}>
             {t('compliancePage.recordCount', { count: total })}
           </span>
         </div>
@@ -707,7 +707,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                   'compliancePage.columnPreview',
                   'compliancePage.columnModel',
                 ].map((k) => (
-                  <th key={k} className="px-4 py-3 text-[10px] font-mono font-semibold tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(var(--sink-rgb), 0.35)', position: 'sticky', top: 0, zIndex: 1 }}>
+                  <th key={k} className="px-4 py-3 text-[10px] font-mono font-semibold tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--table-header-sticky)', position: 'sticky', top: 0, zIndex: 1 }}>
                     {t(k)}
                   </th>
                 ))}
@@ -722,7 +722,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                 <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.noEvents')}</td></tr>
               ) : (
                 events.map((e) => (
-                  <tr key={e.event_id} className="cursor-pointer transition-colors hover:bg-[rgba(250,204,21,0.045)]" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => openEvent(e)}>
+                  <tr key={e.event_id} className="cursor-pointer transition-colors hover:bg-[rgba(var(--primary-rgb), 0.045)]" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => openEvent(e)}>
                     <td className="px-4 py-3.5 text-xs font-mono" style={{ color: 'var(--foreground)' }}>{fmtTime(e.created_at)}</td>
                     <td className="px-4 py-3.5"><Badge variant={actionVariant(e.action_taken)}>{e.action_taken.toUpperCase()}</Badge></td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
@@ -869,7 +869,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                     {/* sequence badge — overhangs the card's top-left corner (出框) */}
                     <span
                       className="inline-flex items-center justify-center text-[10px] font-mono font-bold rounded-full shrink-0"
-                      style={{ position: 'absolute', top: -9, left: -9, width: 20, height: 20, color: 'var(--primary-dim)', border: '1px solid rgba(202,138,4,0.5)', backgroundColor: 'var(--card)', zIndex: 1 }}
+                      style={{ position: 'absolute', top: -9, left: -9, width: 20, height: 20, color: 'var(--primary-dim)', border: '1px solid rgba(var(--primary-dim-rgb), 0.5)', backgroundColor: 'var(--card)', zIndex: 1 }}
                     >{idx + 1}</span>
                     <div className="flex items-center gap-2 mb-1.5">
                       <Badge variant={severityVariant(f.severity)}>{f.severity.toUpperCase()}</Badge>

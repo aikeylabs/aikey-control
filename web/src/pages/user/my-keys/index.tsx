@@ -81,7 +81,7 @@ function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: (
             ))}
           </div>
 
-          <div className="p-2 rounded text-[11px] font-mono" style={{ backgroundColor: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.2)', color: '#fbbf24' }}>
+          <div className="p-2 rounded text-[11px] font-mono" style={{ backgroundColor: 'rgba(var(--caution-text-rgb), 0.06)', border: '1px solid rgba(var(--caution-text-rgb), 0.2)', color: 'var(--caution-text)' }}>
             Real API keys are only available through the CLI. Use <code>aikey delivery pull</code> to sync keys to your local vault.
           </div>
 
@@ -105,7 +105,7 @@ function SummaryModal({ summary, onClose }: { summary: KeySummaryDTO; onClose: (
 function KeyStatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, { color: string; bg: string; border: string }> = {
     active:    { color: 'var(--success-text)', bg: 'rgba(var(--success-rgb), 0.08)',   border: 'rgba(var(--success-rgb), 0.3)' },
-    suspended: { color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',   border: 'rgba(251,191,36,0.3)' },
+    suspended: { color: 'var(--caution-text)', bg: 'rgba(var(--caution-text-rgb), 0.08)',   border: 'rgba(var(--caution-text-rgb), 0.3)' },
     revoked:   { color: 'var(--destructive-text)', bg: 'rgba(var(--destructive-rgb), 0.08)',  border: 'rgba(var(--destructive-rgb), 0.3)' },
   };
   const s = colorMap[status] ?? { color: 'var(--muted-foreground)', bg: 'transparent', border: 'var(--border)' };
@@ -159,7 +159,7 @@ export default function MyKeysPage() {
             <thead>
               <tr>
                 {['Alias', 'Provider', 'Status', 'Share Status', 'Expires', 'Actions'].map((h) => (
-                  <th key={h} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)', borderBottom: '1px solid var(--border)' }}>{h}</th>
+                  <th key={h} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'var(--table-header)', borderBottom: '1px solid var(--border)' }}>{h}</th>
                 ))}
               </tr>
             </thead>

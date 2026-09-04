@@ -167,6 +167,37 @@
   --info: #60a5fa;
   --info-text: #60a5fa;
 
+  /* ── CAUTION: the SECOND warning ramp (2026-09-05) ────────────────────────
+     🔴 These are NOT a new design decision — they are 160 pre-existing hardcoded
+     literals given names. The console has had two warning ramps in dark for a
+     long time and nobody noticed, because with one immutable palette a literal
+     and a token render identically:
+
+         orange ramp (tokenised)  --warning #f97316 / --warning-text #fb923c
+         amber  ramp (literals)   #f59e0b          / #fbbf24          / #a16207
+
+     The amber ramp carries "degraded but not broken" states: seat `suspended`,
+     access-token `no_login`, compliance `statusLocked`, vault "this stage
+     broke", trust-check `suspect`.
+
+     🔴 WHY A SECOND FAMILY INSTEAD OF FOLDING INTO --warning: folding would have
+     been cleaner, but it would repaint 160 call sites IN DARK (amber-500 →
+     orange-500). "Dark does not change" is the standing constraint, so the
+     duplication is preserved and named rather than silently resolved. Decision
+     recorded 2026-09-05 with the alternative explicitly on the table.
+
+     ⚠️ Consequence to keep in mind: dark now has two documented warning hues. If
+     dark is ever allowed to move, collapsing --caution* into --warning* is the
+     obvious cleanup and it is a pure token rename at that point.
+
+     Each dark value below is byte-identical to the literal it replaces, so the
+     migration was a no-op in dark. */
+  --caution: #f59e0b;
+  --caution-rgb: 245, 158, 11;
+  --caution-text: #fbbf24;
+  --caution-text-rgb: 251, 191, 36;
+  --caution-deep: #a16207;
+
   /* Neutral overlays — FULL values. 🔴 A "lift" (white at low alpha) is a
      DARK-ONLY device: on a white card it is literally invisible. In light
      these all invert to ink-at-low-alpha so hover/raise still read. */
@@ -175,6 +206,28 @@
   --overlay-raise: rgba(255, 255, 255, 0.035);
   --overlay-active: rgba(255, 255, 255, 0.05);
   --overlay-sink: rgba(0, 0, 0, 0.2);
+
+  /* 🔴 TABLE COLUMN-HEADER FILL — its own token, split out from --overlay-sink
+     2026-09-05 (user: "the table column header color can be deeper for all
+     tables").
+
+     Why it needed splitting rather than just changing --overlay-sink: that
+     token feeds ~65 other call sites whose alphas were tuned against charcoal,
+     and a previous pass that darkened them wholesale produced "a heavy grey
+     slab" (user-reported 2026-09-04). The header is the one surface that must
+     read as a distinct band; everything else must stay a quiet no-op on white.
+     One role, one token.
+
+     Dark value is byte-identical to the --overlay-sink it was carved out of, so
+     the split is a no-op in dark. */
+  --table-header: rgba(0, 0, 0, 0.2);
+  /* Sticky headers need MORE cover than static ones: rows scroll underneath
+     them, so a translucent fill lets the moving content read through. The
+     compliance table is the one that carries this; its dark value is the
+     rgba(0,0,0,0.35) it already used, kept byte-identical. In light it resolves
+     to the SAME opaque colour as the static header — opaque is strictly better
+     here, and it keeps every header in the console one colour. */
+  --table-header-sticky: rgba(0, 0, 0, 0.35);
   --overlay-sink-strong: rgba(0, 0, 0, 0.25);
 
   /* Surfaces the literals were faking — no token existed for these. */
@@ -295,6 +348,23 @@
      sidebar. It sits on the sidebar, NOT on the dark brand chip. */
   --brand-wordmark: #ffffff;
 
+  /* ── Brand chip (BrandMark / BrandLockup) ─────────────────────────────────
+     🔴 Its own tokens because the chip's SURFACE is not a code surface. It used
+     to paint itself with `var(--code-bg)` + `var(--primary)`, which is exactly
+     right in dark — a near-black tile with an amber mark on a charcoal rail —
+     and wrong in light, where --code-bg is a DARK NAVY (light-mode code blocks
+     are deliberately inverted). The light lockup rendered as a heavy navy blob
+     with a blue mark inside it at ~2:1, ringed by a blue stroke that read as a
+     focused input rather than a logo (user, 2026-09-05: "this icon color and
+     text looks like shit").
+
+     Dark keeps the indirection it already had, so these resolve to the exact
+     same values they did before the split. */
+  --brand-chip-bg: var(--code-bg);
+  --brand-chip-fg: var(--primary);
+  --brand-chip-border: var(--primary);
+  --brand-chip-shadow: 0 0 10px rgba(var(--primary-rgb), 0.10), inset 0 1px 0 rgba(var(--lift-rgb), 0.04);
+
   /* Foreground-tinted overlay. Distinct from --lift-rgb: these 14 call sites
      tint with the TEXT colour (#f4f4f5, very slightly warm) rather than pure
      white. The difference is about 1/255 on a charcoal ground — imperceptible,
@@ -312,8 +382,8 @@
 
 
 /* ═════════════════════════════════════════════════════════════════════════════
- * LIGHT THEME (2026-09-03) — purely additive. Dark is everything above, on bare
- * :root, and is NOT modified by this block.
+ * LIGHT THEME (2026-09-03; palette re-cut 2026-09-05) — purely additive. Dark is
+ * everything above, on bare :root, and is NOT modified by this block.
  *
  * 🔴 DARK IS THE UN-ATTRIBUTED STATE, ON PURPOSE. The dark palette lives on
  *    `:root`, not on `[data-theme='dark']`. That makes "dark is unchanged" a
@@ -323,17 +393,27 @@
  *    lands on :root and renders today's console exactly. The failure mode of
  *    this theme system is "you get what you already had".
  *
- * 🔴 GEOMETRY AND TYPE ARE DELIBERATELY ABSENT BELOW. --radius-*, --font-* and
- *    density are shared by both palettes; there is one set of values. Because
- *    the dark theme must not change, light INHERITS its 2/4/6px radii and its
- *    JetBrains Mono chrome. Light is the reference design's PALETTE on the
- *    current console's BONES. Do not add a radius or font override here — that
- *    would change dark too, which is a separate decision.
+ * 🔴 GEOMETRY IS OVERRIDDEN HERE, TYPE IS NOT. An earlier revision of this
+ *    banner said both were absent while the block below already overrode eight
+ *    radius tokens — the comment and the code disagreed. Settled 2026-09-05
+ *    (user): radii ARE light-only (the reference design is built on large radii
+ *    and pill controls, and scoping them here leaves dark's 2/4/4/6px intact);
+ *    the JetBrains Mono chrome STAYS in both themes. Do not add a --font-*
+ *    override here — the user's explicit call was that light keeps the console's
+ *    monospaced chrome rather than going all-sans like the reference.
  *
- * Accent: see theme_3.css. #facc15 is 1.53:1 on white and cannot be reused;
- * light uses a two-tier orange — --primary (#e8502a, 3.74:1) for fills, icons
- * and rails, --primary-text (#c53f1e, 5.12:1) for accent TEXT. Using --primary
- * for text here would ship a label that fails WCAG AA.
+ * 🔴 ACCENT IS VIOLET IN LIGHT, AMBER IN DARK (user decision, 2026-09-05, made
+ *    against a stated alternative of keeping AiKey amber). #facc15 is 1.53:1 on
+ *    white and cannot be reused at any size, so light needed its own accent
+ *    either way. The console's light chrome now diverges from the main site,
+ *    docs, tray and CLI, which remain amber — that divergence is accepted, not
+ *    an oversight. Because BrandMark/BrandWordmark paint from var(--primary),
+ *    the AK tile and the wordmark i-dot follow: violet in light, amber in dark.
+ *
+ * 🔴 EVERY VALUE BELOW WAS MEASURED WITH ALPHA COMPOSITING, not on the raw hex.
+ *    A ruler that treats rgba() as opaque both false-alarms and misses real
+ *    failures. Text tiers are sized against the CANVAS (#f5f7fa) — the harshest
+ *    ground most text sits on — not against the card.
  *
  * 🔴 DUAL-EDIT: byte-identical with aikey-control-master/web/src/index.css.
  * ═════════════════════════════════════════════════════════════════════════════ */
@@ -351,77 +431,98 @@
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
 
-  /* Surfaces — near-white, warm-biased (not blue-grey: it has to sit under a
-     warm accent without going green). Lightened three times against real
-     screens; the canvas is now only ~5/255 from the card, so cards earn their
-     edge from --border + --shadow rather than from a colour step. */
-  --background: #f4f3f0;
+  /* Surfaces — COOL blue-grey, near-white. The previous cut was warm-biased
+     because the accent was orange and a cool ground under a warm accent goes
+     green. With a violet accent that constraint reverses: violet on a warm
+     cream ground reads muddy, and the reference's character is a cool, almost
+     colourless field. Canvas is ~10/255 off the card, so cards still earn their
+     edge from --border + --shadow rather than from a big brightness step. */
+  --background: #f5f7fa;
   --card: #ffffff;
-  --card-foreground: #1b1f2e;
+  --card-foreground: #1c2333;
   --popover: #ffffff;
-  --popover-foreground: #1b1f2e;
-  --secondary: #f4f4f2;
-  --secondary-foreground: #1b1f2e;
-  --muted: #f4f4f2;
-  --accent: #f4f4f2;
-  --accent-foreground: #1b1f2e;
+  --popover-foreground: #1c2333;
+  --secondary: #f1f3f7;
+  --secondary-foreground: #1c2333;
+  --muted: #f1f3f7;
+  --accent: #f1f3f7;
+  --accent-foreground: #1c2333;
   --input: #ffffff;
   --surface-sunken: #ffffff;
   --surface-raised: #ffffff;
-  --surface-inset: #f4f4f2;
+  --surface-inset: #f1f3f7;
 
-  /* Ink — the same four-tier hierarchy dark documents, re-pitched for a light
-     ground (body → row content → headings → captions → faintest). */
-  --foreground: #1b1f2e;
-  --soft-foreground: #333849;
-  --display-foreground: #12162a;
-  --muted-foreground: #55596a;
-  /* Sized against the RAIL (#eceae6), the darkest ground light-mode text sits
-     on. At #656a79 the nav group labels measured 4.49:1 — a hair under AA once
-     the rail deepened for the three-step ladder. */
-  --faint-foreground: #5f6472;
+  /* Ink — the same four-tier hierarchy dark documents, re-pitched cool for a
+     light ground (headings → body → row content → captions → faintest).
+     Measured against the canvas #f5f7fa: display 16.97, foreground 14.63,
+     soft 10.28, muted 5.86, faint 5.05. All clear AA at any size. */
+  --display-foreground: #0f1524;
+  --foreground: #1c2333;
+  --soft-foreground: #333c50;
+  --muted-foreground: #586074;
+  --faint-foreground: #616a7e;
 
-  --border: #e4e2de;
-  --border-strong: #d5d2cd;
+  --border: #e6e9ef;
+  --border-strong: #d3d8e0;
 
-  /* 🔴 THREE-STEP LADDER (2026-09-04, settled after six passes):
-       rail            #eceae6  deepest — the navigation reads as a distinct block
-       content ground  #f4f3f0  tinted  — the surface cards sit ON
-       card / table / input  #ffffff    — pure white, pops against the ground
+  /* 🔴 SEPARATION MOVED FROM BRIGHTNESS TO BORDER (2026-09-05). The previous cut
+     used a three-step brightness ladder (rail #eceae6 darkest / ground #f4f3f0 /
+     card #ffffff) because the rail had to read as a distinct block. The
+     reference design solves the same problem the other way: the rail is WHITE
+     and is separated by a hairline plus a soft panel shadow.
 
-     🔴 THE CONSTRAINT THAT DRIVES THIS, stated so nobody re-flattens it: a white
-     card can only stand out against a NON-white ground. Two earlier attempts
-     failed on exactly that — content ground set to #ffffff made the white table
-     invisible no matter how white the table itself was made, and setting rail
-     and ground to the same grey made the rail stop reading as navigation.
-     Each of the three steps is load-bearing; collapsing any two re-creates one
-     of those two failures. */
-  --sidebar: #eceae6;
-  --sidebar-foreground: #6b7080;
-  --sidebar-border: #e6e4e0;
-  --sidebar-accent: #ffffff;
-  --sidebar-accent-foreground: #1b1f2e;
+     🔴 THE ONE CONSTRAINT THAT SURVIVES BOTH APPROACHES, stated so nobody
+     re-flattens it: a white card can only stand out against a NON-white ground.
+     That still holds here — cards are #ffffff on a #f5f7fa canvas. What changed
+     is only HOW the rail is told apart, and --sidebar-border + --shadow-panel
+     are now load-bearing for that. If either is dropped the rail dissolves into
+     the page, which is the failure the old ladder was built to avoid.
 
-  /* Accent — two-tier, see header note. */
-  /* 🔴 Orange-yellow with a DARK ink label — the same pattern the dark theme
-     already uses for its amber button, and the only way to go this warm. White
-     text fails on an orange-yellow fill (#f2801a + white = 2.7:1); dark ink on
-     it is 6.14:1. Going warmer than this would keep failing white text. */
-  --primary: #f2801a;
-  --primary-foreground: #1b1f2e;
-  --primary-dim: #d96f10;
-  /* 🔴 Sized against the CANVAS (#ecebe9), not the card. An earlier pass sized
-     these against #ffffff and shipped three tiers that failed AA on the page
-     ground — measured in a browser: muted 4.14:1, faint 2.24:1, accent-text
-     4.30:1. The canvas is the harsher ground and is what most text sits on. */
-  --primary-text: #9a4f0a;
-  --primary-rgb: 242, 128, 26;
-  --primary-dim-rgb: 217, 111, 16;
-  --ring: #f2801a;
-  --link-hover: #7d3f08;
+     --sidebar-accent is the ACTIVE nav pill. It had to invert with the rail:
+     a white pill was right on a grey rail, and is invisible on a white one. */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #5c6575;
+  --sidebar-border: #e6e9ef;
+  --sidebar-accent: #f1f3f7;
+  --sidebar-accent-foreground: #1c2333;
+
+  /* Accent — two-tier TENCENT BLUE (#0052d9, the TDesign brand blue), user
+     decision 2026-09-05. It replaces the violet cut of the same day; violet had
+     itself replaced the original orange. Each re-cut was a single token edit
+     because every call site is tokenised — that is what the 565-literal
+     migration bought.
+
+     --primary carries FILLS, icons and rails (needs 3:1 for UI components;
+     measured 6.10:1 on the canvas). --primary-text carries accent TEXT (needs
+     4.5:1; measured 7.42:1). The split is kept so the two tiers can be re-cut
+     independently without silently shipping a failing label — the exact trap
+     the orange cut fell into.
+
+     🔴 WHITE label on the fill. White on #0052d9 is 6.54:1; dark ink on it is
+     2.52:1 and fails. Any future lighter accent must re-check this — the two
+     are not interchangeable.
+
+     ⚠️ KNOWN ADJACENCY: --info is #4a7fd0, also a blue. It was picked when the
+     accent was orange and stayed through the violet cut. Info is always carried
+     by a LABELLED chip, never by colour alone, so this is recorded rather than
+     resolved — resolving it means re-cutting a semantic colour, which is a
+     separate decision. */
+  --primary: #0052d9;
+  --primary-foreground: #ffffff;
+  --primary-dim: #003fa8;
+  --primary-text: #0047bd;
+  --primary-rgb: 0, 82, 217;
+  --primary-dim-rgb: 0, 63, 168;
+  --ring: #0052d9;
+  --link-hover: #00337d;
 
   /* Status — solids darken so they carry on white; the TEXT tier reverses
-     direction (lighter than the solid on dark, darker than it on light). */
+     direction (lighter than the solid on dark, darker than it on light).
+     Unchanged by the violet re-cut: these are semantic, not brand, and they
+     already measured AA on the cool grounds (success 4.67, warning 5.44,
+     destructive 6.03, info 5.78 against the canvas).
+     🔴 --info stays BLUE next to a violet --primary. They are adjacent hues;
+     info is always carried by a labelled chip, never by colour alone. */
   --success: #16a34a;
   --success-rgb: 22, 163, 74;
   --success-text: #15803d;
@@ -442,27 +543,58 @@
   --info-rgb: 74, 127, 208;
   --info-text: #2f5fa8;
 
+  /* Caution ramp — see the note in :root. In light the two dark tiers do NOT
+     stay a bright fill + a brighter text: a single literal is used BOTH as a
+     `color:` and as a solid fill across the call sites, so each light value has
+     to clear 4.5:1 in both roles at once. Measured on the canvas #f5f7fa and,
+     for the fills, as white-on-fill (the fills carry var(--surface-sunken),
+     which is #ffffff here):
+       --caution       5.44 as text / 5.84 white-on-fill
+       --caution-text  6.11 as text / 6.55 white-on-fill
+       --caution-deep  7.74 as text / 8.31 white-on-fill
+     🔴 This is why they cannot simply reuse --warning (#ea7317): that is a solid
+     tier and measures 2.81:1 as text on the canvas. */
+  --caution: #a8480a;
+  --caution-rgb: 168, 72, 10;
+  --caution-text: #9a4408;
+  --caution-text-rgb: 154, 68, 8;
+  --caution-deep: #7c3d06;
+
   /* Overlays invert: a white lift is invisible on a white card, so hover and
      raise become ink-at-low-alpha. Alphas are retuned per ground, which is why
      these are whole-token swaps rather than RGB triplets. */
-  --overlay-faint: rgba(27, 31, 46, 0.025);
-  --overlay-hover: rgba(27, 31, 46, 0.04);
-  --overlay-raise: rgba(27, 31, 46, 0.05);
-  --overlay-active: rgba(27, 31, 46, 0.07);
+  --overlay-faint: rgba(28, 35, 51, 0.025);
+  --overlay-hover: rgba(28, 35, 51, 0.04);
+  --overlay-raise: rgba(28, 35, 51, 0.05);
+  --overlay-active: rgba(28, 35, 51, 0.07);
   --overlay-sink: #ffffff;
+
+  /* The header band. #e4e9f2 is 27/255 down from the white card — clearly a
+     band, and deliberately short of the ~46/255 warm grey that read as a slab.
+     Header text is --muted-foreground, which measures 5.16:1 on it. */
+  --table-header: #e4e9f2;
+  --table-header-sticky: #e4e9f2;
   --overlay-sink-strong: #ffffff;
 
-  /* Frosted header glass — translucent white instead of translucent charcoal. */
-  --glass-top: rgba(255, 255, 255, 0.78);
-  --glass-bottom: rgba(236, 235, 233, 0.62);
+  /* Frosted header glass — translucent white over the cool canvas.
+     🔴 These two tokens are the ones the 2026-09-05 grey-header bug was about:
+     .user-pages .vault-header defined them but kept painting the dark literals,
+     so the Personal header composited to rgb(99,100,102) on a light page. The
+     rule now consumes them; see the note on that selector. Composited here:
+     top → rgb(253,253,254), bottom → rgb(245,247,250). */
+  --glass-top: rgba(255, 255, 255, 0.82);
+  --glass-bottom: rgba(245, 247, 250, 0.66);
 
-  /* Shadows tint with the ink hue, not pure black — black shadows on a warm
+  /* Shadows tint with the ink hue, not pure black — black shadows on a cool
      grey canvas read as dirt. Two-part (tight contact + wide ambient). */
-  --shadow-sm: 0 1px 2px rgba(27, 31, 46, 0.06);
-  --shadow: 0 1px 3px rgba(27, 31, 46, 0.07), 0 8px 20px -12px rgba(27, 31, 46, 0.14);
-  --shadow-md: 0 2px 4px rgba(27, 31, 46, 0.05), 0 16px 32px -16px rgba(27, 31, 46, 0.16);
-  --shadow-pop: 0 8px 24px -8px rgba(27, 31, 46, 0.22);
-  --shadow-panel: 1px 0 0 var(--border), 6px 0 18px -12px rgba(27, 31, 46, 0.10);
+  --shadow-sm: 0 1px 2px rgba(28, 35, 51, 0.06);
+  --shadow: 0 1px 3px rgba(28, 35, 51, 0.07), 0 8px 20px -12px rgba(28, 35, 51, 0.14);
+  --shadow-md: 0 2px 4px rgba(28, 35, 51, 0.05), 0 16px 32px -16px rgba(28, 35, 51, 0.16);
+  --shadow-pop: 0 8px 24px -8px rgba(28, 35, 51, 0.22);
+  /* Carries the rail's separation now that the rail is white — see the sidebar
+     note. Hairline first, ambient lift second; the dark theme's
+     `4px 0 24px rgba(0,0,0,.5)` renders as a black bar beside a light rail. */
+  --shadow-panel: 1px 0 0 var(--border), 6px 0 18px -12px rgba(28, 35, 51, 0.10);
 
   /* Glow is a DARK-GROUND device (light bleeding off a bright element on a dark
      field); on a light ground it renders as a smudge. The token names are kept
@@ -475,42 +607,52 @@
   /* Buttons: the dark theme deliberately runs .btn-primary one shade dimmer
      than --primary. On light that distinction inverts into saturation rather
      than brightness, so the CTA still reads as primary without shouting. */
-  --btn-primary-bg: #f2801a;
-  --btn-primary-border-rgb: 217, 111, 16;
-  --btn-primary-dim-bg: #d96f10;
-  --btn-primary-dim-fg: #1b1f2e;
+  --btn-primary-bg: #0052d9;
+  --btn-primary-border-rgb: 0, 63, 168;
+  --btn-primary-dim-bg: #003fa8;
+  --btn-primary-dim-fg: #ffffff;
 
   /* Both collapse to ink on a light ground — see the note in :root. --scrim-rgb
      deliberately stays black: a modal backdrop is dark in light mode too. */
-  --lift-rgb: 27, 31, 46;
-  /* 🔴 MID-GREY, not ink. The ~250 call sites choose their own alpha, and those
-     alphas were tuned against a CHARCOAL ground where "sink" has lots of
-     headroom. Reusing ink here made a 0.2 card-header render as rgb(209,210,213)
-     — a heavy grey slab (user-reported, 2026-09-04). A mid-grey hue keeps the
-     🔴 WHITE. Six passes against real screens (ink → 140,144,155 → 200,203,210
+  --lift-rgb: 28, 35, 51;
+  /* 🔴 WHITE. Six passes against real screens (ink → 140,144,155 → 200,203,210
      → white → 214,210,202 → white). Final call: tables, card header strips and
      inputs are PURE WHITE, so every sink overlay resolves to a no-op on a white
      surface. Structure comes from --border alone — a table header reads from its
-     bottom hairline and its uppercase muted label, not from a fill. The nav rail
-     is the only grey block on the light screen.
+     bottom hairline and its uppercase muted label, not from a fill.
      --lift-rgb stays ink because a hover must actually be felt. */
   --sink-rgb: 255, 255, 255;
   --scrim-rgb: 0, 0, 0;
-  --surface-inset-rgb: 242, 241, 238;
-  --muted-rgb: 85, 89, 106;
-  --faint-rgb: 95, 100, 114;
-  --code-bg-rgb: 27, 31, 46;
-  --chart-stone: #6b645e;
-  --input-well: #f4f3f1;
-  --surface-alt: #f4f3f1;
-  --code-bg: #1b1f2e;
-  --code-foreground: #e8e6e3;
-  --backdrop-chrome: rgba(255, 255, 255, 0.80);
-  --brand-wordmark: #1b1f2e;
-  --canvas: #f4f3f0;
-  --well-recessed: rgba(27, 31, 46, 0.05);
-  --fg-rgb: 27, 31, 46;
-  --bg-rgb: 236, 235, 233;
+  --surface-inset-rgb: 241, 243, 247;
+  --muted-rgb: 88, 96, 116;
+  --faint-rgb: 97, 106, 126;
+  --code-bg-rgb: 28, 35, 51;
+  /* Cool neutral for categorical chart scales, to match the ground. */
+  --chart-stone: #6b7280;
+  --input-well: #f5f7fa;
+  --surface-alt: #f5f7fa;
+  --code-bg: #1c2333;
+  --code-foreground: #e6e9ef;
+  --backdrop-chrome: rgba(255, 255, 255, 0.82);
+  --brand-wordmark: #1c2333;
+
+  /* Brand chip in light: a SOLID accent tile with a white mark, not an inverted
+     code surface. White on #0052d9 is 6.54:1, so the AK reads at any size; the
+     border matches the fill so the 1.5px geometry is preserved without drawing a
+     ring. The glow becomes a real elevation — a soft accent-tinted drop shadow —
+     because a 10% glow is a dark-ground device and renders as a smudge here. */
+  --brand-chip-bg: #0052d9;
+  --brand-chip-fg: #ffffff;
+  --brand-chip-border: #0052d9;
+  --brand-chip-shadow: 0 1px 2px rgba(28, 35, 51, 0.10), 0 4px 10px -4px rgba(0, 82, 217, 0.40);
+  --canvas: #f5f7fa;
+  --well-recessed: rgba(28, 35, 51, 0.05);
+  --fg-rgb: 28, 35, 51;
+  /* 🔴 Must equal --background. The orange cut left this at the pre-lightening
+     canvas (236,235,233) while --background had already moved to #f4f3f0, so
+     every rgba(var(--bg-rgb), α) call site tinted toward a ground that no longer
+     existed. Re-derived here; keep the two in lockstep. */
+  --bg-rgb: 245, 247, 250;
   --card-rgb: 255, 255, 255;
   /* White: this triplet paints CARD surfaces (the vault skin fills its .card
      with rgba(var(--surface-alt-rgb), .86)). Any tint here shows through as a
@@ -621,10 +763,18 @@ body {
 }
 
 .user-pages .vault-header {
+  /* 🔴 These MUST stay var() (bugfix 20260905-personal-header-grey-in-light.md).
+     The light theme defined --glass-top/--glass-bottom but this rule kept the
+     dark literals rgba(39,39,42,.72)/rgba(24,24,27,.55), so on a light page the
+     bar composited to rgb(99,100,102)/rgb(128,128,130) — a grey slab across the
+     top of the Personal console, reported on Windows and on staging. A token
+     with no consumer fails silently: no build error, no lint, and a contrast
+     script that samples solid colours does not look inside a gradient.
+     Fence: light-theme-token-consumers.test.ts. */
   background: linear-gradient(
     180deg,
-    rgba(39, 39, 42, 0.72) 0%,
-    rgba(24, 24, 27, 0.55) 100%
+    var(--glass-top) 0%,
+    var(--glass-bottom) 100%
   );
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
   backdrop-filter: blur(12px) saturate(1.2);
@@ -1056,7 +1206,7 @@ body {
   font-weight: 500;
   white-space: nowrap;
   border: 1px solid var(--border);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-pop);
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease 60ms, transform 160ms ease 60ms;
@@ -1299,7 +1449,7 @@ table th {
   color: var(--muted-foreground);
   font-weight: 600;
   border-bottom: 1px solid var(--border);
-  background-color: var(--overlay-sink);
+  background-color: var(--table-header);
   white-space: nowrap;
 }
 table td {

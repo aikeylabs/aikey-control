@@ -1708,9 +1708,9 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
               style={
                 identityMismatch
                   ? {
-                      color: '#facc15',
-                      background: 'rgba(250,204,21,0.08)',
-                      border: '1px solid rgba(250,204,21,0.35)',
+                      color: 'var(--primary-text)',
+                      background: 'rgba(var(--primary-rgb), 0.08)',
+                      border: '1px solid rgba(var(--primary-rgb), 0.35)',
                     }
                   : {
                       color: 'var(--success-text)',
@@ -1784,9 +1784,9 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             aria-live="polite"
             className="text-[11px] font-mono rounded px-3 py-2"
             style={{
-              color: '#facc15',
-              background: 'rgba(250,204,21,0.08)',
-              border: '1px solid rgba(250,204,21,0.38)',
+              color: 'var(--primary-text)',
+              background: 'rgba(var(--primary-rgb), 0.08)',
+              border: '1px solid rgba(var(--primary-rgb), 0.38)',
             }}
           >
             {syncWarning}
@@ -1802,7 +1802,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         <ModalPortal scopeClassName="vault-page">
           <div
             className="fixed inset-0 z-50 flex items-center justify-center"
-            style={{ background: 'var(--overlay-sink)' }}
+            style={{ background: 'rgba(var(--scrim-rgb), 0.2)' }}
             onClick={() => setEgressConfigOpen(false)}
           >
             <div
@@ -1937,7 +1937,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         <ModalPortal scopeClassName="vault-page">
           <div
             className="fixed inset-0 z-50 flex items-center justify-center"
-            style={{ background: 'var(--overlay-sink)' }}
+            style={{ background: 'rgba(var(--scrim-rgb), 0.2)' }}
             onClick={() => setLoginConfirmOpen(false)}
           >
             <div
@@ -2149,7 +2149,7 @@ function AddAccountModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
                 {t('oauthContribute.addGroupsLoadFailed')}
               </div>
             ) : filteredGroups.length === 0 ? (
-              <div className="text-[11px] font-mono py-2" style={{ color: '#facc15' }}>
+              <div className="text-[11px] font-mono py-2" style={{ color: 'var(--primary-text)' }}>
                 {/* Genuinely no matching group: none joined at all, or none for the
                   picked provider (e.g. joined only Claude pools but picked Codex). */}
                 {groups.length === 0 ? t('oauthContribute.addNoGroups') : t('oauthContribute.addNoGroupsForProvider')}

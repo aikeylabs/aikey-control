@@ -212,7 +212,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
     <ModalPortal>
       <div
         className="fixed inset-0 z-50"
-        style={{ backgroundColor: 'var(--overlay-sink)' }}
+        style={{ backgroundColor: 'rgba(var(--scrim-rgb), 0.2)' }}
         onClick={handleNotNow}
       />
       <div

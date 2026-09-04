@@ -92,7 +92,7 @@ function healthGlyph(b: HealthBucket): { glyph: string; color: string; labelKey:
     case 'ok':
       return { glyph: '✓', color: 'var(--success, #16a34a)', labelKey: 'apps.healthOk' };
     case 'warn':
-      return { glyph: '⚠', color: '#ca8a04', labelKey: 'apps.healthWarn' };
+      return { glyph: '⚠', color: 'var(--primary-dim)', labelKey: 'apps.healthWarn' };
     case 'error':
       return { glyph: '✗', color: 'var(--destructive, #ef4444)', labelKey: 'apps.healthError' };
     case 'never':
@@ -189,7 +189,7 @@ function BindingPill({ binding }: { binding: AppBinding }) {
         color: 'var(--foreground)',
       }}
     >
-      <span style={{ color: '#ca8a04' }}>{binding.upstream}</span>
+      <span style={{ color: 'var(--primary-dim)' }}>{binding.upstream}</span>
       <span style={{ color: 'var(--muted-foreground)' }}>→</span>
       <span>{binding.key_source_label ?? binding.key_source_ref}</span>
       <span
@@ -398,7 +398,7 @@ export default function UserAppsListPage() {
               onClick={() => setAddFlow({ kind: 'add' })}
               className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider"
               style={{
-                background: '#ca8a04',
+                background: 'var(--primary-dim)',
                 color: 'var(--primary-foreground, #18181b)',
               }}
               title={t('apps.addAppTooltip')}
@@ -486,7 +486,7 @@ export default function UserAppsListPage() {
             onClick={() => setAddFlow({ kind: 'add' })}
             className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider"
             style={{
-              background: '#ca8a04',
+              background: 'var(--primary-dim)',
               color: 'var(--primary-foreground, #18181b)',
             }}
             title={t('apps.addAppTooltip')}
@@ -531,9 +531,9 @@ export default function UserAppsListPage() {
               style={
                 statusFilter === s
                   ? {
-                      background: '#ca8a04',
+                      background: 'var(--primary-dim)',
                       color: 'var(--primary-foreground, #18181b)',
-                      border: '1px solid #ca8a04',
+                      border: '1px solid var(--primary-dim)',
                     }
                   : {
                       background: 'transparent',
@@ -617,7 +617,7 @@ export default function UserAppsListPage() {
                         <div
                           className="rounded w-8 h-8 flex items-center justify-center text-[11px] font-bold font-mono"
                           style={{
-                            background: '#ca8a04',
+                            background: 'var(--primary-dim)',
                             color: 'var(--primary-foreground, #18181b)',
                           }}
                         >
@@ -639,7 +639,7 @@ export default function UserAppsListPage() {
                               <span
                                 className="rounded px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider"
                                 style={{
-                                  background: '#ca8a04',
+                                  background: 'var(--primary-dim)',
                                   color: 'var(--primary-foreground, #18181b)',
                                 }}
                                 title={t('apps.firstPartyBadgeTooltip')}

@@ -106,8 +106,8 @@ export const TRUST_CHECK_CSS = `
    (only the ON state pulses below): STANDBY means the observer is
    intentionally sitting still, animating it would lie. */
 .trust-check-page .tc-observer-standby {
-  background: rgba(251, 191, 36, 0.10);
-  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(var(--caution-text-rgb), 0.10);
+  border: 1px solid rgba(var(--caution-text-rgb), 0.35);
   color: rgb(245, 158, 11);
 }
 .trust-check-page .tc-observer-off {
@@ -165,11 +165,11 @@ export const TRUST_CHECK_CSS = `
      divider. */
   background: var(--primary-dim);
   color: var(--primary-foreground, #18181b);
-  border-color: rgba(202, 138, 4, 0.55);
+  border-color: rgba(var(--primary-dim-rgb), 0.55);
 }
 .trust-check-page .tc-btn-primary:hover:not(:disabled) {
   background: var(--primary);
-  border-color: rgba(250, 204, 21, 0.7);
+  border-color: rgba(var(--primary-rgb), 0.7);
 }
 .trust-check-page .tc-btn:disabled {
   opacity: 0.5;
@@ -328,9 +328,9 @@ export const TRUST_CHECK_CSS = `
   cursor: pointer;
 }
 .trust-check-page .tc-tab-btn.active {
-  background: rgba(250, 204, 21, 0.10);
+  background: rgba(var(--primary-rgb), 0.10);
   color: var(--primary-text);
-  border-color: rgba(250, 204, 21, 0.35);
+  border-color: rgba(var(--primary-rgb), 0.35);
 }
 .trust-check-page .tc-tab-hint {
   font-size: 11px;
@@ -374,9 +374,9 @@ export const TRUST_CHECK_CSS = `
   transition: background-color 0.12s ease, opacity 0.12s ease;
 }
 .trust-check-page .tc-chip.active {
-  background: rgba(250, 204, 21, 0.12);
+  background: rgba(var(--primary-rgb), 0.12);
   color: var(--primary-text);
-  border-color: rgba(250, 204, 21, 0.35);
+  border-color: rgba(var(--primary-rgb), 0.35);
 }
 .trust-check-page .tc-chip.active::before {
   background: var(--primary);
@@ -455,7 +455,7 @@ export const TRUST_CHECK_CSS = `
   vertical-align: middle;
   border-bottom: 1px solid rgba(var(--surface-inset-rgb), 0.5);
 }
-.trust-check-page .tc-table tr.selected td { background: rgba(250, 204, 21, 0.04); }
+.trust-check-page .tc-table tr.selected td { background: rgba(var(--primary-rgb), 0.04); }
 .trust-check-page .tc-table tr:hover td { background: rgba(var(--surface-inset-rgb), 0.18); }
 
 /* id stack — primary line bold + secondary mono line */
@@ -552,7 +552,7 @@ export const TRUST_CHECK_CSS = `
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
   font-weight: 500;
-  color: var(--tc-suspect, #f59e0b);
+  color: var(--tc-suspect, var(--caution));
   letter-spacing: 0.02em;
   cursor: help;
 }
@@ -573,8 +573,8 @@ export const TRUST_CHECK_CSS = `
   gap: 6px;
   padding: 3px 10px;
   border-radius: 999px;
-  background: rgba(250, 204, 21, 0.12);
-  border: 1px solid rgba(250, 204, 21, 0.35);
+  background: rgba(var(--primary-rgb), 0.12);
+  border: 1px solid rgba(var(--primary-rgb), 0.35);
   font-size: 11px;
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   color: var(--primary-text);
@@ -643,7 +643,7 @@ export const TRUST_CHECK_CSS = `
   font-size: 11px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(250, 204, 21, 0.10);
+  background: rgba(var(--primary-rgb), 0.10);
   color: var(--primary-text);
 }
 .trust-check-page .tc-banner-offline {
@@ -741,7 +741,7 @@ export const TRUST_CHECK_CSS = `
    * status='error' for UPSTREAM_429 / MISSING_APP_KEY etc. */
   background: rgba(var(--destructive-rgb), 0.15);
   color: var(--tc-risk);
-  box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.45);
 }
 .trust-check-page .tc-err-inconclusive {
   background: rgba(var(--warning-rgb), 0.15);
@@ -787,7 +787,7 @@ export const TRUST_CHECK_CSS = `
 .trust-check-page .tc-drawer-dimmer {
   position: fixed;
   inset: 0;
-  background: var(--overlay-sink);
+  background: rgba(var(--scrim-rgb), 0.2);
   /* Below the drawer but above page chrome. */
   z-index: 40;
   animation: tc-fade-in 120ms ease forwards;
@@ -897,8 +897,8 @@ export const TRUST_CHECK_CSS = `
   cursor: help;
 }
 .trust-check-page .tc-subscore.highlight {
-  border-color: rgba(250, 204, 21, 0.45);
-  background: rgba(250, 204, 21, 0.06);
+  border-color: rgba(var(--primary-rgb), 0.45);
+  background: rgba(var(--primary-rgb), 0.06);
 }
 /* "missing" = value is null. Hatch pattern signals "intentionally
    empty, hover for why" rather than "this looks broken". Cursor is
@@ -946,7 +946,7 @@ export const TRUST_CHECK_CSS = `
   opacity: 0.8;
 }
 .trust-check-page .tc-drawer-meta code {
-  background: rgba(250, 204, 21, 0.08);
+  background: rgba(var(--primary-rgb), 0.08);
   color: var(--primary-text);
   padding: 1px 5px;
   border-radius: 4px;
@@ -979,9 +979,9 @@ export const TRUST_CHECK_CSS = `
   background: rgba(var(--surface-inset-rgb), 0.25);
 }
 .trust-check-page .tc-drawer-footer-hint-warn {
-  color: #fbbf24;
-  background: rgba(250, 204, 21, 0.08);
-  border-color: rgba(250, 204, 21, 0.35);
+  color: var(--caution-text);
+  background: rgba(var(--primary-rgb), 0.08);
+  border-color: rgba(var(--primary-rgb), 0.35);
 }
 .trust-check-page .tc-drawer-footer-hint-error {
   color: var(--destructive-text);
@@ -1026,12 +1026,12 @@ export const TRUST_CHECK_CSS = `
    Red would over-signal danger and steer users to misread the scope. */
 .trust-check-page .tc-drawer-footer-remove.armed {
   color: var(--surface-sunken);
-  background: #fbbf24;
-  border-color: #fbbf24;
+  background: var(--caution-text);
+  border-color: var(--caution-text);
 }
 .trust-check-page .tc-drawer-footer-remove.armed:hover:not(:disabled) {
-  background: #f59e0b;
-  border-color: #f59e0b;
+  background: var(--caution);
+  border-color: var(--caution);
 }
 .trust-check-page .tc-drawer-footer-remove:disabled {
   cursor: not-allowed;
@@ -1050,7 +1050,7 @@ export const TRUST_CHECK_CSS = `
   background: var(--surface-sunken);
   overflow: hidden;
 }
-.trust-check-page .tc-history-row.expanded { border-color: rgba(250, 204, 21, 0.35); }
+.trust-check-page .tc-history-row.expanded { border-color: rgba(var(--primary-rgb), 0.35); }
 .trust-check-page .tc-history-row-head {
   width: 100%;
   display: flex;
@@ -1171,7 +1171,7 @@ export const TRUST_CHECK_CSS = `
   color: var(--muted-foreground);
 }
 .trust-check-page .tc-scoring-question-head code {
-  background: rgba(250, 204, 21, 0.10);
+  background: rgba(var(--primary-rgb), 0.10);
   color: var(--primary-text);
   padding: 1px 5px;
   border-radius: 4px;
@@ -1340,8 +1340,8 @@ export const TRUST_CHECK_CSS = `
   align-items: center;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(250, 204, 21, 0.10);
-  border: 1px solid rgba(250, 204, 21, 0.30);
+  background: rgba(var(--primary-rgb), 0.10);
+  border: 1px solid rgba(var(--primary-rgb), 0.30);
   color: var(--primary-text);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
@@ -1432,7 +1432,7 @@ export const TRUST_CHECK_CSS = `
 }
 .trust-check-page .tc-baseurl-row:first-child { border-top: none; }
 .trust-check-page .tc-baseurl-row:hover { background: rgba(var(--lift-rgb), 0.02); }
-.trust-check-page .tc-baseurl-row.selected { background: rgba(250, 204, 21, 0.06); }
+.trust-check-page .tc-baseurl-row.selected { background: rgba(var(--primary-rgb), 0.06); }
 .trust-check-page .tc-baseurl-row::before {
   /* band-color stripe on the left edge — same idiom the metric cards
      used, repurposed to make at-a-glance health visible per row. */
@@ -1579,7 +1579,7 @@ export const TRUST_CHECK_CSS = `
   background: rgba(var(--destructive-rgb), 0.06);
 }
 .trust-check-page .tc-kb-info {
-  border-left-color: rgba(250, 204, 21, 0.6);
+  border-left-color: rgba(var(--primary-rgb), 0.6);
 }
 .trust-check-page .tc-kb-head {
   display: flex;
@@ -1645,8 +1645,8 @@ export const TRUST_CHECK_CSS = `
   padding: 8px 10px;
 }
 .trust-check-page .tc-dimension.warn {
-  border-color: rgba(250, 204, 21, 0.45);
-  background: rgba(250, 204, 21, 0.06);
+  border-color: rgba(var(--primary-rgb), 0.45);
+  background: rgba(var(--primary-rgb), 0.06);
 }
 .trust-check-page .tc-dimension-label {
   font-size: 11px;
@@ -1677,7 +1677,7 @@ export const TRUST_CHECK_CSS = `
 .trust-check-page .tc-escalation-no_round2_bank,
 .trust-check-page .tc-escalation-insufficient_budget,
 .trust-check-page .tc-escalation-round2_failed {
-  border-left: 3px solid rgba(250, 204, 21, 0.6);
+  border-left: 3px solid rgba(var(--primary-rgb), 0.6);
 }
 .trust-check-page .tc-escalation-reason {
   margin: 6px 0 0;

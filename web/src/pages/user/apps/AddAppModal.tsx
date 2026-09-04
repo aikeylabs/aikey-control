@@ -155,7 +155,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
       aria-modal="true"
       aria-labelledby="add-app-title"
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'var(--overlay-sink)', backdropFilter: 'blur(2px)' }}
+      style={{ background: 'rgba(var(--scrim-rgb), 0.2)', backdropFilter: 'blur(2px)' }}
       onClick={onClose}
     >
       <div
@@ -213,12 +213,12 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
               className="rounded border p-4"
               style={{
                 background: 'var(--card)',
-                borderColor: '#facc15',
+                borderColor: 'var(--primary)',
               }}
             >
               <div
                 className="font-mono text-[12px] uppercase tracking-wider mb-2"
-                style={{ color: '#facc15' }}
+                style={{ color: 'var(--primary-text)' }}
               >
                 {t('apps.vaultLocked')}
               </div>
@@ -255,7 +255,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
                   disabled={!unlockPassword || unlockMut.isPending}
                   className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider disabled:opacity-50"
                   style={{
-                    background: '#facc15',
+                    background: 'var(--primary)',
                     color: 'var(--primary-foreground)',
                   }}
                 >
@@ -412,7 +412,7 @@ export function AddAppModal({ onClose, onRegistered }: AddAppModalProps) {
             disabled={!canSubmit}
             className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider disabled:opacity-50"
             style={{
-              background: canSubmit ? '#ca8a04' : 'var(--secondary, #3f3f46)',
+              background: canSubmit ? 'var(--primary-dim)' : 'var(--secondary, #3f3f46)',
               color: canSubmit ? 'var(--primary-foreground, #18181b)' : 'var(--muted-foreground)',
             }}
           >

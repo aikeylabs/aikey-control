@@ -454,7 +454,7 @@ function LastTestCell(props: { value: VaultLastTest | null }) {
   // its own boolean — that's the user's signal-chain mental model.
   const firstFailIdx = phases.findIndex(p => !p.ok && !p.skipped);
   const okColor    = 'var(--success, #22c55e)';
-  const failColor  = '#f59e0b';                       // amber — this stage broke
+  const failColor  = 'var(--caution)';                       // amber — this stage broke
   const downstream = 'var(--destructive, #ef4444)';   // red — never got a chance
   const skippedColor = 'var(--muted-foreground)';
 
@@ -3207,7 +3207,7 @@ const Row = React.memo(function Row(props: {
             // it so the member isn't left thinking a blank "Shared group" is fine.
             <>
               <span className="mx-1 opacity-40">·</span>
-              <span style={{ color: '#f59e0b' }} title={t('vault.oauthGroupNoAccessHint')}>
+              <span style={{ color: 'var(--caution)' }} title={t('vault.oauthGroupNoAccessHint')}>
                 {t('vault.oauthGroupNoAccess')}
               </span>
             </>
@@ -5095,7 +5095,7 @@ function DetailDrawer(props: {
                 ) : r.status === 'needs_login' ? (
                   <>
                     <span className="status-dot" style={{ width: 5, height: 5 }} />
-                    <span style={{ color: 'var(--warning, #f59e0b)' }}>{t('vault.statusNeedsLogin')}</span>
+                    <span style={{ color: 'var(--warning, var(--caution))' }}>{t('vault.statusNeedsLogin')}</span>
                   </>
                 ) : r.status === 'undecryptable' ? (
                   // Same rationale as the row chip — see there.
@@ -5528,7 +5528,7 @@ function SuiteResultsTable(props: { rows: unknown[] }) {
             // Per-phase fail colour: Ping fail = red (network gone),
             // API/Chat fail = amber (reach worked, downstream rejected).
             const pingFailColor = 'var(--destructive, #ef4444)';
-            const stageFailColor = '#f59e0b';
+            const stageFailColor = 'var(--caution)';
             return (
               <tr key={i} style={{ borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
                 <td style={cellStyle}>{label}</td>
@@ -5713,7 +5713,7 @@ function FailureDetails(props: { rows: unknown[] }) {
                 border: '1px solid var(--border)',
                 borderRadius: 6,
                 padding: '10px 12px',
-                background: 'rgba(245, 158, 11, 0.06)',
+                background: 'rgba(var(--caution-rgb), 0.06)',
               }}
             >
               {/* Header row: dot · provider · stage · HTTP status · type chip */}
@@ -5733,7 +5733,7 @@ function FailureDetails(props: { rows: unknown[] }) {
                     width: 6,
                     height: 6,
                     borderRadius: '50%',
-                    background: '#f59e0b',
+                    background: 'var(--caution)',
                   }}
                 />
                 <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>
@@ -5744,7 +5744,7 @@ function FailureDetails(props: { rows: unknown[] }) {
                 {f.status != null && (
                   <>
                     <span style={{ color: 'var(--muted-foreground)' }}>·</span>
-                    <span className="font-mono" style={{ color: '#f59e0b' }}>
+                    <span className="font-mono" style={{ color: 'var(--caution)' }}>
                       HTTP {f.status}
                     </span>
                   </>
@@ -5756,9 +5756,9 @@ function FailureDetails(props: { rows: unknown[] }) {
                       display: 'inline-block',
                       padding: '1px 7px',
                       borderRadius: 999,
-                      background: 'rgba(245, 158, 11, 0.18)',
-                      border: '1px solid rgba(245, 158, 11, 0.45)',
-                      color: '#f59e0b',
+                      background: 'rgba(var(--caution-rgb), 0.18)',
+                      border: '1px solid rgba(var(--caution-rgb), 0.45)',
+                      color: 'var(--caution)',
                       fontSize: 10,
                       fontWeight: 600,
                       letterSpacing: 0.2,

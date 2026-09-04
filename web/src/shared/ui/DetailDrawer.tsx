@@ -47,7 +47,14 @@ export function DetailDrawer({ open, onClose, title, subtitle, width = 480, chil
       <div
         className="fixed inset-0 z-40 transition-opacity duration-200"
         style={{
-          backgroundColor: 'var(--overlay-sink)',
+        // 🔴 SCRIM, not a surface. This must stay a scrim token: --overlay-sink
+        // is #ffffff in light (its job there is to be a no-op tint on a white
+        // table), so painting a `fixed inset-0` backdrop with it covered the
+        // whole page in OPAQUE WHITE — user-reported 2026-09-05, "opening the
+        // right-side details makes the left side all white".
+        // rgba(var(--scrim-rgb), 0.2) is byte-identical to the old dark value.
+        // Fence: no-surface-token-as-scrim.test.ts
+          backgroundColor: 'rgba(var(--scrim-rgb), 0.2)',
           opacity: open ? 1 : 0,
           pointerEvents: open ? 'auto' : 'none',
         }}

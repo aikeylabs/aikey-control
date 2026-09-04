@@ -534,7 +534,7 @@ export default function UserPerformancePage() {
                     </div>
                   </button>
                   <div className="key-bar">
-                    <span className="key-bar-fill" style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: '#a16207' }} />
+                    <span className="key-bar-fill" style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: 'var(--caution-deep)' }} />
                   </div>
                   <span className="font-mono text-[11.5px] text-right whitespace-nowrap">
                     <span style={{ color: 'var(--foreground)' }}>{fmtTok(s.total_tokens)}</span>
@@ -562,19 +562,19 @@ export default function UserPerformancePage() {
             {todayKeyRows.keyCount > 0 && (
               <div className="legend">
                 <span className="item">
-                  <span className="dot" style={{ background: '#ca8a04' }} />
+                  <span className="dot" style={{ background: 'var(--primary-dim)' }} />
                   {t('performance.legendUncached')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.7)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.7)' }} />
                   {t('performance.legendCreation')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.45)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.45)' }} />
                   {t('performance.legendCached')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.2)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.2)' }} />
                   {t('performance.legendOutput')}
                 </span>
               </div>
@@ -732,19 +732,19 @@ export default function UserPerformancePage() {
             {todayModelRows.modelCount > 0 && (
               <div className="legend">
                 <span className="item">
-                  <span className="dot" style={{ background: '#ca8a04' }} />
+                  <span className="dot" style={{ background: 'var(--primary-dim)' }} />
                   {t('performance.legendUncached')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.7)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.7)' }} />
                   {t('performance.legendCreation')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.45)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.45)' }} />
                   {t('performance.legendCached')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.2)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.2)' }} />
                   {t('performance.legendOutput')}
                 </span>
               </div>
@@ -926,8 +926,8 @@ const COST_CSS = `
   width: 7px; height: 7px;
   margin-right: 6px;
   border-radius: 50%;
-  background: #ca8a04;
-  box-shadow: 0 0 6px rgba(250, 204, 21, 0.6);
+  background: var(--primary-dim);
+  box-shadow: 0 0 6px rgba(var(--primary-rgb), 0.6);
   animation: performance-live-pulse 1.6s ease-in-out infinite;
   vertical-align: middle;
 }
@@ -964,12 +964,12 @@ const COST_CSS = `
   transition: width 200ms ease;
 }
 .performance-page .key-bar-fill > .seg-uncached {
-  background: #ca8a04;
-  box-shadow: 0 0 8px rgba(250, 204, 21, 0.3);
+  background: var(--primary-dim);
+  box-shadow: 0 0 8px rgba(var(--primary-rgb), 0.3);
 }
-.performance-page .key-bar-fill > .seg-creation { background: rgba(202, 138, 4, 0.7); }
-.performance-page .key-bar-fill > .seg-cached   { background: rgba(202, 138, 4, 0.45); }
-.performance-page .key-bar-fill > .seg-output   { background: rgba(202, 138, 4, 0.2); }
+.performance-page .key-bar-fill > .seg-creation { background: rgba(var(--primary-dim-rgb), 0.7); }
+.performance-page .key-bar-fill > .seg-cached   { background: rgba(var(--primary-dim-rgb), 0.45); }
+.performance-page .key-bar-fill > .seg-output   { background: rgba(var(--primary-dim-rgb), 0.2); }
 
 .performance-page .key-stats {
   display: inline-flex;
@@ -986,10 +986,10 @@ const COST_CSS = `
   margin-right: 5px;
   flex-shrink: 0;
 }
-.performance-page .stat-dot.stat-uncached { background: #ca8a04; }
-.performance-page .stat-dot.stat-creation { background: rgba(202, 138, 4, 0.7); }
-.performance-page .stat-dot.stat-cached   { background: rgba(202, 138, 4, 0.45); }
-.performance-page .stat-dot.stat-output   { background: rgba(202, 138, 4, 0.2); }
+.performance-page .stat-dot.stat-uncached { background: var(--primary-dim); }
+.performance-page .stat-dot.stat-creation { background: rgba(var(--primary-dim-rgb), 0.7); }
+.performance-page .stat-dot.stat-cached   { background: rgba(var(--primary-dim-rgb), 0.45); }
+.performance-page .stat-dot.stat-output   { background: rgba(var(--primary-dim-rgb), 0.2); }
 .performance-page .stat-total {
   margin-left: 0.35rem;
   padding-left: 0.85rem;
@@ -1009,8 +1009,8 @@ const COST_CSS = `
   border-left: 1px solid var(--border);
   font-weight: 700;
   font-size: 12.5px;
-  color: #facc15;
-  text-shadow: 0 0 6px rgba(250, 204, 21, 0.35);
+  color: var(--primary-text);
+  text-shadow: 0 0 6px rgba(var(--primary-rgb), 0.35);
   cursor: help;
 }
 
@@ -1058,7 +1058,7 @@ const COST_CSS = `
   /* Default state: muted dark yellow (~25% opacity of the chart base
    * color). Quiet enough that the eye doesn't read every day as
    * "active" but still visible against the card background. */
-  background: rgba(202, 138, 4, 0.25);
+  background: rgba(var(--primary-dim-rgb), 0.25);
   border-radius: 3px 3px 0 0;
   transition: background 120ms ease, transform 120ms ease;
   min-height: 2px;
@@ -1066,7 +1066,7 @@ const COST_CSS = `
 .performance-page .trend7d-bar:hover .trend7d-fill {
   /* Hover lift sits between default and active so users get a clear
    * "I'm about to select this" affordance. */
-  background: rgba(202, 138, 4, 0.55);
+  background: rgba(var(--primary-dim-rgb), 0.55);
   transform: scaleY(1.03);
   transform-origin: bottom;
 }
@@ -1075,8 +1075,8 @@ const COST_CSS = `
    * as the cache-utilization "uncached" segment below — visual
    * consistency). 4x more saturated than the 25%-opacity default
    * is plenty of contrast without the harshness of pure #facc15. */
-  background: #ca8a04;
-  box-shadow: 0 0 6px rgba(202, 138, 4, 0.45);
+  background: var(--primary-dim);
+  box-shadow: 0 0 6px rgba(var(--primary-dim-rgb), 0.45);
 }
 .performance-page .trend7d-bar.is-today .trend7d-fill {
   outline: 1px dashed rgba(var(--success-rgb), 0.7);
@@ -1120,7 +1120,7 @@ const COST_CSS = `
   align-items: stretch;
 }
 .performance-page .session-label.is-pinned {
-  outline: 1px solid #ca8a04;
+  outline: 1px solid var(--primary-dim);
   outline-offset: 2px;
   border-radius: 3px;
 }
@@ -1150,8 +1150,8 @@ const COST_CSS = `
   gap: 0.4rem;
   padding: 2px 8px;
   border-radius: 12px;
-  background: rgba(202, 138, 4, 0.15);
-  border: 1px solid rgba(202, 138, 4, 0.4);
+  background: rgba(var(--primary-dim-rgb), 0.15);
+  border: 1px solid rgba(var(--primary-dim-rgb), 0.4);
   color: var(--foreground);
   white-space: nowrap;
   max-width: 360px;
@@ -1168,7 +1168,7 @@ const COST_CSS = `
   line-height: 1;
 }
 .performance-page .filter-chip .chip-x:hover {
-  color: #facc15;
+  color: var(--primary-text);
 }
 .performance-page .reset-link {
   background: none;
@@ -1183,6 +1183,6 @@ const COST_CSS = `
   margin-left: 0.25rem;
 }
 .performance-page .reset-link:hover {
-  color: #facc15;
+  color: var(--primary-text);
 }
 `;

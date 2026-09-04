@@ -101,7 +101,7 @@ export function SessionKeyHelp({ providerKind }: { providerKind: SessionKeyProvi
               {t('sessionKeyHelp.stepCopySuffix')}
             </li>
           </ol>
-          <p style={{ color: '#facc15' }}>{t('sessionKeyHelp.security')}</p>
+          <p style={{ color: 'var(--primary-text)' }}>{t('sessionKeyHelp.security')}</p>
           <div className="flex flex-wrap items-center gap-2">
             <a
               href={provider.officialURL}

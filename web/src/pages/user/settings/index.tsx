@@ -1080,7 +1080,7 @@ export default function SettingsPage() {
                   </span>
                 )}
                 {complianceSave.kind === 'locked' && (
-                  <span style={{ color: '#f59e0b' }}>
+                  <span style={{ color: 'var(--caution)' }}>
                     {t('settings.compliance.statusLocked')}
                   </span>
                 )}
@@ -1148,7 +1148,7 @@ export default function SettingsPage() {
                       <span style={{ color: 'var(--success-text)' }}>{t('settings.compliance.statusApplied')}</span>
                     )}
                     {recordAllowSave.kind === 'locked' && (
-                      <span style={{ color: '#f59e0b' }}>{t('settings.compliance.statusLocked')}</span>
+                      <span style={{ color: 'var(--caution)' }}>{t('settings.compliance.statusLocked')}</span>
                     )}
                     {recordAllowSave.kind === 'fail' && (
                       <span style={{ color: '#ef4444' }}>
