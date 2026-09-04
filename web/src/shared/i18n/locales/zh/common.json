@@ -2589,6 +2589,7 @@
   },
   "compliancePage": {
     "pageTitle": "合规记录",
+    "pageDescriptionShort": "本机检测到的合规事件 —— 自己视角",
     "pageDescription": "本机检测到的合规事件 —— 自己视角。检测在本机完成。个人版：命中原文只留在本机。团队版 / 集群版：当你所在组织的合规隐私策略开启时（全新安装默认开启），命中处前后一小段原文（最多 512 字节）会随合规事件上传到你所在组织自建的团队服务端、保留 90 天 —— 它不会进入 AiKey 的任何服务器。你与模型对话的完整正文是否被留存，另由对话审计通道决定。",
     "toggleLabel": "合规检测",
     "toggleLocked": "保管库已锁定，请先解锁再切换",
@@ -2734,7 +2735,6 @@
     "sessionKeyConfirmLogin": "确认登录",
     "sessionKeySigningIn": "登录中…",
     "sessionKeySaving": "账号已核对，正在保存 Token…",
-    "loginIdentityMismatchError": "本次登录属于 {{actual}}，但当前选中的账号池账号是 {{expected}}。Token 未发生变更。请选择匹配的账号，或使用该账号的登录信息后重试。",
     "sessionKeyIdentityUnknown": "无法识别的 Provider 账号",
     "sessionKeyMismatchWarning": "该 Session Key 属于 {{actual}}，与所选池账号 {{expected}} 不一致。目前未写入任何内容。如确认继续，点击下方按钮：Token 仅绑定到你自己的席位使用，池账号登记身份不会被修改。",
     "sessionKeyConfirmMismatch": "确认使用其他账号登录",
@@ -2757,6 +2757,7 @@
     "loginSyncPendingFallback": "本机运行时同步暂未完成",
     "resolving": "解析中…",
     "confirmSubmit": "确认提交",
+    "confirmSubmitMismatch": "确认使用其他账号提交",
     "submitting": "提交中…",
     "cancel": "取消",
     "signedInMatch": "✓ 已登录账号：{{actual}} —— 确认后保存。",
@@ -2846,6 +2847,8 @@
     "exitIpTestFailed": "出口 IP 测试失败",
     "egressGuideNote": "登录从本浏览器发起，走的是浏览器的出口。请把本账号的浏览器（独立 Chrome Profile）配置成走上面的出口代理，使登录 IP 与账号推理 IP 一致——见下方引导。改了出口后请联系管理员重新测试基准。",
     "testBeforeLogin": "请先测试出口 IP，再登录",
+    "loginProbeFailedTitle": "无法测出本浏览器的出口 IP",
+    "loginProbeFailedBody": "出口 IP 自检没能完成（{{detail}}），因此无法确认本浏览器与该账号走的是同一个出口。仍然可以继续登录；若出口与账号不一致，Provider 可能因此风控该账号。可让管理员为本部署配置出口 IP 回显地址以消除此提示。",
     "loginMismatchTitle": "出口 IP 与基准不一致",
     "loginMismatchBody": "当前浏览器出口 IP（{{current}}）与该账号基准（{{baseline}}）不同。此时登录会让账号从与推理不同的 IP 出现，可能触发风控封号。确认仍要继续登录吗？",
     "loginMismatchConfirm": "我已知晓风险，仍要登录"

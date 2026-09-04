@@ -69,8 +69,18 @@ export function poolAuthorizeURL(credentialID: string) {
  *     master. (`identity` is not a secret; the token never comes back.)
  *   - confirm=true (step 2): the proxy replays the held token and WRITES it back
  *     (status:"ok"). Idempotent per session, so re-sending the same code is safe.
+ *
+ * When the review reports a different provider identity, that second call must
+ * also carry identityMismatchConfirmed (拍板 2026-09-04): the review warning is
+ * the prompt, the click is the acknowledgement. The token then binds to the
+ * member's OWN seat; the pool account's registered identity is not changed.
  */
-export function poolSubmitCode(sessionID: string, code: string, confirm = false) {
+export function poolSubmitCode(
+  sessionID: string,
+  code: string,
+  confirm = false,
+  identityMismatchConfirmed = false,
+) {
   return postPool<{
     status: string;
     identity?: string;
@@ -83,6 +93,7 @@ export function poolSubmitCode(sessionID: string, code: string, confirm = false)
     session_id: sessionID,
     code,
     confirm,
+    identity_mismatch_confirmed: identityMismatchConfirmed,
   });
 }
 

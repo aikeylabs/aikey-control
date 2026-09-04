@@ -85,6 +85,13 @@ export interface RuntimeConfig {
     logoText: string;
   };
   buildVersion: string;
+  /** 2026-09-04: browser exit-IP echo endpoint for the Team OAuth login gate.
+   *  A private / air-gapped deployment cannot reach the public default, so it
+   *  points this at its own echo. Omitted → the public default is tried and,
+   *  if it fails, the login gate DEGRADES TO A WARNING rather than blocking
+   *  (bugfix 2026-09-04-exit-ip-probe-blocks-oauth-login).
+   *  The endpoint must answer JSON `{"ip":"<addr>"}`. */
+  exitIpEchoUrl?: string;
 }
 
 const defaultConfig: RuntimeConfig = {

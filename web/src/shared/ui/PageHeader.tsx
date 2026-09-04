@@ -126,7 +126,15 @@ export function PageHeader({ title, description, actions, titleHint, icon }: Pag
           )}
         </div>
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {/* 🔴 flex-shrink-0 (2026-09-04): the actions group must keep its intrinsic
+          width. Without it BOTH flex children shrink, and a long `description`
+          steals the row — the controls collapse until CJK labels wrap one
+          character per line (winpc2 report: 「企业强制」/「生效合规包」rendered
+          vertically on /user/compliance). The left block already carries
+          `min-w-0`, so prose is the side that wraps. Controls keep their size,
+          text reflows — never the other way round.
+          bugfix: workflow/CI/bugfix/2026-09-04-page-header-actions-squeezed-by-long-description.md */}
+      {actions && <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>}
     </div>
   );
 }

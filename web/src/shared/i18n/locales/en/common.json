@@ -2589,6 +2589,7 @@
   },
   "compliancePage": {
     "pageTitle": "AI Compliance Audit",
+    "pageDescriptionShort": "Compliance events detected on this machine — your own view",
     "pageDescription": "Compliance events detected on this machine — your own view. Detection runs on this machine. On Personal, the matched original text stays here. On Team and Cluster deployments, when your organization's compliance privacy policy allows it (on by default for a fresh install), a short window of the original around the match (at most 512 bytes) is uploaded with the compliance event to your organization's own team server and kept for 90 days — it never reaches any AiKey server. Whether the full text of your conversations is retained is decided separately by the Conversation Audit lane.",
     "toggleLabel": "Compliance detection",
     "toggleLocked": "Vault locked — unlock before toggling",
@@ -2734,7 +2735,6 @@
     "sessionKeyConfirmLogin": "Confirm login",
     "sessionKeySigningIn": "Signing in…",
     "sessionKeySaving": "Account verified. Saving the token…",
-    "loginIdentityMismatchError": "This login belongs to {{actual}}, but the selected pool account is {{expected}}. No token was changed. Select the matching account or sign in with that account, then retry.",
     "sessionKeyIdentityUnknown": "an unidentified provider account",
     "sessionKeyMismatchWarning": "This Session Key belongs to {{actual}}, not the selected pool account {{expected}}. Nothing has been saved. Confirm below to use it anyway — the token is bound to your seat only, and the pool account's registered identity is not changed.",
     "sessionKeyConfirmMismatch": "Confirm cross-account sign-in",
@@ -2757,6 +2757,7 @@
     "loginSyncPendingFallback": "local runtime sync has not completed",
     "resolving": "Resolving…",
     "confirmSubmit": "Confirm & submit",
+    "confirmSubmitMismatch": "Confirm sign-in for the other account",
     "submitting": "Submitting…",
     "cancel": "Cancel",
     "signedInMatch": "✓ Signed in as {{actual}} — confirm to save.",
@@ -2846,6 +2847,8 @@
     "exitIpTestFailed": "Exit-IP test failed",
     "egressGuideNote": "Login is initiated from THIS browser and leaves via the browser's exit. Configure this account's browser (a dedicated Chrome profile) to route through the egress above, so the login IP matches the account's inference IP — see the guide below. After changing the egress, ask an administrator to re-test the baseline.",
     "testBeforeLogin": "Test the exit IP before logging in",
+    "loginProbeFailedTitle": "Could not measure this browser's exit IP",
+    "loginProbeFailedBody": "The exit-IP check could not complete ({{detail}}), so AiKey cannot confirm this browser leaves through the same exit as the account. Sign-in is still possible; if the exit differs from the account's, the provider may flag the account. Ask your administrator to configure an exit-IP echo for this deployment to remove this warning.",
     "loginMismatchTitle": "Exit IP differs from baseline",
     "loginMismatchBody": "This browser's current exit IP ({{current}}) differs from the account baseline ({{baseline}}). Logging in now makes the account appear from a different IP than its inference traffic, which may trigger a ban. Continue logging in anyway?",
     "loginMismatchConfirm": "I understand the risk, log in anyway"

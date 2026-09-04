@@ -37,6 +37,7 @@ import { derivePasswordTier } from './password-tier-state';
 import { appsApi } from '@/shared/api/user/apps';
 import { Badge } from '@/shared/ui/Badge';
 import { PageHeader } from '@/shared/ui/PageHeader';
+import { InfoHint } from '@/shared/ui/InfoHint';
 import { Pagination, useStoredPageSize } from '@/shared/ui/Pagination';
 import { formatDateTime } from '@/shared/utils/datetime-intl';
 // Mask-token highlighting is shared with the master audit + triage drawers —
@@ -141,7 +142,28 @@ export interface ComplianceViewSource {
   /** undefined = org-enforced read-only (team member can't toggle org compliance). */
   filterControl?: ComplianceFilterControl;
   titleKey: string;
+  /**
+   * The FULL page description. For the local lane this is a privacy DISCLOSURE
+   * whose exact content is mandated by `shared/i18n/privacy-claim-scope.test.ts`
+   * (2026-08-11): it must state that the snippet IS uploaded on Team/Cluster,
+   * that a fresh install already permits it, that the destination is the org's
+   * own server, and that conversation audit is a separate lane. It is long by
+   * requirement, not by accident — do not shorten it to fix a layout.
+   */
   descriptionKey: string;
+  /**
+   * Optional one-line headline shown in the header INSTEAD of `descriptionKey`
+   * (2026-09-04, user request "顶部文案简化到一行以内"). When set, the full
+   * `descriptionKey` text moves into an InfoHint beside the title — it is still
+   * rendered, one interaction away, never dropped. Omit it and the full text
+   * stays in the header exactly as before.
+   *
+   * 🔴 The disclosure must remain REACHABLE on the page. privacy-claim-scope
+   * only checks the i18n CATALOG, so deleting the hint would leave that fence
+   * green while the notice silently disappeared — `disclosure-reachable.test.ts`
+   * is the fence that covers the render side.
+   */
+  descriptionShortKey?: string;
   /**
    * i18n key for the note rendered in place of the eye when a finding carries no
    * un-redacted original text. REQUIRED (not defaulted) because the REASON is
@@ -264,6 +286,7 @@ const LOCAL_SOURCE: ComplianceViewSource = {
   },
   titleKey: 'compliancePage.pageTitle',
   descriptionKey: 'compliancePage.pageDescription',
+  descriptionShortKey: 'compliancePage.pageDescriptionShort',
   // Local lane: raw text is normally kept on this box, so an absence really is
   // "recorded before the reveal decision / by an older detector" and upgrading
   // the detector really does fix it.
@@ -524,7 +547,14 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
     <div className="p-6 space-y-5">
       <PageHeader
         title={t(source.titleKey)}
-        description={t(source.descriptionKey)}
+        description={t(source.descriptionShortKey ?? source.descriptionKey)}
+        titleHint={
+          source.descriptionShortKey ? (
+            <InfoHint label={t(source.titleKey)} testId="compliance-disclosure">
+              {t(source.descriptionKey)}
+            </InfoHint>
+          ) : undefined
+        }
         actions={
           <div className="flex items-center gap-3">
             {headerExtra}

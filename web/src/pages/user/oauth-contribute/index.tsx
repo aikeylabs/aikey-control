@@ -15,6 +15,7 @@
  *   - GET /accounts/me/group-routed-credential (no id) → reveal password (routed only)
  *   - POST /api/user/oauth/pool/*           → pool sign-in (relay → proxy broker)
  */
+import { runtimeConfig } from '@/app/config/runtime';
 import { PageTitleGlyph } from '@/shared/ui/PageHeader';
 import { LIVE_PICKER_QUERY } from '@/shared/utils/query-options';
 import React, { useMemo, useState, useRef, useCallback, useEffect, useId } from 'react';
@@ -122,8 +123,15 @@ function glyphFor(providerCode?: string, protocolType?: string): { slug: string;
 // Since 2026-08-14 the master baseline this value is compared against is captured
 // server-side from the SAME host (egress.DefaultEchoURL), so the two sides no longer
 // depend on two providers agreeing.
-// Overridable for tests / air-gapped deployments.
-const EXIT_IP_ECHO = 'https://api.ipify.org?format=json';
+// 🔴 Overridable, and it has to be: this default is unreachable from a private /
+// air-gapped deployment and from networks that block it — which is most of the
+// target market. Until 2026-09-04 the comment CLAIMED it was overridable while no
+// override existed, and a failed probe left the login button permanently disabled
+// (bugfix 2026-09-04-exit-ip-probe-blocks-oauth-login). Two independent fixes:
+// this deployment-injected override, AND a probe failure degrading to a warning
+// instead of a hard gate (see onLoginClick / ipProbeFailed).
+const DEFAULT_EXIT_IP_ECHO = 'https://api.ipify.org?format=json';
+const EXIT_IP_ECHO = (runtimeConfig.exitIpEchoUrl || '').trim() || DEFAULT_EXIT_IP_ECHO;
 
 // fetchBrowserExitIP measures THIS BROWSER's current public exit IP — i.e. the IP
 // the OAuth LOGIN (opened in this same browser) will come from. If the member has
@@ -913,6 +921,11 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   // is exchanged + held but NOT yet written — the member must click Confirm to submit.
   const [signedInAs, setSignedInAs] = useState('');
   const [awaitingConfirm, setAwaitingConfirm] = useState(false);
+  // The PROXY's identity verdict for the reviewed login (external_id first, then
+  // email — see sessionKeyIdentityMatches). The page's own email comparison can
+  // disagree with it (a pool row whose external_id drifted from its email), and
+  // the acknowledgement must follow the side that actually gates the write.
+  const [serverIdentityMismatch, setServerIdentityMismatch] = useState(false);
   // auth_code (codex) only: authorize opened, waiting for the broker's localhost
   // callback to fire (page polls pool/status; no code to paste).
   const [waitingCallback, setWaitingCallback] = useState(false);
@@ -1034,6 +1047,11 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   const [ipErr, setIpErr] = useState('');
   const baselineIP = (egressView?.effective_exit_ip ?? egressView?.last_exit_ip ?? '').trim();
   const ipMismatch = ipTested && !!currentIP && !!baselineIP && currentIP !== baselineIP;
+  // The probe RAN and could not answer (blocked echo, offline, air-gapped). That
+  // is a different state from "not tested yet": the member has done everything
+  // the page asked and cannot make it succeed, so it must not gate the login —
+  // it warns, exactly like a mismatched IP does.
+  const ipProbeFailed = !ipTested && !!ipErr;
 
   async function onTestExitIP() {
     setIpTesting(true);
@@ -1054,7 +1072,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   // red; clicking it opens this confirm instead of logging in directly.
   const [loginConfirmOpen, setLoginConfirmOpen] = useState(false);
   function onLoginClick() {
-    if (ipMismatch) {
+    if (ipMismatch || ipProbeFailed) {
       setLoginConfirmOpen(true);
       return;
     }
@@ -1087,25 +1105,15 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
         setErr(res.message);
         return;
       }
-      // Rolling-upgrade fence: an older Proxy may still return a reviewable
-      // mismatch. Never surface a confirm action for it because the token would
-      // become the shared login for every authorized member.
-      if (res.identity_mismatch) {
-        setErr(
-          t('oauthContribute.loginIdentityMismatchError', {
-            actual: res.identity || t('oauthContribute.sessionKeyIdentityUnknown'),
-            expected: res.expected_identity || account.identity,
-          }),
-        );
-        setSignedInAs('');
-        setAwaitingConfirm(false);
-        setSessionId('');
-        setCode('');
-        setSessionFlow('');
-        return;
-      }
+      // A cross-account login is an ALLOWED, explicitly-acknowledged branch
+      // (拍板 2026-09-04): fall through to the SAME review state, which renders
+      // the yellow warning above an enabled confirm. Resetting here — the
+      // 2026-08-27 behavior — threw away a session the proxy still holds, so the
+      // member could not answer the warning at all.
+      setServerIdentityMismatch(!!res.identity_mismatch);
       setErr('');
       setSignedInAs(res.identity ?? '');
+      if (res.expected_identity) setExpectedLoginIdentity(res.expected_identity);
       setAwaitingConfirm(true); // keep sessionId + code so Confirm can replay the token
     },
   });
@@ -1113,7 +1121,9 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   // Step 2 — confirm (confirm=true): write the reviewed token back. WRITEBACK_FAILED
   // keeps everything so the member can retry Confirm (idempotent replay, no re-login).
   const confirmMut = useMutation({
-    mutationFn: () => poolSubmitCode(sessionId, code.trim(), true),
+    // identityMismatch ⇒ the click IS the explicit acknowledgement: the yellow
+    // review warning above the button is the prompt (拍板 2026-09-04).
+    mutationFn: () => poolSubmitCode(sessionId, code.trim(), true, identityMismatch),
     onSuccess: (res) => {
       if (isPoolLoginError(res)) {
         setErr(res.code === 'WRITEBACK_FAILED' ? t('oauthContribute.writebackRetryHint') : res.message);
@@ -1129,6 +1139,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
       );
       setSignedInAs('');
       setAwaitingConfirm(false);
+      setServerIdentityMismatch(false);
       setSessionId('');
       setCode('');
       setSessionFlow('');
@@ -1273,6 +1284,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     setErr('');
     setSignedInAs('');
     setAwaitingConfirm(false);
+    setServerIdentityMismatch(false);
     setSessionId('');
     setCode('');
     setWaitingCallback(false);
@@ -1308,12 +1320,17 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
     sessionKeyStartMut.mutate({ value, operationID });
   }
 
-  // Current Proxy builds reject a mismatch before this review state. Retain the
-  // comparison as a rolling-upgrade safety fence and never enable confirmation
-  // if an older Proxy still returns mismatched identity metadata.
+  // A different provider identity is an ALLOWED, explicitly-acknowledged branch
+  // (拍板 2026-09-04, mirroring the 2026-09-01 sessionKEY ruling): the warning is
+  // shown, the confirm stays clickable, and the click carries the acknowledgement.
+  // The 2026-08-27 build disabled the button here — with the proxy also destroying
+  // the session on mismatch, that left the member no way forward at all.
   const expectedEmail = expectedLoginIdentity.trim().toLowerCase();
   const actualEmail = signedInAs.trim().toLowerCase();
   const emailMismatch = !!actualEmail && !!expectedEmail && actualEmail !== expectedEmail;
+  // Server verdict wins; the email comparison is the fallback for an older Proxy
+  // that does not report identity_mismatch on the review response.
+  const identityMismatch = serverIdentityMismatch || emailMismatch;
 
   return (
     <div
@@ -1499,7 +1516,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
               type="button"
               className="row-use-btn"
               onClick={onLoginClick}
-              disabled={startMut.isPending || !ipTested}
+              disabled={startMut.isPending || (!ipTested && !ipProbeFailed)}
               style={
                 ipMismatch
                   ? {
@@ -1689,7 +1706,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
             <div
               className="text-[11px] font-mono rounded px-3 py-2"
               style={
-                emailMismatch
+                identityMismatch
                   ? {
                       color: '#facc15',
                       background: 'rgba(250,204,21,0.08)',
@@ -1702,7 +1719,7 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                     }
               }
             >
-              {emailMismatch
+              {identityMismatch
                 ? t('oauthContribute.signedInMismatch', {
                     actual: signedInAs,
                     expected: expectedLoginIdentity,
@@ -1710,8 +1727,12 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
                 : t('oauthContribute.signedInMatch', { actual: signedInAs })}
             </div>
             <div className="flex items-center gap-3">
-              <button type="button" className="row-use-btn" onClick={() => confirmMut.mutate()} disabled={confirmMut.isPending || emailMismatch}>
-                {confirmMut.isPending ? t('oauthContribute.submitting') : t('oauthContribute.confirmSubmit')}
+              <button type="button" className="row-use-btn" onClick={() => confirmMut.mutate()} disabled={confirmMut.isPending}>
+                {confirmMut.isPending
+                  ? t('oauthContribute.submitting')
+                  : identityMismatch
+                    ? t('oauthContribute.confirmSubmitMismatch')
+                    : t('oauthContribute.confirmSubmit')}
               </button>
               <button
                 type="button"
@@ -1929,13 +1950,17 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="text-[13px] font-bold" style={{ color: 'var(--destructive, #ef4444)' }}>
-                {t('oauthContribute.loginMismatchTitle')}
+                {ipProbeFailed
+                  ? t('oauthContribute.loginProbeFailedTitle')
+                  : t('oauthContribute.loginMismatchTitle')}
               </div>
               <p className="text-[12px]" style={{ color: 'var(--foreground)' }}>
-                {t('oauthContribute.loginMismatchBody', {
-                  current: currentIP,
-                  baseline: baselineIP,
-                })}
+                {ipProbeFailed
+                  ? t('oauthContribute.loginProbeFailedBody', { detail: ipErr })
+                  : t('oauthContribute.loginMismatchBody', {
+                      current: currentIP,
+                      baseline: baselineIP,
+                    })}
               </p>
               <div className="flex items-center gap-3 justify-end">
                 <button
