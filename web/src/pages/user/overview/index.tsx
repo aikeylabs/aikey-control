@@ -54,8 +54,8 @@ const IS_PERSONAL_SIDE = OWN_MENU === OWN_PERSONAL_MENU;
 // Provider palette: brand yellow for Anthropic, cool/violet counterbalances
 // for the others. Matches `--chart-*` tokens in user_overview_3_1.html.
 const PROVIDER_COLORS: Record<string, string> = {
-  anthropic: '#ca8a04',
-  claude: '#ca8a04',
+  anthropic: 'var(--primary-dim)',
+  claude: 'var(--primary-dim)',
   kimi: '#38bdf8',
   // 2026-05-08: kimi_code shares Kimi family hue (sky blue) — same brand,
   // distinct protocol code per Kimi-family decisions in
@@ -590,8 +590,8 @@ export default function UserOverviewPage() {
           <section
             className="flex items-center justify-between gap-3 px-4 py-3 rounded border"
             style={{
-              borderColor: 'rgba(250,204,21,0.35)',
-              background: 'rgba(250,204,21,0.06)',
+              borderColor: 'rgba(var(--primary-rgb), 0.35)',
+              background: 'rgba(var(--primary-rgb), 0.06)',
               color: 'var(--foreground)',
             }}
           >
@@ -606,7 +606,7 @@ export default function UserOverviewPage() {
             <button
               className="text-xs font-mono px-3 py-1 rounded border whitespace-nowrap"
               style={{
-                borderColor: 'rgba(250,204,21,0.4)',
+                borderColor: 'rgba(var(--primary-rgb), 0.4)',
                 color: 'var(--primary-text)',
                 background: 'transparent',
               }}
@@ -774,7 +774,7 @@ export default function UserOverviewPage() {
                     <>
                       <rect x="0" y="4" width="100" height="4" rx="2" fill="var(--border)" />
                       {activeW > 0 && (
-                        <rect x="0" y="4" width={activeW} height="4" rx="2" fill="#ca8a04" opacity="0.85" />
+                        <rect x="0" y="4" width={activeW} height="4" rx="2" fill="var(--primary-dim)" opacity="0.85" />
                       )}
                     </>
                   );
@@ -817,7 +817,7 @@ export default function UserOverviewPage() {
                   const gap = 4;
                   const w = (100 - gap * (n - 1)) / n;
                   const x = i * (w + gap);
-                  return <rect key={i} x={x} y={6} width={w} height={8} rx={2} fill="#ca8a04" opacity={0.85} />;
+                  return <rect key={i} x={x} y={6} width={w} height={8} rx={2} fill="var(--primary-dim)" opacity={0.85} />;
                 })
               )}
             </svg>
@@ -872,7 +872,7 @@ export default function UserOverviewPage() {
                         y={hasValue ? y : 31}
                         width={Math.max(barW - 1, 1)}
                         height={hasValue ? Math.max(h, 0.5) : 1}
-                        fill={isPeak ? '#ca8a04' : (hasValue ? 'var(--muted-foreground)' : 'var(--border)')}
+                        fill={isPeak ? 'var(--primary-dim)' : (hasValue ? 'var(--muted-foreground)' : 'var(--border)')}
                         opacity={isPeak ? 1 : (hasValue ? 0.55 : 0.5)}
                       />
                     );
@@ -969,8 +969,8 @@ export default function UserOverviewPage() {
                           ledger — yellow-600 (#ca8a04) instead of the bright
                           yellow-400 brand color, so both consoles render
                           usage in the same chart palette. */}
-                      <stop offset="0%" stopColor="#ca8a04" stopOpacity="0.35" />
-                      <stop offset="100%" stopColor="#ca8a04" stopOpacity="0" />
+                      <stop offset="0%" stopColor="var(--primary-dim)" stopOpacity="0.35" />
+                      <stop offset="100%" stopColor="var(--primary-dim)" stopOpacity="0" />
                     </linearGradient>
                   </defs>
                   {/* Compact hero card — tickCount={2} keeps a single top
@@ -1006,7 +1006,7 @@ export default function UserOverviewPage() {
                   <Area
                     type="monotone"
                     dataKey="total_tokens"
-                    stroke="#ca8a04"
+                    stroke="var(--primary-dim)"
                     strokeWidth={1.8}
                     fill="url(#ov-area-grad)"
                   />
@@ -1419,7 +1419,7 @@ export default function UserOverviewPage() {
                               {k.oauth_group_id && (
                                 <span
                                   className="text-[9px] font-mono px-1.5 py-0.5 rounded border"
-                                  style={{ color: 'var(--primary-dim)', borderColor: 'rgba(250,204,21,0.3)', backgroundColor: 'rgba(250,204,21,0.06)' }}
+                                  style={{ color: 'var(--primary-dim)', borderColor: 'rgba(var(--primary-rgb), 0.3)', backgroundColor: 'rgba(var(--primary-rgb), 0.06)' }}
                                 >
                                   {t('overview.kindTeamOAuth')}
                                 </span>
@@ -1446,7 +1446,7 @@ export default function UserOverviewPage() {
                           <button
                             type="button"
                             className="ov-btn ov-btn-outline text-[11px]"
-                            style={{ borderColor: 'rgba(250, 204, 21,0.5)', color: 'var(--primary-text)' }}
+                            style={{ borderColor: 'rgba(var(--primary-rgb), 0.5)', color: 'var(--primary-text)' }}
                             onClick={() => handleClaim(k.virtual_key_id)}
                           >
                             {t('overview.claim')}
@@ -1576,7 +1576,7 @@ function KeyStatusChip({ keyStatus, shareStatus }: { keyStatus: string; shareSta
   }
   if (shareStatus === 'pending_claim') {
     return (
-      <span className="chip" style={{ color: 'var(--primary-text)', background: 'rgba(250, 204, 21,0.08)', borderColor: 'rgba(250, 204, 21,0.3)' }}>
+      <span className="chip" style={{ color: 'var(--primary-text)', background: 'rgba(var(--primary-rgb), 0.08)', borderColor: 'rgba(var(--primary-rgb), 0.3)' }}>
         <ClockIcon /> {t('overview.statusPending')}
       </span>
     );
@@ -1716,13 +1716,13 @@ const OVERVIEW_CSS = `
   display: flex; align-items: center; gap: 0.75rem;
   padding: 0.55rem 0.9rem;
   border-radius: 6px;
-  background: rgba(251, 191, 36, 0.06);
-  border: 1px solid rgba(251, 191, 36, 0.3);
+  background: rgba(var(--caution-text-rgb), 0.06);
+  border: 1px solid rgba(var(--caution-text-rgb), 0.3);
 }
 .overview-page .warn-banner .dot {
   width: 6px; height: 6px; border-radius: 999px;
-  background: #fbbf24;
-  box-shadow: 0 0 6px rgba(251, 191, 36, 0.7);
+  background: var(--caution-text);
+  box-shadow: 0 0 6px rgba(var(--caution-text-rgb), 0.7);
   flex-shrink: 0;
 }
 /* The live-session dot pulses; a stale one must not — a pulsing dot next
@@ -1898,7 +1898,7 @@ const OVERVIEW_CSS = `
    bottom border to produce the master-style "double line" at the end
    of the table. */
 .overview-page table.vault tbody tr { transition: background 120ms ease; }
-.overview-page table.vault tbody tr:hover { background: rgba(250, 204, 21, 0.035); }
+.overview-page table.vault tbody tr:hover { background: rgba(var(--primary-rgb), 0.035); }
 
 .overview-page .ov-btn {
   display: inline-flex; align-items: center; gap: 0.35rem;

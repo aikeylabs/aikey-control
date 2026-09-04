@@ -49,9 +49,9 @@ export function ActionDialog({
   if (!open) return null;
 
   const confirmDisabled = loading || (requireInput !== undefined && inputValue !== requireInput);
-  const confirmColor = variant === 'danger' ? '#ef4444' : '#f59e0b';
-  const confirmBg = variant === 'danger' ? 'rgba(var(--destructive-rgb), 0.12)' : 'rgba(245,158,11,0.12)';
-  const confirmBorder = variant === 'danger' ? 'rgba(var(--destructive-rgb), 0.4)' : 'rgba(245,158,11,0.4)';
+  const confirmColor = variant === 'danger' ? '#ef4444' : 'var(--caution)';
+  const confirmBg = variant === 'danger' ? 'rgba(var(--destructive-rgb), 0.12)' : 'rgba(var(--caution-rgb), 0.12)';
+  const confirmBorder = variant === 'danger' ? 'rgba(var(--destructive-rgb), 0.4)' : 'rgba(var(--caution-rgb), 0.4)';
 
   // Portal to document.body for the same reason as DetailDrawer: the
   // backdrop + dialog are siblings in a fragment, and caller pages
@@ -64,7 +64,7 @@ export function ActionDialog({
     <>
       <div
         className="fixed inset-0"
-        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'var(--overlay-sink)' }}
+        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'rgba(var(--scrim-rgb), 0.2)' }}
         onClick={onClose}
       />
       <div

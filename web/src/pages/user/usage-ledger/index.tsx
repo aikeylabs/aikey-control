@@ -36,10 +36,19 @@ import { formatCost } from '@/shared/utils/formatCost';
 import { CostCell } from '@/shared/ui/CostCell';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 
+// 🔴 The accent series is a NAMED constant because four render sites branch on
+// `color === ACCENT_SERIES` to add the accent glow. When these were raw colour
+// literals (`#ca8a04`), the map value and the four comparisons were four
+// separate magic strings: tokenising the map without tokenising the comparisons
+// would have made every comparison silently false and dropped the glow with no
+// error anywhere. Compare against this constant, never against a colour string.
+// Its dark value is the #ca8a04 it replaced, so dark is unchanged.
+const ACCENT_SERIES = 'var(--primary-dim)';
+
 // Keep in sync with pages/user/overview/index.tsx's PROVIDER_COLORS.
 const PROVIDER_COLORS: Record<string, string> = {
-  anthropic: '#ca8a04',
-  claude: '#ca8a04',
+  anthropic: ACCENT_SERIES,
+  claude: ACCENT_SERIES,
   kimi: '#38bdf8',
   // 2026-05-08: kimi_code shares Kimi family hue (sky blue) — same brand,
   // distinct protocol code per Kimi-family decisions in
@@ -539,7 +548,7 @@ export default function UserUsageLedgerPage() {
       sharePct: (r.total_tokens / grand) * 100,
       // Agents in a cool tone, the user's own row in gold (matches the
       // INTERNAL/self accent used elsewhere on the page).
-      color: r.is_agent ? '#38bdf8' : '#ca8a04',
+      color: r.is_agent ? '#38bdf8' : 'var(--primary-dim)',
     }));
   }, [byAgent.data]);
   const hasAgents = useMemo(() => agentRows.some((r) => r.is_agent), [agentRows]);
@@ -744,7 +753,7 @@ export default function UserUsageLedgerPage() {
                       tickCount={8}
                     />
                     <Tooltip
-                      cursor={{ fill: 'rgba(250, 204, 21,0.05)' }}
+                      cursor={{ fill: 'rgba(var(--primary-rgb), 0.05)' }}
                       contentStyle={{
                         backgroundColor: 'var(--card)',
                         border: '1px solid var(--border)',
@@ -762,7 +771,7 @@ export default function UserUsageLedgerPage() {
                       yAxisId="tokens"
                       dataKey="total_tokens"
                       name="Tokens"
-                      fill="#ca8a04"
+                      fill="var(--primary-dim)"
                       radius={[2, 2, 0, 0]}
                       maxBarSize={20}
                     />
@@ -862,7 +871,7 @@ export default function UserUsageLedgerPage() {
                               width: `${Math.max(pct, 1)}%`,
                               background: color,
                               boxShadow:
-                                color === '#ca8a04' ? '0 0 8px rgba(250, 204, 21,0.35)' : undefined,
+                                color === ACCENT_SERIES ? '0 0 8px rgba(var(--primary-rgb), 0.35)' : undefined,
                             }}
                           />
                         </div>
@@ -932,7 +941,7 @@ export default function UserUsageLedgerPage() {
                     width={44}
                   />
                   <Tooltip
-                    cursor={{ fill: 'rgba(250, 204, 21,0.04)' }}
+                    cursor={{ fill: 'rgba(var(--primary-rgb), 0.04)' }}
                     contentStyle={{
                       backgroundColor: 'var(--card)',
                       border: '1px solid var(--border)',
@@ -1005,7 +1014,7 @@ export default function UserUsageLedgerPage() {
                         width: `${Math.max(k.barPct, 0.5)}%`,
                         background: k.color,
                         boxShadow:
-                          k.color === '#ca8a04' ? '0 0 8px rgba(250, 204, 21,0.3)' : undefined,
+                          k.color === ACCENT_SERIES ? '0 0 8px rgba(var(--primary-rgb), 0.3)' : undefined,
                       }}
                     />
                   </div>
@@ -1070,7 +1079,7 @@ export default function UserUsageLedgerPage() {
                       <span
                         className="text-[9px] font-mono uppercase tracking-wider px-1 py-0 rounded"
                         style={{
-                          background: '#ca8a04',
+                          background: 'var(--primary-dim)',
                           color: 'var(--primary-foreground, #18181b)',
                           flexShrink: 0,
                         }}
@@ -1099,7 +1108,7 @@ export default function UserUsageLedgerPage() {
                         width: `${Math.max(a.barPct, 0.5)}%`,
                         background: a.color,
                         boxShadow:
-                          a.color === '#ca8a04' ? '0 0 8px rgba(250, 204, 21,0.3)' : undefined,
+                          a.color === ACCENT_SERIES ? '0 0 8px rgba(var(--primary-rgb), 0.3)' : undefined,
                       }}
                     />
                   </div>
@@ -1167,7 +1176,7 @@ export default function UserUsageLedgerPage() {
                         <span
                           className="text-[9px] font-mono uppercase tracking-wider px-1 py-0 rounded"
                           style={{
-                            background: '#ca8a04',
+                            background: 'var(--primary-dim)',
                             color: 'var(--primary-foreground, #18181b)',
                             flexShrink: 0,
                           }}
@@ -1182,7 +1191,7 @@ export default function UserUsageLedgerPage() {
                         style={{
                           width: `${Math.max(a.barPct, 0.5)}%`,
                           background: a.color,
-                          boxShadow: a.color === '#ca8a04' ? '0 0 8px rgba(250, 204, 21,0.3)' : undefined,
+                          boxShadow: a.color === ACCENT_SERIES ? '0 0 8px rgba(var(--primary-rgb), 0.3)' : undefined,
                         }}
                       />
                     </div>

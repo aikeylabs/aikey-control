@@ -143,7 +143,7 @@ export function DesktopConsentModal({ open, replay, onClose, onGranted }: Deskto
     <ModalPortal>
       <div
         className="fixed inset-0 z-50"
-        style={{ backgroundColor: 'var(--overlay-sink)' }}
+        style={{ backgroundColor: 'rgba(var(--scrim-rgb), 0.2)' }}
         onClick={handleCancel}
       />
       <div

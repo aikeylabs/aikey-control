@@ -38,8 +38,8 @@ export function PlaceholderPage({
       <div
         className="border rounded p-4 flex items-start gap-3"
         style={{
-          backgroundColor: 'rgba(250, 204, 21, 0.05)',
-          borderColor: 'rgba(250, 204, 21, 0.2)',
+          backgroundColor: 'rgba(var(--primary-rgb), 0.05)',
+          borderColor: 'rgba(var(--primary-rgb), 0.2)',
         }}
       >
         <svg

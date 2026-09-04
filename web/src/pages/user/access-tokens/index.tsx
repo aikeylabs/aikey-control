@@ -118,7 +118,7 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
   const runtimeColor = runtime?.state === 'unavailable' && isPoolRuntimeAlarm(runtime.reason)
     ? '#f87171'
     : runtime?.state === 'available' && runtime.schedulable_accounts === 0
-      ? '#fbbf24'
+      ? 'var(--caution-text)'
       : 'var(--foreground)';
   const binding = poolQuery.data?.binding ?? agent?.routing_summary;
   const bindingLabel = binding?.state === 'bound'
@@ -205,7 +205,7 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
         </section>
 
         {diverged && (
-          <div role="status" className="rounded px-3 py-2 text-xs" style={{ color: '#fbbf24', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(251,191,36,0.07)' }}>
+          <div role="status" className="rounded px-3 py-2 text-xs" style={{ color: 'var(--caution-text)', border: '1px solid rgba(var(--caution-text-rgb), 0.35)', background: 'rgba(var(--caution-text-rgb), 0.07)' }}>
             {t('accessTokens.routing.failoverNotice')}
           </div>
         )}
@@ -359,8 +359,8 @@ function readinessLabel(status: 'ready' | 'no_login' | 'degraded', t: (key: stri
 function PoolReadinessBadge({ agent, linkToOauth }: { agent: MyAgentDTO; linkToOauth?: boolean }) {
   const { t } = useTranslation();
   const status = readinessStatus(agent);
-  const color = status === 'ready' ? '#4ade80' : status === 'no_login' ? '#f59e0b' : '#fb923c';
-  const bg = status === 'ready' ? 'rgba(var(--success-rgb), 0.07)' : status === 'no_login' ? 'rgba(245,158,11,0.08)' : 'rgba(251,146,60,0.08)';
+  const color = status === 'ready' ? '#4ade80' : status === 'no_login' ? 'var(--caution)' : '#fb923c';
+  const bg = status === 'ready' ? 'rgba(var(--success-rgb), 0.07)' : status === 'no_login' ? 'rgba(var(--caution-rgb), 0.08)' : 'rgba(251,146,60,0.08)';
   const symbol = status === 'ready' ? '✓' : status === 'no_login' ? '!' : '△';
   const chip = (
     <span
@@ -406,13 +406,13 @@ function PoolReadinessAlert({ agent }: { agent: MyAgentDTO }) {
       role="status"
       aria-live="polite"
       className="text-[10px] font-mono px-3 py-2 rounded space-y-1"
-      style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', color: '#f59e0b' }}
+      style={{ background: 'rgba(var(--caution-rgb), 0.08)', border: '1px solid rgba(var(--caution-rgb), 0.35)', color: 'var(--caution)' }}
     >
       <p>
         <strong>{readinessLabel(status, t)}：</strong>{' '}
         {t(readinessMessageKey(agent), { ready: agent.pool_accounts_ready ?? 0, total: agent.pool_accounts_total ?? 0 })}
       </p>
-      <Link to="/user/team-oauth" className="inline-block font-bold" style={{ color: '#f59e0b', textDecoration: 'underline' }}>
+      <Link to="/user/team-oauth" className="inline-block font-bold" style={{ color: 'var(--caution)', textDecoration: 'underline' }}>
         {t('accessTokens.create.vkPendingCta')}
       </Link>
     </div>
@@ -422,9 +422,9 @@ function PoolReadinessAlert({ agent }: { agent: MyAgentDTO }) {
 function SelfCheckRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
   return (
     <div className="flex items-start gap-2 text-[10px] font-mono">
-      <span aria-hidden="true" style={{ color: ok ? '#4ade80' : '#f59e0b' }}>{ok ? '✓' : '!'}</span>
+      <span aria-hidden="true" style={{ color: ok ? '#4ade80' : 'var(--caution)' }}>{ok ? '✓' : '!'}</span>
       <div>
-        <div className="font-bold" style={{ color: ok ? '#4ade80' : '#f59e0b' }}>{label}</div>
+        <div className="font-bold" style={{ color: ok ? '#4ade80' : 'var(--caution)' }}>{label}</div>
         <div style={{ color: 'var(--muted-foreground)' }}>{detail}</div>
       </div>
     </div>
@@ -525,7 +525,7 @@ function ConnectionReveal({ agent, onGetVK, gettingVK, onNavigate }: {
   return (
     <div className="space-y-4">
       {agent.base_url_blocked ? (
-        <div className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
+        <div className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(var(--caution-rgb), 0.08)', border: '1px solid rgba(var(--caution-rgb), 0.3)', color: 'var(--caution)' }}>
           {t('accessTokens.create.baseUrlBlocked')}
         </div>
       ) : (
@@ -575,7 +575,7 @@ function ConnectionReveal({ agent, onGetVK, gettingVK, onNavigate }: {
                not even a mask. Without this branch the modal is a dead end —
                2026-07-28 real-machine finding on staging (1 of 3 agent VKs had an
                empty hint); the master console already carries the same branch. */
-            <div className="text-[10px] font-mono px-3 py-2 rounded leading-relaxed" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
+            <div className="text-[10px] font-mono px-3 py-2 rounded leading-relaxed" style={{ background: 'rgba(var(--caution-rgb), 0.08)', border: '1px solid rgba(var(--caution-rgb), 0.3)', color: 'var(--caution)' }}>
               {t('accessTokens.vk.noHint')}
             </div>
           )}
@@ -841,7 +841,7 @@ function RotateConfirmModal({ agent, busy, onConfirm, onClose }: {
           <button onClick={onClose} disabled={busy} style={{ color: 'var(--muted-foreground)' }}>✕</button>
         </div>
         <div className="px-6 py-5">
-          <div className="text-[11px] font-mono leading-relaxed px-3 py-2 rounded" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
+          <div className="text-[11px] font-mono leading-relaxed px-3 py-2 rounded" style={{ background: 'rgba(var(--caution-rgb), 0.08)', border: '1px solid rgba(var(--caution-rgb), 0.3)', color: 'var(--caution)' }}>
             {t('accessTokens.vk.rotateConfirm.body', { name: agent.alias })}
           </div>
         </div>
@@ -853,7 +853,7 @@ function RotateConfirmModal({ agent, busy, onConfirm, onClose }: {
             onClick={onConfirm}
             disabled={busy}
             className="text-xs font-mono font-bold px-4 py-2 rounded border disabled:opacity-40"
-            style={{ color: '#f59e0b', borderColor: 'rgba(245,158,11,0.5)', backgroundColor: 'rgba(245,158,11,0.1)' }}
+            style={{ color: 'var(--caution)', borderColor: 'rgba(var(--caution-rgb), 0.5)', backgroundColor: 'rgba(var(--caution-rgb), 0.1)' }}
           >
             {busy ? t('accessTokens.vk.rotating') : t('accessTokens.vk.rotateConfirm.confirm')}
           </button>
@@ -963,7 +963,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
             onClick={() => setConfirmRotate(true)}
             disabled={rotating}
             className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
-            style={{ color: '#f59e0b', borderColor: 'rgba(245,158,11,0.3)', backgroundColor: 'rgba(245,158,11,0.06)' }}
+            style={{ color: 'var(--caution)', borderColor: 'rgba(var(--caution-rgb), 0.3)', backgroundColor: 'rgba(var(--caution-rgb), 0.06)' }}
           >
             {t('accessTokens.vk.rotate')}
           </button>

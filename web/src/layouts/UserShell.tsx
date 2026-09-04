@@ -1724,7 +1724,7 @@ export function UserShell() {
             <button
               onClick={() => openPersonalPage('/user/invites')}
               className="btn btn-outline text-[10px] px-3 py-1.5 flex items-center gap-1.5"
-              style={{ borderColor: 'rgba(250,204,21,0.3)', color: 'var(--primary-text)' }}
+              style={{ borderColor: 'rgba(var(--primary-rgb), 0.3)', color: 'var(--primary-text)' }}
             >
               {/* Icon size bumped from w-3.5 to w-4 (2026-04-22) to match
                   nav-sidebar icons. Prior 3.5 made the Invite glyph look

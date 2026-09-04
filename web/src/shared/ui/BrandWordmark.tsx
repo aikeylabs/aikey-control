@@ -136,9 +136,12 @@ export function BrandMark({ size = 32, className = '' }: { size?: number; classN
         width: size,
         height: size,
         borderRadius: Math.round(size * 0.25),
-        background: 'var(--code-bg)',
-        border: '1.5px solid var(--primary)',
-        boxShadow: '0 0 10px rgba(var(--primary-rgb), 0.10), inset 0 1px 0 rgba(var(--lift-rgb), 0.04)',
+        // 🔴 Brand-chip tokens, NOT --code-bg/--primary. The chip is a brand
+        // surface, not a code surface; see the note in index.css. Dark resolves
+        // to the same values it always did.
+        background: 'var(--brand-chip-bg)',
+        border: '1.5px solid var(--brand-chip-border)',
+        boxShadow: 'var(--brand-chip-shadow)',
       }}
       aria-hidden="true"
     >
@@ -148,7 +151,7 @@ export function BrandMark({ size = 32, className = '' }: { size?: number; classN
         viewBox={BRAND_AK_VIEWBOX}
         style={{ display: 'block' }}
       >
-        <path d={BRAND_AK_PATH} fill="var(--primary)" />
+        <path d={BRAND_AK_PATH} fill="var(--brand-chip-fg)" />
       </svg>
     </div>
   );
@@ -194,26 +197,29 @@ export function BrandLockup({
       style={{ display: 'block' }}
     >
       <defs>
-        {/* Approximates the chip's CSS box-shadow amber halo (0 0 10px @10%). */}
+        {/* Approximates the chip's CSS box-shadow accent halo (0 0 10px @10%).
+            🔴 Must track --primary, not a literal: the chip's stroke below is
+            var(--primary), so a hardcoded #facc15 painted an AMBER halo around a
+            VIOLET chip once the light theme re-cut the accent (2026-09-05). */}
         <filter id="brand-chip-glow" x="-60%" y="-60%" width="220%" height="220%">
-          <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="#facc15" floodOpacity="0.25" />
+          <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="var(--brand-chip-border)" floodOpacity="0.25" />
         </filter>
       </defs>
-      {/* Chip box: solid fill + yellow outline + amber halo (favicon-aligned). */}
+      {/* Chip box: solid fill + accent outline + accent halo (favicon-aligned). */}
       <rect
         x="0.75"
         y="0.75"
         width="30.5"
         height="30.5"
         rx="7.25"
-        fill="var(--code-bg)"
-        stroke="var(--primary)"
+        fill="var(--brand-chip-bg)"
+        stroke="var(--brand-chip-border)"
         strokeWidth="1.5"
         filter="url(#brand-chip-glow)"
       />
       {/* "AK" glyph, ~50% chip width, centered. */}
       <svg x="8" y="11.4" width="16" height="9.2" viewBox={BRAND_AK_VIEWBOX}>
-        <path d={BRAND_AK_PATH} fill="var(--primary)" />
+        <path d={BRAND_AK_PATH} fill="var(--brand-chip-fg)" />
       </svg>
       {/* "AiKey" wordmark + accent i-dot. Sits on the sidebar/page ground, not on
           the brand chip, so it must follow the theme — see --brand-wordmark. */}
