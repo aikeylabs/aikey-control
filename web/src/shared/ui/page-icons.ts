@@ -30,6 +30,8 @@ const USER_PAGE_GLYPH: Record<string, GlyphName> = {
   'access-tokens': 'token-tally',
   'account': 'user',
   'apps': 'puzzle',
+  // 阶段8 P8 — the member's read-only MCP tool list.
+  'mcp-tools': 'puzzle',
   'compliance': 'scale',
   'invites': 'user-plus',
   'overview': 'overview',
@@ -72,6 +74,21 @@ const MASTER_PAGE_GLYPH: Record<string, GlyphName> = {
   // individual roster) sitting directly beneath it in the same group.
   'directory': 'team-kind',
   'nodes': 'server',
+  // MCP gateway (阶段8 P8). The glyphs mirror the sidebar exactly — that is the
+  // whole point of this table.
+  //
+  // 🔴 All four resolve to the SAME 'puzzle' since 2026-09-02, when the four
+  // sidebar entries became one 「MCP 网关」entry with in-page tabs. They used to
+  // differ (toolset='layers', grant='key', call log='usage-audit') to mirror
+  // four distinct menu rows; with one menu row left, four different page glyphs
+  // would put this table back in conflict with the sidebar — one menu item,
+  // four icons — which is the exact drift this registry exists to remove.
+  'mcp-backends': 'puzzle',
+  'mcp-credentials': 'puzzle',
+  'mcp-toolsets': 'puzzle',
+  'mcp-grants': 'puzzle',
+  'mcp-delegation': 'puzzle',
+  'mcp-audit': 'puzzle',
   'oauth-groups': 'layers',
   'packs': 'library',
   'provider-accounts': 'cloud',
@@ -83,6 +100,12 @@ const MASTER_PAGE_GLYPH: Record<string, GlyphName> = {
   'virtual-keys': 'key',
   // 无导航项的页面：继承语义最近的父级章节图标
   'mock-provider': 'bot',
+  // The API importer has no sidebar entry — it is reached from the backends
+  // page, because importing is something you do TO a backend you just made.
+  'mcp-import': 'puzzle',
+  // The member's own MCP tool list has no master nav entry; it lives in the
+  // user console and inherits the same 'puzzle' the backends page uses.
+  'mcp-tools': 'puzzle',
   'settings': 'settings',
   'triage': 'scale',
   'unpriced-models': 'master-gauge',
