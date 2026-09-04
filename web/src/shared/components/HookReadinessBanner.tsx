@@ -233,7 +233,7 @@ const HOOK_READINESS_CSS = `
   padding: 10px 14px;
   border: 1px solid var(--border, #444);
   border-radius: 4px;
-  background: var(--surface-warn, rgba(234, 179, 8, 0.08));
+  background: var(--surface-warn, rgba(var(--btn-primary-border-rgb), 0.08));
   color: var(--text);
 }
 /* almost-ready escalation (2026-07-10): reuse the gold "needs action"
@@ -241,8 +241,8 @@ const HOOK_READINESS_CSS = `
    primary inset rail — instead of inventing a new alarm style. Gold, not
    red: unwired auto-sync is a gated state, not a failure. */
 .hook-readiness-banner.hook-readiness-action {
-  background: linear-gradient(90deg, rgba(250, 204, 21, 0.08) 0%, rgba(250, 204, 21, 0.02) 100%);
-  border: 1px solid rgba(250, 204, 21, 0.35);
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.08) 0%, rgba(var(--primary-rgb), 0.02) 100%);
+  border: 1px solid rgba(var(--primary-rgb), 0.35);
   box-shadow: inset 3px 0 0 0 var(--primary);
 }
 .hook-readiness-content {

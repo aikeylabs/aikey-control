@@ -89,7 +89,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
       aria-modal="true"
       aria-labelledby="token-reveal-title"
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'var(--overlay-sink)', backdropFilter: 'blur(2px)' }}
+      style={{ background: 'rgba(var(--scrim-rgb), 0.2)', backdropFilter: 'blur(2px)' }}
     >
       {/* No backdrop onClick handler here — closing this modal accidentally
           would mean losing the token. The user must click Done explicitly. */}
@@ -110,7 +110,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
             className="text-base font-semibold font-mono"
             style={{ color: 'var(--foreground)' }}
           >
-            {t('apps.appRegistered')} <span style={{ color: '#ca8a04' }}>{result.slug}</span>
+            {t('apps.appRegistered')} <span style={{ color: 'var(--primary-dim)' }}>{result.slug}</span>
           </h2>
           <p
             className="text-[12px] mt-1"
@@ -175,7 +175,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                     background:
                       copied === 'openai'
                         ? 'var(--success, #16a34a)'
-                        : '#ca8a04',
+                        : 'var(--primary-dim)',
                     color: 'var(--primary-foreground, #18181b)',
                   }}
                 >
@@ -211,7 +211,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                     background:
                       copied === 'anthropic'
                         ? 'var(--success, #16a34a)'
-                        : '#ca8a04',
+                        : 'var(--primary-dim)',
                     color: 'var(--primary-foreground, #18181b)',
                   }}
                 >
@@ -257,7 +257,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                     className="flex items-center gap-2"
                     style={{ color: 'var(--foreground)' }}
                   >
-                    <span style={{ color: '#ca8a04' }}>{b.upstream}</span>
+                    <span style={{ color: 'var(--primary-dim)' }}>{b.upstream}</span>
                     <span style={{ color: 'var(--muted-foreground)' }}>→</span>
                     <span>{b.key_source_label ?? b.key_source_ref}</span>
                     <span
@@ -274,7 +274,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
                     className="flex items-center gap-2"
                     style={{ color: 'var(--foreground)' }}
                   >
-                    <span style={{ color: '#ca8a04' }}>{b.upstream}</span>
+                    <span style={{ color: 'var(--primary-dim)' }}>{b.upstream}</span>
                     <span style={{ color: 'var(--muted-foreground)' }}>→</span>
                     <span>{b.key_source_label ?? b.key_source_ref}</span>
                     <span
@@ -299,13 +299,13 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
             <div
               className="rounded border p-3"
               style={{
-                background: 'rgba(250, 204, 21, 0.08)',
-                borderColor: '#facc15',
+                background: 'rgba(var(--primary-rgb), 0.08)',
+                borderColor: 'var(--primary)',
               }}
             >
               <div
                 className="font-mono text-[12px] uppercase tracking-wider mb-1"
-                style={{ color: '#facc15' }}
+                style={{ color: 'var(--primary-text)' }}
               >
                 {t('apps.missingDefaultKeyFor')}{' '}
                 {result.missing_upstreams_for_aikey_use.join(', ')}
@@ -333,7 +333,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
             onClick={onClose}
             className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider"
             style={{
-              background: '#ca8a04',
+              background: 'var(--primary-dim)',
               color: 'var(--primary-foreground, #18181b)',
             }}
           >

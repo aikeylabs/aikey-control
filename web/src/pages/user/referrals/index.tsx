@@ -48,7 +48,7 @@ export default function UserReferralsPage() {
       >
         <div
           className="absolute top-0 left-0 w-1 h-full"
-          style={{ backgroundColor: 'var(--primary)', boxShadow: '0 0 10px rgba(250, 204, 21,0.5)' }}
+          style={{ backgroundColor: 'var(--primary)', boxShadow: '0 0 10px rgba(var(--primary-rgb), 0.5)' }}
         />
         <h2 className="text-xs font-mono font-bold tracking-wider uppercase mb-3" style={{ color: 'var(--muted-foreground)' }}>
           {t('referrals.inviteLinkHeading')}
@@ -118,7 +118,7 @@ export default function UserReferralsPage() {
                   { id: 'invited', label: t('referrals.colInvited') },
                   { id: 'completed', label: t('referrals.colCompleted') },
                 ].map((h) => (
-                  <th key={h.id} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)', borderBottom: '1px solid var(--border)' }}>
+                  <th key={h.id} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'var(--table-header)', borderBottom: '1px solid var(--border)' }}>
                     {h.label}
                   </th>
                 ))}

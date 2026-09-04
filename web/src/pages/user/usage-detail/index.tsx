@@ -323,16 +323,16 @@ export default function UserUsageDetailPage() {
                           {r.total_tokens > 0 && (
                             <div className="ud-tokbar-wrap">
                               <div className="ud-tokbar">
-                                <span style={{ width: pct(r.input_tokens), background: '#ca8a04' }} />
-                                <span style={{ width: pct(r.cache_creation_input_tokens), background: 'rgba(202,138,4,0.65)' }} />
-                                <span style={{ width: pct(r.cached_input_tokens), background: 'rgba(202,138,4,0.4)' }} />
-                                <span style={{ width: pct(r.output_tokens), background: 'rgba(202,138,4,0.22)' }} />
+                                <span style={{ width: pct(r.input_tokens), background: 'var(--primary-dim)' }} />
+                                <span style={{ width: pct(r.cache_creation_input_tokens), background: 'rgba(var(--primary-dim-rgb), 0.65)' }} />
+                                <span style={{ width: pct(r.cached_input_tokens), background: 'rgba(var(--primary-dim-rgb), 0.4)' }} />
+                                <span style={{ width: pct(r.output_tokens), background: 'rgba(var(--primary-dim-rgb), 0.22)' }} />
                               </div>
                               <div className="ud-legend">
-                                <span><i style={{ background: '#ca8a04' }} />{t('usageDetail.tokUncached')} {fmtTok(r.input_tokens)}</span>
-                                <span><i style={{ background: 'rgba(202,138,4,0.65)' }} />{t('usageDetail.tokCreation')} {fmtTok(r.cache_creation_input_tokens)}</span>
-                                <span><i style={{ background: 'rgba(202,138,4,0.4)' }} />{t('usageDetail.tokCached')} {fmtTok(r.cached_input_tokens)}</span>
-                                <span><i style={{ background: 'rgba(202,138,4,0.22)' }} />{t('usageDetail.tokOutput')} {fmtTok(r.output_tokens)}</span>
+                                <span><i style={{ background: 'var(--primary-dim)' }} />{t('usageDetail.tokUncached')} {fmtTok(r.input_tokens)}</span>
+                                <span><i style={{ background: 'rgba(var(--primary-dim-rgb), 0.65)' }} />{t('usageDetail.tokCreation')} {fmtTok(r.cache_creation_input_tokens)}</span>
+                                <span><i style={{ background: 'rgba(var(--primary-dim-rgb), 0.4)' }} />{t('usageDetail.tokCached')} {fmtTok(r.cached_input_tokens)}</span>
+                                <span><i style={{ background: 'rgba(var(--primary-dim-rgb), 0.22)' }} />{t('usageDetail.tokOutput')} {fmtTok(r.output_tokens)}</span>
                               </div>
                             </div>
                           )}
@@ -381,7 +381,7 @@ export default function UserUsageDetailPage() {
         .ud-icon {
           width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
           display: flex; align-items: center; justify-content: center;
-          background: rgba(202,138,4,0.10); border: 1px solid rgba(202,138,4,0.28); color: var(--primary-text);
+          background: rgba(var(--primary-dim-rgb), 0.10); border: 1px solid rgba(var(--primary-dim-rgb), 0.28); color: var(--primary-text);
         }
         .ud-icon svg { width: 18px; height: 18px; }
         .ud-title { font-family: var(--font-mono); font-size: 18px; font-weight: 700; letter-spacing: 0.02em; color: var(--display-foreground); line-height: 1.25; }
@@ -392,14 +392,14 @@ export default function UserUsageDetailPage() {
         .ud-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: rgba(var(--sink-rgb), 0.22); border: 1px solid var(--border); }
         .ud-tab { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 6px; background: none; border: none; cursor: pointer; color: var(--muted-foreground); font: inherit; transition: background 110ms ease, color 110ms ease; }
         .ud-tab:hover { color: var(--foreground); }
-        .ud-tab.on { background: rgba(202,138,4,0.16); color: var(--primary-text); }
+        .ud-tab.on { background: rgba(var(--primary-dim-rgb), 0.16); color: var(--primary-text); }
         .ud-tab-n { font-size: 10px; opacity: 0.65; }
         .ud-tab.on .ud-tab-n { opacity: 1; }
-        .ud-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; background: rgba(202,138,4,0.14); border: 1px solid rgba(202,138,4,0.36); color: var(--foreground); }
+        .ud-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; background: rgba(var(--primary-dim-rgb), 0.14); border: 1px solid rgba(var(--primary-dim-rgb), 0.36); color: var(--foreground); }
         .ud-chip button { background: rgba(var(--sink-rgb), 0.18); border: none; color: var(--muted-foreground); cursor: pointer; width: 16px; height: 16px; border-radius: 999px; line-height: 1; font-size: 13px; }
-        .ud-chip button:hover { color: #facc15; background: rgba(var(--sink-rgb), 0.3); }
+        .ud-chip button:hover { color: var(--primary-text); background: rgba(var(--sink-rgb), 0.3); }
         .ud-reset { background: none; border: none; color: var(--muted-foreground); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 0; font: inherit; }
-        .ud-reset:hover { color: #facc15; }
+        .ud-reset:hover { color: var(--primary-text); }
 
         .ud-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
         /* table-layout: fixed (stable — the expanded panel can't resize the table on
@@ -422,8 +422,8 @@ export default function UserUsageDetailPage() {
           border-bottom: 1px solid rgba(var(--lift-rgb), 0.035); color: var(--foreground);
         }
         .ud-table tbody tr.ud-row { cursor: pointer; transition: background 110ms ease, box-shadow 110ms ease; }
-        .ud-table tbody tr.ud-row:hover { background: rgba(250,204,21,0.045); box-shadow: inset 2px 0 0 0 rgba(202,138,4,0.7); }
-        .ud-table tbody tr.ud-row.open { background: rgba(250,204,21,0.06); box-shadow: inset 2px 0 0 0 var(--primary); }
+        .ud-table tbody tr.ud-row:hover { background: rgba(var(--primary-rgb), 0.045); box-shadow: inset 2px 0 0 0 rgba(var(--primary-dim-rgb), 0.7); }
+        .ud-table tbody tr.ud-row.open { background: rgba(var(--primary-rgb), 0.06); box-shadow: inset 2px 0 0 0 var(--primary); }
         .ud-dim { color: var(--muted-foreground); }
         .ud-zero { color: var(--muted-foreground); opacity: 0.45; }
         .ud-cost { color: #2dd4bf; }

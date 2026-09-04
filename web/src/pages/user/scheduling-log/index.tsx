@@ -328,7 +328,7 @@ export default function UserSchedulingLogPage() {
                     orphaned catalog entries (and would not catch a real typo). */}
                 {[t('mySchedLog.columnTime'), t('mySchedLog.columnKind'), t('mySchedLog.columnName'),
                   t('mySchedLog.columnAccount'), t('mySchedLog.columnDetail')].map((label) => (
-                  <th key={label} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--overlay-sink)' }}>
+                  <th key={label} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--table-header)' }}>
                     {label}
                   </th>
                 ))}

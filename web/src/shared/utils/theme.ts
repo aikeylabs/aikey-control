@@ -46,9 +46,14 @@ export const THEME_STORAGE_KEY = 'aikey-theme';
  * choice, so the applied theme overrides them.
  */
 const THEME_COLOR: Record<Theme, string> = {
-  light: '#ecebe9', // theme-literal-ok: = --background in [data-theme='light']
-  // 🔴 REAL HEXES ONLY — a <meta name="theme-color"> cannot take var(). These
-  // two must be kept in step with --background in index.css by hand.
+  // 🔴 REAL HEXES ONLY — a <meta name="theme-color"> cannot take var(), so these
+  // must track --background in index.css BY HAND. There are THREE producers of
+  // the light one: this map, the boot script in index.html, and index.html's
+  // media-keyed <meta> tag. All three had drifted by 2026-09-05 — still #ecebe9
+  // (and #fcfaf7) two palette re-cuts after the light canvas moved to #f5f7fa,
+  // so the mobile address bar painted a colour the page had not used in weeks.
+  // Fence: theme-color-producers-agree.test.ts
+  light: '#f5f7fa', // theme-literal-ok: = --background in [data-theme='light']
   dark: '#18181b', // theme-literal-ok: = --background on :root; a meta tag cannot take var()
 };
 
@@ -106,16 +111,65 @@ export function resolveTheme(): Theme {
   return readStored() ?? systemTheme();
 }
 
-/** User made a choice: persist it and apply it. */
-export function setTheme(theme: Theme): void {
-  writeStored(theme);
-  applyTheme(theme);
+/**
+ * What the USER chose — a different question from what is on screen.
+ *
+ * 🔴 'system' is stored as the ABSENCE of the key, never as the string
+ * "system". That is load-bearing, not tidiness: the pre-paint boot script in
+ * index.html reads the same key and treats anything that is not 'light' /
+ * 'dark' as "no preference". Writing "system" would happen to work there today,
+ * but it would leave the two readers disagreeing about what storage MEANS — and
+ * the boot script is the one that cannot be fixed after the fact, because it
+ * runs before this module exists. Absence keeps "no preference" and "dark is
+ * the un-attributed state" the same fact.
+ */
+export type ThemeMode = Theme | 'system';
+
+function clearStored(): void {
+  try {
+    localStorage.removeItem(THEME_STORAGE_KEY);
+  } catch {
+    /* nothing to clear, or storage is unavailable — either way: follow the OS */
+  }
 }
 
-export function toggleTheme(): Theme {
-  const next: Theme = getTheme() === 'light' ? 'dark' : 'light';
-  setTheme(next);
-  return next;
+/** The user's choice. No stored preference means "follow the OS". */
+export function getMode(): ThemeMode {
+  return readStored() ?? 'system';
+}
+
+/** Apply a mode: persist an explicit choice, or clear back to following the OS. */
+export function setMode(mode: ThemeMode): ThemeMode {
+  if (mode === 'system') {
+    clearStored();
+    applyTheme(systemTheme());
+  } else {
+    writeStored(mode);
+    applyTheme(mode);
+  }
+  return mode;
+}
+
+/**
+ * light → dark → system → light.
+ *
+ * 🔴 'system' is a real stop on the cycle, not a hidden reset. Until 2026-09-05
+ * this was a two-state toggle, which made the FIRST press one-way: it wrote an
+ * override and nothing in the UI could ever clear it, so a console that had
+ * been following the OS silently stopped following it and the user had no way
+ * back. The previous revision of this file said as much — "clearing the stored
+ * override to resume following the OS is not exposed yet; add it if anyone
+ * asks". Someone asked.
+ *
+ * Still ONE cycling button rather than a three-segment control: a segmented
+ * control spends permanent header width on a choice made once, and its third
+ * segment's only job is to return you to the default. Interaction simplicity
+ * first — workflow/CI/IDE/claude/principles/interaction-simplicity-first.md.
+ */
+export function cycleMode(): ThemeMode {
+  const order: ThemeMode[] = ['light', 'dark', 'system'];
+  const next = order[(order.indexOf(getMode()) + 1) % order.length];
+  return setMode(next);
 }
 
 /**
