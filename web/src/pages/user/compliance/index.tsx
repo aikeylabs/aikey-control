@@ -54,6 +54,10 @@ import { engineLoadBadge, engineLoadStateIsUnreadable } from './engine-load-stat
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterTokenBar, type FilterToken, type FilterTokenDimension } from '@/shared/ui/FilterTokenBar';
 import { complianceEntityTypeOptions } from '@/shared/compliance/entity-types';
+// "Did the model actually receive the original?" — one home for that fact,
+// because it is re-derived on every page that renders compliance events
+// (bugfix 2026-09-04-warn-rows-look-masked).
+import { sentUnchanged } from '@/shared/compliance/action-mutation';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 import {
   COMPLIANCE_ACTION_SUMMARY_ACTIONS,
@@ -746,8 +750,22 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                         // in the drawer.
                         const snip = (f0?.redacted_snippet || '').replace(/\s+/g, ' ').trim();
                         return snip ? (
-                          <div className="text-[11px] font-mono truncate" style={{ color: 'var(--muted-foreground)' }}>
-                            {renderMaskedSnippet(snip)}
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="text-[11px] font-mono truncate" style={{ color: 'var(--muted-foreground)' }}>
+                              {renderMaskedSnippet(snip)}
+                            </div>
+                            {/* See SENT_UNCHANGED: without this the masked FORM above
+                                reads as "the model got the masked text", which is false
+                                for every non-mask action. */}
+                            {sentUnchanged(e.action_taken) && (
+                              <span
+                                title={t('compliancePage.sentUnchangedHint')}
+                                className="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap"
+                                style={{ backgroundColor: 'rgba(var(--lift-rgb), 0.05)', color: 'var(--muted-foreground)' }}
+                              >
+                                {t('compliancePage.sentUnchanged')}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.4 }}>—</span>
@@ -786,7 +804,19 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
           <div>
             <DrawerField label={t('compliancePage.fieldEventId')} value={<span className="break-all text-[11px]">{selected.event_id}</span>} />
             <DrawerField label={t('compliancePage.columnTime')} value={formatDateTime(selected.created_at)} />
-            <DrawerField label={t('compliancePage.columnAction')} value={<Badge variant={actionVariant(selected.action_taken)}>{selected.action_taken.toUpperCase()}</Badge>} />
+            <DrawerField label={t('compliancePage.columnAction')} value={
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant={actionVariant(selected.action_taken)}>{selected.action_taken.toUpperCase()}</Badge>
+                {/* Same reason as the list column (see SENT_UNCHANGED): the
+                    per-finding snippets below are masked for display even when
+                    nothing was rewritten on the wire. */}
+                {sentUnchanged(selected.action_taken) && (
+                  <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                    {t('compliancePage.sentUnchangedHint')}
+                  </span>
+                )}
+              </div>
+            } />
             <DrawerField label={t('compliancePage.columnModel')} value={selected.target_model || '—'} />
             <DrawerField label={t('compliancePage.fieldPromptLength')} value={selected.prompt_length} />
             {selected.detect_latency_ms != null && (

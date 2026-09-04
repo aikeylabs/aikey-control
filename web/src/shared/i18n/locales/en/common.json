@@ -2639,7 +2639,9 @@
       "advancedBadge": "ADVANCED",
       "basicDesc": "Basic — only explicitly prefixed passwords (password= / 密码：…) are masked; model-inferred hits are recorded but never rewritten. Admins can enforce Advanced org-wide.",
       "advancedDesc": "Advanced — model-inferred password hits are masked as well (full enforcement)."
-    }
+    },
+    "sentUnchangedHint": "This action does not rewrite content — the masking shown here is for the audit view only; the model received the original text.",
+    "sentUnchanged": "sent as-is"
   },
   "browserProfileGuide": {
     "title": "Use a separate browser profile per account",

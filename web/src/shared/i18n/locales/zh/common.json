@@ -2639,7 +2639,9 @@
       "advancedBadge": "高级级",
       "basicDesc": "简易级——仅明确写出前缀的密码（password= / 密码：…）打码；模型推断的命中只记录、不改内容。管理员可对全组织强制高级级。",
       "advancedDesc": "高级级——模型推断的密码命中也一并打码（全量执法）。"
-    }
+    },
+    "sentUnchangedHint": "此动作不改写内容——这里显示的打码只用于审计展示，模型收到的是原文。",
+    "sentUnchanged": "原文已发出"
   },
   "browserProfileGuide": {
     "title": "为每个账号使用独立的浏览器 Profile",

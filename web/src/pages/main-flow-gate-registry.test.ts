@@ -65,7 +65,11 @@ const GATES: Array<{
     flow: 'Team OAuth 贡献账号 → 确认提交换取到的 token',
     file: '/src/pages/user/oauth-contribute/index.tsx',
     control: 'oauthContribute.confirmSubmit / confirmSubmitMismatch',
-    gate: 'disabled={confirmMut.isPending}',
+    // Anchored to the onClick too: a bare `disabled={confirmMut.isPending}` also
+    // appears on this dialog's Cancel button, and an anchor that matches two
+    // controls silently passes when the one you care about changes (caught while
+    // red-proofing this fence on 2026-09-04).
+    gate: 'onClick={() => confirmMut.mutate()} disabled={confirmMut.isPending}>',
     escape:
       'A cross-account identity is an acknowledged branch, never a block: the click carries ' +
       'identityMismatch as the acknowledgement. Re-adding an identity term here is exactly ' +
@@ -86,6 +90,17 @@ describe('main-flow gates (member console)', () => {
           `everything the page asks STILL get through — or, if not, does the page tell them why ` +
           `and offer a way out?\n\nWhy this gate is shaped the way it is:\n${g.escape}`,
       ).toContain(g.gate);
+
+      // 🔴 An anchor that matches more than one control is worthless: the fence
+      // stays green because the OTHER match still satisfies it, exactly the way
+      // this registry first failed to catch a simulated regression.
+      const occurrences = source.split(g.gate).length - 1;
+      expect(
+        occurrences,
+        `the registered anchor for「${g.control}」matches ${occurrences} places in ${g.file}. ` +
+          `Make it unique (include the onClick or another neighbouring attribute) — otherwise ` +
+          `a change to this control passes as long as some other control still matches.`,
+      ).toBe(1);
     });
   }
 

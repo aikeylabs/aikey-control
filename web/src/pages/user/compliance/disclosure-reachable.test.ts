@@ -22,6 +22,10 @@
  * spec: R-compliance-local-ledger-completeness-3
  * bugfix: workflow/CI/bugfix/2026-09-04-page-header-actions-squeezed-by-long-description.md
  */
+// @ts-nocheck — vitest-only test file using Node built-ins. Same pragma
+// rationale as pages/user/no-silent-query-errors.test.ts: the web app
+// deliberately does not depend on @types/node, so a test that reads source
+// files off disk cannot type-check without it.
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
