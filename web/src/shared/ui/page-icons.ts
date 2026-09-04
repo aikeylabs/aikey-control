@@ -75,14 +75,20 @@ const MASTER_PAGE_GLYPH: Record<string, GlyphName> = {
   'directory': 'team-kind',
   'nodes': 'server',
   // MCP gateway (阶段8 P8). The glyphs mirror the sidebar exactly — that is the
-  // whole point of this table — and the split follows what each page IS:
-  // backends are the third-party pieces plugged in ('puzzle'), a toolset is a
-  // bundle ('layers', like the other grouping surfaces), a grant is an access
-  // decision ('key'), and the call log is an audit surface ('usage-audit').
+  // whole point of this table.
+  //
+  // 🔴 All four resolve to the SAME 'puzzle' since 2026-09-02, when the four
+  // sidebar entries became one 「MCP 网关」entry with in-page tabs. They used to
+  // differ (toolset='layers', grant='key', call log='usage-audit') to mirror
+  // four distinct menu rows; with one menu row left, four different page glyphs
+  // would put this table back in conflict with the sidebar — one menu item,
+  // four icons — which is the exact drift this registry exists to remove.
   'mcp-backends': 'puzzle',
-  'mcp-toolsets': 'layers',
-  'mcp-grants': 'key',
-  'mcp-audit': 'usage-audit',
+  'mcp-credentials': 'puzzle',
+  'mcp-toolsets': 'puzzle',
+  'mcp-grants': 'puzzle',
+  'mcp-delegation': 'puzzle',
+  'mcp-audit': 'puzzle',
   'oauth-groups': 'layers',
   'packs': 'library',
   'provider-accounts': 'cloud',
