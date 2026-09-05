@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { userAccountsApi, type AgentRoutingSummaryDTO, type MyAgentDTO } from '@/shared/api/user/accounts';
+import { parseApiError } from '@/shared/utils/api-error';
 import { ToolGlyph, toolGlyphLabel } from '@/shared/ui/ToolGlyph';
 import { DetailDrawer } from '@/shared/ui/DetailDrawer';
 import { ModalPortal } from '@/shared/ui/ModalShell';
@@ -305,7 +306,12 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
               setConfirmRevoke(false);
               onClose();
             } catch (e) {
-              setRevokeErr(e instanceof Error ? e.message : t('accessTokens.actionFailed'));
+              // update 20260905 (访问令牌 删除·回收站, 拍板 ②): the member delete now
+              // shares the admin guard — 409 BIZ_ACCESS_TOKEN_HAS_ACTIVE_REFS while
+              // the token is still bound to a pool. Show the server's reason and
+              // the unbind guidance, not axios's "Request failed with status 409".
+              const parsed = parseApiError(e);
+              setRevokeErr([parsed.message, parsed.suggestion].filter(Boolean).join(' — ') || t('accessTokens.actionFailed'));
               setConfirmRevoke(false);
             } finally {
               setRevoking(false);

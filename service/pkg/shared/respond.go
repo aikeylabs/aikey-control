@@ -163,6 +163,10 @@ func DomainErrorHTTPStatus(code string) int {
 		// (use a different account) is the admin's. 🚫 Not 422: nothing about the
 		// submitted body is wrong.
 		CodeBizOAuthAccountReclaimed,
+		// update 20260905 (账号池/访问令牌 删除·回收站): "delete requires unbind
+		// first" guards and the deleted-pool tombstone — the same 409 family as
+		// the R39/R40 guards above.
+		CodeBizOauthGroupHasActiveRefs, CodeBizOauthGroupDeleted, CodeBizAccessTokenHasActiveRefs,
 		CodeBizLoginSessionTerminated, CodeBizSSOIdentityConflict,
 		// The virtual key ALREADY has an active binding for this
 		// (protocol_type, provider_id) pair. Like the R39 guard above this is a

@@ -205,10 +205,13 @@ var zhMessages = map[string]string{
 	CodeBizProvCodeTaken:  "已存在使用该代码的供应商",
 
 	// BIZ — Credential
-	CodeBizCredNotFound:          "凭据 {{id}} 不存在",
-	CodeBizCredInactive:          "凭据 {{id}} 未激活",
-	CodeBizOAuthAccountReclaimed: "账号 {{id}} 已回收，不能通过重新登录恢复；请改用其他账号",
-	CodeBizCredHasActiveRefs: "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、OAuth 账号池 {{group_count}} 个），请先迁移通道或将账号移出账号池，再移入回收站",
+	CodeBizCredNotFound:             "凭据 {{id}} 不存在",
+	CodeBizCredInactive:             "凭据 {{id}} 未激活",
+	CodeBizOAuthAccountReclaimed:    "账号 {{id}} 已回收，不能通过重新登录恢复；请改用其他账号",
+	CodeBizCredHasActiveRefs:        "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、OAuth 账号池 {{group_count}} 个），请先迁移通道或将账号移出账号池，再移入回收站",
+	CodeBizOauthGroupHasActiveRefs:  "账号池 {{oauth_group_id}} 仍被使用（挂载账号 {{account_count}} 个、绑定席位 {{seat_count}} 个，其中访问令牌 {{token_count}} 个），请先移出账号、解绑席位/令牌，再删除",
+	CodeBizOauthGroupDeleted:        "账号池 {{oauth_group_id}} 已删除（在回收站中），不能再修改；请使用或新建其他账号池",
+	CodeBizAccessTokenHasActiveRefs: "访问令牌 {{seat_id}} 仍绑定在 {{group_count}} 个账号池中，请先从账号池解绑，再删除",
 
 	// BIZ — Provider
 	CodeBizProvNotFound:                "供应商 {{id}} 不存在",
@@ -388,7 +391,24 @@ const (
 	// fixes by choosing a different credential.
 	CodeBizRouteGroupProtocolMismatch = "BIZ_ROUTE_GROUP_PROTOCOL_MISMATCH"
 	CodeBizOauthGroupDefaultProtected = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
-	CodeBizOauthGroupCredInUse        = "BIZ_OAUTH_GROUP_CRED_IN_USE"
+	// CodeBizOauthGroupHasActiveRefs: an OAuth account pool cannot be deleted
+	// while accounts are attached or seats / access tokens are bound to it —
+	// "delete requires unbind first" (update 20260905-账号池与访问令牌-删除隐藏回收站,
+	// same guard family as CodeBizCredHasActiveRefs / R39). Meta carries the
+	// counts so the console can show the impact and link to the unbind actions.
+	CodeBizOauthGroupHasActiveRefs = "BIZ_OAUTH_GROUP_HAS_ACTIVE_REFS"
+	// CodeBizOauthGroupDeleted: a write targeted a pool that sits in the
+	// recycle bin (status=deleted). Tombstone guard, same posture as
+	// CodeBizOAuthAccountReclaimed — the request is well formed, the state it
+	// conflicts with is deliberate, and the remedy (use / create another pool)
+	// is the admin's.
+	CodeBizOauthGroupDeleted = "BIZ_OAUTH_GROUP_DELETED"
+	// CodeBizAccessTokenHasActiveRefs: an access token (agent seat) cannot be
+	// deleted while it is still a member of an OAuth account pool — unbind it
+	// from the pool first (update 20260905, 拍板 ②: the guard looks ONLY at pool
+	// membership, never at the VK, which OA5 retires with the seat).
+	CodeBizAccessTokenHasActiveRefs = "BIZ_ACCESS_TOKEN_HAS_ACTIVE_REFS"
+	CodeBizOauthGroupCredInUse      = "BIZ_OAUTH_GROUP_CRED_IN_USE"
 	// CodeBizOauthGroupRatioRejected: issuing to a group would push seats:accounts
 	// past the reject threshold (N4 capacity gate). 409 (capacity conflict).
 	CodeBizOauthGroupRatioRejected = "BIZ_OAUTH_GROUP_RATIO_REJECTED"
@@ -832,6 +852,43 @@ func BizRouteGroupProtocolMismatch(credentialID, credProtocol, groupProtocol str
 func BizOauthGroupDefaultProtected() *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupDefaultProtected,
 		Message: "the default OAuth account pool cannot be deleted"}
+}
+
+// BizOauthGroupHasActiveRefs — the pool still has attached accounts and/or
+// bound seats (of which `token_count` are access-token seats); detach / unbind
+// them first. Counts travel in Meta for the impact dialog.
+func BizOauthGroupHasActiveRefs(oauthGroupID string, accountCount, seatCount, tokenCount int) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupHasActiveRefs,
+		Message: fmt.Sprintf("OAuth account pool %q is still in use (%d attached account(s), %d bound seat(s) of which %d access token(s)) — remove the accounts and unbind the seats / tokens, then delete",
+			oauthGroupID, accountCount, seatCount, tokenCount),
+		Meta: map[string]any{
+			"oauth_group_id": oauthGroupID,
+			"account_count":  accountCount,
+			"seat_count":     seatCount,
+			"token_count":    tokenCount,
+		}}
+}
+
+// BizOauthGroupDeleted — the pool is in the recycle bin; it accepts no writes.
+func BizOauthGroupDeleted(oauthGroupID string) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupDeleted,
+		Message: fmt.Sprintf("OAuth account pool %q has been deleted (recycle bin) and cannot be modified — use or create another pool", oauthGroupID),
+		Meta:    map[string]any{"oauth_group_id": oauthGroupID}}
+}
+
+// BizAccessTokenHasActiveRefs — the access token is still bound to pool(s);
+// unbind it there first.
+func BizAccessTokenHasActiveRefs(seatID string, groupIDs []string) *DomainError {
+	if groupIDs == nil {
+		groupIDs = []string{}
+	}
+	return &DomainError{Code: CodeBizAccessTokenHasActiveRefs,
+		Message: fmt.Sprintf("access token %q is still bound to %d OAuth account pool(s) — unbind it from the pool first, then delete", seatID, len(groupIDs)),
+		Meta: map[string]any{
+			"seat_id":     seatID,
+			"group_count": len(groupIDs),
+			"group_ids":   groupIDs,
+		}}
 }
 
 // BizOauthGroupCredInUse — a credential already belongs to a seat group

@@ -6852,6 +6852,16 @@ function healthFromResult(
   }
   // Fail — pick first failing phase per spec.
   if (!testResult.ping_ok) {
+    // 2026-09-05: the proxy REFUSED to ping because it could not resolve
+    // which upstream this key talks to — a proxy-side wiring / version
+    // problem, not a network one. Same wording as friendlyTestError so
+    // the dialog and the Test-connection popup never disagree.
+    if (testResult.error_code === 'PROBE_UPSTREAM_UNRESOLVED') {
+      return {
+        title: t('vault.errProbeUnresolvedTitle'), copy: t('vault.errProbeUnresolvedDetail'), tone: 'bad',
+        repair: { tone: 'bad', text: t('vault.errProbeUnresolvedAction') },
+      };
+    }
     return {
       title: t('vault.healthUpstreamUnreachable'), copy: t('vault.healthUpstreamUnreachableCopy'), tone: 'bad',
       repair: { tone: 'bad', text: t('vault.repairUpstreamUnreachable') },
@@ -6866,6 +6876,16 @@ function healthFromResult(
   const rawMsg = typeof testResult.error_message === 'string' ? testResult.error_message : '';
   const parsed = parseProviderErrorBody(rawMsg);
   if (!testResult.api_ok) {
+    // 2026-09-05 (part D): the CLI now fails the API probe when the
+    // upstream answers an HTML page — the base_url points at a website,
+    // not an API root. "Credential rejected" would send the user to
+    // re-check the key; the fix is the URL.
+    if (/HTML page/.test(rawMsg)) {
+      return {
+        title: t('vault.healthBaseUrlNotApi'), copy: parsed.message || rawMsg, tone: 'bad',
+        repair: { tone: 'bad', text: t('vault.repairBaseUrlNotApi') },
+      };
+    }
     return {
       title: t('vault.healthCredentialRejected'), copy: parsed.message || t('vault.healthAuthFailed'), tone: 'bad',
       repair: { tone: 'bad', text: t('vault.repairCredentialRejected') },
