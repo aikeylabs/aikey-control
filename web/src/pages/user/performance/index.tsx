@@ -534,7 +534,19 @@ export default function UserPerformancePage() {
                     </div>
                   </button>
                   <div className="key-bar">
-                    <span className="key-bar-fill" style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: 'var(--primary)' }} />
+                    {/* 🔴 --primary-dim, NOT --caution-deep (2026-09-07, user decision). The
+                        rest of this page's chart — the 7-day trend, the four-step
+                        segment ramp, both legends — is one --primary-dim family, and
+                        --caution-deep is brown in both themes (#a16207 dark / #7c3d06
+                        light). That left exactly one element on the page a different
+                        hue from everything around it, which reads as a rendering fault
+                        rather than as a "caution" signal: nothing about a top-session
+                        share is a caution. Matching .seg-uncached also means the bar
+                        and the strongest segment below it are literally the same
+                        colour, which is what makes the two charts read as one.
+                        Contrast improves too: 5.07:1 on the dark card against 3.03:1,
+                        which was a hair over the 3:1 floor for a non-text fill. */}
+                    <span className="key-bar-fill" style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: 'var(--primary-dim)' }} />
                   </div>
                   <span className="font-mono text-[11.5px] text-right whitespace-nowrap">
                     <span style={{ color: 'var(--foreground)' }}>{fmtTok(s.total_tokens)}</span>
@@ -566,15 +578,15 @@ export default function UserPerformancePage() {
                   {t('performance.legendUncached')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.7)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.7)' }} />
                   {t('performance.legendCreation')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.45)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.45)' }} />
                   {t('performance.legendCached')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.2)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.2)' }} />
                   {t('performance.legendOutput')}
                 </span>
               </div>
@@ -736,15 +748,15 @@ export default function UserPerformancePage() {
                   {t('performance.legendUncached')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.7)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.7)' }} />
                   {t('performance.legendCreation')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.45)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.45)' }} />
                   {t('performance.legendCached')}
                 </span>
                 <span className="item">
-                  <span className="dot" style={{ background: 'rgba(202,138,4,0.2)' }} />
+                  <span className="dot" style={{ background: 'rgba(var(--primary-dim-rgb), 0.2)' }} />
                   {t('performance.legendOutput')}
                 </span>
               </div>
@@ -926,8 +938,8 @@ const COST_CSS = `
   width: 7px; height: 7px;
   margin-right: 6px;
   border-radius: 50%;
-  background: #ca8a04;
-  box-shadow: 0 0 6px rgba(250, 204, 21, 0.6);
+  background: var(--primary-dim);
+  box-shadow: 0 0 6px rgba(var(--primary-rgb), 0.6);
   animation: performance-live-pulse 1.6s ease-in-out infinite;
   vertical-align: middle;
 }
@@ -963,12 +975,6 @@ const COST_CSS = `
   height: 100%;
   transition: width 200ms ease;
 }
-/* 🔴 The four-step series ramp, tokenised 2026-09-06. #ca8a04 IS --primary-dim's
-   dark value and rgba(202,138,4) IS --primary-dim-rgb, so DARK IS BYTE-IDENTICAL
-   -- this only teaches the ramp to follow the light theme, which re-cut to blue
-   and left these literals behind as gold bars on a blue console.
-   The same ramp is repeated by .stat-dot.* below and by the inline legend dots;
-   all of them have to move together or the legend stops naming the chart. */
 .performance-page .key-bar-fill > .seg-uncached {
   background: var(--primary-dim);
   box-shadow: 0 0 8px rgba(var(--primary-rgb), 0.3);
@@ -1015,8 +1021,8 @@ const COST_CSS = `
   border-left: 1px solid var(--border);
   font-weight: 700;
   font-size: 12.5px;
-  color: #facc15;
-  text-shadow: 0 0 6px rgba(250, 204, 21, 0.35);
+  color: var(--primary-text);
+  text-shadow: 0 0 6px rgba(var(--primary-rgb), 0.35);
   cursor: help;
 }
 
@@ -1064,7 +1070,7 @@ const COST_CSS = `
   /* Default state: muted dark yellow (~25% opacity of the chart base
    * color). Quiet enough that the eye doesn't read every day as
    * "active" but still visible against the card background. */
-  background: rgba(202, 138, 4, 0.25);
+  background: rgba(var(--primary-dim-rgb), 0.25);
   border-radius: 3px 3px 0 0;
   transition: background 120ms ease, transform 120ms ease;
   min-height: 2px;
@@ -1072,7 +1078,7 @@ const COST_CSS = `
 .performance-page .trend7d-bar:hover .trend7d-fill {
   /* Hover lift sits between default and active so users get a clear
    * "I'm about to select this" affordance. */
-  background: rgba(202, 138, 4, 0.55);
+  background: rgba(var(--primary-dim-rgb), 0.55);
   transform: scaleY(1.03);
   transform-origin: bottom;
 }
@@ -1081,8 +1087,8 @@ const COST_CSS = `
    * as the cache-utilization "uncached" segment below — visual
    * consistency). 4x more saturated than the 25%-opacity default
    * is plenty of contrast without the harshness of pure #facc15. */
-  background: #ca8a04;
-  box-shadow: 0 0 6px rgba(202, 138, 4, 0.45);
+  background: var(--primary-dim);
+  box-shadow: 0 0 6px rgba(var(--primary-dim-rgb), 0.45);
 }
 .performance-page .trend7d-bar.is-today .trend7d-fill {
   outline: 1px dashed rgba(var(--success-rgb), 0.7);
@@ -1126,7 +1132,7 @@ const COST_CSS = `
   align-items: stretch;
 }
 .performance-page .session-label.is-pinned {
-  outline: 1px solid #ca8a04;
+  outline: 1px solid var(--primary-dim);
   outline-offset: 2px;
   border-radius: 3px;
 }
@@ -1156,8 +1162,8 @@ const COST_CSS = `
   gap: 0.4rem;
   padding: 2px 8px;
   border-radius: 12px;
-  background: rgba(202, 138, 4, 0.15);
-  border: 1px solid rgba(202, 138, 4, 0.4);
+  background: rgba(var(--primary-dim-rgb), 0.15);
+  border: 1px solid rgba(var(--primary-dim-rgb), 0.4);
   color: var(--foreground);
   white-space: nowrap;
   max-width: 360px;
@@ -1174,7 +1180,7 @@ const COST_CSS = `
   line-height: 1;
 }
 .performance-page .filter-chip .chip-x:hover {
-  color: #facc15;
+  color: var(--primary-text);
 }
 .performance-page .reset-link {
   background: none;
@@ -1189,6 +1195,6 @@ const COST_CSS = `
   margin-left: 0.25rem;
 }
 .performance-page .reset-link:hover {
-  color: #facc15;
+  color: var(--primary-text);
 }
 `;
