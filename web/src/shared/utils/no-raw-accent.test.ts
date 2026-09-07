@@ -255,6 +255,35 @@ describe('accent colours are tokenised', () => {
     ).toEqual([]);
   });
 
+  // An exemption list rots in the SAFE-LOOKING direction.
+  //
+  // 🔴 A file named in LITERAL_DECLARING_FENCES that is renamed or deleted stops
+  // exempting anything, and NOTHING goes red: the list still has two entries, the
+  // scan still finds nothing, and the next author of a fence that must name a
+  // banned literal walks into the very self-report this list exists to prevent —
+  // which is how it reached a release round in the first place. Fail loudly
+  // instead of decaying quietly.
+  //
+  // 🚫 This asserts the entries EXIST, not that they are still fences. Checking
+  // what they contain would put a second, weaker copy of "is this a fence" in a
+  // place nobody would think to update.
+  //
+  // See workflow/CI/bugfix/20260907-two-fences-collide-on-the-literal-they-both-name.md
+  it('every literal-declaring exemption still points at a real file', () => {
+    const missing = LITERAL_DECLARING_FENCES.filter((p) => !fs.existsSync(p));
+    expect(
+      missing,
+      [
+        '',
+        'LITERAL_DECLARING_FENCES names files that no longer exist:',
+        ...missing.map((p) => `  ${path.relative(process.cwd(), p)}`),
+        '',
+        'Fix the path, or drop the entry if that fence is gone. An entry that',
+        'matches nothing silently stops exempting anything.',
+      ].join('\n'),
+    ).toEqual([]);
+  });
+
   it('no source file hardcodes a caution-amber literal', () => {
     const hits = findHits(CAUTION_PATTERNS);
     expect(
