@@ -98,7 +98,7 @@ export function BrandWordmark({
         aria-label="AiKey"
         style={{ display: 'block' }}
       >
-        <path d={WORDMARK_PATH} fill="#ffffff" />
+        <path d={WORDMARK_PATH} fill="var(--brand-wordmark)" />
         <path d={WORDMARK_DOT_PATH} fill="var(--primary)" />
       </svg>
       {tagline && (
@@ -136,9 +136,9 @@ export function BrandMark({ size = 32, className = '' }: { size?: number; classN
         width: size,
         height: size,
         borderRadius: Math.round(size * 0.25),
-        background: '#0c0c0e',
+        background: 'var(--code-bg)',
         border: '1.5px solid var(--primary)',
-        boxShadow: '0 0 10px rgba(250, 204, 21, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+        boxShadow: '0 0 10px rgba(var(--primary-rgb), 0.10), inset 0 1px 0 rgba(var(--lift-rgb), 0.04)',
       }}
       aria-hidden="true"
     >
@@ -194,30 +194,43 @@ export function BrandLockup({
       style={{ display: 'block' }}
     >
       <defs>
-        {/* Approximates the chip's CSS box-shadow amber halo (0 0 10px @10%). */}
+        {/* Approximates the chip's CSS box-shadow halo (0 0 10px @10%).
+            🔴 --primary, not a hard-coded #facc15 (2026-09-07): the halo has to
+            follow the accent, and in light the accent is Tencent blue. A yellow
+            glow was being drawn around a blue chip. */}
         <filter id="brand-chip-glow" x="-60%" y="-60%" width="220%" height="220%">
-          <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="#facc15" floodOpacity="0.25" />
+          <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="var(--primary)" floodOpacity="0.25" />
         </filter>
       </defs>
-      {/* Chip box: solid fill + yellow outline + amber halo (favicon-aligned). */}
+      {/* Chip box (favicon-aligned).
+          🔴 READS --brand-chip-* (2026-09-07). These tokens already existed and
+          already carried the right light values — `--brand-chip-bg:#0052d9`,
+          `--brand-chip-fg:#ffffff` — but nothing consumed them: the chip was
+          hard-wired to --code-bg + --primary, which are the DARK theme's
+          intent. The visible result in light was a dark navy chip with blue
+          letters on a white card, where the brand is meant to be a solid
+          Tencent-blue chip with a white AK — the same lockup the tray panel's
+          `.mark` already draws. A token with a correct value and no reader is
+          indistinguishable from a token nobody defined. */}
       <rect
         x="0.75"
         y="0.75"
         width="30.5"
         height="30.5"
         rx="7.25"
-        fill="#0c0c0e"
-        stroke="var(--primary)"
+        fill="var(--brand-chip-bg)"
+        stroke="var(--brand-chip-border)"
         strokeWidth="1.5"
         filter="url(#brand-chip-glow)"
       />
       {/* "AK" glyph, ~50% chip width, centered. */}
       <svg x="8" y="11.4" width="16" height="9.2" viewBox={BRAND_AK_VIEWBOX}>
-        <path d={BRAND_AK_PATH} fill="var(--primary)" />
+        <path d={BRAND_AK_PATH} fill="var(--brand-chip-fg)" />
       </svg>
-      {/* "AiKey" wordmark (white) + yellow i-dot. */}
+      {/* "AiKey" wordmark + accent i-dot. Sits on the sidebar/page ground, not on
+          the brand chip, so it must follow the theme — see --brand-wordmark. */}
       <svg x="39" y="1.24" width="56.4" height="22.8" viewBox="0 0 47 19">
-        <path d={WORDMARK_PATH} fill="#ffffff" />
+        <path d={WORDMARK_PATH} fill="var(--brand-wordmark)" />
         <path d={WORDMARK_DOT_PATH} fill="var(--primary)" />
       </svg>
       {/* Tagline. */}
