@@ -157,6 +157,13 @@ func DomainErrorHTTPStatus(code string) int {
 		// R39 recycle-bin guard: live references block deletion — a resource-state
 		// conflict the admin resolves (migrate channels / detach from group).
 		CodeBizCredHasActiveRefs,
+		// R-pool-del-2 / recycle-bin tombstone: the pool equivalents of the two
+		// guards around this line. Same reasoning — the body is well formed, the
+		// state is deliberate, the remedy is the admin's. 🔴 Unmapped codes fall
+		// through to a 500, which would tell the operator "server error" for a
+		// refusal they can act on; the class fence below is what catches that.
+		CodeBizOauthGroupHasActiveRefs, CodeBizOauthGroupDeleted,
+		CodeBizAccessTokenHasActiveRefs,
 		// R40 tombstone guard (P2-1/P2-1b): a login/re-auth side effect targeted a
 		// RECLAIMED account. Same 409 family as the R39 guard above — the request
 		// is well formed, the state it conflicts with is deliberate, and the remedy

@@ -205,10 +205,13 @@ var zhMessages = map[string]string{
 	CodeBizProvCodeTaken:  "已存在使用该代码的供应商",
 
 	// BIZ — Credential
-	CodeBizCredNotFound:          "凭据 {{id}} 不存在",
-	CodeBizCredInactive:          "凭据 {{id}} 未激活",
-	CodeBizOAuthAccountReclaimed: "账号 {{id}} 已回收，不能通过重新登录恢复；请改用其他账号",
-	CodeBizCredHasActiveRefs: "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、OAuth 账号池 {{group_count}} 个），请先迁移通道或将账号移出账号池，再移入回收站",
+	CodeBizCredNotFound:             "凭据 {{id}} 不存在",
+	CodeBizCredInactive:             "凭据 {{id}} 未激活",
+	CodeBizOAuthAccountReclaimed:    "账号 {{id}} 已回收，不能通过重新登录恢复；请改用其他账号",
+	CodeBizCredHasActiveRefs:        "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、OAuth 账号池 {{group_count}} 个），请先迁移通道或将账号移出账号池，再移入回收站",
+	CodeBizOauthGroupHasActiveRefs:  "OAuth 账号池 {{id}} 仍被使用（已挂载账号 {{account_count}} 个、成员席位 {{member_count}} 个，其中访问令牌 {{token_count}} 个），请先移除账号并将席位/访问令牌解绑，再移入回收站",
+	CodeBizOauthGroupDeleted:        "OAuth 账号池 {{id}} 已在回收站中，不接受任何修改；请先恢复该池，或改用其他账号池",
+	CodeBizAccessTokenHasActiveRefs: "访问令牌 {{id}} 仍绑定在 {{pool_count}} 个 OAuth 账号池中，请先在「账号池 → 编辑 → 席位」里解绑，再移入回收站",
 
 	// BIZ — Provider
 	CodeBizProvNotFound:                "供应商 {{id}} 不存在",
@@ -398,6 +401,25 @@ const (
 	// is relieved by adding accounts; the seat cap is relieved by splitting seats
 	// across another pool. 409 (capacity conflict).
 	CodeBizOauthGroupSeatCapExceeded = "BIZ_OAUTH_GROUP_SEAT_CAP_EXCEEDED"
+	// CodeBizOauthGroupHasActiveRefs: a pool could not be moved to the recycle bin
+	// because accounts are still attached or seats/access tokens are still members
+	// (R-pool-del-2). 🔴 Same shape and same 409 family as
+	// CodeBizCredHasActiveRefs: the request is well formed, the state it conflicts
+	// with is real, and the remedy belongs to the admin. Deleting anyway would
+	// silently strip live routing from working seats.
+	CodeBizOauthGroupHasActiveRefs = "BIZ_OAUTH_GROUP_HAS_ACTIVE_REFS"
+	// CodeBizOauthGroupDeleted: a WRITE targeted a pool that is already in the
+	// recycle bin (status=deleted). Reads deliberately still succeed so the
+	// recycle-bin view can open it — this code is only for mutations. 409: the
+	// body is fine, the target's state is deliberate, and the fix is the admin's
+	// (restore it, or use another pool).
+	CodeBizOauthGroupDeleted = "BIZ_OAUTH_GROUP_DELETED"
+	// CodeBizAccessTokenHasActiveRefs: an access token could not be revoked
+	// because it is still a member of one or more OAuth account pools
+	// (R-token-del-2). Same 409 family and same shape as the two above; the
+	// remedy is one unbind, which is why the pool ids travel in Meta — an
+	// operator told only "still bound" would have to hunt for where.
+	CodeBizAccessTokenHasActiveRefs = "BIZ_ACCESS_TOKEN_HAS_ACTIVE_REFS"
 	// Bounded-ingress limits (2026-08-18): a payload rejected for SIZE gets its
 	// own codes so the caller's fix ("send less / batch smaller") is unambiguous
 	// versus DATA_INVALID_BODY's "your JSON is malformed".
@@ -732,6 +754,59 @@ func BizCredHasActiveRefs(id string, bindingCount, virtualKeyCount int, groupIDs
 			"virtual_key_count": virtualKeyCount,
 			"group_count":       len(groupIDs),
 			"group_ids":         groupIDs,
+		}}
+}
+
+// BizOauthGroupHasActiveRefs — the R-pool-del-2 guard: a pool with attached
+// accounts or member seats cannot be moved to the recycle bin.
+//
+// 🔴 tokenCount is a SUBSET of memberCount, not a third population. Seats of type
+// access_token / agent are counted separately because they are unbound from a
+// different screen than human seats, and an admin told only "3 seats" would look
+// for three people and find one. Summing the two would overstate the work.
+//
+// The wording matches the front end's own next-step string for this code
+// (web/src/shared/utils/api-error.ts BIZ_OAUTH_GROUP_HAS_ACTIVE_REFS), so the API
+// consumer and the console tell the operator to do the same thing.
+func BizOauthGroupHasActiveRefs(id string, accountCount, memberCount, tokenCount int) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupHasActiveRefs,
+		Message: fmt.Sprintf("OAuth account pool %q is still in use (%d attached account(s), %d member seat(s) of which %d access token(s)) — remove the accounts and unbind the seats / access tokens first, then delete again",
+			id, accountCount, memberCount, tokenCount),
+		Meta: map[string]any{
+			"id":            id,
+			"account_count": accountCount,
+			"member_count":  memberCount,
+			"token_count":   tokenCount,
+		}}
+}
+
+// BizOauthGroupDeleted — a mutation targeted a pool already in the recycle bin.
+//
+// 🚫 Reads must NOT use this: the recycle-bin view opens deleted pools on
+// purpose, so only the write path (oauthgroup.getWritableGroup) raises it.
+func BizOauthGroupDeleted(id string) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupDeleted,
+		Message: fmt.Sprintf("OAuth account pool %q is in the recycle bin and accepts no changes — restore it first, or use another pool", id),
+		Meta:    map[string]any{"id": id}}
+}
+
+// BizAccessTokenHasActiveRefs — the R-token-del-2 guard: an access token that is
+// still a member of an OAuth account pool cannot be revoked.
+//
+// 🔴 poolIDs is normalised to a non-nil slice so the JSON body always carries an
+// array. A null here would make a client that iterates it fail on the ONE case
+// this error exists to describe, which is the worst possible time.
+func BizAccessTokenHasActiveRefs(id string, poolIDs []string) *DomainError {
+	if poolIDs == nil {
+		poolIDs = []string{}
+	}
+	return &DomainError{Code: CodeBizAccessTokenHasActiveRefs,
+		Message: fmt.Sprintf("access token %q is still bound to %d OAuth account pool(s) — unbind it there first, then delete again",
+			id, len(poolIDs)),
+		Meta: map[string]any{
+			"id":         id,
+			"pool_count": len(poolIDs),
+			"pool_ids":   poolIDs,
 		}}
 }
 
