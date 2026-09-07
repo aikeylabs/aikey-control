@@ -102,8 +102,24 @@ const CAUTION_PATTERNS: RegExp[] = [
 
 const SRC = path.resolve(process.cwd(), 'src');
 
-/** This file's own path — see the skip in walk(). */
-const __filename_compat = path.resolve(SRC, 'shared/utils/no-raw-accent.test.ts');
+/**
+ * Files whose accent literals are DATA, not paint — see the skip in walk().
+ *
+ * Both entries are fences that must NAME the literal they forbid:
+ *  - this file's own pattern table;
+ *  - brand-chip-token-wiring.test.ts, whose denial list asserts the chip is NOT
+ *    painted with `var(--primary)` / `#facc15`.
+ * Scanning them reports the fence for stating the rule it enforces — the exact
+ * self-report this skip was created for (first observed 65 → 69), just one file
+ * over. Added 2026-09-07 after it failed a release round.
+ *
+ * 🚫 Keep this list to fences that DECLARE the literal. A file that PAINTS with
+ * it does not belong here no matter how test-shaped its name is.
+ */
+const LITERAL_DECLARING_FENCES = [
+  path.resolve(SRC, 'shared/utils/no-raw-accent.test.ts'),
+  path.resolve(SRC, 'shared/ui/brand-chip-token-wiring.test.ts'),
+];
 
 /**
  * Blank comments, preserving length and newlines so offsets and line numbers
@@ -190,7 +206,7 @@ function walk(dir: string, out: string[] = []): string[] {
       // otherwise match its own pattern table and report itself — which both
       // fails at zero and inflates the ratchet by exactly the number of
       // patterns it declares. Observed on the first run: 65 → 69.
-      if (path.resolve(p) !== path.resolve(__filename_compat)) out.push(p);
+      if (!LITERAL_DECLARING_FENCES.includes(path.resolve(p))) out.push(p);
     }
   }
   return out;

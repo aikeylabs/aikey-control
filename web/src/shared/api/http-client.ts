@@ -91,7 +91,47 @@ function createHttpClient(config?: AxiosRequestConfig): AxiosInstance {
   // In local_bypass mode, /user API calls should never 401 (LocalIdentity
   // middleware always succeeds), so skip the redirect for /user paths.
   client.interceptors.response.use(
-    (res) => res,
+    (res) => {
+      // 🔴 An API call that comes back as HTML is a FAILURE, not data
+      // (2026-09-07, user report: "Unexpected Application Error! q.find is not
+      // a function").
+      //
+      // What happened: the personal box was in gateway mode, so /accounts/*
+      // was forwarded to the configured console origin — a static SPA host
+      // that answers EVERY path with index.html and 200. axios does not parse
+      // text/html, so `res.data` was the HTML string; the caller's
+      // `res.data ?? []` let it through (?? only guards null/undefined), and
+      // the page did `.find()` on a string. The user got a React crash screen
+      // with a minified stack instead of anything actionable, on every visit.
+      //
+      // Rejecting here rather than in each caller: this is the ONE place every
+      // endpoint passes through, and the defect is not specific to arrays — any
+      // shape assumption downstream breaks the same way. Callers already handle
+      // rejection (every page renders an error state from useQuery), so this
+      // converts a crash into the state the UI was designed for.
+      //
+      // 🚫 NOT coerced to an empty value. "The server returned the wrong thing"
+      // and "there is nothing here" are different facts, and showing the second
+      // for the first is the silent-failure this codebase forbids: the user
+      // would see a confidently empty page about a machine that never answered.
+      const ct = String(res.headers?.['content-type'] ?? '');
+      if (ct.includes('text/html')) {
+        const url = `${res.config?.baseURL ?? ''}${res.config?.url ?? ''}`;
+        console.warn(
+          `[api] ${url} answered ${res.status} with text/html — the request ` +
+            `reached a page server, not the API. Check that the console origin ` +
+            `actually proxies this path.`,
+        );
+        return Promise.reject(
+          new Error(
+            `${url} returned an HTML page instead of API data (HTTP ${res.status}). ` +
+              `The request reached a web server that serves the app shell for every ` +
+              `path, so this endpoint is not being routed to the API.`,
+          ),
+        );
+      }
+      return res;
+    },
     (err) => {
       const shouldHandle =
         axios.isAxiosError(err) &&
