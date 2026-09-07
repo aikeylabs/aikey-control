@@ -209,9 +209,9 @@ var zhMessages = map[string]string{
 	CodeBizCredInactive:             "凭据 {{id}} 未激活",
 	CodeBizOAuthAccountReclaimed:    "账号 {{id}} 已回收，不能通过重新登录恢复；请改用其他账号",
 	CodeBizCredHasActiveRefs:        "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、OAuth 账号池 {{group_count}} 个），请先迁移通道或将账号移出账号池，再移入回收站",
-	CodeBizOauthGroupHasActiveRefs:  "OAuth 账号池 {{id}} 仍被使用（已挂载账号 {{account_count}} 个、成员席位 {{member_count}} 个，其中访问令牌 {{token_count}} 个），请先移除账号并将席位/访问令牌解绑，再移入回收站",
+	CodeBizOauthGroupHasActiveRefs:  "OAuth 账号池 {{id}} 仍被使用（已挂载账号 {{account_count}} 个、成员席位 {{seat_count}} 个，其中访问令牌 {{token_count}} 个），请先移除账号并将席位/访问令牌解绑，再移入回收站",
 	CodeBizOauthGroupDeleted:        "OAuth 账号池 {{id}} 已在回收站中，不接受任何修改；请先恢复该池，或改用其他账号池",
-	CodeBizAccessTokenHasActiveRefs: "访问令牌 {{id}} 仍绑定在 {{pool_count}} 个 OAuth 账号池中，请先在「账号池 → 编辑 → 席位」里解绑，再移入回收站",
+	CodeBizAccessTokenHasActiveRefs: "访问令牌 {{id}} 仍绑定在 {{group_count}} 个 OAuth 账号池中，请先在「账号池 → 编辑 → 席位」里解绑，再移入回收站",
 
 	// BIZ — Provider
 	CodeBizProvNotFound:                "供应商 {{id}} 不存在",
@@ -760,7 +760,7 @@ func BizCredHasActiveRefs(id string, bindingCount, virtualKeyCount int, groupIDs
 // BizOauthGroupHasActiveRefs — the R-pool-del-2 guard: a pool with attached
 // accounts or member seats cannot be moved to the recycle bin.
 //
-// 🔴 tokenCount is a SUBSET of memberCount, not a third population. Seats of type
+// 🔴 tokenCount is a SUBSET of seatCount, not a third population. Seats of type
 // access_token / agent are counted separately because they are unbound from a
 // different screen than human seats, and an admin told only "3 seats" would look
 // for three people and find one. Summing the two would overstate the work.
@@ -768,14 +768,18 @@ func BizCredHasActiveRefs(id string, bindingCount, virtualKeyCount int, groupIDs
 // The wording matches the front end's own next-step string for this code
 // (web/src/shared/utils/api-error.ts BIZ_OAUTH_GROUP_HAS_ACTIVE_REFS), so the API
 // consumer and the console tell the operator to do the same thing.
-func BizOauthGroupHasActiveRefs(id string, accountCount, memberCount, tokenCount int) *DomainError {
+//
+// 🔴 The Meta KEYS are a wire contract, not a naming choice: the delete dialog
+// reads seat_count / account_count to render the impact, and
+// api/master TestOauthGroupDelete_UnbindFirstThenRecycleBin pins them.
+func BizOauthGroupHasActiveRefs(id string, accountCount, seatCount, tokenCount int) *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupHasActiveRefs,
 		Message: fmt.Sprintf("OAuth account pool %q is still in use (%d attached account(s), %d member seat(s) of which %d access token(s)) — remove the accounts and unbind the seats / access tokens first, then delete again",
-			id, accountCount, memberCount, tokenCount),
+			id, accountCount, seatCount, tokenCount),
 		Meta: map[string]any{
 			"id":            id,
 			"account_count": accountCount,
-			"member_count":  memberCount,
+			"seat_count":    seatCount,
 			"token_count":   tokenCount,
 		}}
 }
@@ -793,20 +797,25 @@ func BizOauthGroupDeleted(id string) *DomainError {
 // BizAccessTokenHasActiveRefs — the R-token-del-2 guard: an access token that is
 // still a member of an OAuth account pool cannot be revoked.
 //
-// 🔴 poolIDs is normalised to a non-nil slice so the JSON body always carries an
+// 🔴 groupIDs is normalised to a non-nil slice so the JSON body always carries an
 // array. A null here would make a client that iterates it fail on the ONE case
 // this error exists to describe, which is the worst possible time.
-func BizAccessTokenHasActiveRefs(id string, poolIDs []string) *DomainError {
-	if poolIDs == nil {
-		poolIDs = []string{}
+//
+// 🔴 group_count / group_ids, matching BizCredHasActiveRefs above rather than
+// inventing a "pool_" family: a pool IS an oauth group, and two names for one
+// concept on the wire is how a console ends up reading the key that is absent.
+// accesstoken TestDeleteForOrg_GuardThenRevoke pins group_count.
+func BizAccessTokenHasActiveRefs(id string, groupIDs []string) *DomainError {
+	if groupIDs == nil {
+		groupIDs = []string{}
 	}
 	return &DomainError{Code: CodeBizAccessTokenHasActiveRefs,
 		Message: fmt.Sprintf("access token %q is still bound to %d OAuth account pool(s) — unbind it there first, then delete again",
-			id, len(poolIDs)),
+			id, len(groupIDs)),
 		Meta: map[string]any{
-			"id":         id,
-			"pool_count": len(poolIDs),
-			"pool_ids":   poolIDs,
+			"id":          id,
+			"group_count": len(groupIDs),
+			"group_ids":   groupIDs,
 		}}
 }
 
