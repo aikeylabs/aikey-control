@@ -97,24 +97,46 @@
      dimmest): --foreground #f4f4f5 → --display-foreground #c8c4ba →
      --muted-foreground #a1a1aa. */
   --display-foreground: #c8c4ba;
-  /* Tailwind radius scale, now themeable (2026-09-04). Dark values are EXACTLY
-     the numbers previously hardcoded in tailwind.config.js (2/4/4/6px), so the
-     dark console's geometry does not move by a pixel.
-     🔴 This is a DELIBERATE departure from "geometry is shared": the user asked
-     for light to match the reference design's large radii while dark stays put.
-     The two themes therefore have different geometry — accepted, on request. */
-  --rad-sm: 2px;
-  --rad: 4px;
-  --rad-md: 4px;
-  --rad-lg: 6px;
+  /* Tailwind radius scale, themeable since 2026-09-04, SHARED again since
+     2026-09-07. Tailwind reads these through borderRadius in
+     tailwind.config.js, so every `rounded-*` utility in every .tsx moves with
+     them.
 
-  --radius: 0.375rem;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
-  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+     History, because the reversal matters and the superseded decision was a
+     real one — not an oversight:
+       2026-09-04: light was re-cut to the reference design's large radii
+         (8/12/14/20px) and dark deliberately held at 2/4/4/6px, on the user's
+         explicit request, recorded here as "a DELIBERATE departure from
+         'geometry is shared'". That was a decision, and it stood.
+       2026-09-07: the user asked for the desktop UI to follow a new set of
+         reference drafts, and those drafts include a DARK cut built on the
+         same large radii as their light cut. The reason dark held is therefore
+         gone: dark was held back to stay conservative, and the new brief asks
+         for the opposite. Superseded, not corrected.
+
+     🔴 So geometry is defined ONCE again, here, and the light block redefines
+     no radius. That is also the rule the tray panel follows, and its reasoning
+     applies with equal force to a console the user can theme-switch inside: a
+     frame that changes SHAPE with the colour scheme reads as a different app
+     rather than a different theme. If dark is ever asked to hold still again,
+     re-split it deliberately and say who asked — do not let it drift back. */
+  --rad-sm: 8px;
+  --rad: 12px;
+  --rad-md: 14px;
+  --rad-lg: 20px;
+
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  /* 🔴 SOFTER AND WIDER (2026-09-07), matching the tray panel's re-cut. A short
+     dark shadow reads as a drawn BORDER around a rectangle; a wide faint one
+     reads as a surface lifted off a ground. Same ink, spread out — and with the
+     radii above now large, a tight shadow was tracing the corner instead of
+     falling away from it. */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 12px 28px -14px rgba(0, 0, 0, 0.55);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 20px 40px -20px rgba(0, 0, 0, 0.6);
   --glow-primary: 0 0 15px rgba(var(--primary-rgb), 0.15);
   --glow-primary-hover: 0 0 25px rgba(var(--primary-rgb), 0.3);
   --glow-destructive: 0 0 10px rgba(239, 68, 68, 0.4);
@@ -419,17 +441,6 @@
  * ═════════════════════════════════════════════════════════════════════════════ */
 [data-theme='light'] {
   color-scheme: light;
-
-  /* Rounder — the reference design is built on large radii and pill controls.
-     Light-only; dark keeps 2/4/4/6px. */
-  --rad-sm: 8px;
-  --rad: 12px;
-  --rad-md: 14px;
-  --rad-lg: 20px;
-  --radius-sm: 0.5rem;
-  --radius: 0.75rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
 
   /* Surfaces — COOL blue-grey, near-white. The previous cut was warm-biased
      because the accent was orange and a cool ground under a warm accent goes
