@@ -177,7 +177,7 @@ var zhMessages = map[string]string{
 	// TestEveryBizCodeHasAnExplicitStatus 的枚举源之一，且它们都会被管理员在
 	// 控制台上直接读到。
 	CodeBizRouteGroupEndpointNotCluster:   "只有集群版部署才能把路由组发布成服务端点：服务端点走集群共享入口，而个人版/体验版/生产版的流量是从每位员工自己的机器发出的，没有可以对外交付的统一地址",
-	CodeBizRouteGroupIngressNotConfigured: "该集群没有配置入口域名（清单里的 {{key}}），无法生成端点地址；请在集群清单中设置该键并重新执行安装脚本",
+	CodeBizRouteGroupIngressNotConfigured: "该集群没有配置入口地址（控制机上的 {{setting_key}} 未设置），无法生成端点地址；请在集群清单里给 hub 行填 advertise=（deploy-cluster-production.sh --inventory），或给 cluster-install.sh 传 --oauth-ingress-domain，然后重新执行安装脚本",
 	CodeBizRouteGroupProtocolUnsupported:  "入口目前不能以服务端点的形式承载 {{protocol}} 协议；当前支持：{{supported}}",
 	CodeBizRouteGroupEndpointPairMismatch: "这把端点密钥不属于所访问的这个端点（{{route_group_id}}）；地址与密钥是一对，请改用该端点自己的密钥，或改用这把密钥对应端点的地址",
 
@@ -931,17 +931,29 @@ func BizRouteGroupEndpointNotCluster(edition string) *DomainError {
 // BizRouteGroupIngressNotConfigured — a Cluster deployment whose inventory never
 // set the ingress domain, so no address can be formed.
 //
-// 🔴 The message names the INVENTORY KEY and says to re-run the installer,
-// because the fix is not in this console: the ingress domain is delivered by the
-// cluster installer from the inventory, and an admin told only "no ingress
-// domain" will look for a field on this page that does not exist. Passing the
-// key in rather than hard-coding it keeps this message and the code that reads
-// the inventory pointing at the same string.
-func BizRouteGroupIngressNotConfigured(inventoryKey string) *DomainError {
+// 🔴 The message names the SETTING and BOTH operator paths that set it, and says
+// to re-run the installer, because the fix is not in this console: the ingress
+// domain is delivered by the cluster installer, and an admin told only "no
+// ingress domain" will look for a field on this page that does not exist.
+//
+// 🔴 It names `AIKEY_OAUTH_INGRESS_DOMAIN` and not a key called `ingress_domain`
+// — CHECKED against the installers on 2026-09-08, and there is no such key. The
+// two real editing points are the hub row's `advertise=` in the cluster
+// inventory (deploy-cluster-production.sh wires it via
+// cdl_wire_oauth_ingress_domain) and `cluster-install.sh --oauth-ingress-domain`.
+// Both converge on this one env var on the control host, which is why the
+// parameter is the env var rather than either path's spelling.
+//
+// 🚫 A refusal that names a key the operator cannot find is worse than one that
+// says "your configuration": it sends them looking for something that does not
+// exist and makes them doubt the message rather than the setting.
+func BizRouteGroupIngressNotConfigured(settingKey string) *DomainError {
 	return &DomainError{Code: CodeBizRouteGroupIngressNotConfigured,
 		Message: fmt.Sprintf("this cluster has no ingress address configured, so an endpoint address cannot be "+
-			"formed: set %s in the cluster inventory and re-run the installer", inventoryKey),
-		Meta: map[string]any{"inventory_key": inventoryKey}}
+			"formed: %s is unset on the control host. Set the hub row's advertise= in the cluster inventory "+
+			"(deploy-cluster-production.sh --inventory) or pass --oauth-ingress-domain to cluster-install.sh, "+
+			"then re-run the installer", settingKey),
+		Meta: map[string]any{"setting_key": settingKey}}
 }
 
 // BizRouteGroupProtocolUnsupported — the group's protocol has no ingress route,
