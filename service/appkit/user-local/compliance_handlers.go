@@ -330,7 +330,7 @@ func insertComplianceEvent(ctx context.Context, db *sql.DB, ev complianceEventWi
 			metadata = string(b)
 		}
 	}
-	_, err := db.ExecContext(ctx, `
+	res, err := db.ExecContext(ctx, `
 		INSERT INTO local_compliance_events
 			(event_id, created_at, user_id, proxy_version, target_model, scenario, prompt_length, action_taken, prompt_hash, metadata)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -339,6 +339,20 @@ func insertComplianceEvent(ctx context.Context, db *sql.DB, ev complianceEventWi
 		nullStr(ev.TargetModel), nullStr(ev.Scenario), ev.PromptLength, ev.ActionTaken, nullStr(ev.PromptHash), metadata)
 	if err != nil {
 		return err
+	}
+	// 审计单元已存在 → findings 一并跳过(2026-09-08)。
+	//
+	// WHY: finding_id 是 detector 侧 randomFindingID() 的 CSPRNG(engine_recall.go
+	// 等多处),所以同一段内容**重扫一次就得到一整套新的 finding_id**。事件按
+	// event_id 幂等吸收了,findings 却会 ON CONFLICT 不中、原样追加到同一个
+	// event 上 —— 页面上那个「×12」会累加成「×24」「×36」。
+	// 「审计单元 = 一个会话内的一段违规内容」意味着一个单元只有一组 findings,
+	// 所以正确的边界就是:事件没真正插入 = 这个单元已记过账 = findings 不再写。
+	// 首次写入(RowsAffected==1)时行为逐字不变。
+	// spec: R-compliance-filter-scope-2
+	// bugfix: workflow/CI/bugfix/2026-09-08-compliance-audit-unit-id-parasitic-on-cache.md
+	if n, raErr := res.RowsAffected(); raErr == nil && n == 0 {
+		return nil
 	}
 	for _, f := range ev.Findings {
 		if f.FindingID == "" {
