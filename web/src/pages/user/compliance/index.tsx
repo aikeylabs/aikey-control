@@ -711,7 +711,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                   'compliancePage.columnPreview',
                   'compliancePage.columnModel',
                 ].map((k) => (
-                  <th key={k} className="px-4 py-3 text-[10px] font-mono font-semibold tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--table-header-sticky)', position: 'sticky', top: 0, zIndex: 1 }}>
+                  <th key={k} className="px-4 py-3 text-[10px] font-mono tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--table-header-sticky)', position: 'sticky', top: 0, zIndex: 1 }}>
                     {t(k)}
                   </th>
                 ))}

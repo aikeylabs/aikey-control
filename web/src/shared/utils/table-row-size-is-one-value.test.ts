@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * TABLE ROWS ARE ONE SIZE.
+ * TABLE CHROME IS ONE STYLE — one row size, one header weight.
  *
  * # Why this exists (2026-09-08)
  *
@@ -35,7 +35,21 @@ import * as path from 'node:path';
  * those are allowed to be quieter than the rows they comment on. They are
  * skipped structurally rather than listed, so a new one needs no maintenance.
  *
- * 能红: give any `<td>` or `<table>` a `text-sm` / `text-[13px]` / similar.
+ * # The header weight, added 2026-09-08 in the same pass
+ *
+ * Same shape of defect, one layer up and this one WAS master-vs-personal:
+ * `table th` sets `font-weight: 600` and 83 of 96 headers take it, but personal
+ * overrode 5 to `font-normal` (400) in one file and master overrode 5 to
+ * `font-medium` (500) in another — two different answers to the same baseline,
+ * so the master console's headers really did read heavier than personal's.
+ * Plus a `font-semibold` that merely restated the 600 it inherited.
+ *
+ * The fix removes the classes rather than replacing them with `font-semibold`:
+ * 83 headers already work by inheriting, and a no-op class is the thing that
+ * invites the next person to "adjust" it.
+ *
+ * 能红: give any `<td>` or `<table>` a `text-sm` / `text-[13px]` / similar, or
+ * any `<th>` a font-weight class at all.
  */
 
 const SRC = path.resolve(process.cwd(), 'src');
@@ -56,6 +70,8 @@ const NON_DATA_TABLES: Array<{ file: string; why: string }> = [
 const ALLOWED = 'text-xs';
 const SIZE = /text-(?:sm|base|lg|xl|\[[0-9.]+(?:px|rem)\])/;
 const TAG = /<(td|table)\b[^>]*?className="([^"]*)"[^>]*?>/gs;
+const TH = /<th\b[^>]*?className="([^"]*)"[^>]*?>/gs;
+const WEIGHT = /font-(?:thin|extralight|light|normal|medium|semibold|bold|extrabold|black|\[\d+\])/;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -66,7 +82,7 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-describe('table rows are one size', () => {
+describe('table chrome is one style', () => {
   it('no page declares its own table row size', () => {
     const exempt = new Set(NON_DATA_TABLES.map((e) => path.resolve(SRC, e.file)));
     const offenders: string[] = [];
@@ -106,6 +122,45 @@ their size from here, so this value IS the row size for most of both consoles.
 If it is meant to change, the fence's ALLOWED class has to change with it or
 the two halves split again.`,
     ).toMatch(/font-size:\s*0\.75rem/);
+  });
+
+  it('no page declares its own table header weight', () => {
+    const exempt = new Set(NON_DATA_TABLES.map((e) => path.resolve(SRC, e.file)));
+    const offenders: string[] = [];
+
+    for (const file of walk(SRC)) {
+      if (exempt.has(file)) continue;
+      const src = fs.readFileSync(file, 'utf8');
+      for (const m of src.matchAll(TH)) {
+        const hit = WEIGHT.exec(m[1]);
+        if (!hit) continue;
+        const line = src.slice(0, m.index).split('\n').length;
+        offenders.push(`${path.relative(SRC, file)}:${line}  <th> ${hit[0]}`);
+      }
+    }
+
+    expect(offenders, `These headers set their own weight instead of taking the
+one baseline. That is how the two consoles ended up disagreeing: personal chose
+font-normal (400) and master font-medium (500), against the same
+\`table th { font-weight: 600 }\`.
+
+Delete the class — 83 of 96 headers already work by inheriting, and a class that
+merely restates the baseline is what invites the next adjustment:
+
+${offenders.join('\n')}
+`).toEqual([]);
+  });
+
+  it('the header weight baseline is still 600', () => {
+    const css = fs.readFileSync(path.resolve(SRC, 'index.css'), 'utf8');
+    const rule = /table th \{([^}]*)\}/.exec(css);
+    expect(rule, 'the `table th` rule is gone from index.css').not.toBeNull();
+    expect(
+      rule![1],
+      `The header weight baseline moved. 83 of 96 headers declare nothing and
+take their weight from here, so this value IS the header weight for both
+consoles.`,
+    ).toMatch(/font-weight:\s*600/);
   });
 
   /**

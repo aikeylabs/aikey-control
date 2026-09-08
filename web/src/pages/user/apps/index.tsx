@@ -578,16 +578,16 @@ export default function UserAppsListPage() {
               className="text-left text-[11px] font-mono uppercase tracking-wider"
               style={{ color: 'var(--muted-foreground)' }}
             >
-              <th className="px-4 py-3 font-normal">{t('apps.colApp')}</th>
-              <th className="px-4 py-3 font-normal">{t('apps.colStatus')}</th>
-              <th className="px-4 py-3 font-normal">{t('apps.colProviderBindings')}</th>
+              <th className="px-4 py-3">{t('apps.colApp')}</th>
+              <th className="px-4 py-3">{t('apps.colStatus')}</th>
+              <th className="px-4 py-3">{t('apps.colProviderBindings')}</th>
               <th
-                className="px-4 py-3 font-normal"
+                className="px-4 py-3"
                 title={t('apps.healthColTooltip')}
               >
                 {t('apps.colHealth')}
               </th>
-              <th className="px-4 py-3 font-normal text-center">{t('apps.colActions')}</th>
+              <th className="px-4 py-3 text-center">{t('apps.colActions')}</th>
             </tr>
           </thead>
           <tbody>
