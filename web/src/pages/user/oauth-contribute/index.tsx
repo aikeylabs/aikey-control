@@ -796,10 +796,10 @@ function AccountRow({
         </td>
         {/* Pool group name (group_alias): which OAuth pool this account belongs to.
             Empty for ungrouped accounts / older servers → shows a muted dash. */}
-        <td className="font-mono text-[11.5px]" style={{ color: 'var(--foreground)' }}>
+        <td className="font-mono text-xs" style={{ color: 'var(--foreground)' }}>
           {account.group_alias ? account.group_alias : <span style={{ color: 'var(--muted-foreground)', opacity: 0.55 }}>—</span>}
         </td>
-        <td className="font-mono text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>
+        <td className="font-mono text-xs" style={{ color: 'var(--muted-foreground)' }}>
           {fmtDate(account.last_login_at)}
         </td>
         {/* Provider-signed token expiry. The field always rode this DTO and was

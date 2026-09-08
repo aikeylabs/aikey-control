@@ -3444,7 +3444,7 @@ const Row = React.memo(function Row(props: {
       </td>
 
       <td
-        className="font-mono text-[11.5px]"
+        className="font-mono text-xs"
         style={{ color: 'var(--muted-foreground)' }}
       >
         {/* V2 (2026-08-01): server-managed rows have no local created_at — a

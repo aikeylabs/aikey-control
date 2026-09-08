@@ -534,7 +534,19 @@ export default function UserPerformancePage() {
                     </div>
                   </button>
                   <div className="key-bar">
-                    <span className="key-bar-fill" style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: 'var(--caution-deep)' }} />
+                    {/* 🔴 --primary-dim, NOT --caution-deep (2026-09-07, user decision). The
+                        rest of this page's chart — the 7-day trend, the four-step
+                        segment ramp, both legends — is one --primary-dim family, and
+                        --caution-deep is brown in both themes (#a16207 dark / #7c3d06
+                        light). That left exactly one element on the page a different
+                        hue from everything around it, which reads as a rendering fault
+                        rather than as a "caution" signal: nothing about a top-session
+                        share is a caution. Matching .seg-uncached also means the bar
+                        and the strongest segment below it are literally the same
+                        colour, which is what makes the two charts read as one.
+                        Contrast improves too: 5.07:1 on the dark card against 3.03:1,
+                        which was a hair over the 3:1 floor for a non-text fill. */}
+                    <span className="key-bar-fill" style={{ width: `${Math.max(s.barPct, 0.5)}%`, background: 'var(--primary-dim)' }} />
                   </div>
                   <span className="font-mono text-[11.5px] text-right whitespace-nowrap">
                     <span style={{ color: 'var(--foreground)' }}>{fmtTok(s.total_tokens)}</span>

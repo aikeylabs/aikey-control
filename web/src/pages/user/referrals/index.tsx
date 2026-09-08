@@ -132,7 +132,7 @@ export default function UserReferralsPage() {
               ) : (
                 referrals.map((r: ReferralDTO) => (
                   <tr key={r.referral_id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td className="px-5 py-3 text-sm font-mono" style={{ color: 'var(--foreground)' }}>{r.referred_email}</td>
+                    <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--foreground)' }}>{r.referred_email}</td>
                     <td className="px-5 py-3">
                       <Badge variant={r.status === 'completed' ? 'green' : 'yellow'}>
                         {r.status === 'completed' ? t('referrals.statusCompleted') : t('referrals.statusPending')}
