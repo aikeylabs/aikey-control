@@ -108,6 +108,26 @@ func TestDomainErrorStatus_BindingConflictCodes(t *testing.T) {
 			"the chosen template is archived — an unusable object, like CodeBizCredInactive"},
 		{CodeBizRouteGroupEmpty, http.StatusUnprocessableEntity,
 			"the chosen template has no upstreams to generate hops from"},
+
+		// 2026-09-08, publishing a route group AS A SERVICE ENDPOINT
+		// (openspec aliyun-aigw-route-group-endpoint). Pinned here for the same
+		// reason as the rows above: the class fence only proves they are not
+		// 500, and "not 500" is satisfied by any 4xx.
+		{CodeBizRouteGroupEndpointNotCluster, http.StatusUnprocessableEntity,
+			"this deployment has no shared ingress to serve an endpoint from — a deployment fact, not a missing object"},
+		{CodeBizRouteGroupIngressNotConfigured, http.StatusUnprocessableEntity,
+			"a cluster whose inventory never set ingress_domain= — the same family, with a local remedy"},
+		{CodeBizRouteGroupProtocolUnsupported, http.StatusUnprocessableEntity,
+			"the ingress exposes no route for this protocol — the choice itself cannot work, like CodeBizRouteGroupProtocolMismatch"},
+		// 🔴 The one row here that is not cosmetic. The cluster ingress counts
+		// `pair_mismatch` on /cluster/health BY STATUS, so an endpoint key
+		// presented at the wrong address must arrive as 403 specifically.
+		// Any other 4xx keeps every other test in this file green and silently
+		// zeroes that counter, collapsing "somebody configured a job wrong" into
+		// "the control plane is unreachable" — two conditions whose operational
+		// responses are opposite.
+		{CodeBizRouteGroupEndpointPairMismatch, http.StatusForbidden,
+			"the address and the key are one credential; 403 is what the ingress attributes pair_mismatch on"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code, func(t *testing.T) {

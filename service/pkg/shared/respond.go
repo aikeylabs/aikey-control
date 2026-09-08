@@ -123,7 +123,20 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizAgentGroupNotMember, CodeBizAgentPoolNotOwner,
 		// Refused BY DESIGN (form-①): still a 403, but the code tells the client
 		// it's policy, not a permission fault (2026-07-13).
-		CodeBizDeliveryCentralOnly:
+		CodeBizDeliveryCentralOnly,
+		// An endpoint key presented at a DIFFERENT endpoint's address
+		// (aliyun-aigw-route-group-endpoint, 2026-09-08). 403 rather than 404:
+		// the address exists and the caller holds a valid key — what is refused
+		// is the PAIRING, and saying "not found" would send them looking for a
+		// typo in the URL.
+		//
+		// 🔴 This status is load-bearing. The cluster ingress attributes
+		// `pair_mismatch` on /cluster/health BY STATUS, so that "somebody
+		// configured a job wrong" is distinguishable from "the control plane is
+		// unreachable" — two conditions needing opposite responses. Moving this
+		// code to another 4xx keeps every test here green and silently zeroes
+		// that counter.
+		CodeBizRouteGroupEndpointPairMismatch:
 		return http.StatusForbidden
 
 	// ── 404 Not Found ─────────────────────────────────────────────────────────
@@ -226,6 +239,17 @@ func DomainErrorHTTPStatus(code string) int {
 		// auditing the whole function after two of its siblings were reported,
 		// which is the same move that turned one BIZ_BIND report into two defects.
 		CodeBizRouteGroupArchived, CodeBizRouteGroupEmpty,
+		// Publishing a route group as a SERVICE ENDPOINT, refused for a reason
+		// the admin can act on (aliyun-aigw-route-group-endpoint, 2026-09-08).
+		// Same family: the request cannot be processed as asked, and the remedy
+		// is to change the deployment, the inventory, or the group chosen.
+		//
+		// 🚫 None of the three may answer 404 or be hidden in the console
+		// (R-rge-6.S1): a control that disappears teaches the admin the feature
+		// does not exist, and they go and build a worse thing by hand.
+		CodeBizRouteGroupEndpointNotCluster,
+		CodeBizRouteGroupIngressNotConfigured,
+		CodeBizRouteGroupProtocolUnsupported,
 		// Bounded-ingress element cap (2026-08-18): the payload parsed fine but
 		// one list is beyond what this endpoint will process in one call.
 		CodeDataTooManyItems:
