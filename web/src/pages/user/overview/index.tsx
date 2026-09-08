@@ -1285,10 +1285,10 @@ export default function UserOverviewPage() {
                             </span>
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 font-mono text-[11px]" style={{ color: 'var(--muted-foreground)' }} title={rr.virtual_key_id}>
+                        <td className="px-4 py-2.5 font-mono text-xs" style={{ color: 'var(--muted-foreground)' }} title={rr.virtual_key_id}>
                           {shortVkId(rr.virtual_key_id) || '—'}
                         </td>
-                        <td className="px-4 py-2.5 text-left font-mono text-[12px] tabular-nums" style={{ color: 'var(--foreground)' }} title={`${rr.total_tokens.toLocaleString()} tokens`}>
+                        <td className="px-4 py-2.5 text-left font-mono text-xs tabular-nums" style={{ color: 'var(--foreground)' }} title={`${rr.total_tokens.toLocaleString()} tokens`}>
                           {/* fmtTok 统一用 K/M 单位 + tabular-nums 锁定数字等宽 —
                               避免 toLocaleString 的 "12,345" / "123,456" 在右
                               对齐下因长度差异看起来跳动。原始精确值留到 title

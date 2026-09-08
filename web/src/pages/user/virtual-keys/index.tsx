@@ -1060,7 +1060,7 @@ const Row = React.memo(function Row(props: {
         )}
       </td>
 
-      <td className="font-mono text-[11.5px]" style={{ color: 'var(--muted-foreground)' }}>
+      <td className="font-mono text-xs" style={{ color: 'var(--muted-foreground)' }}>
         {expiresStr ?? <span className="cell-empty">—</span>}
       </td>
 

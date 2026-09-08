@@ -173,7 +173,7 @@ export default function MyKeysPage() {
               ) : (
                 keys.map((k: UserKeyDTO) => (
                   <tr key={k.virtual_key_id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td className="px-5 py-3 text-sm font-mono font-bold" style={{ color: 'var(--foreground)' }}>{k.alias}</td>
+                    <td className="px-5 py-3 text-xs font-mono font-bold" style={{ color: 'var(--foreground)' }}>{k.alias}</td>
                     <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{k.provider_code || '—'}</td>
                     <td className="px-5 py-3"><KeyStatusBadge status={k.key_status} /></td>
                     <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{k.share_status}</td>

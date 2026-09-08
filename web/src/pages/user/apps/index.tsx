@@ -572,7 +572,7 @@ export default function UserAppsListPage() {
         className="rounded-md border overflow-x-auto"
         style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
       >
-        <table className="w-full text-[13px] border-collapse">
+        <table className="w-full text-xs border-collapse">
           <thead>
             <tr
               className="text-left text-[11px] font-mono uppercase tracking-wider"
