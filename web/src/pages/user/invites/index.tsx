@@ -148,7 +148,7 @@ export default function UserInvitesPage() {
         {generateError ? (
           <div
             className="mt-4 rounded border p-3 text-xs font-mono"
-            style={{ color: '#f87171', borderColor: 'rgba(248,113,113,0.4)', backgroundColor: 'rgba(248,113,113,0.05)' }}
+            style={{ color: 'var(--destructive-text)', borderColor: 'rgba(var(--destructive-rgb), 0.4)', backgroundColor: 'rgba(var(--destructive-rgb), 0.05)' }}
           >
             {generateError}
           </div>
@@ -158,11 +158,11 @@ export default function UserInvitesPage() {
           <div className="mt-5 space-y-3">
             <div
               className="rounded border p-3 flex items-center justify-between gap-3"
-              style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderColor: 'var(--border)' }}
+              style={{ backgroundColor: 'rgba(var(--sink-rgb), 0.3)', borderColor: 'var(--border)' }}
             >
               <code
                 className="text-xs font-mono truncate flex-1"
-                style={{ color: 'var(--primary)' }}
+                style={{ color: 'var(--primary-text)' }}
                 data-testid="invite-url"
               >
                 {latest.url}
@@ -172,7 +172,7 @@ export default function UserInvitesPage() {
                 className="btn btn-outline text-[10px] px-3 py-1.5 flex-shrink-0"
                 style={{
                   color: copied ? '#4ade80' : 'var(--foreground)',
-                  borderColor: copied ? 'rgba(74,222,128,0.3)' : 'var(--border)',
+                  borderColor: copied ? 'rgba(var(--success-rgb), 0.3)' : 'var(--border)',
                 }}
               >
                 {copied ? t('invites.copied') : t('invites.copyLink')}
@@ -193,7 +193,7 @@ export default function UserInvitesPage() {
                 values={{ code: latest.code }}
                 components={{
                   strong: <strong />,
-                  code: <code className="px-1 rounded" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }} />,
+                  code: <code className="px-1 rounded" style={{ backgroundColor: 'rgba(var(--sink-rgb), 0.3)' }} />,
                 }}
               />
               {!acknowledged ? (
@@ -234,7 +234,7 @@ export default function UserInvitesPage() {
             disabled={revoking}
             className="flex-1 rounded border px-3 py-2 text-xs font-mono"
             style={{
-              backgroundColor: 'rgba(0,0,0,0.3)',
+              backgroundColor: 'rgba(var(--sink-rgb), 0.3)',
               borderColor: 'var(--border)',
               color: 'var(--foreground)',
             }}
@@ -244,8 +244,8 @@ export default function UserInvitesPage() {
             disabled={revoking || !revokeInput.trim()}
             className="btn btn-outline text-[11px] px-4 py-2"
             style={{
-              color: '#f87171',
-              borderColor: 'rgba(248,113,113,0.4)',
+              color: 'var(--destructive-text)',
+              borderColor: 'rgba(var(--destructive-rgb), 0.4)',
               opacity: revoking || !revokeInput.trim() ? 0.6 : 1,
             }}
           >

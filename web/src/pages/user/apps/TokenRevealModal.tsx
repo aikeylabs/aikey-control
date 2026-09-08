@@ -89,7 +89,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
       aria-modal="true"
       aria-labelledby="token-reveal-title"
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(2px)' }}
+      style={{ background: 'var(--overlay-sink)', backdropFilter: 'blur(2px)' }}
     >
       {/* No backdrop onClick handler here — closing this modal accidentally
           would mean losing the token. The user must click Done explicitly. */}
@@ -128,7 +128,7 @@ export function TokenRevealModal({ result, onClose }: TokenRevealModalProps) {
           <div
             className="rounded border p-3"
             style={{
-              background: 'rgba(239, 68, 68, 0.08)',
+              background: 'rgba(var(--destructive-rgb), 0.08)',
               borderColor: 'var(--destructive, #ef4444)',
             }}
           >

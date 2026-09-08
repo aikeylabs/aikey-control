@@ -227,13 +227,13 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
 
           {poolQuery.isLoading && <div className="card p-4 text-xs" style={{ color: 'var(--muted-foreground)' }}>{t('accessTokens.routing.loading')}</div>}
           {poolQuery.isError && (
-            <div role="alert" className="card p-4 text-xs" style={{ color: '#fca5a5' }}>
+            <div role="alert" className="card p-4 text-xs" style={{ color: 'var(--destructive-text-soft)' }}>
               <p>{t('accessTokens.routing.poolLoadError')}</p>
               <button type="button" className="row-use-btn mt-3" onClick={() => void poolQuery.refetch()}>{t('accessTokens.retry')}</button>
             </div>
           )}
           {poolQuery.data?.accounts_state === 'unavailable' && (
-            <div role="alert" className="card p-4 text-xs" style={{ color: '#fca5a5' }}>
+            <div role="alert" className="card p-4 text-xs" style={{ color: 'var(--destructive-text-soft)' }}>
               <p>{t('accessTokens.routing.poolLoadError')}</p>
               <button type="button" className="row-use-btn mt-3" onClick={() => void poolQuery.refetch()}>{t('accessTokens.retry')}</button>
             </div>
@@ -267,15 +267,15 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
             🔴 In the DRAWER, not the row (user decision 2026-08-10): this is
             terminal and unsafe — a row button sits one mis-click from 停用. */}
         {agent.status !== 'revoked' && (
-          <section className="card p-4" style={{ borderColor: 'rgba(239,68,68,0.35)' }}>
-            <p className="text-[10px] uppercase tracking-wider" style={{ color: '#f87171' }}>
+          <section className="card p-4" style={{ borderColor: 'rgba(var(--destructive-rgb), 0.35)' }}>
+            <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--destructive-text)' }}>
               {t('accessTokens.revoke.sectionTitle')}
             </p>
             <p className="mt-2 text-[10px] leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
               {t('accessTokens.revoke.explain')}
             </p>
             {revokeErr && (
-              <div role="alert" className="mt-2 text-[10px] rounded px-2 py-1" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)' }}>
+              <div role="alert" className="mt-2 text-[10px] rounded px-2 py-1" style={{ color: 'var(--destructive-text-soft)', background: 'rgba(var(--destructive-rgb), 0.08)', border: '1px solid rgba(var(--destructive-rgb), 0.35)' }}>
                 {revokeErr}
               </div>
             )}
@@ -284,7 +284,7 @@ function AgentRoutingDrawer({ agent, onClose }: { agent: MyAgentDTO | null; onCl
               onClick={() => setConfirmRevoke(true)}
               disabled={revoking}
               className="mt-3 text-[10px] font-mono px-2.5 py-1 rounded border disabled:opacity-40"
-              style={{ color: '#f87171', borderColor: 'rgba(239,68,68,0.4)', backgroundColor: 'rgba(239,68,68,0.06)' }}
+              style={{ color: 'var(--destructive-text)', borderColor: 'rgba(var(--destructive-rgb), 0.4)', backgroundColor: 'rgba(var(--destructive-rgb), 0.06)' }}
             >
               {revoking ? t('accessTokens.revoke.busy') : t('accessTokens.revoke.button')}
             </button>
@@ -360,7 +360,7 @@ function PoolReadinessBadge({ agent, linkToOauth }: { agent: MyAgentDTO; linkToO
   const { t } = useTranslation();
   const status = readinessStatus(agent);
   const color = status === 'ready' ? '#4ade80' : status === 'no_login' ? '#f59e0b' : '#fb923c';
-  const bg = status === 'ready' ? 'rgba(74,222,128,0.07)' : status === 'no_login' ? 'rgba(245,158,11,0.08)' : 'rgba(251,146,60,0.08)';
+  const bg = status === 'ready' ? 'rgba(var(--success-rgb), 0.07)' : status === 'no_login' ? 'rgba(245,158,11,0.08)' : 'rgba(251,146,60,0.08)';
   const symbol = status === 'ready' ? '✓' : status === 'no_login' ? '!' : '△';
   const chip = (
     <span
@@ -437,7 +437,7 @@ function ConnectionSelfCheck({ agent }: { agent: MyAgentDTO }) {
   const vkReady = !agent.vk_pending && !!(agent.vk || agent.vk_hint);
   const poolReady = readinessStatus(agent) === 'ready';
   return (
-    <div className="rounded px-3 py-3 space-y-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
+    <div className="rounded px-3 py-3 space-y-2" style={{ background: 'rgba(var(--lift-rgb), 0.02)', border: '1px solid var(--border)' }}>
       <div className="text-[10px] font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
         {t('accessTokens.create.selfCheckTitle')}
       </div>
@@ -504,7 +504,7 @@ function CopyField({ label, value, secret = false }: { label: string; value: str
         <button
           onClick={() => { copyText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}
           className="text-[10px] font-mono px-2.5 py-2 rounded border whitespace-nowrap"
-          style={{ borderColor: copied ? 'rgba(74,222,128,0.4)' : 'var(--border)', color: copied ? '#4ade80' : 'var(--muted-foreground)' }}
+          style={{ borderColor: copied ? 'rgba(var(--success-rgb), 0.4)' : 'var(--border)', color: copied ? '#4ade80' : 'var(--muted-foreground)' }}
         >
           {copied ? t('accessTokens.copied') : t('accessTokens.copy')}
         </button>
@@ -532,17 +532,17 @@ function ConnectionReveal({ agent, onGetVK, gettingVK, onNavigate }: {
         <CopyField label={t('accessTokens.create.baseUrlLabel')} value={agent.base_url ?? ''} />
       )}
       {agent.vk_pending ? (
-        <div className="text-[10px] font-mono px-3 py-2 rounded space-y-2" style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}>
+        <div className="text-[10px] font-mono px-3 py-2 rounded space-y-2" style={{ background: 'rgba(var(--info-rgb), 0.08)', border: '1px solid rgba(var(--info-rgb), 0.25)', color: 'var(--info-text)' }}>
           <p>{t('accessTokens.create.vkPending')}</p>
           {/* Reuse the canonical add-account + login surface (Team OAuth pool-login)
               instead of duplicating it here. After adding an account, click "Get my
               VK" (below, or on the agent row in the list) to mint + reveal it. */}
-          <Link to="/user/team-oauth" onClick={onNavigate} className="inline-block font-bold" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
+          <Link to="/user/team-oauth" onClick={onNavigate} className="inline-block font-bold" style={{ color: 'var(--info-text)', textDecoration: 'underline' }}>
             {t('accessTokens.create.vkPendingCta')}
           </Link>
           {onGetVK && (
             <div>
-              <button onClick={onGetVK} disabled={gettingVK} className="mt-1 text-[10px] font-mono px-2.5 py-1 rounded border disabled:opacity-40" style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.4)' }}>
+              <button onClick={onGetVK} disabled={gettingVK} className="mt-1 text-[10px] font-mono px-2.5 py-1 rounded border disabled:opacity-40" style={{ color: 'var(--info-text)', borderColor: 'rgba(var(--info-rgb), 0.4)' }}>
                 {gettingVK ? t('accessTokens.vk.getting') : t('accessTokens.vk.getNow')}
               </button>
             </div>
@@ -597,10 +597,10 @@ function VKRevealModal({ agent, onClose }: { agent: MyAgentDTO; onClose: () => v
   const { t } = useTranslation();
   return (
     <ModalPortal>
-      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={onClose} />
+      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(var(--scrim-rgb), 0.6)' }} onClick={onClose} />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border"
-        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.7)' }}
       >
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('accessTokens.vk.title', { name: agent.alias })}</h3>
@@ -680,10 +680,10 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
   if (!open) return null;
   return (
     <ModalPortal>
-      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={!submitting ? close : undefined} />
+      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(var(--scrim-rgb), 0.6)' }} onClick={!submitting ? close : undefined} />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border"
-        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.7)' }}
       >
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>
@@ -705,7 +705,7 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
                     disabled={submitting}
                     className="px-3 py-1.5 text-xs font-mono font-bold rounded border"
                     style={provider === code
-                      ? { borderColor: '#60a5fa', color: '#60a5fa', background: 'rgba(96,165,250,0.08)' }
+                      ? { borderColor: 'var(--info-text)', color: 'var(--info-text)', background: 'rgba(var(--info-rgb), 0.08)' }
                       : { borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
                   >
                     {label}
@@ -715,7 +715,7 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
               <div
                 role="status"
                 className="rounded px-3 py-2 space-y-1"
-                style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}
+                style={{ background: 'rgba(var(--lift-rgb), 0.02)', border: '1px solid var(--border)' }}
               >
                 <div className="text-[10px] font-mono font-bold" style={{ color: 'var(--foreground)' }}>
                   {t('accessTokens.create.preflightTitle')}
@@ -745,7 +745,7 @@ function CreateAgentModal({ open, onClose, agents }: { open: boolean; onClose: (
                 {t('accessTokens.create.hint')}
               </p>
               {err && (
-                <div role="alert" aria-live="assertive" className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>{err}</div>
+                <div role="alert" aria-live="assertive" className="text-[10px] font-mono px-3 py-2 rounded" style={{ background: 'rgba(var(--destructive-rgb), 0.08)', border: '1px solid rgba(var(--destructive-rgb), 0.3)', color: 'var(--destructive-text)' }}>{err}</div>
               )}
             </div>
             <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
@@ -791,13 +791,13 @@ function RevokeConfirmModal({ agent, busy, onConfirm, onClose }: {
   const { t } = useTranslation();
   return (
     <ModalPortal>
-      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={!busy ? onClose : undefined} />
+      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(var(--scrim-rgb), 0.6)' }} onClick={!busy ? onClose : undefined} />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border"
-        style={{ backgroundColor: 'var(--card)', borderColor: 'rgba(239,68,68,0.4)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+        style={{ backgroundColor: 'var(--card)', borderColor: 'rgba(var(--destructive-rgb), 0.4)', boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.7)' }}
       >
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
-          <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: '#f87171' }}>
+          <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--destructive-text)' }}>
             {t('accessTokens.revoke.confirmTitle', { name: agent.alias })}
           </h3>
           <button onClick={onClose} disabled={busy} style={{ color: 'var(--muted-foreground)' }}>✕</button>
@@ -815,7 +815,7 @@ function RevokeConfirmModal({ agent, busy, onConfirm, onClose }: {
             onClick={onConfirm}
             disabled={busy}
             className="px-4 py-2 text-xs font-mono font-bold rounded border disabled:opacity-40"
-            style={{ color: '#f87171', borderColor: 'rgba(239,68,68,0.5)', backgroundColor: 'rgba(239,68,68,0.1)' }}
+            style={{ color: 'var(--destructive-text)', borderColor: 'rgba(var(--destructive-rgb), 0.5)', backgroundColor: 'rgba(var(--destructive-rgb), 0.1)' }}
           >
             {busy ? t('accessTokens.revoke.busy') : t('accessTokens.revoke.confirmAction')}
           </button>
@@ -831,10 +831,10 @@ function RotateConfirmModal({ agent, busy, onConfirm, onClose }: {
   const { t } = useTranslation();
   return (
     <ModalPortal>
-      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} onClick={!busy ? onClose : undefined} />
+      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(var(--scrim-rgb), 0.6)' }} onClick={!busy ? onClose : undefined} />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border"
-        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.7)' }}
       >
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-mono font-bold tracking-wider" style={{ color: 'var(--foreground)' }}>{t('accessTokens.vk.rotateConfirm.title')}</h3>
@@ -944,7 +944,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
   return (
     <div className="space-y-1">
       {actionErr && (
-        <div role="alert" aria-live="assertive" className="max-w-[300px] whitespace-normal text-[9px] font-mono text-left rounded px-2 py-1" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)' }}>
+        <div role="alert" aria-live="assertive" className="max-w-[300px] whitespace-normal text-[9px] font-mono text-left rounded px-2 py-1" style={{ color: 'var(--destructive-text-soft)', background: 'rgba(var(--destructive-rgb), 0.08)', border: '1px solid rgba(var(--destructive-rgb), 0.35)' }}>
           {actionErr}
         </div>
       )}
@@ -955,7 +955,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
             onClick={getVK}
             disabled={getting}
             className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
-            style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.3)', backgroundColor: 'rgba(96,165,250,0.06)' }}
+            style={{ color: 'var(--info-text)', borderColor: 'rgba(var(--info-rgb), 0.3)', backgroundColor: 'rgba(var(--info-rgb), 0.06)' }}
           >
             {getting ? '...' : t('accessTokens.vk.button')}
           </button>
@@ -974,7 +974,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
           onClick={() => setStatus('suspend')}
           disabled={loading}
           className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
-          style={{ color: '#f97316', borderColor: 'rgba(249,115,22,0.3)', backgroundColor: 'rgba(249,115,22,0.06)' }}
+          style={{ color: '#f97316', borderColor: 'rgba(var(--warning-rgb), 0.3)', backgroundColor: 'rgba(var(--warning-rgb), 0.06)' }}
         >
           {loading ? '...' : t('accessTokens.disable')}
         </button>
@@ -985,7 +985,7 @@ function AgentRowActions({ agent }: { agent: MyAgentDTO }) {
           disabled={loading}
           title={t('accessTokens.enableTitle')}
           className="text-[10px] font-mono px-2.5 py-1 rounded border whitespace-nowrap disabled:opacity-40"
-          style={{ color: '#4ade80', borderColor: 'rgba(74,222,128,0.35)', backgroundColor: 'rgba(74,222,128,0.06)' }}
+          style={{ color: 'var(--success-text)', borderColor: 'rgba(var(--success-rgb), 0.35)', backgroundColor: 'rgba(var(--success-rgb), 0.06)' }}
         >
           {loading ? '...' : t('accessTokens.enable')}
         </button>
@@ -1243,7 +1243,7 @@ export default function MyAgentsPage() {
                       role="alert"
                       aria-live="assertive"
                       className="flex w-full items-center justify-center gap-3 rounded px-4 py-3"
-                      style={{ color: 'var(--muted-foreground)', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}
+                      style={{ color: 'var(--muted-foreground)', background: 'rgba(var(--lift-rgb), 0.02)', border: '1px solid var(--border)' }}
                     >
                       <span>{t('accessTokens.loadError')}</span>
                       <button type="button" className="row-use-btn" onClick={() => void refetch()}>{t('accessTokens.retry')}</button>

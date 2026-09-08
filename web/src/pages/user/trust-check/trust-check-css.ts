@@ -96,8 +96,8 @@ export const TRUST_CHECK_CSS = `
   user-select: none;
 }
 .trust-check-page .tc-observer-on {
-  background: rgba(74, 222, 128, 0.10);
-  border: 1px solid rgba(74, 222, 128, 0.35);
+  background: rgba(var(--success-rgb), 0.10);
+  border: 1px solid rgba(var(--success-rgb), 0.35);
   color: var(--tc-trust);
 }
 /* 2026-05-28: third state added between ON and OFFLINE. Amber to signal
@@ -111,8 +111,8 @@ export const TRUST_CHECK_CSS = `
   color: rgb(245, 158, 11);
 }
 .trust-check-page .tc-observer-off {
-  background: rgba(161, 161, 170, 0.10);
-  border: 1px solid rgba(161, 161, 170, 0.35);
+  background: rgba(var(--muted-rgb), 0.10);
+  border: 1px solid rgba(var(--muted-rgb), 0.35);
   color: var(--muted-foreground);
 }
 .trust-check-page .tc-observer-dot {
@@ -142,7 +142,7 @@ export const TRUST_CHECK_CSS = `
   gap: 6px;
   padding: 6px 12px;
   border-radius: 6px;
-  background: #1f1f23;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   color: var(--foreground);
   font-size: 12px;
@@ -153,7 +153,7 @@ export const TRUST_CHECK_CSS = `
   transition: background 120ms ease, border-color 120ms ease;
 }
 .trust-check-page .tc-btn:hover:not(:disabled) {
-  background: #27272a;
+  background: var(--card);
   border-color: var(--muted-foreground);
 }
 .trust-check-page .tc-btn-primary {
@@ -187,7 +187,7 @@ export const TRUST_CHECK_CSS = `
   gap: 8px;
   padding: 6px 12px 6px 8px;
   border-radius: 6px;
-  background: #1f1f23;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   color: var(--foreground);
   font-size: 12px;
@@ -198,7 +198,7 @@ export const TRUST_CHECK_CSS = `
   transition: background 120ms ease, border-color 120ms ease;
 }
 .trust-check-page .tc-realtime-toggle:hover:not(:disabled) {
-  background: #27272a;
+  background: var(--card);
   border-color: var(--muted-foreground);
 }
 .trust-check-page .tc-realtime-toggle:disabled {
@@ -210,7 +210,7 @@ export const TRUST_CHECK_CSS = `
   display: inline-block;
   width: 28px;
   height: 16px;
-  background: #3f3f46;
+  background: var(--surface-inset);
   border-radius: 999px;
   flex-shrink: 0;
   transition: background 140ms ease;
@@ -329,7 +329,7 @@ export const TRUST_CHECK_CSS = `
 }
 .trust-check-page .tc-tab-btn.active {
   background: rgba(250, 204, 21, 0.10);
-  color: var(--primary);
+  color: var(--primary-text);
   border-color: rgba(250, 204, 21, 0.35);
 }
 .trust-check-page .tc-tab-hint {
@@ -353,7 +353,7 @@ export const TRUST_CHECK_CSS = `
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #1f1f23;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
   font-size: 11px;
@@ -375,7 +375,7 @@ export const TRUST_CHECK_CSS = `
 }
 .trust-check-page .tc-chip.active {
   background: rgba(250, 204, 21, 0.12);
-  color: var(--primary);
+  color: var(--primary-text);
   border-color: rgba(250, 204, 21, 0.35);
 }
 .trust-check-page .tc-chip.active::before {
@@ -411,7 +411,7 @@ export const TRUST_CHECK_CSS = `
   min-width: 200px;
   padding: 8px 12px;
   border-radius: 6px;
-  background: #1f1f23;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   color: var(--foreground);
   font-size: 13px;
@@ -423,7 +423,7 @@ export const TRUST_CHECK_CSS = `
   gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: #1f1f23;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
   font-size: 11px;
@@ -446,17 +446,17 @@ export const TRUST_CHECK_CSS = `
   color: var(--muted-foreground);
   opacity: 0.65;
   padding: 12px 18px;
-  background: #1c1c1f;
+  background: var(--surface-sunken);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 .trust-check-page .tc-table td {
   padding: 12px 18px;
   vertical-align: middle;
-  border-bottom: 1px solid rgba(63, 63, 70, 0.5);
+  border-bottom: 1px solid rgba(var(--surface-inset-rgb), 0.5);
 }
 .trust-check-page .tc-table tr.selected td { background: rgba(250, 204, 21, 0.04); }
-.trust-check-page .tc-table tr:hover td { background: rgba(63, 63, 70, 0.18); }
+.trust-check-page .tc-table tr:hover td { background: rgba(var(--surface-inset-rgb), 0.18); }
 
 /* id stack — primary line bold + secondary mono line */
 .trust-check-page .tc-id {
@@ -502,15 +502,15 @@ export const TRUST_CHECK_CSS = `
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.trust-check-page .tc-pill-trust  { background: rgba(74, 222, 128, 0.15); color: var(--tc-trust); }
-.trust-check-page .tc-pill-suspect{ background: rgba(249, 115, 22, 0.15); color: var(--tc-suspect); }
-.trust-check-page .tc-pill-risk   { background: rgba(239, 68, 68, 0.15);  color: var(--tc-risk); }
-.trust-check-page .tc-pill-info   { background: rgba(96, 165, 250, 0.15); color: var(--tc-info); }
+.trust-check-page .tc-pill-trust  { background: rgba(var(--success-rgb), 0.15); color: var(--tc-trust); }
+.trust-check-page .tc-pill-suspect{ background: rgba(var(--warning-rgb), 0.15); color: var(--tc-suspect); }
+.trust-check-page .tc-pill-risk   { background: rgba(var(--destructive-rgb), 0.15);  color: var(--tc-risk); }
+.trust-check-page .tc-pill-info   { background: rgba(var(--info-rgb), 0.15); color: var(--tc-info); }
 
 .trust-check-page .tc-score-bar {
   height: 4px;
   border-radius: 999px;
-  background: rgba(63, 63, 70, 0.6);
+  background: rgba(var(--surface-inset-rgb), 0.6);
   overflow: hidden;
   position: relative;
 }
@@ -577,7 +577,7 @@ export const TRUST_CHECK_CSS = `
   border: 1px solid rgba(250, 204, 21, 0.35);
   font-size: 11px;
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  color: var(--primary);
+  color: var(--primary-text);
 }
 /* Rotating ring spinner (2026-05-23) — replaces the previous pulse-dot
    that was misnamed "spin-dot" but only animated opacity, not rotation.
@@ -590,8 +590,8 @@ export const TRUST_CHECK_CSS = `
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 2px solid rgba(244, 244, 245, 0.15);
-  border-top-color: var(--primary);
+  border: 2px solid rgba(var(--fg-rgb), 0.15);
+  border-top-color: var(--primary-text);
   display: inline-block;
   box-sizing: border-box;
   flex-shrink: 0;
@@ -644,11 +644,11 @@ export const TRUST_CHECK_CSS = `
   padding: 1px 5px;
   border-radius: 4px;
   background: rgba(250, 204, 21, 0.10);
-  color: var(--primary);
+  color: var(--primary-text);
 }
 .trust-check-page .tc-banner-offline {
-  border-color: rgba(239, 68, 68, 0.55);
-  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(var(--destructive-rgb), 0.55);
+  background: rgba(var(--destructive-rgb), 0.08);
 }
 /* When the banner needs to fit both the explanation AND a Start
    button, switch to a 3-column flex (dot | body fills | action). */
@@ -667,7 +667,7 @@ export const TRUST_CHECK_CSS = `
   height: 8px;
   border-radius: 50%;
   background: var(--tc-risk);
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.65);
+  box-shadow: 0 0 6px rgba(var(--destructive-rgb), 0.65);
   margin-top: 5px;
   flex-shrink: 0;
   animation: tc-spin-pulse 1.5s ease-in-out infinite;
@@ -697,7 +697,7 @@ export const TRUST_CHECK_CSS = `
   background: transparent;
   border: 0;
   padding: 0;
-  color: var(--primary);
+  color: var(--primary-text);
   font-family: inherit;
   font-size: inherit;
   text-decoration: underline;
@@ -728,27 +728,27 @@ export const TRUST_CHECK_CSS = `
   text-overflow: ellipsis;
 }
 .trust-check-page .tc-err-rate-limited {
-  background: rgba(96, 165, 250, 0.15);
+  background: rgba(var(--info-rgb), 0.15);
   color: var(--tc-info);
 }
 .trust-check-page .tc-err-fail {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(var(--destructive-rgb), 0.15);
   color: var(--tc-risk);
 }
 .trust-check-page .tc-err-error {
   /* Distinct from 'fail': same red intent but with a yellow accent ring
    * to signal "upstream/config issue, retry may help". Stage 2.6 added
    * status='error' for UPSTREAM_429 / MISSING_APP_KEY etc. */
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(var(--destructive-rgb), 0.15);
   color: var(--tc-risk);
   box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.45);
 }
 .trust-check-page .tc-err-inconclusive {
-  background: rgba(249, 115, 22, 0.15);
+  background: rgba(var(--warning-rgb), 0.15);
   color: var(--tc-suspect);
 }
 .trust-check-page .tc-err-generic {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(var(--destructive-rgb), 0.15);
   color: var(--tc-risk);
 }
 
@@ -773,7 +773,7 @@ export const TRUST_CHECK_CSS = `
   align-items: center;
   gap: 10px;
   padding: 12px 18px 6px;
-  background: #1c1c1f;
+  background: var(--surface-sunken);
 }
 .trust-check-page .tc-band-section-count {
   font-size: 11px;
@@ -787,7 +787,7 @@ export const TRUST_CHECK_CSS = `
 .trust-check-page .tc-drawer-dimmer {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay-sink);
   /* Below the drawer but above page chrome. */
   z-index: 40;
   animation: tc-fade-in 120ms ease forwards;
@@ -803,7 +803,7 @@ export const TRUST_CHECK_CSS = `
   z-index: 41;
   display: flex;
   flex-direction: column;
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.35);
+  box-shadow: -8px 0 32px rgba(var(--sink-rgb), 0.35);
   animation: tc-slide-in 160ms ease forwards;
 }
 @keyframes tc-fade-in {
@@ -818,7 +818,7 @@ export const TRUST_CHECK_CSS = `
   justify-content: space-between;
   padding: 18px 22px;
   border-bottom: 1px solid var(--border);
-  background: #1c1c1f;
+  background: var(--surface-sunken);
 }
 .trust-check-page .tc-drawer-eyebrow {
   font-size: 11px;
@@ -847,7 +847,7 @@ export const TRUST_CHECK_CSS = `
 }
 .trust-check-page .tc-drawer-close:hover {
   color: var(--foreground);
-  background: rgba(63, 63, 70, 0.4);
+  background: rgba(var(--surface-inset-rgb), 0.4);
 }
 .trust-check-page .tc-drawer-body {
   flex: 1;
@@ -856,7 +856,7 @@ export const TRUST_CHECK_CSS = `
 }
 .trust-check-page .tc-drawer-section {
   padding: 18px 22px;
-  border-bottom: 1px solid rgba(63, 63, 70, 0.5);
+  border-bottom: 1px solid rgba(var(--surface-inset-rgb), 0.5);
 }
 .trust-check-page .tc-drawer-section-title {
   font-size: 11px;
@@ -885,7 +885,7 @@ export const TRUST_CHECK_CSS = `
   margin-bottom: 12px;
 }
 .trust-check-page .tc-subscore {
-  background: #1f1f23;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px;
@@ -906,8 +906,8 @@ export const TRUST_CHECK_CSS = `
 .trust-check-page .tc-subscore.missing {
   background: repeating-linear-gradient(
     -45deg,
-    rgba(63, 63, 70, 0.08),
-    rgba(63, 63, 70, 0.08) 6px,
+    rgba(var(--surface-inset-rgb), 0.08),
+    rgba(var(--surface-inset-rgb), 0.08) 6px,
     transparent 6px,
     transparent 12px
   );
@@ -947,7 +947,7 @@ export const TRUST_CHECK_CSS = `
 }
 .trust-check-page .tc-drawer-meta code {
   background: rgba(250, 204, 21, 0.08);
-  color: var(--primary);
+  color: var(--primary-text);
   padding: 1px 5px;
   border-radius: 4px;
 }
@@ -960,7 +960,7 @@ export const TRUST_CHECK_CSS = `
 .trust-check-page .tc-drawer-footer {
   flex-shrink: 0;
   border-top: 1px solid var(--border);
-  background: #1c1c1f;
+  background: var(--surface-sunken);
   padding: 14px 22px;
   display: flex;
   flex-direction: column;
@@ -976,7 +976,7 @@ export const TRUST_CHECK_CSS = `
 }
 .trust-check-page .tc-drawer-footer-hint-info {
   color: var(--muted-foreground);
-  background: rgba(63, 63, 70, 0.25);
+  background: rgba(var(--surface-inset-rgb), 0.25);
 }
 .trust-check-page .tc-drawer-footer-hint-warn {
   color: #fbbf24;
@@ -984,9 +984,9 @@ export const TRUST_CHECK_CSS = `
   border-color: rgba(250, 204, 21, 0.35);
 }
 .trust-check-page .tc-drawer-footer-hint-error {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.08);
-  border-color: rgba(248, 113, 113, 0.4);
+  color: var(--destructive-text);
+  background: rgba(var(--destructive-rgb), 0.08);
+  border-color: rgba(var(--destructive-rgb), 0.4);
 }
 .trust-check-page .tc-drawer-footer-actions {
   display: flex;
@@ -1004,7 +1004,7 @@ export const TRUST_CHECK_CSS = `
 }
 .trust-check-page .tc-drawer-footer-cancel:hover {
   color: var(--foreground);
-  background: rgba(63, 63, 70, 0.35);
+  background: rgba(var(--surface-inset-rgb), 0.35);
 }
 .trust-check-page .tc-drawer-footer-remove {
   background: transparent;
@@ -1019,13 +1019,13 @@ export const TRUST_CHECK_CSS = `
 }
 .trust-check-page .tc-drawer-footer-remove:hover:not(:disabled) {
   color: var(--foreground);
-  background: rgba(63, 63, 70, 0.4);
+  background: rgba(var(--surface-inset-rgb), 0.4);
 }
 /* Armed state — second click will execute. Uses amber, not red, since
    the action only clears tracking history (credential is preserved).
    Red would over-signal danger and steer users to misread the scope. */
 .trust-check-page .tc-drawer-footer-remove.armed {
-  color: #1c1c1f;
+  color: var(--surface-sunken);
   background: #fbbf24;
   border-color: #fbbf24;
 }
@@ -1047,7 +1047,7 @@ export const TRUST_CHECK_CSS = `
 .trust-check-page .tc-history-row {
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: #1f1f23;
+  background: var(--surface-sunken);
   overflow: hidden;
 }
 .trust-check-page .tc-history-row.expanded { border-color: rgba(250, 204, 21, 0.35); }
@@ -1063,7 +1063,7 @@ export const TRUST_CHECK_CSS = `
   cursor: pointer;
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
 }
-.trust-check-page .tc-history-row-head:hover { background: rgba(63, 63, 70, 0.4); }
+.trust-check-page .tc-history-row-head:hover { background: rgba(var(--surface-inset-rgb), 0.4); }
 .trust-check-page .tc-history-row-id {
   margin-left: auto;
   font-size: 11px;
@@ -1089,7 +1089,7 @@ export const TRUST_CHECK_CSS = `
   padding: 8px 12px 12px;
   font-size: 12px;
   border-top: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(var(--sink-rgb), 0.18);
 }
 .trust-check-page .tc-history-error {
   color: var(--tc-risk);
@@ -1128,7 +1128,7 @@ export const TRUST_CHECK_CSS = `
 .trust-check-page .tc-signals-row dd code {
   font-size: 11px;
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  background: rgba(96, 165, 250, 0.10);
+  background: rgba(var(--info-rgb), 0.10);
   color: var(--tc-info);
   padding: 1px 5px;
   border-radius: 4px;
@@ -1156,7 +1156,7 @@ export const TRUST_CHECK_CSS = `
   gap: 8px;
 }
 .trust-check-page .tc-scoring-question {
-  background: #18181b;
+  background: var(--background);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px;
@@ -1172,7 +1172,7 @@ export const TRUST_CHECK_CSS = `
 }
 .trust-check-page .tc-scoring-question-head code {
   background: rgba(250, 204, 21, 0.10);
-  color: var(--primary);
+  color: var(--primary-text);
   padding: 1px 5px;
   border-radius: 4px;
 }
@@ -1180,7 +1180,7 @@ export const TRUST_CHECK_CSS = `
   margin-left: auto;
   padding: 1px 8px;
   border-radius: 999px;
-  background: rgba(96, 165, 250, 0.15);
+  background: rgba(var(--info-rgb), 0.15);
   color: var(--tc-info);
   font-weight: 600;
 }
@@ -1204,7 +1204,7 @@ export const TRUST_CHECK_CSS = `
 .trust-check-page .tc-scoring-raw {
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(var(--sink-rgb), 0.25);
 }
 .trust-check-page .tc-scoring-raw summary {
   cursor: pointer;
@@ -1273,7 +1273,7 @@ export const TRUST_CHECK_CSS = `
   background:
     conic-gradient(
       var(--health-color) var(--health-pct),
-      rgba(255, 255, 255, 0.08) 0
+      rgba(var(--lift-rgb), 0.08) 0
     );
   display: flex;
   align-items: center;
@@ -1342,7 +1342,7 @@ export const TRUST_CHECK_CSS = `
   border-radius: 999px;
   background: rgba(250, 204, 21, 0.10);
   border: 1px solid rgba(250, 204, 21, 0.30);
-  color: var(--primary);
+  color: var(--primary-text);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
   letter-spacing: 0.05em;
@@ -1354,7 +1354,7 @@ export const TRUST_CHECK_CSS = `
   gap: 12px;
 }
 .trust-check-page .tc-health-stat {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--lift-rgb), 0.02);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 14px;
@@ -1431,7 +1431,7 @@ export const TRUST_CHECK_CSS = `
   position: relative;
 }
 .trust-check-page .tc-baseurl-row:first-child { border-top: none; }
-.trust-check-page .tc-baseurl-row:hover { background: rgba(255, 255, 255, 0.02); }
+.trust-check-page .tc-baseurl-row:hover { background: rgba(var(--lift-rgb), 0.02); }
 .trust-check-page .tc-baseurl-row.selected { background: rgba(250, 204, 21, 0.06); }
 .trust-check-page .tc-baseurl-row::before {
   /* band-color stripe on the left edge — same idiom the metric cards
@@ -1499,7 +1499,7 @@ export const TRUST_CHECK_CSS = `
   padding: 20px 24px;
   border: 1px solid var(--border, #2a2a2a);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.015);
+  background: rgba(var(--lift-rgb), 0.015);
   color: var(--muted-foreground, #888);
   font-size: 12px;
   line-height: 1.65;
@@ -1546,7 +1546,7 @@ export const TRUST_CHECK_CSS = `
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #f87171;
+  color: var(--destructive-text);
   cursor: help;
 }
 
@@ -1559,7 +1559,7 @@ export const TRUST_CHECK_CSS = `
    average it with them.
    --------------------------------------------------------------------- */
 .trust-check-page .tc-kb {
-  background: #1f1f23;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   border-left-width: 3px;
   border-radius: 6px;
@@ -1572,11 +1572,11 @@ export const TRUST_CHECK_CSS = `
   opacity: 0.85;
 }
 .trust-check-page .tc-kb-pass {
-  border-left-color: rgba(34, 197, 94, 0.7);
+  border-left-color: rgba(var(--success-rgb), 0.7);
 }
 .trust-check-page .tc-kb-fail {
-  border-left-color: rgba(239, 68, 68, 0.85);
-  background: rgba(239, 68, 68, 0.06);
+  border-left-color: rgba(var(--destructive-rgb), 0.85);
+  background: rgba(var(--destructive-rgb), 0.06);
 }
 .trust-check-page .tc-kb-info {
   border-left-color: rgba(250, 204, 21, 0.6);
@@ -1595,7 +1595,7 @@ export const TRUST_CHECK_CSS = `
   color: var(--muted-foreground);
 }
 .trust-check-page .tc-kb-status-fail {
-  color: #f87171;
+  color: var(--destructive-text);
 }
 .trust-check-page .tc-kb-score {
   font-size: 22px;
@@ -1639,7 +1639,7 @@ export const TRUST_CHECK_CSS = `
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  background: #1f1f23;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px;
@@ -1662,7 +1662,7 @@ export const TRUST_CHECK_CSS = `
 
 /* --- Deep re-check (multi-round escalation) -------------------------- */
 .trust-check-page .tc-escalation {
-  background: #1f1f23;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px 12px;

@@ -104,7 +104,7 @@ export function UnlockPopover({ anchor, onClose, onUnlocked }: UnlockPopoverProp
           transform: 'translate(-50%, -100%)',
           background: 'var(--card)',
           borderColor: '#facc15',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.55)',
+          boxShadow: '0 12px 32px rgba(var(--scrim-rgb), 0.55)',
         }}
       >
         <div
@@ -132,7 +132,7 @@ export function UnlockPopover({ anchor, onClose, onUnlocked }: UnlockPopoverProp
             // w-44 input squeezed this flex sibling, wrapping zh "解锁" into
             // two stacked characters.
             className="rounded px-2 py-0.5 text-[11px] font-mono uppercase tracking-wider disabled:opacity-50 whitespace-nowrap flex-shrink-0"
-            style={{ background: '#facc15', color: '#18181b' }}
+            style={{ background: '#facc15', color: 'var(--primary-foreground)' }}
           >
             {unlockMut.isPending ? '…' : t('shared.unlock')}
           </button>

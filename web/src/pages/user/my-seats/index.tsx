@@ -34,7 +34,7 @@ export default function MySeatsPage() {
       >
         <div
           className="px-5 py-4 border-b"
-          style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(0,0,0,0.2)' }}
+          style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)' }}
         >
           <h2 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
             SEAT LIST

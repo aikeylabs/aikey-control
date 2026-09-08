@@ -400,7 +400,11 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder, size
         // FILTER_ROW_HEIGHT's own note). Without it this bar sat at ~34px and
         // read misaligned (user report 2026-07-29 ×2, again 2026-08-11).
         className="flex items-center flex-wrap gap-1.5 px-2 py-1.5 rounded border cursor-text"
-        style={{ backgroundColor: muted ? 'var(--muted)' : 'var(--card)', borderColor: 'var(--border)', minHeight: FILTER_ROW_HEIGHT }}
+        // --input, not --muted, for the muted variant (2026-09-04). The two are
+        // both #3f3f46 in dark so this is a no-op there; in light --muted is the
+        // CHIP fill (#f4f4f2) and painting a filter INPUT with it left the box a
+        // tint darker than every other field on the page (user-reported).
+        style={{ backgroundColor: muted ? 'var(--input)' : 'var(--card)', borderColor: 'var(--border)', minHeight: FILTER_ROW_HEIGHT }}
         onClick={() => {
           setOpen(true);
           inputRef.current?.focus();
@@ -423,7 +427,7 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder, size
           <span
             key={tk.key}
             className="flex items-center gap-1.5 text-xs font-mono px-2 py-1 rounded border whitespace-nowrap"
-            style={{ borderColor: 'rgba(96,165,250,0.3)', color: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.08)' }}
+            style={{ borderColor: 'rgba(var(--info-rgb), 0.3)', color: 'var(--info-text)', backgroundColor: 'rgba(var(--info-rgb), 0.08)' }}
           >
             {/* Rule 1 (2026-07-29): clicking the chip body jumps straight to
                 that dimension's value list so the pick can be adjusted in
@@ -436,7 +440,7 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder, size
               }}
               className="hover:underline cursor-pointer"
               title={t('filterTokenBar.editToken')}
-              style={{ color: '#60a5fa', background: 'transparent', border: 'none', padding: 0, font: 'inherit' }}
+              style={{ color: 'var(--info-text)', background: 'transparent', border: 'none', padding: 0, font: 'inherit' }}
             >
               {tokenLabel(tk)}
             </button>
@@ -447,7 +451,7 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder, size
               }}
               aria-label={t('filterTokenBar.remove')}
               className="leading-none"
-              style={{ color: '#60a5fa' }}
+              style={{ color: 'var(--info-text)' }}
             >
               ×
             </button>
@@ -578,7 +582,7 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder, size
           {/* Footer: keyboard hints left, explicit close button right
               (2026-07-29 user request — closing is deliberate, not a side
               effect of clicking around inside the panel). */}
-          <div className="px-3 h-8 flex items-center justify-between border-t shrink-0" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(0,0,0,0.1)' }}>
+          <div className="px-3 h-8 flex items-center justify-between border-t shrink-0" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(var(--sink-rgb), 0.1)' }}>
             <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
               {t('filterTokenBar.hints')}
             </span>

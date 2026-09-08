@@ -24,9 +24,9 @@ function CopyButton({ text }: { text: string }) {
       onClick={handleCopy}
       className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono font-bold rounded border transition-colors"
       style={{
-        borderColor: copied ? 'rgba(74,222,128,0.4)' : 'var(--border)',
+        borderColor: copied ? 'rgba(var(--success-rgb), 0.4)' : 'var(--border)',
         color: copied ? '#4ade80' : 'var(--muted-foreground)',
-        backgroundColor: copied ? 'rgba(74,222,128,0.08)' : 'transparent',
+        backgroundColor: copied ? 'rgba(var(--success-rgb), 0.08)' : 'transparent',
       }}
     >
       {copied ? (
@@ -44,15 +44,15 @@ function CopyButton({ text }: { text: string }) {
 function DeliveryModal({ delivery, onClose }: { delivery: DeliveryDTO; onClose: () => void }) {
   return (
     <ModalPortal>
-      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }} />
+      <div className="fixed inset-0 z-50" style={{ backgroundColor: 'rgba(var(--scrim-rgb), 0.7)' }} />
       <div
         className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded border"
-        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.8)' }}
+        style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.8)' }}
       >
         <div className="px-6 py-5 space-y-4">
           {/* Header */}
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)' }}>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(var(--success-rgb), 0.15)', border: '1px solid rgba(var(--success-rgb), 0.3)' }}>
               <svg className="w-4 h-4" fill="none" stroke="#4ade80" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
             </div>
             <div>
@@ -71,7 +71,7 @@ function DeliveryModal({ delivery, onClose }: { delivery: DeliveryDTO; onClose: 
                   {slot.protocol_type}
                 </div>
                 {slot.binding_targets.map((t) => (
-                  <div key={t.binding_id} className="space-y-2 p-3 rounded border" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                  <div key={t.binding_id} className="space-y-2 p-3 rounded border" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(var(--lift-rgb), 0.02)' }}>
                     <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
                       {t.provider_code}{t.fallback_role === 'fallback' ? ' · fallback' : ''}
                     </span>
@@ -81,7 +81,7 @@ function DeliveryModal({ delivery, onClose }: { delivery: DeliveryDTO; onClose: 
                     </div>
                     <div
                       className="w-full px-3 py-2 rounded border font-mono text-xs break-all select-all"
-                      style={{ backgroundColor: 'rgba(0,0,0,0.4)', borderColor: 'var(--border)', color: 'var(--foreground)', wordBreak: 'break-all' }}
+                      style={{ backgroundColor: 'var(--well-recessed)', borderColor: 'var(--border)', color: 'var(--foreground)', wordBreak: 'break-all' }}
                     >
                       {t.provider_key}
                     </div>
@@ -138,7 +138,7 @@ export default function PendingKeysPage() {
       <PageHeader title="Pending Keys" description="Unclaimed virtual keys awaiting your action" />
 
       <div className="rounded border overflow-hidden" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)' }}>
-        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)' }}>
           <h2 className="text-xs font-mono font-bold tracking-wider" style={{ color: 'var(--muted-foreground)' }}>Pending Claims</h2>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded border" style={{ color: 'var(--muted-foreground)', borderColor: 'var(--border)' }}>
             {keys.length} records
@@ -150,7 +150,7 @@ export default function PendingKeysPage() {
             <thead>
               <tr>
                 {['Alias', 'Provider', 'Expires', 'Actions'].map((h) => (
-                  <th key={h} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(0,0,0,0.2)', borderBottom: '1px solid var(--border)' }}>{h}</th>
+                  <th key={h} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)', borderBottom: '1px solid var(--border)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -158,7 +158,7 @@ export default function PendingKeysPage() {
               {isLoading ? (
                 <tr><td colSpan={4} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>Loading...</td></tr>
               ) : isError ? (
-                <tr><td colSpan={4} className="px-5 py-10 text-center text-xs font-mono" style={{ color: '#f87171' }}>Failed to load</td></tr>
+                <tr><td colSpan={4} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--destructive-text)' }}>Failed to load</td></tr>
               ) : keys.length === 0 ? (
                 <tr><td colSpan={4} className="px-5 py-12 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>No pending keys</td></tr>
               ) : (
@@ -174,7 +174,7 @@ export default function PendingKeysPage() {
                         onClick={() => { setClaimingId(k.virtual_key_id); claimMut.mutate(k.virtual_key_id); }}
                         disabled={claimMut.isPending && claimingId === k.virtual_key_id}
                         className="text-[10px] font-mono px-3 py-1.5 rounded border disabled:opacity-40"
-                        style={{ color: '#4ade80', borderColor: 'rgba(74,222,128,0.3)', backgroundColor: 'rgba(74,222,128,0.06)' }}
+                        style={{ color: 'var(--success-text)', borderColor: 'rgba(var(--success-rgb), 0.3)', backgroundColor: 'rgba(var(--success-rgb), 0.06)' }}
                       >
                         {claimMut.isPending && claimingId === k.virtual_key_id ? 'Claiming...' : 'Claim Key'}
                       </button>

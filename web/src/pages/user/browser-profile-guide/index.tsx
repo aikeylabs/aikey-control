@@ -81,7 +81,7 @@ export default function BrowserProfileGuidePage() {
                     width: 22,
                     height: 22,
                     fontSize: 12,
-                    background: 'var(--surface-2, #27272a)',
+                    background: 'var(--surface-2, var(--card))',
                     color: 'var(--primary, #4ade80)',
                     border: '1px solid var(--border, #3f3f46)',
                   }}
@@ -114,13 +114,13 @@ export default function BrowserProfileGuidePage() {
             <pre
               className="rounded overflow-x-auto"
               style={{
-                background: '#000',
+                background: 'var(--code-bg)',
                 border: '1px solid var(--border, #27272a)',
                 padding: '12px 14px',
                 fontFamily: 'var(--font-mono)',
                 fontSize: 12.5,
                 lineHeight: 1.6,
-                color: '#e4e4e7',
+                color: 'var(--foreground)',
                 margin: 0,
               }}
             >

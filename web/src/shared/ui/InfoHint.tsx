@@ -121,7 +121,7 @@ export function InfoHint({ label, children, testId, glyph = 'i' }: InfoHintProps
                 color: 'var(--foreground)',
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius)',
-                boxShadow: '0 6px 18px rgba(0, 0, 0, 0.45)',
+                boxShadow: '0 6px 18px rgba(var(--scrim-rgb), 0.45)',
                 padding: '8px 10px',
                 fontSize: '11px',
                 lineHeight: 1.5,

@@ -18,13 +18,13 @@ export const KEYS_PAGE_CSS = `
   --chart-openai:    #a78bfa;
   --chart-codex:     #22d3ee;
   --chart-gemini:    #f472b6;
-  --chart-neutral:   #52525b;
+  --chart-neutral:   var(--border-strong);
   --success:         #4ade80;
   --warning:         #f97316;
   --destructive:     #ef4444;
   --info:            #60a5fa;
-  --surface-1:       #1f1f23;
-  --surface-2:       #27272a;
+  --surface-1:       var(--surface-sunken);
+  --surface-2:       var(--card);
 }
 
 /* ---- Buttons ------------------------------------------------- */
@@ -51,12 +51,12 @@ export const KEYS_PAGE_CSS = `
 .vault-page .btn-ghost { background: transparent; color: var(--muted-foreground); }
 .vault-page .btn-ghost:hover:not(:disabled) { color: var(--foreground); background: var(--surface-1); }
 .vault-page .btn-danger {
-  background: rgba(239, 68, 68, 0.1); color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(var(--destructive-rgb), 0.1); color: var(--destructive-text-soft);
+  border-color: rgba(var(--destructive-rgb), 0.35);
 }
 .vault-page .btn-danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.18); color: #fecaca;
-  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(var(--destructive-rgb), 0.18); color: #fecaca;
+  border-color: rgba(var(--destructive-rgb), 0.55);
 }
 .vault-page .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -92,7 +92,7 @@ export const KEYS_PAGE_CSS = `
   font-family: var(--font-sans);
   font-weight: 500;
   letter-spacing: 0;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 6px 18px rgba(var(--scrim-rgb), 0.45);
   pointer-events: none;
   z-index: 100;
 }
@@ -133,10 +133,10 @@ export const KEYS_PAGE_CSS = `
   white-space: nowrap;
   flex-shrink: 0;
 }
-.vault-page .chip.success { color: rgba(134,239,172,0.65); background: rgba(74,222,128,0.04);  border-color: rgba(74,222,128,0.16); }
-.vault-page .chip.warning { color: var(--warning); background: rgba(249,115,22,0.09);  border-color: rgba(249,115,22,0.32); }
-.vault-page .chip.danger  { color: #fca5a5;       background: rgba(239,68,68,0.1);     border-color: rgba(239,68,68,0.35); }
-.vault-page .chip.info    { color: var(--info);   background: rgba(96,165,250,0.08);   border-color: rgba(96,165,250,0.3); }
+.vault-page .chip.success { color: rgba(134,239,172,0.65); background: rgba(var(--success-rgb), 0.04);  border-color: rgba(var(--success-rgb), 0.16); }
+.vault-page .chip.warning { color: var(--warning); background: rgba(var(--warning-rgb), 0.09);  border-color: rgba(var(--warning-rgb), 0.32); }
+.vault-page .chip.danger  { color: var(--destructive-text-soft);       background: rgba(var(--destructive-rgb), 0.1);     border-color: rgba(var(--destructive-rgb), 0.35); }
+.vault-page .chip.info    { color: var(--info);   background: rgba(var(--info-rgb), 0.08);   border-color: rgba(var(--info-rgb), 0.3); }
 /* EXPERIMENT (2026-08-01, user request "去除边框试试看"): borderless status
    chips across the keys family — tint bg + colored text carry the state,
    border goes transparent (NOT removed: 1px stays in the box so chip
@@ -162,15 +162,15 @@ export const KEYS_PAGE_CSS = `
   margin-top: 6px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: rgba(255,255,255,0.02);
+  background: rgba(var(--lift-rgb), 0.02);
 }
 .vault-page .pool-account-card.current {
-  border-color: rgba(74,222,128,0.28);
-  background: rgba(74,222,128,0.06);
+  border-color: rgba(var(--success-rgb), 0.28);
+  background: rgba(var(--success-rgb), 0.06);
 }
 .vault-page .pool-account-card.exhausted {
-  border-color: rgba(248,113,113,0.4);
-  background: rgba(248,113,113,0.06);
+  border-color: rgba(var(--destructive-rgb), 0.4);
+  background: rgba(var(--destructive-rgb), 0.06);
 }
 .vault-page .pool-account-heading {
   display: flex;
@@ -246,7 +246,7 @@ export const KEYS_PAGE_CSS = `
   height: 4px;
   overflow: hidden;
   border-radius: 3px;
-  background: rgba(255,255,255,0.06);
+  background: rgba(var(--lift-rgb), 0.06);
 }
 .vault-page .pool-account-usage-fill {
   display: block;
@@ -312,13 +312,13 @@ export const KEYS_PAGE_CSS = `
 .vault-page .status-dot {
   width: 6px; height: 6px; border-radius: 999px;
   background: var(--success);
-  box-shadow: 0 0 3px rgba(74, 222, 128, 0.35);
+  box-shadow: 0 0 3px rgba(var(--success-rgb), 0.35);
   flex-shrink: 0; display: inline-block;
   opacity: 0.75;
 }
 .vault-page .status-dot.idle  { background: var(--muted-foreground); box-shadow: none; }
-.vault-page .status-dot.stale { background: var(--warning); box-shadow: 0 0 6px rgba(249,115,22,0.6); }
-.vault-page .status-dot.error { background: var(--destructive); box-shadow: 0 0 6px rgba(239,68,68,0.7); }
+.vault-page .status-dot.stale { background: var(--warning); box-shadow: 0 0 6px rgba(var(--warning-rgb), 0.6); }
+.vault-page .status-dot.error { background: var(--destructive); box-shadow: 0 0 6px rgba(var(--destructive-rgb), 0.7); }
 
 /* Provider chip rendered inline beside the key name (2026-07-22). The provider
    axis sits next to the thing it qualifies rather than owning a column; one chip
@@ -348,8 +348,8 @@ export const KEYS_PAGE_CSS = `
    destructive — the key works, it is the ORDER that is undefined. */
 .vault-page .role-pill.tied {
   color: var(--warning);
-  border-color: rgba(249,115,22,0.35);
-  background: rgba(249,115,22,0.06);
+  border-color: rgba(var(--warning-rgb), 0.35);
+  background: rgba(var(--warning-rgb), 0.06);
 }
 
 /* The provider cell as a CHAIN (2026-08-02). The arrow is what turns a list back
@@ -402,13 +402,13 @@ export const KEYS_PAGE_CSS = `
   display: flex; align-items: center; gap: 0.75rem;
   padding: 0.6rem 0.95rem;
   border-radius: var(--radius-sm);
-  background: rgba(74, 222, 128, 0.05);
-  border: 1px solid rgba(74, 222, 128, 0.25);
+  background: rgba(var(--success-rgb), 0.05);
+  border: 1px solid rgba(var(--success-rgb), 0.25);
   font-size: 12.5px; color: var(--foreground);
 }
 .vault-page .unlock-banner .dot {
   width: 6px; height: 6px; border-radius: 999px;
-  background: var(--success); box-shadow: 0 0 6px rgba(74,222,128,0.7);
+  background: var(--success); box-shadow: 0 0 6px rgba(var(--success-rgb), 0.7);
   flex-shrink: 0;
 }
 /* Locked-state theme matches /user/import's .unlock-banner (gold gradient
@@ -438,7 +438,7 @@ export const KEYS_PAGE_CSS = `
 .vault-page .field-input:focus,
 .vault-page .search-input:focus {
   outline: none;
-  border-color: var(--primary);
+  border-color: var(--primary-text);
   box-shadow: 0 0 0 2px rgba(250, 204, 21,0.15);
 }
 .vault-page .search-input { padding-left: 30px; width: 100%; }
@@ -485,17 +485,17 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page .filter-pill:hover:not(.active) {
   color: var(--foreground);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--lift-rgb), 0.04);
 }
 .vault-page .filter-pill.active {
   background: rgba(250, 204, 21, 0.12);
-  color: var(--primary);
+  color: var(--primary-text);
   font-weight: 600;
 }
 .vault-page .filter-pill .count {
   font-size: 11px; color: var(--muted-foreground); opacity: 0.8; margin-left: 3px;
 }
-.vault-page .filter-pill.active .count { color: var(--primary); opacity: 1; }
+.vault-page .filter-pill.active .count { color: var(--primary-text); opacity: 1; }
 
 .vault-page .filter-group-label {
   font-family: var(--font-mono);
@@ -528,8 +528,8 @@ export const KEYS_PAGE_CSS = `
 .vault-page table.vault { width: 100%; border-collapse: collapse; }
 .vault-page table.vault th {
   /* 2026-05-12: thead bg deepened to match /user/virtual-keys's thead
-     appearance. Virtual-keys' card is transparent, so its rgba(0,0,0,0.2)
-     overlay lands on the page bg (#18181b) and reads as ~rgb(19,19,22).
+     appearance. Virtual-keys' card is transparent, so its rgba(var(--sink-rgb), 0.2)
+     overlay lands on the page bg (var(--background)) and reads as ~rgb(19,19,22).
      Vault's card now uses var(--surface-2) (#27272a), so the same 0.2
      overlay would read as ~rgb(31,31,33) — visibly lighter. Bumping the
      thead overlay to 0.5 makes the rendered color match across both
@@ -540,7 +540,7 @@ export const KEYS_PAGE_CSS = `
   color: var(--muted-foreground);
   font-weight: 600;
   text-align: left;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-sink);
   border-bottom: 1px solid var(--border);
   padding: 12px 20px;
   white-space: nowrap;
@@ -561,7 +561,7 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page table.vault th.th-sortable:hover {
   color: var(--foreground);
-  background: rgba(0, 0, 0, 0.62);
+  background: var(--overlay-sink);
 }
 .vault-page table.vault th.th-sortable.active {
   color: var(--foreground);
@@ -570,7 +570,7 @@ export const KEYS_PAGE_CSS = `
   display: inline-block;
   margin-left: 4px;
   font-size: 10px;
-  color: var(--primary);
+  color: var(--primary-text);
   vertical-align: baseline;
 }
 .vault-page table.vault td {
@@ -678,7 +678,7 @@ export const KEYS_PAGE_CSS = `
   font-weight: 600;
   font-family: var(--font-sans);
   letter-spacing: 0.01em;
-  color: var(--primary);
+  color: var(--primary-text);
   background: transparent;
   border: 1px solid rgba(250, 204, 21, 0.35);
   cursor: pointer;
@@ -764,11 +764,11 @@ export const KEYS_PAGE_CSS = `
   line-height: 1.4;
   letter-spacing: 0.02em;
   text-transform: lowercase;
-  color: #ffffff;
+  color: var(--fixed-white);
   flex-shrink: 0;
   /* Subtle shadow so the chip reads as a tactile element rather than
      sitting flat on the row background. */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 2px rgba(var(--sink-rgb), 0.18), inset 0 0 0 1px rgba(var(--lift-rgb), 0.06);
 }
 
 /* .gr-name kept as a dead rule for any remaining references (none in
@@ -807,8 +807,8 @@ export const KEYS_PAGE_CSS = `
   background: linear-gradient(
     180deg,
     transparent 0,
-    rgba(255, 255, 255, 0.08) 14%,
-    rgba(255, 255, 255, 0.08) 86%,
+    rgba(var(--lift-rgb), 0.08) 14%,
+    rgba(var(--lift-rgb), 0.08) 86%,
     transparent 100%
   );
   pointer-events: none;
@@ -818,14 +818,14 @@ export const KEYS_PAGE_CSS = `
   position: absolute;
   left: 22px; top: 50%;
   width: 10px; height: 1px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--lift-rgb), 0.12);
   pointer-events: none;
 }
 .vault-page tr.group-child.last-in-group td:first-child::before {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.08) 0,
-    rgba(255, 255, 255, 0.08) 50%,
+    rgba(var(--lift-rgb), 0.08) 0,
+    rgba(var(--lift-rgb), 0.08) 50%,
     transparent 50%,
     transparent 100%
   );
@@ -855,7 +855,7 @@ export const KEYS_PAGE_CSS = `
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 12px 28px rgba(var(--scrim-rgb), 0.5), 0 2px 4px rgba(var(--sink-rgb), 0.3);
   color: var(--foreground);
   transform: translateY(12px);
   opacity: 0;
@@ -865,17 +865,17 @@ export const KEYS_PAGE_CSS = `
   overflow: hidden;
 }
 .vault-page .toast[data-open="true"] { transform: translateY(0); opacity: 1; }
-.vault-page .toast.error { border-color: rgba(239, 68, 68, 0.45); }
+.vault-page .toast.error { border-color: rgba(var(--destructive-rgb), 0.45); }
 .vault-page .toast .toast-icon {
   width: 24px; height: 24px;
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0;
   border-radius: 999px;
   background: rgba(250, 204, 21, 0.14);
-  color: var(--primary);
+  color: var(--primary-text);
 }
 .vault-page .toast.error .toast-icon {
-  background: rgba(239, 68, 68, 0.14);
+  background: rgba(var(--destructive-rgb), 0.14);
   color: var(--destructive);
 }
 .vault-page .toast .toast-body { flex: 1; min-width: 0; }
@@ -897,7 +897,7 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page .toast .toast-undo {
   font-size: 11px; font-weight: 600;
-  color: var(--primary);
+  color: var(--primary-text);
   background: transparent;
   border: 1px solid rgba(250, 204, 21, 0.4);
   border-radius: 5px;
@@ -960,7 +960,7 @@ export const KEYS_PAGE_CSS = `
   height: 8px;
   border-radius: 999px;
   background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.75);
+  box-shadow: 0 0 6px rgba(var(--success-rgb), 0.75);
   margin-right: 8px;
   vertical-align: middle;
   position: relative;
@@ -1061,11 +1061,11 @@ export const KEYS_PAGE_CSS = `
   border-color: var(--border);
 }
 .vault-page .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.vault-page .icon-btn.primary:hover:not(:disabled) { color: var(--primary); border-color: rgba(250, 204, 21,0.4); }
-.vault-page .icon-btn.danger:hover:not(:disabled)  { color: #fca5a5; background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.4); }
+.vault-page .icon-btn.primary:hover:not(:disabled) { color: var(--primary-text); border-color: rgba(250, 204, 21,0.4); }
+.vault-page .icon-btn.danger:hover:not(:disabled)  { color: var(--destructive-text-soft); background: rgba(var(--destructive-rgb), 0.1); border-color: rgba(var(--destructive-rgb), 0.4); }
 
 .vault-page .inline-input {
-  background: rgba(0,0,0,0.5); border: 1px solid var(--primary);
+  background: var(--overlay-sink); border: 1px solid var(--primary);
   border-radius: var(--radius-sm); padding: 4px 8px;
   color: var(--foreground); font-family: var(--font-mono);
   font-size: 13px; outline: none;
@@ -1076,7 +1076,7 @@ export const KEYS_PAGE_CSS = `
 .vault-page ~ .drawer-overlay,
 .drawer-overlay {
   position: fixed; inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-sink);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   z-index: 90;
@@ -1088,9 +1088,9 @@ export const KEYS_PAGE_CSS = `
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0;
   width: 460px; max-width: calc(100vw - 40px);
-  background: var(--surface-2, #27272a);
+  background: var(--surface-2, var(--card));
   border-left: 1px solid var(--border);
-  box-shadow: -20px 0 40px -10px rgba(0,0,0,0.6);
+  box-shadow: -20px 0 40px -10px rgba(var(--scrim-rgb), 0.6);
   z-index: 95;
   display: flex; flex-direction: column;
   transform: translateX(100%);
@@ -1143,19 +1143,19 @@ export const KEYS_PAGE_CSS = `
   padding: 3px 7px; font-size: 10.5px;
   font-family: var(--font-mono);
   border-radius: 4px;
-  background: rgba(0,0,0,0.2);
+  background: rgba(var(--sink-rgb), 0.2);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
 }
-.drawer-head .chip.success { color: #6ee7b7; background: rgba(74,222,128,0.08); border-color: rgba(74,222,128,0.3); }
-.drawer-head .chip.danger { color: #fca5a5; background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.35); }
+.drawer-head .chip.success { color: #6ee7b7; background: rgba(var(--success-rgb), 0.08); border-color: rgba(var(--success-rgb), 0.3); }
+.drawer-head .chip.danger { color: var(--destructive-text-soft); background: rgba(var(--destructive-rgb), 0.1); border-color: rgba(var(--destructive-rgb), 0.35); }
 .drawer-head .status-dot {
   width: 6px; height: 6px; border-radius: 999px;
   background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+  box-shadow: 0 0 6px rgba(var(--success-rgb), 0.7);
   flex-shrink: 0; display: inline-block;
 }
-.drawer-head .status-dot.error { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.7); }
+.drawer-head .status-dot.error { background: #ef4444; box-shadow: 0 0 6px rgba(var(--destructive-rgb), 0.7); }
 
 .drawer-close {
   width: 32px; height: 32px;
@@ -1169,7 +1169,7 @@ export const KEYS_PAGE_CSS = `
 }
 .drawer-close:hover {
   color: var(--foreground);
-  background: rgba(0,0,0,0.15);
+  background: rgba(var(--sink-rgb), 0.15);
   border-color: var(--border);
 }
 
@@ -1226,7 +1226,7 @@ export const KEYS_PAGE_CSS = `
      intra-group dividers, not structural boundaries, so a mid-opacity
      tint reads as a rhythm marker rather than another hairline to
      compete with the drawer-head bottom rule (2026-04-24). */
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(var(--lift-rgb), 0.05);
   font-size: 14px;
   align-items: start;
   min-height: 38px;
@@ -1270,10 +1270,10 @@ export const KEYS_PAGE_CSS = `
 .drawer-field .v .status-dot {
   width: 6px; height: 6px; border-radius: 999px;
   background: #4ade80;
-  box-shadow: 0 0 6px rgba(74,222,128,0.7);
+  box-shadow: 0 0 6px rgba(var(--success-rgb), 0.7);
   display: inline-block;
 }
-.drawer-field .v .status-dot.error { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.7); }
+.drawer-field .v .status-dot.error { background: #ef4444; box-shadow: 0 0 6px rgba(var(--destructive-rgb), 0.7); }
 
 /* Status line (Meta section) — label coloured to match the dot. */
 .drawer-field .status-line {
@@ -1295,7 +1295,7 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page .inline-copy:hover {
   color: var(--foreground);
-  background: rgba(255,255,255,0.05);
+  background: rgba(var(--lift-rgb), 0.05);
   opacity: 1;
 }
 
@@ -1321,7 +1321,7 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page .drawer-tokenbox::-webkit-scrollbar { width: 6px; }
 .vault-page .drawer-tokenbox::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.12); border-radius: 3px;
+  background: rgba(var(--lift-rgb), 0.12); border-radius: 3px;
 }
 .vault-page .drawer-tokenbox .copy-btn {
   position: absolute;
@@ -1336,7 +1336,7 @@ export const KEYS_PAGE_CSS = `
   transition: color 120ms ease, background 120ms ease;
 }
 .vault-page .drawer-tokenbox .copy-btn:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(var(--lift-rgb), 0.06);
   color: var(--foreground);
 }
 
@@ -1393,7 +1393,7 @@ export const KEYS_PAGE_CSS = `
 .vault-page .drawer-actions-hint svg {
   flex-shrink: 0;
   margin-top: 2px;
-  color: var(--primary);
+  color: var(--primary-text);
   opacity: 0.75;
 }
 .vault-page .drawer-actions-hint code {
@@ -1414,15 +1414,15 @@ export const KEYS_PAGE_CSS = `
   font-weight: 500;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   border-radius: 7px;
-  background: rgba(255,255,255,0.025);
+  background: rgba(var(--lift-rgb), 0.025);
   border: 1px solid var(--border);
   color: var(--foreground);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 .vault-page .drawer-actions .action-btn:hover:not(:disabled) {
-  background: rgba(255,255,255,0.06);
-  border-color: rgba(255,255,255,0.15);
+  background: rgba(var(--lift-rgb), 0.06);
+  border-color: rgba(var(--lift-rgb), 0.15);
 }
 .vault-page .drawer-actions .action-btn:disabled {
   opacity: 0.5;
@@ -1441,7 +1441,7 @@ export const KEYS_PAGE_CSS = `
 .vault-page .drawer-actions .action-btn.primary-route {
   background: rgba(250, 204, 21, 0.06);
   border-color: rgba(250, 204, 21, 0.35);
-  color: var(--primary);
+  color: var(--primary-text);
   font-weight: 600;
   box-shadow: none;
 }
@@ -1458,14 +1458,14 @@ export const KEYS_PAGE_CSS = `
 }
 /* Danger — Delete. */
 .vault-page .drawer-actions .action-btn.danger {
-  color: #fca5a5;
-  background: rgba(239, 68, 68, 0.05);
-  border-color: rgba(239, 68, 68, 0.25);
+  color: var(--destructive-text-soft);
+  background: rgba(var(--destructive-rgb), 0.05);
+  border-color: rgba(var(--destructive-rgb), 0.25);
 }
 .vault-page .drawer-actions .action-btn.danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.14);
+  background: rgba(var(--destructive-rgb), 0.14);
   color: #fecaca;
-  border-color: rgba(239, 68, 68, 0.45);
+  border-color: rgba(var(--destructive-rgb), 0.45);
 }
 
 .ro-pill {
@@ -1474,7 +1474,7 @@ export const KEYS_PAGE_CSS = `
   font-size: 9px; font-weight: 600;
   letter-spacing: 0.05em;
   padding: 1px 5px; border-radius: 2px;
-  background: rgba(255,255,255,0.04);
+  background: rgba(var(--lift-rgb), 0.04);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
   margin-left: 2px;
@@ -1516,7 +1516,7 @@ export const KEYS_PAGE_CSS = `
 }
 .secret-view .icon-btn:hover:not(:disabled) {
   color: var(--foreground);
-  background: rgba(255,255,255,0.04);
+  background: rgba(var(--lift-rgb), 0.04);
   border-color: var(--border);
 }
 .secret-view .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
@@ -1531,28 +1531,28 @@ export const KEYS_PAGE_CSS = `
   transition: background 150ms ease, border-color 150ms ease, color 120ms ease;
 }
 .drawer-section .btn-outline {
-  background: var(--surface-1, #1f1f23);
+  background: var(--surface-1, var(--surface-sunken));
   color: var(--foreground);
   border-color: var(--border);
 }
 .drawer-section .btn-outline:hover:not(:disabled) {
-  background: var(--surface-2, #27272a);
+  background: var(--surface-2, var(--card));
   border-color: var(--muted-foreground);
 }
 .drawer-section .btn-danger {
-  background: rgba(239, 68, 68, 0.1); color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(var(--destructive-rgb), 0.1); color: var(--destructive-text-soft);
+  border-color: rgba(var(--destructive-rgb), 0.35);
 }
 .drawer-section .btn-danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.18); color: #fecaca;
-  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(var(--destructive-rgb), 0.18); color: #fecaca;
+  border-color: rgba(var(--destructive-rgb), 0.55);
 }
 .drawer-section .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ---- Modal ------------------------------------------------- */
 .modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: var(--overlay-sink);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   z-index: 100;
@@ -1564,10 +1564,10 @@ export const KEYS_PAGE_CSS = `
 .modal-panel {
   width: 540px; max-width: calc(100vw - 40px);
   max-height: calc(100vh - 80px);
-  background: var(--surface-2, #27272a);
+  background: var(--surface-2, var(--card));
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6);
+  box-shadow: 0 30px 60px -20px rgba(var(--scrim-rgb), 0.6);
   display: flex; flex-direction: column;
   transform: translateY(8px);
   transition: transform 180ms ease;
@@ -1580,7 +1580,7 @@ export const KEYS_PAGE_CSS = `
 .modal-header { border-bottom: 1px solid var(--border); }
 .modal-footer {
   border-top: 1px solid var(--border);
-  background: rgba(0,0,0,0.15);
+  background: rgba(var(--sink-rgb), 0.15);
   border-bottom-left-radius: var(--radius-md);
   border-bottom-right-radius: var(--radius-md);
 }
@@ -1607,7 +1607,7 @@ export const KEYS_PAGE_CSS = `
 }
 .modal-body .req, .modal-panel-guided .page .req { color: var(--destructive, #ef4444); }
 .modal-body .field-input, .modal-panel-guided .page .field-input {
-  background: var(--surface-1, #1f1f23);
+  background: var(--surface-1, var(--surface-sunken));
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--foreground);
@@ -1622,10 +1622,10 @@ export const KEYS_PAGE_CSS = `
   color: var(--muted-foreground); display: inline-flex;
   align-items: center; justify-content: center; border-radius: 3px;
 }
-.modal-body .field-reveal-btn:hover, .modal-panel-guided .page .field-reveal-btn:hover { color: var(--foreground); background: rgba(255,255,255,0.04); }
+.modal-body .field-reveal-btn:hover, .modal-panel-guided .page .field-reveal-btn:hover { color: var(--foreground); background: rgba(var(--lift-rgb), 0.04); }
 .modal-body .field-reveal-btn:focus-visible, .modal-panel-guided .page .field-reveal-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .modal-body .field-input:focus, .modal-panel-guided .page .field-input:focus {
-  outline: none; border-color: var(--primary);
+  outline: none; border-color: var(--primary-text);
   box-shadow: 0 0 0 2px rgba(250, 204, 21,0.15);
 }
 /* Validation-fail flash — red border + glow pulses twice over ~1s
@@ -1634,25 +1634,25 @@ export const KEYS_PAGE_CSS = `
    (timer in AddKeyModal). 2026-04-25. */
 .modal-body .field-input.field-input-flash, .modal-panel-guided .page .field-input.field-input-flash {
   animation: modal-field-flash 0.5s ease-in-out 2;
-  border-color: rgba(239, 68, 68, 0.8) !important;
+  border-color: rgba(var(--destructive-rgb), 0.8) !important;
 }
 .modal-body .field-input.field-input-flash:focus, .modal-panel-guided .page .field-input.field-input-flash:focus {
-  border-color: rgba(239, 68, 68, 0.9) !important;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+  border-color: rgba(var(--destructive-rgb), 0.9) !important;
+  box-shadow: 0 0 0 2px rgba(var(--destructive-rgb), 0.2) !important;
 }
 @keyframes modal-field-flash {
   0%, 100% {
-    background: var(--surface-1, #1f1f23);
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    background: var(--surface-1, var(--surface-sunken));
+    box-shadow: 0 0 0 0 rgba(var(--destructive-rgb), 0);
   }
   50% {
-    background: rgba(239, 68, 68, 0.08);
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+    background: rgba(var(--destructive-rgb), 0.08);
+    box-shadow: 0 0 0 3px rgba(var(--destructive-rgb), 0.25);
   }
 }
 .modal-body .seg, .modal-panel-guided .page .seg {
   display: inline-flex; padding: 2px;
-  background: var(--surface-1, #1f1f23); border: 1px solid var(--border);
+  background: var(--surface-1, var(--surface-sunken)); border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
 .modal-body .seg button, .modal-panel-guided .page .seg button {
@@ -1664,7 +1664,7 @@ export const KEYS_PAGE_CSS = `
   display: inline-flex; align-items: center; gap: 4px;
 }
 .modal-body .seg button.active, .modal-panel-guided .page .seg button.active {
-  background: var(--surface-2, #27272a); color: var(--foreground);
+  background: var(--surface-2, var(--card)); color: var(--foreground);
   box-shadow: inset 0 0 0 1px var(--border);
 }
 .modal-footer .btn {
@@ -1679,7 +1679,7 @@ export const KEYS_PAGE_CSS = `
   border-color: rgba(250, 204, 21, 0.55);
 }
 .modal-footer .btn-ghost { background: transparent; color: var(--muted-foreground); }
-.modal-footer .btn-ghost:hover { color: var(--foreground); background: rgba(0,0,0,0.15); }
+.modal-footer .btn-ghost:hover { color: var(--foreground); background: rgba(var(--sink-rgb), 0.15); }
 
 .modal-header .icon-btn {
   width: 28px; height: 28px;
@@ -1692,7 +1692,7 @@ export const KEYS_PAGE_CSS = `
 }
 .modal-header .icon-btn:hover {
   color: var(--foreground);
-  background: rgba(0,0,0,0.15);
+  background: rgba(var(--sink-rgb), 0.15);
   border-color: var(--border);
 }
 
@@ -1714,9 +1714,9 @@ export const KEYS_PAGE_CSS = `
   width: 56px; height: 56px;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 999px;
-  background: rgba(0,0,0,0.25);
+  background: rgba(var(--sink-rgb), 0.25);
   border: 1px solid var(--border);
-  color: var(--primary);
+  color: var(--primary-text);
   margin-bottom: 14px;
   box-shadow: 0 0 0 6px rgba(250, 204, 21,0.04);
 }
@@ -1737,7 +1737,7 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page .vault-empty-link {
   font-family: var(--font-mono);
-  color: var(--primary);
+  color: var(--primary-text);
   font-size: 12.5px;
   text-decoration: none;
   border-bottom: 1px solid rgba(250, 204, 21,0.35);
@@ -1831,7 +1831,7 @@ export const KEYS_PAGE_CSS = `
   display: none;
 }
 .modal-panel-guided .rail {
-  background: rgba(0, 0, 0, 0.14);
+  background: rgba(var(--sink-rgb), 0.14);
   border-right: 1px solid var(--border);
   padding: 18px 14px;
   display: flex;
@@ -1865,7 +1865,7 @@ export const KEYS_PAGE_CSS = `
   width: 100%;
 }
 .modal-panel-guided .step:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--lift-rgb), 0.03);
 }
 .modal-panel-guided .step.active {
   color: var(--foreground);
@@ -1884,7 +1884,7 @@ export const KEYS_PAGE_CSS = `
   color: var(--muted-foreground);
 }
 .modal-panel-guided .step.active .step-num {
-  color: var(--primary);
+  color: var(--primary-text);
   border-color: rgba(250, 204, 21, 0.35);
   background: rgba(250, 204, 21, 0.1);
 }
@@ -2018,7 +2018,7 @@ export const KEYS_PAGE_CSS = `
   align-items: center;
 }
 .modal-panel-guided .probe-head {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(var(--sink-rgb), 0.2);
   border-bottom: 1px solid var(--border);
   color: var(--muted-foreground);
   font-family: var(--font-mono);
@@ -2033,7 +2033,7 @@ export const KEYS_PAGE_CSS = `
   min-width: 0;
 }
 .modal-panel-guided .probe-row {
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(var(--lift-rgb), 0.05);
   font-size: 12.5px;
   color: var(--foreground);
 }
@@ -2054,7 +2054,7 @@ export const KEYS_PAGE_CSS = `
 }
 .modal-panel-guided .probe-row.good .result-dot {
   background: var(--success);
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.55);
+  box-shadow: 0 0 6px rgba(var(--success-rgb), 0.55);
   opacity: 1;
 }
 .modal-panel-guided .probe-row.warn .result-dot {
@@ -2066,7 +2066,7 @@ export const KEYS_PAGE_CSS = `
    failures like 5xx / state mismatch / chat-stage rejection). */
 .modal-panel-guided .probe-row.bad .result-dot {
   background: var(--destructive, #ef4444);
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 6px rgba(var(--destructive-rgb), 0.5);
   opacity: 1;
 }
 .modal-panel-guided .probe-table .mono {
@@ -2082,8 +2082,8 @@ export const KEYS_PAGE_CSS = `
   align-items: flex-start;
   padding: 10px 11px;
   border-radius: var(--radius-sm);
-  background: rgba(96, 165, 250, 0.06);
-  border: 1px solid rgba(96, 165, 250, 0.22);
+  background: rgba(var(--info-rgb), 0.06);
+  border: 1px solid rgba(var(--info-rgb), 0.22);
   color: var(--muted-foreground);
   font-size: 12px;
   line-height: 1.45;
@@ -2093,12 +2093,12 @@ export const KEYS_PAGE_CSS = `
   border-color: rgba(250, 204, 21, 0.25);
 }
 .modal-panel-guided .repair.bad {
-  background: rgba(239, 68, 68, 0.07);
-  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(var(--destructive-rgb), 0.07);
+  border-color: rgba(var(--destructive-rgb), 0.25);
 }
 .modal-panel-guided .repair.good {
-  background: rgba(74, 222, 128, 0.05);
-  border-color: rgba(74, 222, 128, 0.22);
+  background: rgba(var(--success-rgb), 0.05);
+  border-color: rgba(var(--success-rgb), 0.22);
 }
 
 /* Name strip — alias input + risk line on page 2. */
@@ -2107,7 +2107,7 @@ export const KEYS_PAGE_CSS = `
   gap: 8px;
   padding: 12px;
   border-radius: var(--radius-md);
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(var(--sink-rgb), 0.12);
   border: 1px solid var(--border);
 }
 .modal-panel-guided .risk-line {
@@ -2178,7 +2178,7 @@ export const KEYS_PAGE_CSS = `
   gap: 10px;
   padding: 12px;
   border-radius: var(--radius-md);
-  background: rgba(0, 0, 0, 0.16);
+  background: rgba(var(--sink-rgb), 0.16);
   border: 1px solid var(--border);
 }
 .modal-panel-guided .oauth-flow-title {
@@ -2201,7 +2201,7 @@ export const KEYS_PAGE_CSS = `
   border-radius: 999px;
   border: 1px solid rgba(250, 204, 21, 0.22);
   background: rgba(250, 204, 21, 0.07);
-  color: var(--primary);
+  color: var(--primary-text);
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
@@ -2231,7 +2231,7 @@ export const KEYS_PAGE_CSS = `
   justify-content: center;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  color: var(--primary);
+  color: var(--primary-text);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
@@ -2293,7 +2293,7 @@ export const KEYS_PAGE_CSS = `
   font-weight: 700;
   letter-spacing: 0.04em;
 }
-.modal-panel-guided .code-status.loading { color: var(--primary); }
+.modal-panel-guided .code-status.loading { color: var(--primary-text); }
 .modal-panel-guided .code-status.success { color: var(--success); }
 .modal-panel-guided .code-status.error   { color: var(--destructive, #ef4444); }
 .modal-panel-guided .copy-auth-url {
@@ -2311,7 +2311,7 @@ export const KEYS_PAGE_CSS = `
   align-items: center;
   gap: 5px;
 }
-.modal-panel-guided .copy-auth-url:hover { color: var(--primary); }
+.modal-panel-guided .copy-auth-url:hover { color: var(--primary-text); }
 
 /* Responsive: spec §17.5 breakpoint 780px. Modal goes full-screen,
    rail becomes horizontal, probe-table hides 3rd + 4th columns. */
@@ -2394,10 +2394,10 @@ export const KEYS_PAGE_CSS = `
    ARE in the nav", and it ties into the amber in-use row rail. Shared:
    vault and virtual-keys both tag their routing row tr.in-use. */
 .vault-page table.vault tbody tr.in-use .kind-tile {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 .vault-page table.vault tbody tr.in-use .alias-main .alias-name {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 /* .action-rail / .action-slot — fixed-width slots in the actions cell:

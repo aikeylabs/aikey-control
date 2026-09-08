@@ -212,7 +212,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
     <ModalPortal>
       <div
         className="fixed inset-0 z-50"
-        style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+        style={{ backgroundColor: 'var(--overlay-sink)' }}
         onClick={handleNotNow}
       />
       <div
@@ -220,7 +220,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
         style={{
           backgroundColor: 'var(--card)',
           borderColor: 'var(--border)',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+          boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.7)',
         }}
         role="dialog"
         aria-modal="true"
@@ -245,7 +245,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
         <pre
           className="font-mono text-xs leading-relaxed p-3 rounded border mb-4 whitespace-pre-wrap"
           style={{
-            backgroundColor: 'rgba(255,255,255,0.04)',
+            backgroundColor: 'rgba(var(--lift-rgb), 0.04)',
             borderColor: 'var(--border)',
             color: 'var(--foreground)',
           }}
@@ -260,7 +260,7 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
         <div
           className="flex items-center gap-2 p-2 rounded border mb-4"
           style={{
-            backgroundColor: 'rgba(255,255,255,0.04)',
+            backgroundColor: 'rgba(var(--lift-rgb), 0.04)',
             borderColor: 'var(--border)',
           }}
         >
@@ -290,8 +290,8 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
           <div
             className="p-2 rounded border mb-4 text-xs font-mono"
             style={{
-              borderColor: 'rgba(239,68,68,0.4)',
-              backgroundColor: 'rgba(239,68,68,0.08)',
+              borderColor: 'rgba(var(--destructive-rgb), 0.4)',
+              backgroundColor: 'rgba(var(--destructive-rgb), 0.08)',
               color: '#ef4444',
             }}
           >
@@ -316,8 +316,8 @@ export function HookWireRcModal({ open, onClose }: HookWireRcModalProps) {
             disabled={busy}
             className="px-4 py-2 text-xs font-mono font-bold tracking-wider rounded border transition-colors disabled:opacity-40"
             style={{
-              backgroundColor: 'rgba(34,197,94,0.12)',
-              borderColor: 'rgba(34,197,94,0.4)',
+              backgroundColor: 'rgba(var(--success-rgb), 0.12)',
+              borderColor: 'rgba(var(--success-rgb), 0.4)',
               color: '#22c55e',
             }}
           >

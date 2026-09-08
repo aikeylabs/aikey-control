@@ -234,7 +234,7 @@ export default function UserSchedulingLogPage() {
                 className="text-xs font-mono px-3 py-2"
                 style={{
                   color: kindFilter === v ? 'var(--foreground)' : 'var(--muted-foreground)',
-                  backgroundColor: kindFilter === v ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  backgroundColor: kindFilter === v ? 'rgba(var(--lift-rgb), 0.08)' : 'transparent',
                 }}
               >
                 {t(key)}
@@ -272,7 +272,7 @@ export default function UserSchedulingLogPage() {
                 style={{
                   borderColor: active ? 'var(--primary)' : 'var(--border)',
                   color: disabled ? 'var(--muted-foreground)' : (active ? 'var(--foreground)' : 'var(--muted-foreground)'),
-                  backgroundColor: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  backgroundColor: active ? 'rgba(var(--lift-rgb), 0.08)' : 'transparent',
                   opacity: disabled ? 0.5 : 1,
                   cursor: disabled ? 'not-allowed' : 'pointer',
                 }}
@@ -308,7 +308,7 @@ export default function UserSchedulingLogPage() {
               className="text-xs font-mono px-3 py-2"
               style={{
                 color: rangeDays === days ? 'var(--foreground)' : 'var(--muted-foreground)',
-                backgroundColor: rangeDays === days ? 'rgba(255,255,255,0.08)' : 'transparent',
+                backgroundColor: rangeDays === days ? 'rgba(var(--lift-rgb), 0.08)' : 'transparent',
               }}
               onClick={() => { setRangeDays(days); resetPaging(); }}
             >
@@ -328,7 +328,7 @@ export default function UserSchedulingLogPage() {
                     orphaned catalog entries (and would not catch a real typo). */}
                 {[t('mySchedLog.columnTime'), t('mySchedLog.columnKind'), t('mySchedLog.columnName'),
                   t('mySchedLog.columnAccount'), t('mySchedLog.columnDetail')].map((label) => (
-                  <th key={label} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                  <th key={label} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--overlay-sink)' }}>
                     {label}
                   </th>
                 ))}
@@ -338,9 +338,9 @@ export default function UserSchedulingLogPage() {
               {loading ? (
                 <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('mySchedLog.loading')}</td></tr>
               ) : fetchError ? (
-                <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: '#f87171' }}>{t(fetchErrKey(fetchError.kind))}</td></tr>
+                <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--destructive-text)' }}>{t(fetchErrKey(fetchError.kind))}</td></tr>
               ) : isError ? (
-                <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: '#f87171' }}>{t('mySchedLog.errUnreachable')}</td></tr>
+                <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--destructive-text)' }}>{t('mySchedLog.errUnreachable')}</td></tr>
               ) : rows.length === 0 ? (
                 <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('mySchedLog.empty')}</td></tr>
               ) : (
@@ -378,7 +378,7 @@ export default function UserSchedulingLogPage() {
                         <tr style={{ borderBottom: '1px solid var(--border)' }}>
                           <td colSpan={5} className="px-5 pb-4">
                             <pre className="text-[11px] font-mono rounded border p-3 overflow-x-auto"
-                              style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)', backgroundColor: 'rgba(0,0,0,0.25)' }}>
+                              style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)', backgroundColor: 'rgba(var(--sink-rgb), 0.25)' }}>
                               {row.detail || '—'}
                             </pre>
                           </td>

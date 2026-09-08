@@ -25,7 +25,7 @@ function CopyButton({ text }: { text: string }) {
       className="text-[10px] font-mono px-2 py-1 rounded border shrink-0"
       style={{
         color: copied ? '#4ade80' : 'var(--muted-foreground)',
-        borderColor: copied ? 'rgba(74,222,128,0.3)' : 'var(--border)',
+        borderColor: copied ? 'rgba(var(--success-rgb), 0.3)' : 'var(--border)',
         backgroundColor: 'transparent',
       }}
     >
@@ -42,9 +42,9 @@ function CommandBlock({ command, label }: { command: string; label: string }) {
       </p>
       <div
         className="rounded border p-4 flex items-center justify-between gap-3"
-        style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderColor: 'var(--border)' }}
+        style={{ backgroundColor: 'rgba(var(--sink-rgb), 0.3)', borderColor: 'var(--border)' }}
       >
-        <code className="text-sm font-mono font-bold" style={{ color: 'var(--primary)' }}>
+        <code className="text-sm font-mono font-bold" style={{ color: 'var(--primary-text)' }}>
           {command}
         </code>
         <CopyButton text={command} />
@@ -61,7 +61,7 @@ export default function SessionExpiredPage() {
       style={{
         backgroundColor: 'var(--card)',
         borderColor: 'var(--border)',
-        boxShadow: '0 0 40px rgba(0,0,0,0.6)',
+        boxShadow: '0 0 40px rgba(var(--scrim-rgb), 0.6)',
       }}
     >
       <div className="flex flex-col items-center mb-8">
@@ -88,7 +88,7 @@ export default function SessionExpiredPage() {
       <div className="flex justify-center mb-6">
         <div
           className="w-14 h-14 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}
+          style={{ backgroundColor: 'rgba(var(--destructive-rgb), 0.1)', border: '1px solid rgba(var(--destructive-rgb), 0.3)' }}
         >
           <svg className="w-7 h-7" fill="none" stroke="#f87171" viewBox="0 0 24 24" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />

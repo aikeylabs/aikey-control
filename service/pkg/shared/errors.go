@@ -171,6 +171,13 @@ var zhMessages = map[string]string{
 	CodeBizRouteGroupArchived:       "路由组 {{id}} 已归档（当前状态 {{status}}），不能套用；请先恢复该路由组，或改选一个启用中的",
 	CodeBizRouteGroupEmpty:          "路由组 {{name}} 没有任何启用中的成员，套用后这把密钥将没有可用上游；请先给该路由组添加上游",
 
+	// BIZ — Route Group 服务端点（路由组即服务）
+	CodeBizRouteGroupEndpointNotCluster:   "当前部署不是集群版，没有共享入口：本版型的代理跑在每位员工自己的机器上，外部调用方无处可连。要把路由组发布成服务端点，需要集群版部署；请联系管理员",
+	CodeBizRouteGroupIngressNotConfigured: "集群清单里没有配置 {{key}}，无法生成端点地址（生成出来会是一个没有主机名的地址）。请在集群清单中设置 {{key}}，然后重新执行安装脚本",
+	CodeBizRouteGroupProtocolUnsupported:  "入口无法为协议 {{protocol_type}} 生成端点地址；当前支持的协议是 {{supported}}。请改用受支持协议的路由组",
+	CodeBizRouteGroupEndpointRevoked:      "该端点密钥已被吊销，无法继续使用。请向管理员申请一把新的端点密钥（同一端点的其他密钥不受影响）",
+	CodeBizRouteGroupEndpointPairMismatch: "这把端点密钥属于另一个端点，不能用来访问 {{route_group_id}}。请检查地址与密钥是否配对：一个端点的地址只接受这个端点自己的密钥",
+
 	// BIZ — Login Session / OAuth
 	CodeBizLoginSessionNotFound:         "登录会话 {{id}} 不存在",
 	CodeBizLoginSessionExpired:          "登录会话已过期，请重新运行 aikey login",
@@ -384,6 +391,52 @@ const (
 	// template's protocol (P0a rev10 task 4.50). 422 — a validation the admin
 	// fixes by choosing a different credential.
 	CodeBizRouteGroupProtocolMismatch = "BIZ_ROUTE_GROUP_PROTOCOL_MISMATCH"
+
+	// BIZ — Route Group SERVICE ENDPOINT (路由组即服务; openspec change
+	// `aliyun-aigw-route-group-endpoint`, R-rge-1 / R-rge-4 / R-rge-6 / R-rge-8).
+	//
+	// 🔴 Four separate codes for four separate refusals, deliberately. They all
+	// come out of the same "publish an endpoint" call and a single
+	// BIZ_ROUTE_GROUP_ENDPOINT_UNAVAILABLE would have been less code — but the
+	// four have four different next actions, performed by three different people:
+	//
+	//	NOT_CLUSTER            nobody can fix it here; this edition has no shared
+	//	                       ingress at all. The decision is a purchase, not a
+	//	                       setting. (R-rge-6.S1)
+	//	INGRESS_NOT_CONFIGURED the DEPLOYER sets `ingress_domain=` in the cluster
+	//	                       inventory and re-runs the installer. (R-rge-6.S2)
+	//	EMPTY (reused)         the ORG ADMIN adds an upstream to the group.
+	//	                       Reuses CodeBizRouteGroupEmpty above — same fact,
+	//	                       same remedy, so 🚫 no fifth code.
+	//	PROTOCOL_UNSUPPORTED   the ORG ADMIN picks a group whose protocol the
+	//	                       ingress can route. (R-rge-1.S3)
+	//
+	// Collapsing them would put "ask procurement", "edit the inventory" and "add
+	// a credential" behind one string, and the console could only print all three.
+	CodeBizRouteGroupEndpointNotCluster = "BIZ_ROUTE_GROUP_ENDPOINT_NOT_CLUSTER"
+	CodeBizRouteGroupIngressNotConfigured = "BIZ_ROUTE_GROUP_INGRESS_NOT_CONFIGURED"
+	// CodeBizRouteGroupProtocolUnsupported: the group's protocol_type has no entry
+	// in the ingress client-route table, so no BaseURL can be derived for it.
+	//
+	// 🚫 NOT the same as CodeBizRouteGroupProtocolMismatch above, and the two are
+	// easy to confuse. MISMATCH is about a MEMBER: a credential that does not speak
+	// the group's protocol. UNSUPPORTED is about the GROUP: its protocol is one the
+	// ingress cannot address at all. Different subject, different remedy.
+	CodeBizRouteGroupProtocolUnsupported = "BIZ_ROUTE_GROUP_PROTOCOL_UNSUPPORTED"
+	// CodeBizRouteGroupEndpointRevoked: the endpoint key presented was revoked.
+	// 401 — an authentication answer, because the caller is a THIRD PARTY holding
+	// a key, not an admin operating the console. 🚫 Not 403: nothing about their
+	// permissions changed; the credential itself is dead.
+	CodeBizRouteGroupEndpointRevoked = "BIZ_ROUTE_GROUP_ENDPOINT_REVOKED"
+	// CodeBizRouteGroupEndpointPairMismatch: the endpoint key is valid but belongs
+	// to a DIFFERENT endpoint than the one named in the request URL (R-rge-4).
+	//
+	// 🔴 Refused at the ingress BEFORE any upstream is contacted. The alternative —
+	// forward and let the vendor answer — turns a two-second configuration mistake
+	// into an opaque vendor 401 that the consumer cannot act on and that bills
+	// somebody. 403: the credential is genuine, it just does not authorise THIS
+	// endpoint.
+	CodeBizRouteGroupEndpointPairMismatch = "BIZ_ROUTE_GROUP_ENDPOINT_PAIR_MISMATCH"
 	CodeBizOauthGroupDefaultProtected = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
 	CodeBizOauthGroupCredInUse        = "BIZ_OAUTH_GROUP_CRED_IN_USE"
 	// CodeBizOauthGroupRatioRejected: issuing to a group would push seats:accounts
@@ -780,6 +833,67 @@ func BizRouteGroupEmpty(name string) *DomainError {
 	return &DomainError{Code: CodeBizRouteGroupEmpty,
 		Message: fmt.Sprintf("route group %q has no active members, so applying it would leave the key with no upstream to call", name),
 		Meta:    map[string]any{"name": name}}
+}
+
+// ── Route group service endpoint (路由组即服务) ─────────────────────────────
+
+// BizRouteGroupEndpointNotCluster — this deployment has no shared data-plane
+// ingress, so an endpoint address would have nowhere to point.
+//
+// 🔴 The refusal names the STRUCTURAL reason, not just the edition. "You need
+// the cluster edition" invites "so turn it on"; "this edition's proxies run on
+// each employee's machine, so there is no address an outside caller could reach"
+// tells the reader why no setting will fix it (R-rge-6.S1).
+func BizRouteGroupEndpointNotCluster(edition string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupEndpointNotCluster,
+		Message: "a route group can only be published as a service endpoint on a Cluster deployment: " +
+			"this edition's proxies run on each employee's own machine, so there is no shared ingress " +
+			"an outside caller could address. Ask your administrator about a cluster deployment",
+		Meta: map[string]any{"edition": edition}}
+}
+
+// BizRouteGroupIngressNotConfigured — Cluster, but the inventory never named the
+// ingress domain, so the BaseURL would have an empty host.
+func BizRouteGroupIngressNotConfigured(inventoryKey string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupIngressNotConfigured,
+		Message: fmt.Sprintf("this cluster has no %s configured, so an endpoint address cannot be built "+
+			"(it would have an empty host). Set %s in the cluster inventory and re-run the installer",
+			inventoryKey, inventoryKey),
+		Meta: map[string]any{"key": inventoryKey}}
+}
+
+// BizRouteGroupProtocolUnsupported — the ingress has no client route for this
+// group's protocol, so no address exists to hand out.
+//
+// 🔴 Fails closed. Guessing a route from the provider name would publish an
+// address that 404s at the ingress allowlist, and the consumer would be debugging
+// their own client.
+func BizRouteGroupProtocolUnsupported(protocolType string, supported []string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupProtocolUnsupported,
+		Message: fmt.Sprintf("the ingress cannot build an endpoint address for protocol %q; "+
+			"supported protocols are %s. Choose a route group on a supported protocol",
+			protocolType, strings.Join(supported, ", ")),
+		Meta: map[string]any{"protocol_type": protocolType, "supported": strings.Join(supported, ", ")}}
+}
+
+// BizRouteGroupEndpointRevoked — the endpoint key presented has been revoked.
+//
+// 🔴 Says explicitly that the OTHER keys on the endpoint still work. A consumer
+// who reads "this endpoint is dead" escalates; one who reads "your key was
+// revoked" asks for a new one (R-rge-2.S1).
+func BizRouteGroupEndpointRevoked() *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupEndpointRevoked,
+		Message: "this endpoint key has been revoked and can no longer be used. " +
+			"Ask your administrator to issue a new endpoint key — the endpoint's other keys are unaffected"}
+}
+
+// BizRouteGroupEndpointPairMismatch — a valid key for a DIFFERENT endpoint.
+func BizRouteGroupEndpointPairMismatch(urlRouteGroupID string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupEndpointPairMismatch,
+		Message: fmt.Sprintf("this endpoint key belongs to a different endpoint and cannot be used with %s. "+
+			"Check that the address and the key are a pair: an endpoint's address only accepts that endpoint's own keys",
+			urlRouteGroupID),
+		Meta: map[string]any{"route_group_id": urlRouteGroupID}}
 }
 
 // BizRouteGroupProtocolMismatch — a credential was chosen as a hop of a template

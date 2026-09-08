@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 // Stacking order comes from the shared scale, never a bare z-* here: a
@@ -22,6 +22,33 @@ interface ActionDialogProps {
   inputValue?: string;
   onInputChange?: (v: string) => void;
   inputPlaceholder?: string;
+  /**
+   * Extra body content between the description and the buttons — an IMPACT
+   * PREVIEW, not decoration.
+   *
+   * 🔴 Added 2026-09-08 (openspec `aliyun-aigw-route-group-endpoint`, task 5.5)
+   * so a destructive action can state, in real numbers, what it changes, who is
+   * affected, when it takes effect and what cannot be undone. The alternative
+   * was a second dialog component for "danger, but with a preview", which would
+   * have meant two implementations of the danger affordance and two chances for
+   * them to look different from each other.
+   *
+   * 🚫 Optional and unused by every existing caller, so their behaviour is
+   * unchanged. Mirrored into this repo because ActionDialog renders in BOTH
+   * consoles: a prop that exists on one side only is this repo's classic silent
+   * failure — tsc and vite build both pass.
+   */
+  children?: ReactNode;
+  /**
+   * Extra gate on the confirm button, ANDed with the existing ones.
+   *
+   * 🔴 Exists because `requireInput` (type the name to confirm) is not the only
+   * shape of deliberate consent. A tick-box is the right gate when the operator
+   * has just been shown five facts and the question is "did you read them",
+   * whereas type-to-confirm is right when the question is "are you sure it is
+   * THIS object".
+   */
+  confirmDisabled?: boolean;
 }
 
 export function ActionDialog({
@@ -37,6 +64,8 @@ export function ActionDialog({
   inputValue = '',
   onInputChange,
   inputPlaceholder,
+  children,
+  confirmDisabled: extraDisabled = false,
 }: ActionDialogProps) {
   const { t } = useTranslation();
   useEffect(() => {
@@ -48,10 +77,11 @@ export function ActionDialog({
 
   if (!open) return null;
 
-  const confirmDisabled = loading || (requireInput !== undefined && inputValue !== requireInput);
+  const confirmDisabled =
+    loading || extraDisabled || (requireInput !== undefined && inputValue !== requireInput);
   const confirmColor = variant === 'danger' ? '#ef4444' : '#f59e0b';
-  const confirmBg = variant === 'danger' ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)';
-  const confirmBorder = variant === 'danger' ? 'rgba(239,68,68,0.4)' : 'rgba(245,158,11,0.4)';
+  const confirmBg = variant === 'danger' ? 'rgba(var(--destructive-rgb), 0.12)' : 'rgba(245,158,11,0.12)';
+  const confirmBorder = variant === 'danger' ? 'rgba(var(--destructive-rgb), 0.4)' : 'rgba(245,158,11,0.4)';
 
   // Portal to document.body for the same reason as DetailDrawer: the
   // backdrop + dialog are siblings in a fragment, and caller pages
@@ -64,12 +94,12 @@ export function ActionDialog({
     <>
       <div
         className="fixed inset-0"
-        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'rgba(0,0,0,0.6)' }}
+        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'var(--overlay-sink)' }}
         onClick={onClose}
       />
       <div
         className="fixed left-1/2 top-1/2 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded border p-6"
-        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}
+        style={{ zIndex: DIALOG_LAYER.confirm, backgroundColor: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(var(--scrim-rgb), 0.7)' }}
       >
         {/* Icon + Title */}
         <div className="flex items-start gap-3 mb-4">
@@ -92,6 +122,13 @@ export function ActionDialog({
             )}
           </div>
         </div>
+
+        {/* Optional impact preview / extra body (task 5.5). */}
+        {children && (
+          <div className="mb-4 text-xs font-mono leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+            {children}
+          </div>
+        )}
 
         {/* Optional confirmation input */}
         {requireInput !== undefined && (

@@ -736,7 +736,7 @@ function IdentityStrip({ counts }: { counts: { total: number; issued: number; pe
       <div className="flex items-center gap-3 min-w-0">
         <div
           className="w-9 h-9 rounded flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--primary)' }}
+          style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--primary-text)' }}
         >
           <PageTitleGlyph />
         </div>
@@ -1279,7 +1279,7 @@ function DetailDrawer(props: {
                   marginTop: 10,
                   padding: '8px 10px',
                   borderRadius: 6,
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'rgba(var(--lift-rgb), 0.02)',
                   border: '1px solid var(--border)',
                 }}
               >
@@ -1354,7 +1354,7 @@ function DetailDrawer(props: {
             )}
             {props.summaryError && (
               <div className="drawer-field">
-                <span className="v" style={{ color: '#fca5a5' }}>{props.summaryError}</span>
+                <span className="v" style={{ color: 'var(--destructive-text-soft)' }}>{props.summaryError}</span>
               </div>
             )}
             {props.summary && props.summary.slots.length === 0 && (
@@ -1591,7 +1591,7 @@ function DetailDrawer(props: {
               <span className="v">
                 {status.chipClass === 'success'
                   ? <><span className="status-dot" style={{ width: 5, height: 5 }} /><span style={{ color: 'var(--success)' }}>{status.label}</span></>
-                  : <><span className="status-dot error" style={{ width: 5, height: 5 }} /><span style={{ color: '#fca5a5' }}>{status.label}</span></>}
+                  : <><span className="status-dot error" style={{ width: 5, height: 5 }} /><span style={{ color: 'var(--destructive-text-soft)' }}>{status.label}</span></>}
               </span>
             </div>
             {expiresStr && (
@@ -1658,13 +1658,13 @@ function TeamKeysEmptyPanel() {
   return (
     <div className="text-center py-20">
       <div className="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-5" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-        <KeyRoundIcon className="w-6 h-6" style={{ color: 'var(--primary)' }} />
+        <KeyRoundIcon className="w-6 h-6" style={{ color: 'var(--primary-text)' }} />
       </div>
       <div className="text-[12px] font-mono uppercase tracking-wider mb-2" style={{ color: 'var(--foreground)' }}>{t('teamKeys.emptyTitle')}</div>
       <p className="text-[12px] mx-auto max-w-md" style={{ color: 'var(--muted-foreground)' }}>
         {t('teamKeys.emptyHintPrefix')}
         <strong style={{ color: 'var(--foreground)' }}>{t('teamKeys.emptyHintTeamAdmin')}</strong>{t('teamKeys.emptyHintMiddle')}
-        <Link to="/user/import" className="underline" style={{ color: 'var(--primary)' }}>{t('teamKeys.emptyHintImportLink')}</Link>{t('teamKeys.emptyHintSuffix')}
+        <Link to="/user/import" className="underline" style={{ color: 'var(--primary-text)' }}>{t('teamKeys.emptyHintImportLink')}</Link>{t('teamKeys.emptyHintSuffix')}
       </p>
     </div>
   );

@@ -170,7 +170,7 @@ function RouteErrorFallback({
         <div className={`space-y-2 ${inline ? '' : 'max-w-3xl'}`}>
           <pre
             className="text-[10px] font-mono p-3 rounded overflow-auto max-h-64 whitespace-pre-wrap break-all"
-            style={{ backgroundColor: 'rgba(0,0,0,0.25)', color: 'var(--muted-foreground)' }}
+            style={{ backgroundColor: 'rgba(var(--sink-rgb), 0.25)', color: 'var(--muted-foreground)' }}
             data-testid="route-error-detail"
           >
             {detail}

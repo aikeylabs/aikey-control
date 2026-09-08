@@ -192,6 +192,11 @@ const ALLOWED: Allowed[] = [
       '🔴 REWRITTEN 2026-08-11. Same Personal-scoped surviving claim as compliancePage.pageDescription, plus the two things a reader of a TOGGLE specifically needs: (1) this switch does not govern the conversation-audit lane, so turning compliance detection off does not stop conversation capture; (2) turning it ON is what starts the snippet upload on Team/Cluster, and on a fresh install the org policy already permits it — a toggle whose copy hides its own default is the incomplete-notice failure mode.',
   },
   {
+    key: 'conversationAudit.toolCalls.unlinkableHint',
+    why:
+      'Different subject — an outbound CORRELATION ID on the client\'s own MCP requests, not user content and not a retention promise. The sentence says the client attaches no conversation id to the requests it sends to the gateway, which is why the audit cannot decide whether a tool call traversed it (task 7.5c registered that as expected behaviour for the main client). It makes no claim about where prompts, replies or tool arguments go — those follow the conversation-audit and MCP raw-argument switches, and this string neither mentions nor implies them. It trips `en:never-carries` because that pattern is deliberately verb-shaped rather than subject-shaped; the pattern is right to be broad, so the exemption is recorded here rather than by rewording a true sentence into one the scan happens not to see.',
+  },
+  {
     key: 'vault.keyDerivationTail',
     why:
       'Different subject — the vault MASTER PASSWORD, not user content. It is consumed locally by the KDF to unwrap the vault; nothing derived from it is transmitted. Pre-existing string, unchanged by the 2026-08-10c privacy-copy audit, and re-stated here only so the scan has a reason on file rather than a silent exemption.',

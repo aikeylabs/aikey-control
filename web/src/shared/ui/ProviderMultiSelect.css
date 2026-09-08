@@ -23,7 +23,7 @@
   padding: 2px 4px 2px 8px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--primary);
+  color: var(--primary-text);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 700;
@@ -32,7 +32,7 @@
 .provider-ms-chip-x {
   background: transparent;
   border: none;
-  color: var(--primary);
+  color: var(--primary-text);
   cursor: pointer;
   padding: 0 3px;
   font-size: 14px;
@@ -43,7 +43,7 @@
 
 .provider-ms-chip-x:hover {
   opacity: 1;
-  color: #f87171;
+  color: var(--destructive-text);
 }
 
 .provider-ms-search {
@@ -73,13 +73,13 @@
 
 .provider-ms-add-btn:hover {
   color: var(--foreground);
-  border-color: var(--primary);
+  border-color: var(--primary-text);
   border-style: solid;
 }
 
 .provider-ms-add-btn-warn {
-  border-color: #f87171;
-  color: #f87171;
+  border-color: var(--destructive-text);
+  color: var(--destructive-text);
 }
 
 /* Portal dropdown: position=fixed (由 JS 按 trigger rect 计算 top/left/width),
@@ -109,7 +109,7 @@
 
 .provider-ms-option:hover {
   background: rgba(250, 204, 21, 0.08);
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .provider-ms-option:last-child {

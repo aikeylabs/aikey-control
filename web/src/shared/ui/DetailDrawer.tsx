@@ -47,7 +47,7 @@ export function DetailDrawer({ open, onClose, title, subtitle, width = 480, chil
       <div
         className="fixed inset-0 z-40 transition-opacity duration-200"
         style={{
-          backgroundColor: 'rgba(0,0,0,0.5)',
+          backgroundColor: 'var(--overlay-sink)',
           opacity: open ? 1 : 0,
           pointerEvents: open ? 'auto' : 'none',
         }}
@@ -66,7 +66,7 @@ export function DetailDrawer({ open, onClose, title, subtitle, width = 480, chil
           maxWidth: '96vw',
           backgroundColor: 'var(--card)',
           borderLeft: '1px solid var(--border)',
-          boxShadow: '-8px 0 32px rgba(0,0,0,0.6)',
+          boxShadow: '-8px 0 32px rgba(var(--scrim-rgb), 0.6)',
           transform: open ? 'translateX(0)' : 'translateX(100%)',
         }}
       >

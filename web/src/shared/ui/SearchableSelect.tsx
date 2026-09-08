@@ -242,7 +242,7 @@ export function SearchableSelect({
           style={{
             backgroundColor: 'var(--card)',
             borderColor: 'var(--border)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            boxShadow: '0 8px 32px rgba(var(--scrim-rgb), 0.5)',
           }}
         >
           {/* Search input */}
@@ -256,7 +256,7 @@ export function SearchableSelect({
               onChange={e => setSearch(e.target.value)}
               onKeyDown={handleKeyDown}
               style={{
-                backgroundColor: 'rgba(0,0,0,0.2)',
+                backgroundColor: 'rgba(var(--sink-rgb), 0.2)',
                 borderColor: 'var(--border)',
                 color: 'var(--foreground)',
                 fontFamily: 'var(--font-mono, ui-monospace, monospace)',
@@ -300,7 +300,7 @@ export function SearchableSelect({
                   style={{
                     backgroundColor: opt.disabled
                       ? 'transparent'
-                      : idx === highlightIdx ? 'var(--accent)' : opt.value === value ? 'rgba(255,255,255,0.04)' : 'transparent',
+                      : idx === highlightIdx ? 'var(--accent)' : opt.value === value ? 'rgba(var(--lift-rgb), 0.04)' : 'transparent',
                     color: opt.value === value ? 'var(--accent-foreground, var(--foreground))' : 'var(--foreground)',
                     fontFamily: 'var(--font-mono, ui-monospace, monospace)',
                     // Dimmed rather than hidden; `not-allowed` says "this row is
