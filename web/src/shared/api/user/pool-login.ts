@@ -69,8 +69,18 @@ export function poolAuthorizeURL(credentialID: string) {
  *     master. (`identity` is not a secret; the token never comes back.)
  *   - confirm=true (step 2): the proxy replays the held token and WRITES it back
  *     (status:"ok"). Idempotent per session, so re-sending the same code is safe.
+ *
+ * When the review reports a different provider identity, that second call must
+ * also carry identityMismatchConfirmed (拍板 2026-09-04): the review warning is
+ * the prompt, the click is the acknowledgement. The token then binds to the
+ * member's OWN seat; the pool account's registered identity is not changed.
  */
-export function poolSubmitCode(sessionID: string, code: string, confirm = false) {
+export function poolSubmitCode(
+  sessionID: string,
+  code: string,
+  confirm = false,
+  identityMismatchConfirmed = false,
+) {
   return postPool<{
     status: string;
     identity?: string;
@@ -83,6 +93,7 @@ export function poolSubmitCode(sessionID: string, code: string, confirm = false)
     session_id: sessionID,
     code,
     confirm,
+    identity_mismatch_confirmed: identityMismatchConfirmed,
   });
 }
 
@@ -99,20 +110,24 @@ export interface PoolSessionKeyResult {
 
 /** Exchange a Claude or ChatGPT web session key locally on Windows or macOS. The first call keeps
  * the resulting OAuth token inside aikey-proxy for identity review; the second
- * call writes that held token to the shared account-token endpoint. Identity
- * mismatch is a hard zero-write error and has no client override. Neither
- * call returns token material to the browser. */
+ * call writes that held token back. When the review reports identity_mismatch,
+ * the confirm requires the member's explicit identityMismatchConfirmed
+ * acknowledgement (拍板 2026-09-01) — the token then binds to the member's own
+ * seat only; the shared account identity is never modified. Neither call
+ * returns token material to the browser. */
 export function poolSessionKey(
   credentialID: string,
   sessionKey: string,
   operationID: string,
   confirm = false,
+  identityMismatchConfirmed = false,
 ) {
   return postPool<PoolSessionKeyResult>('session-key', {
     credential_id: credentialID,
     session_key: sessionKey,
     operation_id: operationID,
     confirm,
+    identity_mismatch_confirmed: identityMismatchConfirmed,
   });
 }
 

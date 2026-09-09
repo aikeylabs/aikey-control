@@ -138,9 +138,9 @@ export function VaultStatusPill({ invalidateOnUnlock }: VaultStatusPillProps) {
         onClick={() => setExpanded(true)}
         className="inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider"
         style={{
-          background: '#facc15',
+          background: 'var(--primary)',
           color: 'var(--primary-foreground)',
-          border: '1px solid #facc15',
+          border: '1px solid var(--primary)',
         }}
       >
         {t('shared.vaultLockedUnlock')}
@@ -159,7 +159,7 @@ export function VaultStatusPill({ invalidateOnUnlock }: VaultStatusPillProps) {
       className="inline-flex items-center gap-1.5 rounded border px-2 py-1"
       style={{
         background: 'var(--card)',
-        borderColor: '#facc15',
+        borderColor: 'var(--primary)',
       }}
     >
       <input
@@ -177,7 +177,7 @@ export function VaultStatusPill({ invalidateOnUnlock }: VaultStatusPillProps) {
         disabled={!password || unlockMut.isPending}
         className="rounded px-2 py-0.5 text-[11px] font-mono uppercase tracking-wider disabled:opacity-50"
         style={{
-          background: '#facc15',
+          background: 'var(--primary)',
           color: 'var(--primary-foreground)',
         }}
       >

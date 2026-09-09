@@ -44,7 +44,7 @@ export function AuthLayout({ width = 'md' }: { width?: AuthCardWidth } = {}) {
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse 60% 40% at 50% 50%, rgba(250, 204, 21, 0.04) 0%, transparent 70%)',
+            'radial-gradient(ellipse 60% 40% at 50% 50%, rgba(var(--primary-rgb), 0.04) 0%, transparent 70%)',
         }}
       />
 

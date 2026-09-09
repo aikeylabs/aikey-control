@@ -2054,7 +2054,7 @@ export default function UserBulkImportPage() {
         description={
           <>
             {t('import.reparseDescPrefix')}
-            <span style={{ color: '#ca8a04', fontWeight: 600 }}>{t('import.reparseDescFields')}</span>
+            <span style={{ color: 'var(--primary-dim)', fontWeight: 600 }}>{t('import.reparseDescFields')}</span>
             {t('import.reparseDescSuffix')}
             <br />
             <span style={{ color: 'var(--muted-foreground)' }}>
@@ -3900,8 +3900,8 @@ const IMPORT_CSS = `
   --imp-surface-3: #ececea; /* theme-literal-ok: light counterpart of --imp-surface-3 */
 }
 .import-page .btn{display:inline-flex;align-items:center;justify-content:center;gap:0.375rem;border-radius:6px;font-family:var(--font-mono);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing: 0.05em;padding:8px 14px;border:1px solid transparent;transition:all 180ms ease;cursor:pointer}
-.import-page .btn-primary{background:var(--primary);color:var(--primary-foreground);border-color:rgba(250, 204, 21,0.6);box-shadow:0 0 0 1px rgba(250, 204, 21,0.15),0 6px 20px -10px rgba(250, 204, 21,0.5)}
-.import-page .btn-primary:hover{background:#fde047;transform:translateY(-1px)}
+.import-page .btn-primary{background:var(--primary);color:var(--primary-foreground);border-color:rgba(var(--primary-rgb), 0.6);box-shadow:0 0 0 1px rgba(var(--primary-rgb), 0.15),0 6px 20px -10px rgba(var(--primary-rgb), 0.5)}
+.import-page .btn-primary:hover{background:var(--link-hover);transform:translateY(-1px)}
 .import-page .btn-primary:disabled{background:var(--muted);color:var(--muted-foreground);box-shadow:none;border-color:var(--border);cursor:not-allowed;transform:none;opacity:0.7}
 .import-page .btn-outline{background:transparent;color:var(--foreground);border-color:var(--imp-line-strong)}
 .import-page .btn-outline:hover{background:rgba(var(--lift-rgb), 0.04);border-color:var(--imp-text-dim)}
@@ -3917,7 +3917,7 @@ const IMPORT_CSS = `
  * Unlocked: emerald inset bar (3px box-shadow, not a ::before so it
  *   plays nicely with the gradient background).
  */
-.unlock-banner{background:linear-gradient(90deg,rgba(250, 204, 21,0.08) 0%,rgba(250, 204, 21,0.02) 100%);border-bottom:1px solid rgba(250, 204, 21,0.35);box-shadow:inset 3px 0 0 0 var(--primary)}
+.unlock-banner{background:linear-gradient(90deg,rgba(var(--primary-rgb), 0.08) 0%,rgba(var(--primary-rgb), 0.02) 100%);border-bottom:1px solid rgba(var(--primary-rgb), 0.35);box-shadow:inset 3px 0 0 0 var(--primary)}
 .unlock-banner-ok{background:rgba(16,185,129,0.06);border-bottom:1px solid rgba(16,185,129,0.25);box-shadow:inset 3px 0 0 0 #10b981}
 .undo-toast{background:linear-gradient(90deg,rgba(16,185,129,0.14) 0%,rgba(16,185,129,0.03) 100%);border-bottom:1px solid rgba(16,185,129,0.4);box-shadow:inset 3px 0 0 0 #10b981}
 
@@ -3957,8 +3957,8 @@ const IMPORT_CSS = `
    2026-05-06 v2: 同时定义 --state-color CSS var,供 .src-line-boxed 的框边复用。
    未 pin/未 hover 时,行只有这条单线 (基底常驻);pin/hover 时被 .src-line-boxed
    的高优先级规则覆盖为框边。 */
-.src-line.hl-key   {--state-color:rgba(250, 204, 21,0.65); box-shadow:inset 3px 0 0 rgba(250, 204, 21,0.55)}
-.src-line.hl-weak  {--state-color:#fde047;                  box-shadow:inset 3px 0 0 #fde047}
+.src-line.hl-key   {--state-color:rgba(var(--primary-rgb), 0.65); box-shadow:inset 3px 0 0 rgba(var(--primary-rgb), 0.55)}
+.src-line.hl-weak  {--state-color:var(--link-hover);                  box-shadow:inset 3px 0 0 var(--link-hover)}
 .src-line.hl-oauth {--state-color:rgba(var(--info-rgb), 0.65);    box-shadow:inset 3px 0 0 rgba(var(--info-rgb), 0.55)}
 .src-line.hl-failed{--state-color:rgba(var(--destructive-rgb), 0.7);    box-shadow:inset 3px 0 0 rgba(var(--destructive-rgb), 0.65)}
 
@@ -3980,8 +3980,8 @@ const IMPORT_CSS = `
   border-radius: 6px;
   position: relative;
 }
-.src-line-group.hl-key   {--state-color:rgba(250, 204, 21,0.65)}
-.src-line-group.hl-weak  {--state-color:#fde047}
+.src-line-group.hl-key   {--state-color:rgba(var(--primary-rgb), 0.65)}
+.src-line-group.hl-weak  {--state-color:var(--link-hover)}
 .src-line-group.hl-oauth {--state-color:rgba(var(--info-rgb), 0.65)}
 .src-line-group.hl-failed{--state-color:rgba(var(--destructive-rgb), 0.7)}
 
@@ -3999,8 +3999,8 @@ const IMPORT_CSS = `
 }
 
 /* === 旧 bg-{state} / src-line-hover 保留但不再被 push (防外部引用) === */
-.src-line.bg-key   {background:rgba(250, 204, 21,0.04)}
-.src-line.bg-weak  {background:rgba(234,179,8,0.04)}
+.src-line.bg-key   {background:rgba(var(--primary-rgb), 0.04)}
+.src-line.bg-weak  {background:rgba(var(--btn-primary-border-rgb), 0.04)}
 .src-line.bg-oauth {background:rgba(var(--info-rgb), 0.06)}
 .src-line.bg-failed{background:rgba(var(--destructive-rgb), 0.06)}
 .src-line.src-line-hover{background:rgba(var(--lift-rgb), 0.06);box-shadow:inset 3px 0 0 rgba(var(--lift-rgb), 0.3)}
@@ -4046,7 +4046,7 @@ const IMPORT_CSS = `
    2026-04-23 第三轮:文字色也加暗向背景靠拢,从 full saturation 的纯品牌色
    降到去饱和暗调(rgba α≈0.55-0.65 + 暗一档的灰调底)。视觉效果:idle 态
    几乎完全融入卡片背景 #2a2a2f,只在认真看时显出 provider 的色相提示。 */
-.chip-claude{background:transparent;color:rgba(202,165,17,0.65);border-color:rgba(250, 204, 21,0.12)}
+.chip-claude{background:transparent;color:rgba(202,165,17,0.65);border-color:rgba(var(--primary-rgb), 0.12)}
 .chip-openai{background:transparent;color:rgba(140,118,200,0.65);border-color:rgba(167,139,250,0.12)}
 .chip-oauth{background:transparent;color:rgba(80,140,200,0.65);border-color:rgba(var(--info-rgb), 0.12)}
 /* v4.2: 国产模型 (kimi/deepseek/zhipu/doubao/siliconflow/qwen/baichuan/minimax) — 暖珊瑚红系 */
@@ -4093,11 +4093,11 @@ const IMPORT_CSS = `
    ending (last-row border stacked with card outer border). */
 .draft-row{background:var(--imp-surface-3);border:1px solid rgba(var(--lift-rgb), 0.05);border-radius:6px;box-shadow:inset 0 -1px 0 0 rgba(var(--lift-rgb), 0.05);transition:all 150ms ease;overflow:visible;position:relative;--state-color:rgba(var(--lift-rgb), 0.4)}
 .draft-row:hover{border-color:rgba(var(--lift-rgb), 0.14)}
-.draft-row.selected{border-color:rgba(250, 204, 21,0.22);box-shadow:0 0 0 1px rgba(250, 204, 21,0.06),inset 0 -1px 0 0 rgba(250, 204, 21,0.18);--state-color:rgba(250, 204, 21,0.65)}
+.draft-row.selected{border-color:rgba(var(--primary-rgb), 0.22);box-shadow:0 0 0 1px rgba(var(--primary-rgb), 0.06),inset 0 -1px 0 0 rgba(var(--primary-rgb), 0.18);--state-color:rgba(var(--primary-rgb), 0.65)}
 /* 2026-04-23 第七轮:右侧卡片 bg 回滚到原浅色(weak 0.03 / oauth 0.04 / failed 0.05 /
    missing-provider 0.04)。用户决策:右侧弱化保持(卡片不抢眼),左侧 src-line bg 单独加深
    (源文本要让用户一眼能看到选中范围)。不再追求左右 1:1 同色,左右各自承担不同视觉职责。 */
-.draft-row.weak{border-color:#fde047;border-style:dashed;background:rgba(234,179,8,0.03);--state-color:#fde047}
+.draft-row.weak{border-color:var(--link-hover);border-style:dashed;background:rgba(var(--btn-primary-border-rgb), 0.03);--state-color:var(--link-hover)}
 .draft-row.oauth{border-color:rgba(var(--info-rgb), 0.35);background:rgba(var(--info-rgb), 0.04);--state-color:rgba(var(--info-rgb), 0.65)}
 .draft-row.failed{border-color:rgba(var(--destructive-rgb), 0.4);background:rgba(var(--destructive-rgb), 0.05);box-shadow:0 0 0 1px rgba(var(--destructive-rgb), 0.06),inset 0 -1px 0 0 rgba(var(--destructive-rgb), 0.3);--state-color:rgba(var(--destructive-rgb), 0.7)}
 /* Stage 7+ 规则 1: selected KEY draft 缺 Provider(必填),红框 + 淡红底提示导入会被阻止 */
@@ -4110,7 +4110,7 @@ const IMPORT_CSS = `
    .draft-row-pinned: pin 状态(左右都按 pinnedDraft === idx 命中)→ border 加粗
      - border-width 从 1px → 2px,与左侧 .src-line-boxed 的"框框"语义对齐 */
 .draft-row.draft-row-soft-hover{box-shadow:0 0 8px 0 var(--state-color), inset 0 -1px 0 0 rgba(var(--lift-rgb), 0.05)}
-.draft-row.draft-row-soft-hover.selected{box-shadow:0 0 8px 0 var(--state-color), 0 0 0 1px rgba(250, 204, 21,0.06), inset 0 -1px 0 0 rgba(250, 204, 21,0.18)}
+.draft-row.draft-row-soft-hover.selected{box-shadow:0 0 8px 0 var(--state-color), 0 0 0 1px rgba(var(--primary-rgb), 0.06), inset 0 -1px 0 0 rgba(var(--primary-rgb), 0.18)}
 .draft-row.draft-row-soft-hover.failed,
 .draft-row.draft-row-soft-hover.missing-provider{box-shadow:0 0 8px 0 var(--state-color), 0 0 0 1px rgba(var(--destructive-rgb), 0.08), inset 0 -1px 0 0 rgba(var(--destructive-rgb), 0.3)}
 /* 2026-05-06 (用户反馈): pin 不仅加粗,也要"亮一点",和左侧 src-line-group-pinned
@@ -4139,7 +4139,7 @@ const IMPORT_CSS = `
 .check{width:16px;height:16px;border:1.5px solid var(--imp-line-strong);border-radius:3px;display:inline-flex;align-items:center;justify-content:center;background:transparent;flex-shrink:0;cursor:pointer;color:var(--primary-foreground);font-size:10px}
 .check.checked{background:var(--primary);border-color: var(--primary-text)}
 /* Stage 13+: indeterminate 半选态(部分勾选)— 用 primary 淡色 + hyphen 符号 */
-.check.indeterminate{background:rgba(250, 204, 21,0.3);border-color: var(--primary-text);color:var(--primary-foreground)}
+.check.indeterminate{background:rgba(var(--primary-rgb), 0.3);border-color: var(--primary-text);color:var(--primary-foreground)}
 /* Select all 按钮里的 inline check —— 尺寸稍小,不影响 btn padding 对齐 */
 .check-inline{width:14px;height:14px;font-size:9px}
 .select-all-btn{display:inline-flex;align-items:center;gap:8px}
@@ -4204,7 +4204,7 @@ const IMPORT_CSS = `
    input text column below (KIMI ↔ kimi11 ↔ sk-... ↔ https://...). */
 .field-row-multi .provider-ms{padding-left:9px}
 .protocol-multiselect{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-height:28px;position:relative}
-.protocol-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(250, 204, 21,0.08);border:1px solid rgba(250, 204, 21,0.3);border-radius:3px;padding:2px 4px 2px 8px;font-family:var(--font-mono);font-size:11px;color: var(--primary-text);text-transform:uppercase;letter-spacing: 0.05em;font-weight:700}
+.protocol-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(var(--primary-rgb), 0.08);border:1px solid rgba(var(--primary-rgb), 0.3);border-radius:3px;padding:2px 4px 2px 8px;font-family:var(--font-mono);font-size:11px;color: var(--primary-text);text-transform:uppercase;letter-spacing: 0.05em;font-weight:700}
 .protocol-chip-x{background:transparent;border:none;color: var(--primary-text);cursor:pointer;padding:0 3px;font-size:14px;line-height:1;opacity:0.7;font-family:inherit}
 .protocol-chip-x:hover{opacity:1;color:var(--destructive-text)}
 .protocol-add-btn{background:transparent;border:1px dashed var(--imp-line-strong);border-radius:3px;color:var(--imp-text-dim);font-family:var(--font-mono);font-size:10.5px;padding:3px 10px;cursor:pointer;letter-spacing: 0.05em}
@@ -4213,7 +4213,7 @@ const IMPORT_CSS = `
 .protocol-search{background:var(--well-recessed);border:1px solid var(--primary);border-radius:3px;padding:0.25rem 0.5rem;color:var(--foreground);font-family:var(--font-mono);font-size:12px;outline:none;width:100%}
 .protocol-dropdown{position:absolute;top:100%;left:0;right:0;margin-top:2px;background:var(--imp-surface-2);border:1px solid var(--imp-line-strong);border-radius:3px;box-shadow:0 4px 12px rgba(var(--scrim-rgb), 0.5);max-height:240px;overflow-y:auto;z-index:100}
 .protocol-option{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--foreground);font-family:var(--font-mono);font-size:12px;padding:0.375rem 0.625rem;cursor:pointer;border-bottom:1px solid rgba(var(--lift-rgb), 0.03)}
-.protocol-option:hover{background:rgba(250, 204, 21,0.08);color: var(--primary-text)}
+.protocol-option:hover{background:rgba(var(--primary-rgb), 0.08);color: var(--primary-text)}
 .protocol-option:last-child{border-bottom:none}
 .protocol-option-custom{color:#86efac;font-style:italic}
 .protocol-option-custom:hover{background:rgba(134,239,172,0.1);color:#86efac}
@@ -4224,8 +4224,8 @@ const IMPORT_CSS = `
 /* 2026-04-23 第十三轮:USE OFFICIAL 按钮弱化,跟卡片内其他可交互元素同风格。
    idle: transparent + 低 α 浅金边 + 暗金文字(融入卡片);
    hover: 淡金 bg + 稍明显边 + 文字恢复原金色(明确"正在被指向"),与 field-input hover 视觉档位一致。 */
-.baseurl-official-btn{flex-shrink:0;background:transparent;border:1px solid rgba(250, 204, 21,0.18);border-radius:3px;color:rgba(202,165,17,0.75);font-family:var(--font-mono);font-size:10.5px;padding:3px 8px;cursor:pointer;letter-spacing: 0.05em;text-transform:uppercase;white-space:nowrap;transition:all 120ms ease}
-.baseurl-official-btn:hover:not(.is-disabled){background:rgba(250, 204, 21,0.05);border-color:rgba(250, 204, 21,0.32);color: var(--primary-text)}
+.baseurl-official-btn{flex-shrink:0;background:transparent;border:1px solid rgba(var(--primary-rgb), 0.18);border-radius:3px;color:rgba(202,165,17,0.75);font-family:var(--font-mono);font-size:10.5px;padding:3px 8px;cursor:pointer;letter-spacing: 0.05em;text-transform:uppercase;white-space:nowrap;transition:all 120ms ease}
+.baseurl-official-btn:hover:not(.is-disabled){background:rgba(var(--primary-rgb), 0.05);border-color:rgba(var(--primary-rgb), 0.32);color: var(--primary-text)}
 .baseurl-official-btn.is-disabled{border-color:var(--imp-line-strong);color:var(--imp-text-dim);opacity:0.5;cursor:not-allowed}
 /* v4.1 Stage 9+: Pending OAuth handoffs (Done page) */
 /* v4.1 Stage 10+: Done page — 按 design_iterations/user_bulk_import_done_3.html 模板 */
@@ -4301,16 +4301,16 @@ const IMPORT_CSS = `
 /* ── Confidence bar ───────────────────────────────────────────── */
 /* 2026-04-23: 进度条颜色与百分比一同弱化,跟卡片整体视觉强度对齐 */
 .conf-bar{width:64px;height:3px;background:rgba(var(--lift-rgb), 0.05);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0}
-.conf-bar>span{display:block;height:100%;background:rgba(250, 204, 21,0.45)}
+.conf-bar>span{display:block;height:100%;background:rgba(var(--primary-rgb), 0.45)}
 
 /* ── Provider suggest bar ─────────────────────────────────────── */
 /* v3 uses gold tint to match the "apply as provider" CTA's primary-colour
    action. Old palette was indigo; keeping the .suggest-bar / .apply-btn
    selectors but swapping tokens. */
-.suggest-bar{background:rgba(250, 204, 21,0.04);border-bottom:1px solid var(--imp-line)}
+.suggest-bar{background:rgba(var(--primary-rgb), 0.04);border-bottom:1px solid var(--imp-line)}
 /* Stage 14+: suggest 横幅左侧关闭按钮(小圆 × 按钮,dismiss 当前 provider 建议) */
-.suggest-close{width:20px;height:20px;border-radius:50%;border:1px solid rgba(250, 204, 21,0.3);background:transparent;color: var(--primary-text);font-family:var(--font-mono);font-size:14px;line-height:1;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:0;margin-right:4px;transition:all 120ms ease}
-.suggest-close:hover{background:rgba(250, 204, 21,0.12);border-color: var(--primary-text);color:#fde047}
+.suggest-close{width:20px;height:20px;border-radius:50%;border:1px solid rgba(var(--primary-rgb), 0.3);background:transparent;color: var(--primary-text);font-family:var(--font-mono);font-size:14px;line-height:1;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:0;margin-right:4px;transition:all 120ms ease}
+.suggest-close:hover{background:rgba(var(--primary-rgb), 0.12);border-color: var(--primary-text);color:var(--link-hover)}
 /* Darker yellow (#ca8a04 = amber-600) than the bright --primary
    (#facc15) — these two bulk-action buttons (Apply-to-all + the big
    Import commit) carry heavier consequences than modal Save / Unlock,
@@ -4319,8 +4319,8 @@ const IMPORT_CSS = `
 /* 2026-05-06 (用户反馈): apply-btn 不是主按钮,改成暗色调。
    原 #ca8a04 实金底 + 黑字过于抢眼,banner 是 hint 提示而非主操作 (主操作是右下 IMPORT)。
    改成: 透明底 + 金色边 + 金色文字,与 .btn-outline 一致的低调样式。 */
-.apply-btn{font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing: 0.05em;text-transform:uppercase;padding:6px 10px;border-radius:4px;background:transparent;color:rgba(250,204,21,0.75);border:1px solid rgba(250,204,21,0.3);cursor:pointer;transition:all 120ms ease}
-.apply-btn:hover{background:rgba(250,204,21,0.08);border-color:rgba(250,204,21,0.5);color:rgba(250,204,21,0.95)}
+.apply-btn{font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing: 0.05em;text-transform:uppercase;padding:6px 10px;border-radius:4px;background:transparent;color:rgba(var(--primary-rgb), 0.75);border:1px solid rgba(var(--primary-rgb), 0.3);cursor:pointer;transition:all 120ms ease}
+.apply-btn:hover{background:rgba(var(--primary-rgb), 0.08);border-color:rgba(var(--primary-rgb), 0.5);color:rgba(var(--primary-rgb), 0.95)}
 
 /* .btn-primary-dim is now defined globally in src/index.css 2026-04-25
    so vault, import, and any other page can stack it on .btn-primary

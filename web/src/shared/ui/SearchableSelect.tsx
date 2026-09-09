@@ -217,7 +217,7 @@ export function SearchableSelect({
           // Amber border + ring when open, mirroring the global input:focus
           // treatment so the select and the search box read as one family.
           borderColor: open ? 'var(--primary)' : 'var(--border)',
-          boxShadow: open ? '0 0 0 1px rgba(250, 204, 21, 0.2)' : 'none',
+          boxShadow: open ? '0 0 0 1px rgba(var(--primary-rgb), 0.2)' : 'none',
           transition: 'border-color 150ms ease, box-shadow 150ms ease',
           color: selectedLabel ? 'var(--foreground)' : 'var(--muted-foreground)',
           opacity: disabled ? 0.5 : 1,
@@ -276,7 +276,7 @@ export function SearchableSelect({
               style={{
                 color: 'var(--primary-dim, var(--muted-foreground))',
                 borderBottom: '1px solid var(--border)',
-                backgroundColor: 'rgba(250,204,21,0.06)',
+                backgroundColor: 'rgba(var(--primary-rgb), 0.06)',
               }}
             >
               {noOptionsHint}

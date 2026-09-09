@@ -7,7 +7,7 @@ import * as path from 'node:path';
 import en from '@/shared/i18n/locales/en/common.json';
 import zh from '@/shared/i18n/locales/zh/common.json';
 
-import { knownEpoch, poolAccountTone, quotaPercent, retryTimeState, ridesSharedFallback, showRetryTime } from './pool-account-state';
+import { knownEpoch, poolAccountTone, quotaPercent, retryTimeState, ridesSharedFallback, showRetryTime, showsSessionRenewalLabel } from './pool-account-state';
 
 describe('PoolAccountList display derivations', () => {
   it('uses danger only for exhausted and authentication-failed accounts', () => {
@@ -28,6 +28,30 @@ describe('PoolAccountList display derivations', () => {
     expect(zh.poolAccount.loginStatus.auth_failed).toBe('需要重新登录');
     expect(zh.oauthContribute.status.auth_failed).toBe('需要重新登录');
     expect(zh.vault.oauthLoginStatus.auth_failed).toBe('需要重新登录');
+  });
+
+  // spec: R-oauth-token-mint-6.S5 成员看得出 auth_failed 的原因
+  it('shows the specific Session Key label ONLY for the named renewal-rejected cause', () => {
+    // Specific cause named by the server → the "why" is shown.
+    expect(showsSessionRenewalLabel('auth_failed', 'session_renewal_rejected')).toBe(true);
+    // 能红 boundary A — any OTHER auth_failed cause stays generic (a dead
+    // refresh token / usage-401 must never read as a Session Key failure).
+    expect(showsSessionRenewalLabel('auth_failed', 'refresh_rejected')).toBe(false);
+    expect(showsSessionRenewalLabel('auth_failed', 'upstream_rejected')).toBe(false);
+    // 能红 boundary B — an older server sends no reason → generic, never guessed.
+    expect(showsSessionRenewalLabel('auth_failed', undefined)).toBe(false);
+    // 能红 boundary C — a stale verdict on a non-auth_failed row must not trip it.
+    expect(showsSessionRenewalLabel('logged_in', 'session_renewal_rejected')).toBe(false);
+    expect(showsSessionRenewalLabel('revoked', 'session_renewal_rejected')).toBe(false);
+  });
+
+  it('carries the specific Session Key auth-failure label in both locales', () => {
+    expect(en.oauthContribute.status.auth_failed_session_renewal).toBe(
+      'Session Key exchange failed — sign in again',
+    );
+    expect(zh.oauthContribute.status.auth_failed_session_renewal).toBe(
+      'Session Key 兑换失败，请重新登录',
+    );
   });
 
   it('preserves unknown utilization and renders an observed zero honestly', () => {

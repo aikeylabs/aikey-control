@@ -145,7 +145,8 @@
     "navComplianceAudit": "Compliance Audit",
     "sessionExpired": "Signed out",
     "sessionExpiredHint": "SESSION EXPIRED",
-    "backToSimple": "Simple view"
+    "backToSimple": "Simple view",
+    "refresh": "Refresh"
   },
   "teamMenu": {
     "oauthContribute": "Team OAuth",
@@ -687,6 +688,11 @@
     "errClusterNodeUnresolvedTitle": "Cluster node not ready",
     "errClusterNodeUnresolvedDetail": "This team key's credential lives on the cluster's central node. The node resolved but the connectivity probe target couldn't be built — usually a transient state.",
     "errClusterNodeUnresolvedAction": "Retry. If it keeps failing, run `aikey use <alias>` to refresh the key, or check control / hub connectivity.",
+    "errProbeUnresolvedTitle": "Proxy could not resolve this key",
+    "errProbeUnresolvedDetail": "aikey-proxy does not know which upstream this key talks to — the alias is missing from the proxy's vault view (not yet loaded, renamed, or the proxy is an older build).",
+    "errProbeUnresolvedAction": "Run `aikey use <alias>` or `aikey service restart proxy`, then test again. If it keeps failing, upgrade aikey-proxy.",
+    "healthBaseUrlNotApi": "Base URL is not an API root",
+    "repairBaseUrlNotApi": "Point Base URL at the API root (OpenAI-compatible gateways usually need a /v1 suffix, e.g. https://host/v1), then test again.",
     "errCredNotFoundTitle": "Key not found",
     "errCredNotFoundDetail": "The vault no longer contains a credential with this alias / id. It may have been deleted in another window.",
     "errCredNotFoundAction": "Refresh the list (top-right button) and try again.",
@@ -2325,10 +2331,8 @@
       "packKindLabel": "Pack Kind *",
       "packKindBuiltInOption": "Built-in (system, cross-tenant)",
       "packKindPlaceholder": "Select kind...",
-      "tenantIdLabel": "Tenant ID *",
-      "tenantIdPlaceholderBuiltIn": "system",
-      "tenantIdPlaceholderCustom": "org id, e.g. org_xxx",
-      "tenantIdHint": "Built-in packs are typically owned by 'system' and shared across all tenants.",
+      "ownerHintBuiltIn": "Built-in packs are owned by 'system' and shared across all tenants.",
+      "ownerHintCustom": "Custom packs belong to this deployment's organization (single-tenant; nothing to fill in).",
       "nameLabel": "Name *",
       "namePlaceholder": "e.g. Sales Script — Insurance Q1",
       "descriptionLabel": "Description",
@@ -2588,6 +2592,7 @@
   },
   "compliancePage": {
     "pageTitle": "AI Compliance Audit",
+    "pageDescriptionShort": "Compliance events detected on this machine — your own view",
     "pageDescription": "Compliance events detected on this machine — your own view. Detection runs on this machine. On Personal, the matched original text stays here. On Team and Cluster deployments, when your organization's compliance privacy policy allows it (on by default for a fresh install), a short window of the original around the match (at most 512 bytes) is uploaded with the compliance event to your organization's own team server and kept for 90 days — it never reaches any AiKey server. Whether the full text of your conversations is retained is decided separately by the Conversation Audit lane.",
     "toggleLabel": "Compliance detection",
     "toggleLocked": "Vault locked — unlock before toggling",
@@ -2637,7 +2642,9 @@
       "advancedBadge": "ADVANCED",
       "basicDesc": "Basic — only explicitly prefixed passwords (password= / 密码：…) are masked; model-inferred hits are recorded but never rewritten. Admins can enforce Advanced org-wide.",
       "advancedDesc": "Advanced — model-inferred password hits are masked as well (full enforcement)."
-    }
+    },
+    "sentUnchangedHint": "This action does not rewrite content — the masking shown here is for the audit view only; the model received the original text.",
+    "sentUnchanged": "sent as-is"
   },
   "browserProfileGuide": {
     "title": "Use a separate browser profile per account",
@@ -2693,24 +2700,6 @@
     "copyFailed": "Copy failed. Select and copy the text manually.",
     "instructionsText": "Open {{officialURL}} in a browser where you are signed in to {{provider}}. Open Developer Tools, then Application (or Storage) > Cookies > {{cookieOrigin}}. Find the cookie named {{cookieName}} and copy only its Value into AiKey. Treat the value like a password; do not copy the entire Cookie header, put it in a URL, or share it."
   },
-  "sessionKeyHelp": {
-    "trigger": "How to get a Session Key",
-    "providerClaude": "Claude",
-    "providerChatGPT": "ChatGPT",
-    "intro": "Use a browser where you are already signed in to {{provider}}. This help only locates the cookie; token exchange still happens in the local AiKey service.",
-    "stepOpen": "Open the official {{provider}} website.",
-    "stepDevTools": "Open Developer Tools, then Application (or Storage) > Cookies > {{cookieOrigin}}.",
-    "stepCopyPrefix": "Find the cookie named",
-    "stepCopySuffix": "and copy only its Value into the field below.",
-    "security": "Treat the value like a password. Do not copy the entire Cookie header, put it in a URL, or share it.",
-    "openProvider": "Open {{provider}}",
-    "copyCookieName": "Copy cookie name",
-    "copyInstructions": "Copy instructions",
-    "cookieNameCopied": "Cookie name copied.",
-    "instructionsCopied": "Instructions copied.",
-    "copyFailed": "Copy failed. Select and copy the text manually.",
-    "instructionsText": "Open {{officialURL}} in a browser where you are signed in to {{provider}}. Open Developer Tools, then Application (or Storage) > Cookies > {{cookieOrigin}}. Find the cookie named {{cookieName}} and copy only its Value into AiKey. Treat the value like a password; do not copy the entire Cookie header, put it in a URL, or share it."
-  },
   "oauthContribute": {
     "pageTitle": "Team OAuth",
     "pageDescription": "Sign in to the team account you're routed to. Past accounts are kept for history.",
@@ -2727,6 +2716,7 @@
     "colPoolGroup": "Pool group",
     "clearPoolFilter": "Clear pool filter",
     "colLastLogin": "Last login",
+    "colTokenExpiry": "Token expiry",
     "colStatus": "Status",
     "empty": "No accounts yet.",
     "noRoutedAccount": "You are not currently routed to a pool account.",
@@ -2750,8 +2740,9 @@
     "sessionKeyConfirmLogin": "Confirm login",
     "sessionKeySigningIn": "Signing in…",
     "sessionKeySaving": "Account verified. Saving the token…",
-    "loginIdentityMismatchError": "This login belongs to {{actual}}, but the selected pool account is {{expected}}. No token was changed. Select the matching account or sign in with that account, then retry.",
     "sessionKeyIdentityUnknown": "an unidentified provider account",
+    "sessionKeyMismatchWarning": "This Session Key belongs to {{actual}}, not the selected pool account {{expected}}. Nothing has been saved. Confirm below to use it anyway — the token is bound to your seat only, and the pool account's registered identity is not changed.",
+    "sessionKeyConfirmMismatch": "Confirm cross-account sign-in",
     "sessionKeyRetrySave": "Retry save",
     "sessionKeyLoginSuccess": "✓ Login succeeded for {{identity}}. The OAuth token was saved to the account pool.",
     "sessionKeyHint": "Paste the active Claude web session key. This device exchanges it locally through the account's configured egress; no browser page opens.",
@@ -2771,6 +2762,7 @@
     "loginSyncPendingFallback": "local runtime sync has not completed",
     "resolving": "Resolving…",
     "confirmSubmit": "Confirm & submit",
+    "confirmSubmitMismatch": "Confirm sign-in for the other account",
     "submitting": "Submitting…",
     "cancel": "Cancel",
     "signedInMatch": "✓ Signed in as {{actual}} — confirm to save.",
@@ -2785,6 +2777,7 @@
       "logged_in": "Logged in",
       "needs_login": "Needs login",
       "auth_failed": "Sign in again",
+      "auth_failed_session_renewal": "Session Key exchange failed — sign in again",
       "revoked": "Revoked"
     },
     "addButton": "Enroll OAuth account",
@@ -2819,6 +2812,8 @@
     "colProvider": "Provider",
     "egressChip": "Egress",
     "egressChipHint": "This account reaches the upstream through an admin-configured dedicated egress line (its own exit IP).",
+    "routedChip": "Routed",
+    "routedChipHint": "Traffic from this pool goes to this account — this is the row to sign in on.",
     "egressSectionTitle": "Egress proxy & login-IP self-check",
     "loginSectionTitle": "Account sign-in",
     "egressLabel": "Egress",
@@ -2857,6 +2852,8 @@
     "exitIpTestFailed": "Exit-IP test failed",
     "egressGuideNote": "Login is initiated from THIS browser and leaves via the browser's exit. Configure this account's browser (a dedicated Chrome profile) to route through the egress above, so the login IP matches the account's inference IP — see the guide below. After changing the egress, ask an administrator to re-test the baseline.",
     "testBeforeLogin": "Test the exit IP before logging in",
+    "loginProbeFailedTitle": "Could not measure this browser's exit IP",
+    "loginProbeFailedBody": "The exit-IP check could not complete ({{detail}}), so AiKey cannot confirm this browser leaves through the same exit as the account. Sign-in is still possible; if the exit differs from the account's, the provider may flag the account. Ask your administrator to configure an exit-IP echo for this deployment to remove this warning.",
     "loginMismatchTitle": "Exit IP differs from baseline",
     "loginMismatchBody": "This browser's current exit IP ({{current}}) differs from the account baseline ({{baseline}}). Logging in now makes the account appear from a different IP than its inference traffic, which may trigger a ban. Continue logging in anyway?",
     "loginMismatchConfirm": "I understand the risk, log in anyway"
@@ -3094,5 +3091,12 @@
     "errUnauth": "Team session expired or revoked. Run `aikey login` again, then retry.",
     "errParse": "The team server answered in an unexpected format. Check the team server version.",
     "errUnreachable": "Team server unreachable. Check your connection to the team server (aikey status), then retry."
+  },
+  "tokenExpiry": {
+    "expired": "Expired",
+    "inMinutes": "{{count}} min left",
+    "inHours": "{{count}} h left",
+    "inDays": "{{count}} d left",
+    "absoluteHint": "Provider-signed token expires at {{at}}"
   }
 }

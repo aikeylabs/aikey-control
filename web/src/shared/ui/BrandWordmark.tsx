@@ -136,9 +136,12 @@ export function BrandMark({ size = 32, className = '' }: { size?: number; classN
         width: size,
         height: size,
         borderRadius: Math.round(size * 0.25),
-        background: 'var(--code-bg)',
-        border: '1.5px solid var(--primary)',
-        boxShadow: '0 0 10px rgba(var(--primary-rgb), 0.10), inset 0 1px 0 rgba(var(--lift-rgb), 0.04)',
+        // 🔴 Brand-chip tokens, NOT --code-bg/--primary. The chip is a brand
+        // surface, not a code surface; see the note in index.css. Dark resolves
+        // to the same values it always did.
+        background: 'var(--brand-chip-bg)',
+        border: '1.5px solid var(--brand-chip-border)',
+        boxShadow: 'var(--brand-chip-shadow)',
       }}
       aria-hidden="true"
     >
@@ -148,7 +151,7 @@ export function BrandMark({ size = 32, className = '' }: { size?: number; classN
         viewBox={BRAND_AK_VIEWBOX}
         style={{ display: 'block' }}
       >
-        <path d={BRAND_AK_PATH} fill="var(--primary)" />
+        <path d={BRAND_AK_PATH} fill="var(--brand-chip-fg)" />
       </svg>
     </div>
   );
@@ -194,24 +197,15 @@ export function BrandLockup({
       style={{ display: 'block' }}
     >
       <defs>
-        {/* Approximates the chip's CSS box-shadow halo (0 0 10px @10%).
-            🔴 --primary, not a hard-coded #facc15 (2026-09-07): the halo has to
-            follow the accent, and in light the accent is Tencent blue. A yellow
-            glow was being drawn around a blue chip. */}
+        {/* Approximates the chip's CSS box-shadow accent halo (0 0 10px @10%).
+            🔴 Must track --primary, not a literal: the chip's stroke below is
+            var(--primary), so a hardcoded #facc15 painted an AMBER halo around a
+            VIOLET chip once the light theme re-cut the accent (2026-09-05). */}
         <filter id="brand-chip-glow" x="-60%" y="-60%" width="220%" height="220%">
-          <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="var(--primary)" floodOpacity="0.25" />
+          <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="var(--brand-chip-border)" floodOpacity="0.25" />
         </filter>
       </defs>
-      {/* Chip box (favicon-aligned).
-          🔴 READS --brand-chip-* (2026-09-07). These tokens already existed and
-          already carried the right light values — `--brand-chip-bg:#0052d9`,
-          `--brand-chip-fg:#ffffff` — but nothing consumed them: the chip was
-          hard-wired to --code-bg + --primary, which are the DARK theme's
-          intent. The visible result in light was a dark navy chip with blue
-          letters on a white card, where the brand is meant to be a solid
-          Tencent-blue chip with a white AK — the same lockup the tray panel's
-          `.mark` already draws. A token with a correct value and no reader is
-          indistinguishable from a token nobody defined. */}
+      {/* Chip box: solid fill + accent outline + accent halo (favicon-aligned). */}
       <rect
         x="0.75"
         y="0.75"

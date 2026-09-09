@@ -60,3 +60,22 @@ export function ridesSharedFallback(account: {
     account.token_source === 'fallback'
   );
 }
+
+/** showsSessionRenewalLabel decides whether an auth_failed pool row renders the
+ * SPECIFIC "Session Key exchange failed" label instead of the generic
+ * "sign in again".
+ *
+ * Why a named predicate and not an inline condition: this is the one place the
+ * page departs from the generic re-login label, and the decision has two hard
+ * boundaries a hand-rolled `&&` keeps re-deriving wrong —
+ *   - it fires ONLY for the server-named `session_renewal_rejected` cause; every
+ *     other cause (refresh / usage-401 / give-up) and every older server that
+ *     sends no reason fall back to generic — we never guess a cause; and
+ *   - it is gated on `auth_failed`, so a `logged_in`/`revoked` row still
+ *     carrying a stale verdict in `status_reason` cannot trip the specific label.
+ *
+ * spec: R-oauth-token-mint-6.S5 成员看得出 auth_failed 的原因
+ */
+export function showsSessionRenewalLabel(status?: string, statusReason?: string): boolean {
+  return status === 'auth_failed' && statusReason === 'session_renewal_rejected';
+}

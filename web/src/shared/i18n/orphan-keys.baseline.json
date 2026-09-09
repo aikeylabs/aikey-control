@@ -188,6 +188,7 @@
     "oauthGroups.overview.band.ok",
     "oauthGroups.overview.band.reject",
     "oauthGroups.overview.band.warn",
+    "oauthGroups.status.deleted",
     "oauthGroups.tabs.accounts",
     "oauthGroups.tabs.comingSoon",
     "oauthGroups.tabs.egress",

@@ -89,24 +89,36 @@ export const VAULT_PAGE_SKIN_V1 = `
   --skin-edge: var(--skin-edge);
 }
 [data-theme='light'] .vault-page.vault-skin-v1 {
-  /* 🔴 WHITE — the vault table must match every other table in the console.
-     A first attempt set these to near-white GREYS, which re-created the grey
-     slab the light theme exists to avoid: because each is applied at its own
-     alpha over a white card, any non-white hue shows through as a tint. White
-     makes every one of them a no-op, and structure comes from --border, exactly
-     as it does on the master console's tables. */
+  /* 🔴 WHITE for the ROW family — the vault rows must match every other table in
+     the console. A first attempt set these to near-white GREYS, which re-created
+     the grey slab the light theme exists to avoid: because each is applied at
+     its own alpha over a white card, any non-white hue shows through as a tint.
+     White makes those a no-op, and row structure comes from --border, exactly as
+     it does on the master console's tables.
+
+     🔴 --skin-head is the ONE exception (2026-09-05, user: "the table column
+     header color can be deeper for all tables"). At white it was a no-op and the
+     vault's column headers read as flat as every other table's did. The value is
+     derived, not eyeballed: this skin applies it at alpha .32, and
+     rgb(171,182,205) at .32 over white lands on #e4e9f2 — the same band
+     --table-header paints everywhere else. The .2 and .48 steps of the same
+     ramp stay proportional (#eef0f5 / #d7dce7).
+     🔴 Change this and --table-header together, or the vault table stops
+     matching the console. */
   --skin-well: 255, 255, 255;
-  --skin-head: 255, 255, 255;
+  --skin-head: 171, 182, 205;
   --skin-row: 255, 255, 255;
   --skin-row-alt: 255, 255, 255;
   --skin-row-hi: 255, 255, 255;
-  --skin-edge: #e4e2de; /* theme-literal-ok: hairline, the only structure left */
+  /* Was #e4e2de — the WARM hairline left over from the orange cut, still sitting
+     in a now-cool palette. Re-derived from --border. */
+  --skin-edge: #e6e9ef; /* theme-literal-ok: hairline, the only structure left */
   --skin-field: 255, 255, 255; /* theme-literal-ok: fields are white in light */
 }
 /* ── Body atmosphere — amber radial glow + soft vertical gradient ── */
 .vault-page.vault-skin-v1 {
   background:
-    radial-gradient(circle at 78% -10%, rgba(250, 204, 21, 0.05), transparent 32rem),
+    radial-gradient(circle at 78% -10%, rgba(var(--primary-rgb), 0.05), transparent 32rem),
     linear-gradient(180deg, rgba(var(--lift-rgb), 0.012) 0%, transparent 42rem),
     var(--background);
 }
@@ -144,10 +156,10 @@ export const VAULT_PAGE_SKIN_V1 = `
   box-shadow: inset 0 1px 0 rgba(var(--lift-rgb), 0.035);
 }
 .vault-page.vault-skin-v1 .search-input:focus {
-  border-color: rgba(250, 204, 21, 0.5);
+  border-color: rgba(var(--primary-rgb), 0.5);
   box-shadow:
     inset 0 1px 0 rgba(var(--lift-rgb), 0.05),
-    0 0 0 2px rgba(250, 204, 21, 0.15);
+    0 0 0 2px rgba(var(--primary-rgb), 0.15);
 }
 
 /* ── Table thead: warmer dark band + softer bottom border ───────── */
@@ -221,13 +233,13 @@ export const VAULT_PAGE_SKIN_V1 = `
 .vault-page.vault-skin-v1 table.vault tbody tr.in-use {
   background: linear-gradient(
     90deg,
-    rgba(250, 204, 21, 0.075),
+    rgba(var(--primary-rgb), 0.075),
     transparent 34%
   );
-  box-shadow: inset 2px 0 0 0 rgba(250, 204, 21, 0.78);
+  box-shadow: inset 2px 0 0 0 rgba(var(--primary-rgb), 0.78);
 }
 .vault-page.vault-skin-v1 table.vault tbody tr.in-use:hover {
-  box-shadow: inset 2px 0 0 0 rgba(250, 204, 21, 0.92);
+  box-shadow: inset 2px 0 0 0 rgba(var(--primary-rgb), 0.92);
 }
 /* In-use identity recolor (green kind glyph + green alias) lives in the
    shared KEYS_PAGE_CSS — virtual-keys marks tr.in-use the same way

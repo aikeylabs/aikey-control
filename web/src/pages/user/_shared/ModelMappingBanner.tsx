@@ -64,7 +64,7 @@ export function ModelMappingBanner() {
         // gold gradient + primary inset rail, which we deliberately do NOT use.
         borderRadius: 4,
         border: '1px solid var(--border)',
-        background: 'var(--surface-warn, rgba(234, 179, 8, 0.08))',
+        background: 'var(--surface-warn, rgba(var(--btn-primary-border-rgb), 0.08))',
         color: 'var(--foreground)',
         fontSize: 12,
         fontFamily: 'var(--font-mono)',

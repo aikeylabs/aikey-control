@@ -3,58 +3,87 @@ import { describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-// 🔴 2026-09-07. The light theme defined --brand-chip-bg:#0052d9 and
-// --brand-chip-fg:#ffffff — the correct Tencent-blue lockup, the same one the
-// tray panel's `.mark` draws — and NOTHING READ THEM. BrandWordmark.tsx was
-// hard-wired to --code-bg and --primary, which encode the DARK theme's intent
-// (dark chip, amber glyph). In light that rendered a dark navy chip with blue
-// letters on a white card: not the brand, and not what any token said it
-// should be. Reported by the user as "this icon is not the tencent blue icon
-// we used as well."
+// 🔴 The brand chip must paint from --brand-chip-*, never from --code-bg /
+// --primary. Those two encode the DARK theme's intent (dark chip, amber glyph);
+// painting with them renders a dark navy chip with blue letters on a white card
+// once the light theme re-cuts the accent to Tencent blue.
 //
-// Why a fence and not just a fix: a token with a correct value and no reader is
-// indistinguishable, from inside the stylesheet, from a token nobody defined.
-// Grepping index.css finds --brand-chip-bg and says "handled". Only the
+// Why a fence and not just the fix: a token with a correct value and no reader
+// is indistinguishable, from inside index.css, from a token nobody defined.
+// Grepping the stylesheet finds --brand-chip-bg and says "handled". Only the
 // consumer side can tell you it is dead, and the consumer side is a different
-// file in a different language. That asymmetry is what let this sit.
+// file in a different language.
 //
-// 能红: change any of the three fills back to var(--primary) / var(--code-bg).
+// 🔴 TWO COMPONENTS DRAW A CHIP — BrandMark (a CSS-in-JS div) and BrandLockup
+// (an SVG). An earlier cut of this fence sliced ONE of them by comment text and
+// checked the tokens with `includes()` over the whole file. A drill proved that
+// vacuous: reverting BrandMark's glyph to var(--primary) left BrandLockup's
+// occurrence behind, `includes()` still found it, and the fence stayed GREEN on
+// a real regression. Both bodies are now checked separately, and the glyph rule
+// below is counted rather than searched, so one surviving correct call site
+// cannot cover for a broken one.
 const R = (p: string) => fs.readFileSync(path.resolve(process.cwd(), p), 'utf-8');
+const SRC = R('src/shared/ui/BrandWordmark.tsx');
+const CSS = R('src/index.css');
+
+/** Body of a top-level exported function, delimited structurally, not by prose. */
+function bodyOf(name: string): string {
+  const start = SRC.indexOf(`export function ${name}(`);
+  expect(start, `BrandWordmark.tsx no longer exports ${name} — re-anchor this fence`).toBeGreaterThan(-1);
+  const after = SRC.indexOf('\nexport ', start + 1);
+  return SRC.slice(start, after === -1 ? SRC.length : after);
+}
 
 describe('brand chip reads its own tokens', () => {
-  const SRC = R('src/shared/ui/BrandWordmark.tsx');
-  const CSS = R('src/index.css');
-
-  // Every --brand-chip-* the stylesheet defines must have a reader. Derived from
-  // the CSS rather than hand-listed: a token added to the palette and never
-  // wired is exactly the failure this exists to catch, and a hand-kept list
-  // would not have it.
   const defined = [...new Set([...CSS.matchAll(/--brand-chip-([a-z-]+)\s*:/g)].map((m) => m[1]))];
 
   it('defines the chip tokens in the stylesheet at all', () => {
     expect(defined).toEqual(expect.arrayContaining(['bg', 'fg', 'border']));
   });
 
-  for (const name of ['bg', 'fg', 'border']) {
-    it(`BrandWordmark consumes --brand-chip-${name}`, () => {
-      expect(
-        SRC.includes(`var(--brand-chip-${name})`),
-        `BrandWordmark.tsx never reads --brand-chip-${name}. The palette sets it per theme; ` +
-          `if the component paints with --primary or --code-bg instead, the chip silently ` +
-          `renders the DARK intent in the light theme.`,
-      ).toBe(true);
+  // Counted, not searched: every place the AK glyph is drawn must use the chip's
+  // foreground token. This is the assertion the previous cut got wrong.
+  it('paints EVERY AK glyph with --brand-chip-fg', () => {
+    const uses = SRC.match(/d=\{BRAND_AK_PATH\}/g) ?? [];
+    const correct = SRC.match(/d=\{BRAND_AK_PATH\}\s+fill="var\(--brand-chip-fg\)"/g) ?? [];
+    expect(uses.length, 'no BRAND_AK_PATH call sites found — re-anchor this fence').toBeGreaterThan(1);
+    expect(correct.length, `${uses.length} AK glyph(s) drawn but only ${correct.length} painted with ` +
+      `--brand-chip-fg. A second, correct call site does NOT cover for a broken one.`).toBe(uses.length);
+  });
+
+  for (const name of ['BrandMark', 'BrandLockup']) {
+    it(`${name} paints its chip from the brand tokens`, () => {
+      const body = bodyOf(name);
+      for (const t of ['--brand-chip-bg', '--brand-chip-border', '--brand-chip-fg']) {
+        expect(body.includes(`var(${t})`), `${name} never reads ${t}`).toBe(true);
+      }
+    });
+
+    it(`${name} does not paint its chip with the dark theme's tokens`, () => {
+      // Scoped to the lines that actually PAINT the chip, for two reasons the
+      // drills surfaced: --primary is legitimate in this file (the wordmark's
+      // i-dot sits on the page ground, not on the chip), and the recorded
+      // rationale comments NAME the forbidden token, so prose would trip its own
+      // fence — the same reason `lint-no-runtime-goos` excludes comments.
+      const body = stripComments(bodyOf(name));
+      const painting = body
+        .split('\n')
+        .filter((l) => /\b(background|border|boxShadow|fill|stroke|floodColor)\s*[:=]/.test(l))
+        .filter((l) => !/WORDMARK|TAGLINE/.test(l));
+      expect(painting.length, `found no chip-painting lines in ${name} — re-anchor this fence`).toBeGreaterThan(2);
+      for (const line of painting) {
+        for (const bad of ['var(--code-bg)', 'var(--primary)', 'var(--primary-rgb)', '#facc15']) {
+          expect(line.includes(bad), `${name} paints the chip with ${bad}:\n    ${line.trim()}\n` +
+            `The chip must use --brand-chip-* so it re-cuts with the theme.`).toBe(false);
+        }
+      }
     });
   }
-
-  it('does not paint the chip with the dark theme\'s tokens', () => {
-    const chip = SRC.slice(SRC.indexOf('Chip box'), SRC.indexOf('wordmark + accent i-dot'));
-    for (const token of ['var(--code-bg)', 'var(--primary)']) {
-      expect(
-        chip.includes(token),
-        `The chip block still paints with ${token}. Those encode the dark theme's intent ` +
-          `(dark chip, amber glyph); the light theme needs the blue-fill/white-glyph lockup ` +
-          `that --brand-chip-* already carries.`,
-      ).toBe(false);
-    }
-  });
 });
+
+/** Blank out // and /* *\/ comments, keeping newlines so slices stay aligned. */
+function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
+}

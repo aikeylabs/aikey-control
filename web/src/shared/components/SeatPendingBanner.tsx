@@ -109,7 +109,7 @@ const SEAT_PENDING_CSS = `
   padding: 10px 14px;
   border: 1px solid var(--border, #444);
   border-radius: 4px;
-  background: var(--surface-warn, rgba(234, 179, 8, 0.08));
+  background: var(--surface-warn, rgba(var(--btn-primary-border-rgb), 0.08));
   color: var(--text);
 }
 .seat-pending-content {

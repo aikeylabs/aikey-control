@@ -229,7 +229,7 @@ export function SwitchKeyModal({
       aria-modal="true"
       aria-labelledby="switch-key-title"
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'var(--overlay-sink)', backdropFilter: 'blur(2px)' }}
+      style={{ background: 'rgba(var(--scrim-rgb), 0.2)', backdropFilter: 'blur(2px)' }}
       onClick={onClose}
     >
       <div
@@ -250,7 +250,7 @@ export function SwitchKeyModal({
             className="text-base font-semibold font-mono"
             style={{ color: 'var(--foreground)' }}
           >
-            {t('apps.switchUpstreamKey')} — <span style={{ color: '#ca8a04' }}>{upstream}</span>
+            {t('apps.switchUpstreamKey')} — <span style={{ color: 'var(--primary-dim)' }}>{upstream}</span>
           </h2>
           <p
             className="text-[12px] mt-1"
@@ -286,12 +286,12 @@ export function SwitchKeyModal({
               className="rounded border p-4"
               style={{
                 background: 'var(--card)',
-                borderColor: '#facc15',
+                borderColor: 'var(--primary)',
               }}
             >
               <div
                 className="font-mono text-[12px] uppercase tracking-wider mb-2"
-                style={{ color: '#facc15' }}
+                style={{ color: 'var(--primary-text)' }}
               >
                 {t('apps.vaultLocked')}
               </div>
@@ -331,7 +331,7 @@ export function SwitchKeyModal({
                   disabled={!unlockPassword || unlockMut.isPending}
                   className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider disabled:opacity-50"
                   style={{
-                    background: '#facc15',
+                    background: 'var(--primary)',
                     color: 'var(--primary-foreground)',
                   }}
                 >
@@ -396,7 +396,7 @@ export function SwitchKeyModal({
                     className="flex items-start gap-3 rounded border p-3 cursor-pointer"
                     style={{
                       background: checked ? 'var(--secondary, #3f3f46)' : 'transparent',
-                      borderColor: checked ? '#ca8a04' : 'var(--border)',
+                      borderColor: checked ? 'var(--primary-dim)' : 'var(--border)',
                     }}
                   >
                     <input
@@ -405,7 +405,7 @@ export function SwitchKeyModal({
                       checked={checked}
                       onChange={() => setSelectedRef(c.ref)}
                       className="mt-0.5"
-                      style={{ accentColor: '#ca8a04' }}
+                      style={{ accentColor: 'var(--primary-dim)' }}
                     />
                     <div className="min-w-0 flex-1">
                       <div
@@ -479,7 +479,7 @@ export function SwitchKeyModal({
               title={vaultLocked ? t('apps.unlockVaultFirst') : undefined}
               className="rounded px-3 py-1.5 text-[12px] font-mono uppercase tracking-wider disabled:opacity-50"
               style={{
-                background: '#ca8a04',
+                background: 'var(--primary-dim)',
                 color: 'var(--primary-foreground, #18181b)',
               }}
             >

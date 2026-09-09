@@ -545,9 +545,9 @@ export default function UserAppDetailPage() {
           {rotateM.data ? (
             <div
               className="cap-surface mb-5 p-4"
-              style={{ borderColor: 'rgba(202, 138, 4, 0.5)' }}
+              style={{ borderColor: 'rgba(var(--primary-dim-rgb), 0.5)' }}
             >
-              <strong style={{ color: '#ca8a04' }}>{t('apps.newBearerIssued')}</strong>
+              <strong style={{ color: 'var(--primary-dim)' }}>{t('apps.newBearerIssued')}</strong>
               <p className="text-[12px] mt-1" style={{ color: 'var(--muted-foreground)' }}>
                 {t('apps.copyBlockRestart')}
               </p>
@@ -625,10 +625,10 @@ export default function UserAppDetailPage() {
                 <div className="cap-callout px-4 py-3 mb-3 flex items-start gap-3">
                   <Info
                     size={17}
-                    style={{ color: '#ca8a04', marginTop: 2, flexShrink: 0 }}
+                    style={{ color: 'var(--primary-dim)', marginTop: 2, flexShrink: 0 }}
                   />
                   <p className="m-0 text-sm leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
-                    <strong style={{ color: '#ca8a04' }}>
+                    <strong style={{ color: 'var(--primary-dim)' }}>
                       {t('apps.followsDefaultKey')}
                     </strong>{' '}
                     {t('apps.followsDefaultKeyPre')}{' '}
@@ -676,7 +676,7 @@ export default function UserAppDetailPage() {
                           <div
                             className="font-bold"
                             style={{
-                              color: '#ca8a04',
+                              color: 'var(--primary-dim)',
                               fontFamily: 'var(--font-mono)',
                             }}
                           >
@@ -1222,7 +1222,7 @@ export default function UserAppDetailPage() {
                           background:
                             copiedBaseUrl === row.sdk
                               ? 'var(--success, #16a34a)'
-                              : '#ca8a04',
+                              : 'var(--primary-dim)',
                           color: 'var(--primary-foreground, #18181b)',
                         }}
                       >
@@ -1346,7 +1346,7 @@ export default function UserAppDetailPage() {
                                 }}
                                 className="rounded px-2 py-1 text-[11px] font-mono uppercase tracking-wider disabled:opacity-50"
                                 style={{
-                                  background: copiedToken ? 'var(--success, #16a34a)' : '#ca8a04',
+                                  background: copiedToken ? 'var(--success, #16a34a)' : 'var(--primary-dim)',
                                   color: 'var(--primary-foreground, #18181b)',
                                 }}
                               >

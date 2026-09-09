@@ -150,7 +150,7 @@ export default function PendingKeysPage() {
             <thead>
               <tr>
                 {['Alias', 'Provider', 'Expires', 'Actions'].map((h) => (
-                  <th key={h} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'rgba(var(--sink-rgb), 0.2)', borderBottom: '1px solid var(--border)' }}>{h}</th>
+                  <th key={h} className="px-5 py-3 text-[10px] font-mono tracking-wider" style={{ color: 'var(--muted-foreground)', backgroundColor: 'var(--table-header)', borderBottom: '1px solid var(--border)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -164,7 +164,7 @@ export default function PendingKeysPage() {
               ) : (
                 keys.map((k) => (
                   <tr key={k.virtual_key_id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td className="px-5 py-3 text-sm font-mono font-bold" style={{ color: 'var(--foreground)' }}>{k.alias}</td>
+                    <td className="px-5 py-3 text-xs font-mono font-bold" style={{ color: 'var(--foreground)' }}>{k.alias}</td>
                     <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{k.provider_code || '—'}</td>
                     <td className="px-5 py-3 text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>
                       {k.expires_at ? formatDate(k.expires_at) : 'Never'}

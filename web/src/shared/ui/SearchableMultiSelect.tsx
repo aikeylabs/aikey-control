@@ -145,7 +145,7 @@ export function SearchableMultiSelect({
         style={{
           backgroundColor: 'var(--card)',
           borderColor: open ? 'var(--primary)' : 'var(--border)',
-          boxShadow: open ? '0 0 0 2px rgba(250,204,21,0.15)' : undefined,
+          boxShadow: open ? '0 0 0 2px rgba(var(--primary-rgb), 0.15)' : undefined,
           opacity: disabled ? 0.5 : 1,
           cursor: disabled ? 'not-allowed' : 'text',
           fontFamily: 'var(--font-mono, ui-monospace, monospace)',
@@ -157,9 +157,9 @@ export function SearchableMultiSelect({
             className="inline-flex items-center gap-1 rounded"
             style={{
               padding: '2px 4px 2px 8px',
-              background: 'rgba(250,204,21,0.1)',
+              background: 'rgba(var(--primary-rgb), 0.1)',
               color: 'var(--primary-text)',
-              border: '1px solid rgba(250,204,21,0.35)',
+              border: '1px solid rgba(var(--primary-rgb), 0.35)',
               fontSize: 11,
               letterSpacing: '0.04em',
             }}

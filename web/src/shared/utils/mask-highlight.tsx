@@ -257,7 +257,7 @@ export function renderMaskedSnippet(text: string, focus?: SnippetFocus | null): 
         className="font-bold"
         style={{
           color: 'var(--primary-dim)',
-          backgroundColor: 'rgba(202,138,4,0.08)',
+          backgroundColor: 'rgba(var(--primary-dim-rgb), 0.08)',
           borderRadius: 2,
           padding: '0 2px',
         }}

@@ -37,6 +37,7 @@ import { derivePasswordTier } from './password-tier-state';
 import { appsApi } from '@/shared/api/user/apps';
 import { Badge } from '@/shared/ui/Badge';
 import { PageHeader } from '@/shared/ui/PageHeader';
+import { InfoHint } from '@/shared/ui/InfoHint';
 import { Pagination, useStoredPageSize } from '@/shared/ui/Pagination';
 import { formatDateTime } from '@/shared/utils/datetime-intl';
 // Mask-token highlighting is shared with the master audit + triage drawers —
@@ -53,6 +54,10 @@ import { engineLoadBadge, engineLoadStateIsUnreadable } from './engine-load-stat
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterTokenBar, type FilterToken, type FilterTokenDimension } from '@/shared/ui/FilterTokenBar';
 import { complianceEntityTypeOptions } from '@/shared/compliance/entity-types';
+// "Did the model actually receive the original?" — one home for that fact,
+// because it is re-derived on every page that renders compliance events
+// (bugfix 2026-09-04-warn-rows-look-masked).
+import { sentUnchanged } from '@/shared/compliance/action-mutation';
 import { PageQueryErrors } from '@/shared/components/PageQueryErrors';
 import {
   COMPLIANCE_ACTION_SUMMARY_ACTIONS,
@@ -141,7 +146,28 @@ export interface ComplianceViewSource {
   /** undefined = org-enforced read-only (team member can't toggle org compliance). */
   filterControl?: ComplianceFilterControl;
   titleKey: string;
+  /**
+   * The FULL page description. For the local lane this is a privacy DISCLOSURE
+   * whose exact content is mandated by `shared/i18n/privacy-claim-scope.test.ts`
+   * (2026-08-11): it must state that the snippet IS uploaded on Team/Cluster,
+   * that a fresh install already permits it, that the destination is the org's
+   * own server, and that conversation audit is a separate lane. It is long by
+   * requirement, not by accident — do not shorten it to fix a layout.
+   */
   descriptionKey: string;
+  /**
+   * Optional one-line headline shown in the header INSTEAD of `descriptionKey`
+   * (2026-09-04, user request "顶部文案简化到一行以内"). When set, the full
+   * `descriptionKey` text moves into an InfoHint beside the title — it is still
+   * rendered, one interaction away, never dropped. Omit it and the full text
+   * stays in the header exactly as before.
+   *
+   * 🔴 The disclosure must remain REACHABLE on the page. privacy-claim-scope
+   * only checks the i18n CATALOG, so deleting the hint would leave that fence
+   * green while the notice silently disappeared — `disclosure-reachable.test.ts`
+   * is the fence that covers the render side.
+   */
+  descriptionShortKey?: string;
   /**
    * i18n key for the note rendered in place of the eye when a finding carries no
    * un-redacted original text. REQUIRED (not defaulted) because the REASON is
@@ -264,13 +290,35 @@ const LOCAL_SOURCE: ComplianceViewSource = {
   },
   titleKey: 'compliancePage.pageTitle',
   descriptionKey: 'compliancePage.pageDescription',
+  descriptionShortKey: 'compliancePage.pageDescriptionShort',
   // Local lane: raw text is normally kept on this box, so an absence really is
   // "recorded before the reveal decision / by an older detector" and upgrading
   // the detector really does fix it.
   originalUnavailableKey: 'compliancePage.originalUnavailable',
 };
 
-export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { source?: ComplianceViewSource } = {}) {
+/**
+ * The LOCAL lane's "no original text" note key, DERIVED from LOCAL_SOURCE —
+ * exported (2026-09-03) so the team wrapper's this-machine scope can point at
+ * the local lane's own key without re-typing the literal. Two fences shape
+ * this: snippet-reveal.test.ts R3 (the literal must appear exactly once in
+ * this file, inside LOCAL_SOURCE) and the master repo's
+ * team-lane-original-note.test.ts (the wrapper must not carry the literal at
+ * all — a literal there is how the 2026-08-10 wrong-lane note happened).
+ */
+export const LOCAL_ORIGINAL_UNAVAILABLE_KEY: string = LOCAL_SOURCE.originalUnavailableKey;
+
+/**
+ * `headerExtra` (2026-09-03): an optional node rendered at the head of the
+ * page-header actions, BEFORE the detection switch. The team wrapper uses it
+ * for a team / this-machine scope switch — the gateway-forwarded team page
+ * reads master's member endpoint, while events from personal / custom-provider
+ * routes live only in the local store, so without a switch those records had
+ * no UI at all (winpc2 report 2026-09-03, "compliance page shows nothing" while
+ * the local API held 9 mask events). A prop rather than a source field because
+ * it is presentation the wrapper owns, not data the page reads.
+ */
+export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerExtra }: { source?: ComplianceViewSource; headerExtra?: ReactNode } = {}) {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selected, setSelected] = useState<ComplianceEventDTO | null>(null);
@@ -390,7 +438,13 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   }
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['compliance-self', { severity, category, action, entityType, offset, pageSize }],
+    // source.titleKey in the key (2026-09-03): the team wrapper now SWAPS the
+    // injected source (team server / this machine) at runtime. Without a
+    // source discriminator the key is identical across the swap, and
+    // react-query would keep serving the other ledger's cached page instead of
+    // refetching — a silent wrong-ledger view, the exact confusion the switch
+    // exists to end. titleKey is distinct per source and already on the object.
+    queryKey: ['compliance-self', source.titleKey, { severity, category, action, entityType, offset, pageSize }],
     queryFn: () => source.listEvents({
       severity: severity || undefined,
       category: category || undefined,
@@ -407,7 +461,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
   // Effective packs (built-in + server-distributed) — lazily fetched when the
   // drawer opens. Relayed local-server → proxy → live detector IPC.
   const packsQuery = useQuery({
-    queryKey: ['compliance-packs'],
+    queryKey: ['compliance-packs', source.titleKey],
     queryFn: () => source.getEffectivePacks(),
     enabled: packsOpen,
   });
@@ -497,9 +551,17 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
     <div className="p-6 space-y-5">
       <PageHeader
         title={t(source.titleKey)}
-        description={t(source.descriptionKey)}
+        description={t(source.descriptionShortKey ?? source.descriptionKey)}
+        titleHint={
+          source.descriptionShortKey ? (
+            <InfoHint label={t(source.titleKey)} testId="compliance-disclosure">
+              {t(source.descriptionKey)}
+            </InfoHint>
+          ) : undefined
+        }
         actions={
           <div className="flex items-center gap-3">
+            {headerExtra}
             {/* Feature master switch — distinct from the pack-level info (layered:
                 whole-detection on/off here, which packs are effective in the drawer). */}
             {filterState.kind === 'ready' && (
@@ -560,7 +622,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
             )}
             <button
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs font-mono transition-colors"
-              style={{ borderColor: 'rgba(250,204,21,0.35)', color: 'var(--primary-text)', backgroundColor: 'rgba(250,204,21,0.06)' }}
+              style={{ borderColor: 'rgba(var(--primary-rgb), 0.35)', color: 'var(--primary-text)', backgroundColor: 'rgba(var(--primary-rgb), 0.06)' }}
               onClick={() => setPacksOpen(true)}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -626,7 +688,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
               </span>
             ))}
           </div>
-          <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full border shrink-0" style={{ color: 'var(--primary-text)', borderColor: 'rgba(250,204,21,0.35)', backgroundColor: 'rgba(250,204,21,0.06)' }}>
+          <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full border shrink-0" style={{ color: 'var(--primary-text)', borderColor: 'rgba(var(--primary-rgb), 0.35)', backgroundColor: 'rgba(var(--primary-rgb), 0.06)' }}>
             {t('compliancePage.recordCount', { count: total })}
           </span>
         </div>
@@ -649,7 +711,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                   'compliancePage.columnPreview',
                   'compliancePage.columnModel',
                 ].map((k) => (
-                  <th key={k} className="px-4 py-3 text-[10px] font-mono font-semibold tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(var(--sink-rgb), 0.35)', position: 'sticky', top: 0, zIndex: 1 }}>
+                  <th key={k} className="px-4 py-3 text-[10px] font-mono tracking-wider uppercase" style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--table-header-sticky)', position: 'sticky', top: 0, zIndex: 1 }}>
                     {t(k)}
                   </th>
                 ))}
@@ -664,7 +726,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                 <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.noEvents')}</td></tr>
               ) : (
                 events.map((e) => (
-                  <tr key={e.event_id} className="cursor-pointer transition-colors hover:bg-[rgba(250,204,21,0.045)]" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => openEvent(e)}>
+                  <tr key={e.event_id} className="cursor-pointer transition-colors hover:bg-[rgba(var(--primary-rgb), 0.045)]" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => openEvent(e)}>
                     <td className="px-4 py-3.5 text-xs font-mono" style={{ color: 'var(--foreground)' }}>{fmtTime(e.created_at)}</td>
                     <td className="px-4 py-3.5"><Badge variant={actionVariant(e.action_taken)}>{e.action_taken.toUpperCase()}</Badge></td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
@@ -688,8 +750,22 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                         // in the drawer.
                         const snip = (f0?.redacted_snippet || '').replace(/\s+/g, ' ').trim();
                         return snip ? (
-                          <div className="text-[11px] font-mono truncate" style={{ color: 'var(--muted-foreground)' }}>
-                            {renderMaskedSnippet(snip)}
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="text-[11px] font-mono truncate" style={{ color: 'var(--muted-foreground)' }}>
+                              {renderMaskedSnippet(snip)}
+                            </div>
+                            {/* See SENT_UNCHANGED: without this the masked FORM above
+                                reads as "the model got the masked text", which is false
+                                for every non-mask action. */}
+                            {sentUnchanged(e.action_taken) && (
+                              <span
+                                title={t('compliancePage.sentUnchangedHint')}
+                                className="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap"
+                                style={{ backgroundColor: 'rgba(var(--lift-rgb), 0.05)', color: 'var(--muted-foreground)' }}
+                              >
+                                {t('compliancePage.sentUnchanged')}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)', opacity: 0.4 }}>—</span>
@@ -728,7 +804,19 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
           <div>
             <DrawerField label={t('compliancePage.fieldEventId')} value={<span className="break-all text-[11px]">{selected.event_id}</span>} />
             <DrawerField label={t('compliancePage.columnTime')} value={formatDateTime(selected.created_at)} />
-            <DrawerField label={t('compliancePage.columnAction')} value={<Badge variant={actionVariant(selected.action_taken)}>{selected.action_taken.toUpperCase()}</Badge>} />
+            <DrawerField label={t('compliancePage.columnAction')} value={
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant={actionVariant(selected.action_taken)}>{selected.action_taken.toUpperCase()}</Badge>
+                {/* Same reason as the list column (see SENT_UNCHANGED): the
+                    per-finding snippets below are masked for display even when
+                    nothing was rewritten on the wire. */}
+                {sentUnchanged(selected.action_taken) && (
+                  <span className="text-[10px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                    {t('compliancePage.sentUnchangedHint')}
+                  </span>
+                )}
+              </div>
+            } />
             <DrawerField label={t('compliancePage.columnModel')} value={selected.target_model || '—'} />
             <DrawerField label={t('compliancePage.fieldPromptLength')} value={selected.prompt_length} />
             {selected.detect_latency_ms != null && (
@@ -811,7 +899,7 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE }: { sour
                     {/* sequence badge — overhangs the card's top-left corner (出框) */}
                     <span
                       className="inline-flex items-center justify-center text-[10px] font-mono font-bold rounded-full shrink-0"
-                      style={{ position: 'absolute', top: -9, left: -9, width: 20, height: 20, color: 'var(--primary-dim)', border: '1px solid rgba(202,138,4,0.5)', backgroundColor: 'var(--card)', zIndex: 1 }}
+                      style={{ position: 'absolute', top: -9, left: -9, width: 20, height: 20, color: 'var(--primary-dim)', border: '1px solid rgba(var(--primary-dim-rgb), 0.5)', backgroundColor: 'var(--card)', zIndex: 1 }}
                     >{idx + 1}</span>
                     <div className="flex items-center gap-2 mb-1.5">
                       <Badge variant={severityVariant(f.severity)}>{f.severity.toUpperCase()}</Badge>

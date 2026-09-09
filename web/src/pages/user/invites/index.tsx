@@ -114,7 +114,7 @@ export default function UserInvitesPage() {
       >
         <div
           className="absolute top-0 left-0 w-1 h-full"
-          style={{ backgroundColor: 'var(--primary-dim)', boxShadow: '0 0 10px rgba(202, 138, 4, 0.5)' }}
+          style={{ backgroundColor: 'var(--primary-dim)', boxShadow: '0 0 10px rgba(var(--primary-dim-rgb), 0.5)' }}
         />
         <h2 className="text-xs font-mono font-bold tracking-wider uppercase mb-3" style={{ color: 'var(--muted-foreground)' }}>
           {t('invites.generateHeading')}
@@ -138,7 +138,7 @@ export default function UserInvitesPage() {
             // Run checks button, and the left-rail accent above on this
             // same card. Bright --primary reserved for hover/active.
             color: 'var(--primary-dim)',
-            borderColor: 'rgba(202, 138, 4, 0.4)',
+            borderColor: 'rgba(var(--primary-dim-rgb), 0.4)',
             opacity: generating ? 0.6 : 1,
           }}
         >
@@ -182,9 +182,9 @@ export default function UserInvitesPage() {
             <div
               className="rounded border p-3 text-xs font-mono"
               style={{
-                color: '#facc15',
-                borderColor: 'rgba(250,204,21,0.4)',
-                backgroundColor: 'rgba(250,204,21,0.05)',
+                color: 'var(--primary-text)',
+                borderColor: 'rgba(var(--primary-rgb), 0.4)',
+                backgroundColor: 'rgba(var(--primary-rgb), 0.05)',
                 lineHeight: 1.6,
               }}
             >

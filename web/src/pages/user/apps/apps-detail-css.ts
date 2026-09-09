@@ -14,7 +14,7 @@
 
 export const APPS_DETAIL_CSS = `
 .connected-app-page {
-  --cap-token-bar:    #ca8a04;  /* dark amber, matches usage-ledger token bars */
+  --cap-token-bar:    var(--primary-dim);  /* dark amber, matches usage-ledger token bars */
   --cap-request-line: var(--faint-foreground);  /* zinc-500, muted secondary signal */
 }
 
@@ -61,7 +61,7 @@ export const APPS_DETAIL_CSS = `
   border-radius: 8px;
   background: var(--secondary);
   border: 1px solid var(--border);
-  color: #ca8a04;
+  color: var(--primary-dim);
 }
 
 .connected-app-page .cap-chip {
@@ -72,9 +72,9 @@ export const APPS_DETAIL_CSS = `
   font-family: var(--font-mono);
 }
 .connected-app-page .cap-chip-active {
-  background: rgba(202, 138, 4, 0.12);
-  border-color: rgba(202, 138, 4, 0.5);
-  color: #ca8a04;
+  background: rgba(var(--primary-dim-rgb), 0.12);
+  border-color: rgba(var(--primary-dim-rgb), 0.5);
+  color: var(--primary-dim);
 }
 
 .connected-app-page .cap-btn {
@@ -97,8 +97,8 @@ export const APPS_DETAIL_CSS = `
 }
 
 .connected-app-page .cap-btn-primary {
-  background: #ca8a04;
-  border: 1px solid #ca8a04;
+  background: var(--primary-dim);
+  border: 1px solid var(--primary-dim);
   color: var(--primary-foreground);
 }
 .connected-app-page .cap-btn-secondary {
@@ -134,8 +134,8 @@ export const APPS_DETAIL_CSS = `
 /* ── Callout (follow-user-active) ─────────────────────────────────── */
 
 .connected-app-page .cap-callout {
-  background: rgba(202, 138, 4, 0.07);
-  border: 1px solid rgba(202, 138, 4, 0.32);
+  background: rgba(var(--primary-dim-rgb), 0.07);
+  border: 1px solid rgba(var(--primary-dim-rgb), 0.32);
   border-radius: 6px;
 }
 
@@ -233,7 +233,7 @@ export const APPS_DETAIL_CSS = `
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #ca8a04;
+  background: var(--primary-dim);
 }
 
 /* ── Audit placeholder ────────────────────────────────────────────── */

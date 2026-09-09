@@ -64,6 +64,16 @@ describe('friendlyTestError matching order', () => {
     expect(out.title).toBe('Cluster node not ready');
   });
 
+  it('PROBE_UPSTREAM_UNRESOLVED names the proxy, not the network (2026-09-05)', () => {
+    const r = friendlyTestError({
+      code: 'PROBE_UPSTREAM_UNRESOLVED',
+      message: 'aikey-proxy could not resolve the upstream address for \'x\'',
+    });
+    expect(r.title).toBe('Proxy could not resolve this key');
+    expect(r.detail).not.toMatch(/network|internet/i);
+    expect(String(r.action)).toContain('aikey use');
+  });
+
   it('I_CREDENTIAL_NOT_FOUND wins over httpStatus 500', () => {
     // The credential was deleted between click and probe. Server may
     // wrap this in a 500 (it currently maps to 404, but pin the UI

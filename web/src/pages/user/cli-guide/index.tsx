@@ -56,7 +56,7 @@ const PALETTE = {
 } as const;
 
 const BG_ATMOSPHERE =
-  `radial-gradient(circle at 78% -10%, rgba(250, 204, 21, 0.05), transparent 32rem), ` +
+  `radial-gradient(circle at 78% -10%, rgba(var(--primary-rgb), 0.05), transparent 32rem), ` +
   `linear-gradient(180deg, rgba(var(--lift-rgb), 0.012) 0%, transparent 42rem), ` +
   PALETTE.bg;
 
@@ -516,8 +516,8 @@ export default function CLIGuidePage() {
                 style={{
                   ...subCard,
                   position: 'relative',
-                  border: '1px solid rgba(250, 204, 21, 0.45)',
-                  boxShadow: `${SUB_CARD_LIFT}, 0 0 18px rgba(250, 204, 21, 0.05)`,
+                  border: '1px solid rgba(var(--primary-rgb), 0.45)',
+                  boxShadow: `${SUB_CARD_LIFT}, 0 0 18px rgba(var(--primary-rgb), 0.05)`,
                 }}
               >
                 <span
@@ -552,9 +552,9 @@ export default function CLIGuidePage() {
             <div
               style={{
                 marginTop: 14, padding: '10px 12px',
-                border: '1px solid rgba(245, 158, 11, 0.28)', borderRadius: 7,
-                background: 'rgba(245, 158, 11, 0.08)',
-                boxShadow: 'inset 3px 0 0 rgba(245, 158, 11, 0.6)',
+                border: '1px solid rgba(var(--caution-rgb), 0.28)', borderRadius: 7,
+                background: 'rgba(var(--caution-rgb), 0.08)',
+                boxShadow: 'inset 3px 0 0 rgba(var(--caution-rgb), 0.6)',
                 color: PALETTE.text, fontSize: 12, lineHeight: 1.55,
               }}
             >
@@ -618,10 +618,10 @@ export default function CLIGuidePage() {
           style={{
             marginTop: 14,
             padding: '10px 12px',
-            border: '1px solid rgba(245, 158, 11, 0.28)',
+            border: '1px solid rgba(var(--caution-rgb), 0.28)',
             borderRadius: 7,
-            background: 'rgba(245, 158, 11, 0.08)',
-            boxShadow: 'inset 3px 0 0 rgba(245, 158, 11, 0.6)',
+            background: 'rgba(var(--caution-rgb), 0.08)',
+            boxShadow: 'inset 3px 0 0 rgba(var(--caution-rgb), 0.6)',
             color: PALETTE.text,
             fontSize: 12,
             lineHeight: 1.55,

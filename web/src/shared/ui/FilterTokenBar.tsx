@@ -506,7 +506,7 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder, size
                       style={{
                         height: spec.rowHeight,
                         color: active ? 'var(--primary)' : 'var(--muted-foreground)',
-                        backgroundColor: active ? 'rgba(250,204,21,0.08)' : 'transparent',
+                        backgroundColor: active ? 'rgba(var(--primary-rgb), 0.08)' : 'transparent',
                       }}
                       // Hover previews only in pure browse mode: once a
                       // dimension is explicitly picked, moving the mouse over
@@ -561,7 +561,7 @@ export function FilterTokenBar({ dimensions, tokens, onChange, placeholder, size
                       style={{
                         height: spec.rowHeight,
                         color: s.kind === 'dim' ? 'var(--foreground)' : 'var(--soft-foreground)',
-                        backgroundColor: i === highlight ? 'rgba(250,204,21,0.08)' : 'transparent',
+                        backgroundColor: i === highlight ? 'rgba(var(--primary-rgb), 0.08)' : 'transparent',
                       }}
                       title={s.label}
                       onMouseEnter={() => setHighlight(i)}

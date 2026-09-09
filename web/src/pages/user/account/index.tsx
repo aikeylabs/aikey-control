@@ -404,13 +404,13 @@ function chipColors(color: string) {
         ? 'rgba(var(--success-rgb), 0.08)'
         : color === '#f87171'
           ? 'rgba(var(--destructive-rgb), 0.08)'
-          : 'rgba(250, 204, 21,0.08)',
+          : 'rgba(var(--primary-rgb), 0.08)',
     borderColor:
       color === '#4ade80'
         ? 'rgba(var(--success-rgb), 0.3)'
         : color === '#f87171'
           ? 'rgba(var(--destructive-rgb), 0.3)'
-          : 'rgba(250, 204, 21,0.3)',
+          : 'rgba(var(--primary-rgb), 0.3)',
   };
 }
 
@@ -487,8 +487,8 @@ const ACCOUNT_CSS = `
      (#facc15) — matches the in-use indicator + chart accents + bulk
      import buttons elsewhere in the app, keeping the bright yellow
      reserved for interactive chrome (buttons / focus rings). */
-  background: #ca8a04;
-  box-shadow: 0 0 10px rgba(202, 138, 4, 0.45);
+  background: var(--primary-dim);
+  box-shadow: 0 0 10px rgba(var(--primary-dim-rgb), 0.45);
 }
 .account-page .card-header {
   display: flex; align-items: center; justify-content: space-between;

@@ -86,6 +86,10 @@ const SUGGESTIONS: Record<string, string> = {
   BIZ_CRED_NOT_FOUND: 'The credential was not found. It may have been deleted from Provider Accounts.',
   BIZ_CRED_INACTIVE:  'This credential is not active. Go to Provider Accounts and rotate or replace it.',
   BIZ_CRED_HAS_ACTIVE_REFS: 'Migrate its active channels to another credential (Migrate action), or remove the account from its OAuth account pool, then delete again.',
+  // update 20260905 (账号池/访问令牌 删除·回收站): "delete requires unbind first".
+  BIZ_OAUTH_GROUP_HAS_ACTIVE_REFS: 'Remove the attached accounts and unbind the seats / access tokens from this pool (Edit pool → Accounts / Seats), then delete again.',
+  BIZ_OAUTH_GROUP_DELETED: 'This pool is in the recycle bin and accepts no changes. Use or create another pool.',
+  BIZ_ACCESS_TOKEN_HAS_ACTIVE_REFS: 'Unbind this access token from its account pool first (Account pools → Edit pool → Seats), then delete again.',
 
   // BIZ — Provider
   BIZ_PROV_NOT_FOUND: 'The provider was not found. It may have been removed.',
@@ -236,6 +240,9 @@ const LABELS: Record<string, string> = {
   BIZ_CRED_NOT_FOUND:  'Credential Not Found',
   BIZ_CRED_INACTIVE:   'Credential Inactive',
   BIZ_CRED_HAS_ACTIVE_REFS: 'Still In Use',
+  BIZ_OAUTH_GROUP_HAS_ACTIVE_REFS: 'Pool Still In Use',
+  BIZ_OAUTH_GROUP_DELETED: 'Pool Deleted',
+  BIZ_ACCESS_TOKEN_HAS_ACTIVE_REFS: 'Token Still Bound',
   BIZ_PROV_NOT_FOUND:  'Provider Not Found',
 
   // DATA

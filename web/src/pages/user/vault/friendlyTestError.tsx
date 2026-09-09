@@ -99,6 +99,26 @@ export function friendlyTestError(
       ),
     };
   }
+  if (code === 'PROBE_UPSTREAM_UNRESOLVED') {
+    // 2026-09-05: aikey-proxy refused the ping because it could not
+    // resolve WHICH upstream this credential talks to (alias unknown to
+    // the proxy's vault view). Before this branch the code fell through
+    // to the generic network wording, sending users to check their
+    // connection for what is a proxy-side wiring / version problem.
+    // Bugfix: 2026-09-05-add-key-dialog-draft-probe-sends-unresolvable-
+    // source-ref.md.
+    return {
+      title: tr('vault.errProbeUnresolvedTitle', 'Proxy could not resolve this key'),
+      detail: tr(
+        'vault.errProbeUnresolvedDetail',
+        "aikey-proxy does not know which upstream this key talks to — the alias is missing from the proxy's vault view (not yet loaded, renamed, or the proxy is an older build).",
+      ),
+      action: tr(
+        'vault.errProbeUnresolvedAction',
+        'Run `aikey use <alias>` or `aikey service restart proxy`, then test again. If it keeps failing, upgrade aikey-proxy.',
+      ),
+    };
+  }
   if (code === 'I_CREDENTIAL_NOT_FOUND') {
     return {
       title: tr('vault.errCredNotFoundTitle', 'Key not found'),

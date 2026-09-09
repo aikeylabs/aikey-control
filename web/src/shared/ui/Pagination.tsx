@@ -143,7 +143,7 @@ export function Pagination({ onPage, onPageSize, ...input }: PaginationProps) {
                 style={{
                   borderColor: input.page === p ? 'var(--primary)' : 'var(--border)',
                   color: input.page === p ? 'var(--primary)' : 'var(--muted-foreground)',
-                  backgroundColor: input.page === p ? 'rgba(250,204,21,0.08)' : 'transparent',
+                  backgroundColor: input.page === p ? 'rgba(var(--primary-rgb), 0.08)' : 'transparent',
                 }}
               >
                 {p}

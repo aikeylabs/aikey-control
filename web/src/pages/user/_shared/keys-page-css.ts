@@ -13,7 +13,7 @@ export const KEYS_PAGE_CSS = `
      the CSS parser, which previously left .card background transparent
      and the "All keys" header reading near-black. */
   .vault-page {
-  --chart-anthropic: #ca8a04;
+  --chart-anthropic: var(--primary-dim);
   --chart-kimi:      #38bdf8;
   --chart-openai:    #a78bfa;
   --chart-codex:     #22d3ee;
@@ -40,9 +40,9 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page .btn-primary {
   background: var(--primary); color: var(--primary-foreground);
-  border-color: rgba(250, 204, 21, 0.55);
+  border-color: rgba(var(--primary-rgb), 0.55);
 }
-.vault-page .btn-primary:hover:not(:disabled) { background: #fde047; }
+.vault-page .btn-primary:hover:not(:disabled) { background: var(--link-hover); }
 .vault-page .btn-outline {
   background: var(--surface-1); color: var(--foreground);
   border-color: var(--border);
@@ -416,12 +416,12 @@ export const KEYS_PAGE_CSS = `
    unlock flow. Avoids the orange/warning look we had before — orange
    implies error, but "locked" is simply a gated state, not a failure. */
 .vault-page .unlock-banner.locked {
-  background: linear-gradient(90deg, rgba(250, 204, 21,0.08) 0%, rgba(250, 204, 21,0.02) 100%);
-  border: 1px solid rgba(250, 204, 21,0.35);
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.08) 0%, rgba(var(--primary-rgb), 0.02) 100%);
+  border: 1px solid rgba(var(--primary-rgb), 0.35);
   box-shadow: inset 3px 0 0 0 var(--primary);
 }
 .vault-page .unlock-banner.locked .dot {
-  background: var(--primary); box-shadow: 0 0 6px rgba(250, 204, 21,0.6);
+  background: var(--primary); box-shadow: 0 0 6px rgba(var(--primary-rgb), 0.6);
 }
 
 /* ---- Inputs ------------------------------------------------ */
@@ -439,7 +439,7 @@ export const KEYS_PAGE_CSS = `
 .vault-page .search-input:focus {
   outline: none;
   border-color: var(--primary-text);
-  box-shadow: 0 0 0 2px rgba(250, 204, 21,0.15);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
 }
 .vault-page .search-input { padding-left: 30px; width: 100%; }
 /* Monospace override for form fields carrying code-like values (e.g. the
@@ -488,7 +488,7 @@ export const KEYS_PAGE_CSS = `
   background: rgba(var(--lift-rgb), 0.04);
 }
 .vault-page .filter-pill.active {
-  background: rgba(250, 204, 21, 0.12);
+  background: rgba(var(--primary-rgb), 0.12);
   color: var(--primary-text);
   font-weight: 600;
 }
@@ -561,7 +561,7 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page table.vault th.th-sortable:hover {
   color: var(--foreground);
-  background: var(--overlay-sink);
+  background: var(--table-header);
 }
 .vault-page table.vault th.th-sortable.active {
   color: var(--foreground);
@@ -589,8 +589,8 @@ export const KEYS_PAGE_CSS = `
   transition: background 120ms ease, box-shadow 120ms ease;
 }
 .vault-page table.vault tbody tr:hover {
-  background: rgba(250, 204, 21, 0.035);
-  box-shadow: inset 2px 0 0 0 rgba(250, 204, 21, 0.6);
+  background: rgba(var(--primary-rgb), 0.035);
+  box-shadow: inset 2px 0 0 0 rgba(var(--primary-rgb), 0.6);
 }
 .vault-page table.vault tbody tr:hover .row-actions { opacity: 1; }
 /* Whole-row click opens the detail drawer (2026-04-24). Cursor hints
@@ -680,13 +680,13 @@ export const KEYS_PAGE_CSS = `
   letter-spacing: 0.01em;
   color: var(--primary-text);
   background: transparent;
-  border: 1px solid rgba(250, 204, 21, 0.35);
+  border: 1px solid rgba(var(--primary-rgb), 0.35);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
 }
 .vault-page .row-use-btn:hover:not(:disabled) {
-  background: rgba(250, 204, 21, 0.1);
-  border-color: rgba(250, 204, 21, 0.7);
+  background: rgba(var(--primary-rgb), 0.1);
+  border-color: rgba(var(--primary-rgb), 0.7);
 }
 .vault-page .row-use-btn:disabled {
   opacity: 0.5;
@@ -694,8 +694,8 @@ export const KEYS_PAGE_CSS = `
 }
 .vault-page .row-use-btn:focus-visible {
   outline: none;
-  border-color: rgba(250, 204, 21, 0.9);
-  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.15);
+  border-color: rgba(var(--primary-rgb), 0.9);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
 }
 
 /* ── Protocol grouping (tree view) ──────────────────────────────────
@@ -871,7 +871,7 @@ export const KEYS_PAGE_CSS = `
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0;
   border-radius: 999px;
-  background: rgba(250, 204, 21, 0.14);
+  background: rgba(var(--primary-rgb), 0.14);
   color: var(--primary-text);
 }
 .vault-page .toast.error .toast-icon {
@@ -899,15 +899,15 @@ export const KEYS_PAGE_CSS = `
   font-size: 11px; font-weight: 600;
   color: var(--primary-text);
   background: transparent;
-  border: 1px solid rgba(250, 204, 21, 0.4);
+  border: 1px solid rgba(var(--primary-rgb), 0.4);
   border-radius: 5px;
   padding: 3px 8px;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
 }
 .vault-page .toast .toast-undo:hover {
-  background: rgba(250, 204, 21, 0.1);
-  border-color: rgba(250, 204, 21, 0.7);
+  background: rgba(var(--primary-rgb), 0.1);
+  border-color: rgba(var(--primary-rgb), 0.7);
 }
 .vault-page .toast .toast-dismiss {
   width: 22px; height: 22px;
@@ -1061,7 +1061,7 @@ export const KEYS_PAGE_CSS = `
   border-color: var(--border);
 }
 .vault-page .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.vault-page .icon-btn.primary:hover:not(:disabled) { color: var(--primary-text); border-color: rgba(250, 204, 21,0.4); }
+.vault-page .icon-btn.primary:hover:not(:disabled) { color: var(--primary-text); border-color: rgba(var(--primary-rgb), 0.4); }
 .vault-page .icon-btn.danger:hover:not(:disabled)  { color: var(--destructive-text-soft); background: rgba(var(--destructive-rgb), 0.1); border-color: rgba(var(--destructive-rgb), 0.4); }
 
 .vault-page .inline-input {
@@ -1069,14 +1069,14 @@ export const KEYS_PAGE_CSS = `
   border-radius: var(--radius-sm); padding: 4px 8px;
   color: var(--foreground); font-family: var(--font-mono);
   font-size: 13px; outline: none;
-  box-shadow: 0 0 0 2px rgba(250, 204, 21,0.15);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
 }
 
 /* ---- Drawer ------------------------------------------------ */
 .vault-page ~ .drawer-overlay,
 .drawer-overlay {
   position: fixed; inset: 0;
-  background: var(--overlay-sink);
+  background: rgba(var(--scrim-rgb), 0.2);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   z-index: 90;
@@ -1102,7 +1102,7 @@ export const KEYS_PAGE_CSS = `
   padding: 18px 22px 14px;
   display: flex; align-items: flex-start; gap: 12px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(250, 204, 21,0.04) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.04) 0%, transparent 100%);
 }
 .drawer-head .content { flex: 1; min-width: 0; }
 .drawer-head .alias-title {
@@ -1439,22 +1439,22 @@ export const KEYS_PAGE_CSS = `
    so the user reads the LABEL for state, not the color (2026-05-06).
    Only hover differs: clickable state lights up, in-use state stays flat. */
 .vault-page .drawer-actions .action-btn.primary-route {
-  background: rgba(250, 204, 21, 0.06);
-  border-color: rgba(250, 204, 21, 0.35);
+  background: rgba(var(--primary-rgb), 0.06);
+  border-color: rgba(var(--primary-rgb), 0.35);
   color: var(--primary-text);
   font-weight: 600;
   box-shadow: none;
 }
 .vault-page .drawer-actions .action-btn.primary-route:hover:not(:disabled):not(.routing) {
-  background: rgba(250, 204, 21, 0.12);
-  border-color: rgba(250, 204, 21, 0.5);
+  background: rgba(var(--primary-rgb), 0.12);
+  border-color: rgba(var(--primary-rgb), 0.5);
 }
 .vault-page .drawer-actions .action-btn.primary-route.routing {
   cursor: default;
 }
 .vault-page .drawer-actions .action-btn.primary-route.routing:hover {
-  background: rgba(250, 204, 21, 0.06);
-  border-color: rgba(250, 204, 21, 0.35);
+  background: rgba(var(--primary-rgb), 0.06);
+  border-color: rgba(var(--primary-rgb), 0.35);
 }
 /* Danger — Delete. */
 .vault-page .drawer-actions .action-btn.danger {
@@ -1552,7 +1552,7 @@ export const KEYS_PAGE_CSS = `
 /* ---- Modal ------------------------------------------------- */
 .modal-overlay {
   position: fixed; inset: 0;
-  background: var(--overlay-sink);
+  background: rgba(var(--scrim-rgb), 0.2);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   z-index: 100;
@@ -1626,7 +1626,7 @@ export const KEYS_PAGE_CSS = `
 .modal-body .field-reveal-btn:focus-visible, .modal-panel-guided .page .field-reveal-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .modal-body .field-input:focus, .modal-panel-guided .page .field-input:focus {
   outline: none; border-color: var(--primary-text);
-  box-shadow: 0 0 0 2px rgba(250, 204, 21,0.15);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
 }
 /* Validation-fail flash — red border + glow pulses twice over ~1s
    so the user's eye is drawn to the offending field even if they
@@ -1676,7 +1676,7 @@ export const KEYS_PAGE_CSS = `
 }
 .modal-footer .btn-primary {
   background: var(--primary); color: var(--primary-foreground);
-  border-color: rgba(250, 204, 21, 0.55);
+  border-color: rgba(var(--primary-rgb), 0.55);
 }
 .modal-footer .btn-ghost { background: transparent; color: var(--muted-foreground); }
 .modal-footer .btn-ghost:hover { color: var(--foreground); background: rgba(var(--sink-rgb), 0.15); }
@@ -1718,7 +1718,7 @@ export const KEYS_PAGE_CSS = `
   border: 1px solid var(--border);
   color: var(--primary-text);
   margin-bottom: 14px;
-  box-shadow: 0 0 0 6px rgba(250, 204, 21,0.04);
+  box-shadow: 0 0 0 6px rgba(var(--primary-rgb), 0.04);
 }
 .vault-page .vault-empty-title {
   font-family: var(--font-mono);
@@ -1740,12 +1740,12 @@ export const KEYS_PAGE_CSS = `
   color: var(--primary-text);
   font-size: 12.5px;
   text-decoration: none;
-  border-bottom: 1px solid rgba(250, 204, 21,0.35);
+  border-bottom: 1px solid rgba(var(--primary-rgb), 0.35);
   transition: border-color 150ms ease, color 150ms ease;
 }
 .vault-page .vault-empty-link:hover {
-  color: #fde047;
-  border-bottom-color: rgba(250, 204, 21,0.7);
+  color: var(--link-hover);
+  border-bottom-color: rgba(var(--primary-rgb), 0.7);
 }
 
 /* Scrollbar polish — matches Overview v3.1. */
@@ -1869,8 +1869,8 @@ export const KEYS_PAGE_CSS = `
 }
 .modal-panel-guided .step.active {
   color: var(--foreground);
-  background: rgba(250, 204, 21, 0.07);
-  border-color: rgba(250, 204, 21, 0.18);
+  background: rgba(var(--primary-rgb), 0.07);
+  border-color: rgba(var(--primary-rgb), 0.18);
 }
 .modal-panel-guided .step-num {
   width: 24px; height: 24px;
@@ -1885,8 +1885,8 @@ export const KEYS_PAGE_CSS = `
 }
 .modal-panel-guided .step.active .step-num {
   color: var(--primary-text);
-  border-color: rgba(250, 204, 21, 0.35);
-  background: rgba(250, 204, 21, 0.1);
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: rgba(var(--primary-rgb), 0.1);
 }
 .modal-panel-guided .step-body strong {
   display: block;
@@ -2059,7 +2059,7 @@ export const KEYS_PAGE_CSS = `
 }
 .modal-panel-guided .probe-row.warn .result-dot {
   background: var(--warning);
-  box-shadow: 0 0 6px rgba(250, 204, 21, 0.4);
+  box-shadow: 0 0 6px rgba(var(--primary-rgb), 0.4);
   opacity: 1;
 }
 /* destructive red — spec §5.1 gap fix (4th row state for hard
@@ -2089,8 +2089,8 @@ export const KEYS_PAGE_CSS = `
   line-height: 1.45;
 }
 .modal-panel-guided .repair.warn {
-  background: rgba(250, 204, 21, 0.07);
-  border-color: rgba(250, 204, 21, 0.25);
+  background: rgba(var(--primary-rgb), 0.07);
+  border-color: rgba(var(--primary-rgb), 0.25);
 }
 .modal-panel-guided .repair.bad {
   background: rgba(var(--destructive-rgb), 0.07);
@@ -2199,8 +2199,8 @@ export const KEYS_PAGE_CSS = `
   height: 23px;
   padding: 0 7px;
   border-radius: 999px;
-  border: 1px solid rgba(250, 204, 21, 0.22);
-  background: rgba(250, 204, 21, 0.07);
+  border: 1px solid rgba(var(--primary-rgb), 0.22);
+  background: rgba(var(--primary-rgb), 0.07);
   color: var(--primary-text);
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -2270,7 +2270,7 @@ export const KEYS_PAGE_CSS = `
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.08);
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08);
 }
 .modal-panel-guided .oauth-code-input {
   display: none;
