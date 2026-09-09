@@ -173,6 +173,14 @@ var zhMessages = map[string]string{
 	CodeBizRouteGroupArchived:       "路由组 {{id}} 已归档（当前状态 {{status}}），不能套用；请先恢复该路由组，或改选一个启用中的",
 	CodeBizRouteGroupEmpty:          "路由组 {{name}} 没有任何启用中的成员，套用后这把密钥将没有可用上游；请先给该路由组添加上游",
 
+	// 路由组「发布为服务端点」的四条拒绝。登记在此的理由同上：本表是
+	// TestEveryBizCodeHasAnExplicitStatus 的枚举源之一，且它们都会被管理员在
+	// 控制台上直接读到。
+	CodeBizRouteGroupEndpointNotCluster:   "只有集群版部署才能把路由组发布成服务端点：服务端点走集群共享入口，而个人版/体验版/生产版的流量是从每位员工自己的机器发出的，没有可以对外交付的统一地址",
+	CodeBizRouteGroupIngressNotConfigured: "该集群没有配置入口地址（控制机上的 {{setting_key}} 未设置），无法生成端点地址；请在集群清单里给 hub 行填 advertise=（deploy-cluster-production.sh --inventory），或给 cluster-install.sh 传 --oauth-ingress-domain，然后重新执行安装脚本",
+	CodeBizRouteGroupProtocolUnsupported:  "入口目前不能以服务端点的形式承载 {{protocol}} 协议；当前支持：{{supported}}",
+	CodeBizRouteGroupEndpointPairMismatch: "这把端点密钥不属于所访问的这个端点（{{route_group_id}}）；地址与密钥是一对，请改用该端点自己的密钥，或改用这把密钥对应端点的地址",
+
 	// BIZ — Login Session / OAuth
 	CodeBizLoginSessionNotFound:         "登录会话 {{id}} 不存在",
 	CodeBizLoginSessionExpired:          "登录会话已过期，请重新运行 aikey login",
@@ -390,7 +398,55 @@ const (
 	// template's protocol (P0a rev10 task 4.50). 422 — a validation the admin
 	// fixes by choosing a different credential.
 	CodeBizRouteGroupProtocolMismatch = "BIZ_ROUTE_GROUP_PROTOCOL_MISMATCH"
-	CodeBizOauthGroupDefaultProtected = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
+
+	// ── Route group published AS A SERVICE ENDPOINT (openspec
+	// aliyun-aigw-route-group-endpoint, 2026-09-08) ──────────────────────────
+	//
+	// 🔴 These four are distinct codes rather than reuses of the template codes
+	// above, because the AUDIENCE is different. The template codes are read by an
+	// admin editing a route group; these are read by an admin trying to hand an
+	// address to somebody OUTSIDE the organization, and every one of them has a
+	// different next action. A shared code would send half of them to the wrong
+	// screen.
+
+	// CodeBizRouteGroupEndpointNotCluster: this deployment has no shared ingress
+	// to serve an endpoint from — Personal / Trial / Production route from each
+	// employee's own machine, so there is no address that could be handed out.
+	// 422: the request cannot be processed as asked, and the remedy is a
+	// deployment decision, not a retry.
+	//
+	// 🚫 Not 404, and the console must NOT hide the control (R-rge-6.S1): a
+	// hidden button teaches the admin the feature does not exist, and they go and
+	// build a worse thing by hand.
+	CodeBizRouteGroupEndpointNotCluster = "BIZ_ROUTE_GROUP_ENDPOINT_NOT_CLUSTER"
+	// CodeBizRouteGroupIngressNotConfigured: a Cluster deployment whose inventory
+	// never set `ingress_domain=`, so no address can be formed. 422, same family
+	// — and DISTINCT from the one above because the remedy is concrete and local
+	// (set the key, re-run the installer) rather than "buy a different edition".
+	CodeBizRouteGroupIngressNotConfigured = "BIZ_ROUTE_GROUP_INGRESS_NOT_CONFIGURED"
+	// CodeBizRouteGroupProtocolUnsupported: the group's protocol has no ingress
+	// route, so an endpoint under it could never be dialled. 422 — the choice
+	// itself cannot work, like CodeBizRouteGroupProtocolMismatch.
+	//
+	// 🚫 Not reused from CodeBizProviderProtocolUnsupported: that one is about a
+	// provider not speaking a protocol; this is about the INGRESS not exposing
+	// one, and the message has to list what the ingress does expose.
+	CodeBizRouteGroupProtocolUnsupported = "BIZ_ROUTE_GROUP_PROTOCOL_UNSUPPORTED"
+	// CodeBizRouteGroupEndpointPairMismatch: an endpoint key was presented at a
+	// DIFFERENT endpoint's address. The address and the key are one credential,
+	// not two independent ones.
+	//
+	// 🔴 403, and this status is load-bearing beyond politeness: the cluster
+	// ingress attributes `pair_mismatch` on /cluster/health BY STATUS, so that
+	// "somebody configured a job wrong" can be told apart from "the control plane
+	// is unreachable" — two conditions needing opposite responses. Attributing by
+	// status rather than by parsing the body is deliberate: the two error
+	// envelopes nest differently, and string-matching a body would be a second
+	// wire contract nobody would maintain. Changing this to 4xx-other silently
+	// zeroes that counter. Fence: aikey-hub
+	// TestEndpointHealth_AControlPlanePairingRefusalCountsAsAPairMismatch.
+	CodeBizRouteGroupEndpointPairMismatch = "BIZ_ROUTE_GROUP_ENDPOINT_PAIR_MISMATCH"
+	CodeBizOauthGroupDefaultProtected     = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
 	// CodeBizOauthGroupHasActiveRefs: an OAuth account pool cannot be deleted
 	// while accounts are attached or seats / access tokens are bound to it —
 	// "delete requires unbind first" (update 20260905-账号池与访问令牌-删除隐藏回收站,
@@ -846,6 +902,89 @@ func BizRouteGroupProtocolMismatch(credentialID, credProtocol, groupProtocol str
 			"group_protocol":      groupProtocol,
 		},
 	}
+}
+
+// ── Route group published AS A SERVICE ENDPOINT ─────────────────────────────
+// openspec change `aliyun-aigw-route-group-endpoint` (2026-09-08). An endpoint
+// is a route group handed to somebody OUTSIDE the organization as a stable
+// BaseURL. Every refusal below is read by the admin who is about to hand that
+// address over, so each names the next action rather than only the fault.
+
+// BizRouteGroupEndpointNotCluster — this deployment has no shared ingress, so
+// there is no address to publish.
+//
+// 🔴 The message gives the STRUCTURAL reason, not just the edition name.
+// "Requires the Cluster edition" reads as a sales gate and invites the admin to
+// argue with it; "traffic leaves from each employee's own machine, so there is
+// no shared address to hand out" is a fact they can check, and it is why the
+// feature cannot exist here rather than why it is withheld. The edition name is
+// best-effort CONTEXT — the decision input is whether a cluster ingress exists.
+func BizRouteGroupEndpointNotCluster(edition string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupEndpointNotCluster,
+		Message: fmt.Sprintf("publishing a route group as a service endpoint needs a Cluster deployment: "+
+			"the endpoint serves through the cluster's shared ingress, and in a %s deployment traffic leaves "+
+			"from each employee's own machine, so there is no shared address that could be handed to a consumer",
+			edition),
+		Meta: map[string]any{"edition": edition}}
+}
+
+// BizRouteGroupIngressNotConfigured — a Cluster deployment whose inventory never
+// set the ingress domain, so no address can be formed.
+//
+// 🔴 The message names the SETTING and BOTH operator paths that set it, and says
+// to re-run the installer, because the fix is not in this console: the ingress
+// domain is delivered by the cluster installer, and an admin told only "no
+// ingress domain" will look for a field on this page that does not exist.
+//
+// 🔴 It names `AIKEY_OAUTH_INGRESS_DOMAIN` and not a key called `ingress_domain`
+// — CHECKED against the installers on 2026-09-08, and there is no such key. The
+// two real editing points are the hub row's `advertise=` in the cluster
+// inventory (deploy-cluster-production.sh wires it via
+// cdl_wire_oauth_ingress_domain) and `cluster-install.sh --oauth-ingress-domain`.
+// Both converge on this one env var on the control host, which is why the
+// parameter is the env var rather than either path's spelling.
+//
+// 🚫 A refusal that names a key the operator cannot find is worse than one that
+// says "your configuration": it sends them looking for something that does not
+// exist and makes them doubt the message rather than the setting.
+func BizRouteGroupIngressNotConfigured(settingKey string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupIngressNotConfigured,
+		Message: fmt.Sprintf("this cluster has no ingress address configured, so an endpoint address cannot be "+
+			"formed: %s is unset on the control host. Set the hub row's advertise= in the cluster inventory "+
+			"(deploy-cluster-production.sh --inventory) or pass --oauth-ingress-domain to cluster-install.sh, "+
+			"then re-run the installer", settingKey),
+		Meta: map[string]any{"setting_key": settingKey}}
+}
+
+// BizRouteGroupProtocolUnsupported — the group's protocol has no ingress route,
+// so an endpoint under it could never be dialled.
+//
+// 🔴 It LISTS what is supported. The admin's next move is to pick a different
+// group, and a refusal that names only the rejected protocol makes them open
+// each remaining group in turn to find one that works.
+func BizRouteGroupProtocolUnsupported(protocolType string, supported []string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupProtocolUnsupported,
+		Message: fmt.Sprintf("the ingress cannot serve %q as a service endpoint; it currently serves: %s",
+			protocolType, strings.Join(supported, ", ")),
+		Meta: map[string]any{"protocol_type": protocolType, "supported": supported}}
+}
+
+// BizRouteGroupEndpointPairMismatch — an endpoint key was presented at a
+// different endpoint's address (R-rge-4.S1).
+//
+// 🔴 Refused BEFORE any upstream is contacted. The alternative — forward it and
+// let the vendor answer — turns a local configuration mistake into billed
+// traffic, and gives the consumer a vendor error message about a problem the
+// vendor has nothing to do with.
+//
+// 🔴 Delivered as 403, and that status is load-bearing: the cluster ingress
+// counts `pair_mismatch` by status. See the note on the code constant.
+func BizRouteGroupEndpointPairMismatch(routeGroupID string) *DomainError {
+	return &DomainError{Code: CodeBizRouteGroupEndpointPairMismatch,
+		Message: fmt.Sprintf("this endpoint key does not belong to the endpoint at this address (%s); "+
+			"the address and the key are one credential — use this endpoint's own key, or the address of the "+
+			"endpoint this key was issued for", routeGroupID),
+		Meta: map[string]any{"route_group_id": routeGroupID}}
 }
 
 // BizOauthGroupDefaultProtected — the per-org default group cannot be deleted.
