@@ -13,6 +13,10 @@
     />
     <meta name="theme-color" content="#f5f7fa" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#18181b" media="(prefers-color-scheme: dark)" />
+    <!-- Media-less fallback the theme boot script rewrites to the APPLIED theme;
+         the two media-keyed tags above describe the OS preference, which stops
+         being the right answer once the user picks a theme explicitly. -->
+    <meta name="theme-color" content="#18181b" />
     <meta property="og:site_name" content="AiKey" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="AiKey Web · AI Governance Workbench" />

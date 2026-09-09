@@ -109,7 +109,11 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizRefreshTokenInvalid,
 		CodeBizLoginSessionNotFound, CodeBizLoginSessionExpired,
 		CodeBizLoginTokenInvalid, CodeBizLoginTokenAlreadyUsed,
-		CodeBizJoinTokenInvalid:
+		CodeBizJoinTokenInvalid,
+		// A revoked route-group endpoint key. 401 rather than 403: the caller is a
+		// third-party consumer presenting a credential, and the credential itself
+		// is dead — nothing about their permissions changed (R-rge-2.S1 / R-rge-8).
+		CodeBizRouteGroupEndpointRevoked:
 		return http.StatusUnauthorized
 
 	// ── 403 Forbidden ─────────────────────────────────────────────────────────
@@ -123,7 +127,13 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizAgentGroupNotMember, CodeBizAgentPoolNotOwner,
 		// Refused BY DESIGN (form-①): still a 403, but the code tells the client
 		// it's policy, not a permission fault (2026-07-13).
-		CodeBizDeliveryCentralOnly:
+		CodeBizDeliveryCentralOnly,
+		// A genuine endpoint key presented against ANOTHER endpoint's address
+		// (R-rge-4). 403, not 401: the credential is valid and authenticates fine,
+		// it simply does not authorise this endpoint. 🚫 Not 404 — pretending the
+		// endpoint is absent would send the consumer to check the URL when the key
+		// is the mismatched half just as often.
+		CodeBizRouteGroupEndpointPairMismatch:
 		return http.StatusForbidden
 
 	// ── 404 Not Found ─────────────────────────────────────────────────────────
@@ -226,6 +236,19 @@ func DomainErrorHTTPStatus(code string) int {
 		// auditing the whole function after two of its siblings were reported,
 		// which is the same move that turned one BIZ_BIND report into two defects.
 		CodeBizRouteGroupArchived, CodeBizRouteGroupEmpty,
+		// Route-group SERVICE ENDPOINT publish gates. Same 422 family as the two
+		// above and for the same reason: the request is well formed, the OBJECT or
+		// the DEPLOYMENT it names cannot serve the request as asked, and the remedy
+		// is a configuration change rather than a retry.
+		//
+		// 🔴 NOT_CLUSTER is 422 rather than 403 on purpose. 403 would say "you are
+		// not allowed", which invites an admin to go looking for a permission to
+		// grant; there is none — this edition has no shared ingress at all, and the
+		// console must render the structural explanation, not a lock icon
+		// (R-rge-6.S1 requires the control stay VISIBLE and refuse loudly).
+		CodeBizRouteGroupEndpointNotCluster,
+		CodeBizRouteGroupIngressNotConfigured,
+		CodeBizRouteGroupProtocolUnsupported,
 		// Bounded-ingress element cap (2026-08-18): the payload parsed fine but
 		// one list is beyond what this endpoint will process in one call.
 		CodeDataTooManyItems:
