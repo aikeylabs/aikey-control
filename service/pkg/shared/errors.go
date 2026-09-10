@@ -219,6 +219,7 @@ var zhMessages = map[string]string{
 	CodeBizCredHasActiveRefs:        "凭据 {{id}} 仍被使用（活跃通道 {{binding_count}} 个、OAuth 账号池 {{group_count}} 个），请先迁移通道或将账号移出账号池，再移入回收站",
 	CodeBizOauthGroupHasActiveRefs:  "账号池 {{oauth_group_id}} 仍被使用（挂载账号 {{account_count}} 个、绑定席位 {{seat_count}} 个，其中访问令牌 {{token_count}} 个），请先移出账号、解绑席位/令牌，再删除",
 	CodeBizOauthGroupDeleted:        "账号池 {{oauth_group_id}} 已删除（在回收站中），不能再修改；请使用或新建其他账号池",
+	CodeBizOauthGroupInactive:       "账号池 {{oauth_group_id}} 当前为{{status}}状态，不能作为访问令牌的账号池；请先启用该池，或改选其他账号池",
 	CodeBizAccessTokenHasActiveRefs: "访问令牌 {{seat_id}} 仍绑定在 {{group_count}} 个账号池中，请先从账号池解绑，再删除",
 
 	// BIZ — Provider
@@ -459,6 +460,22 @@ const (
 	// conflicts with is deliberate, and the remedy (use / create another pool)
 	// is the admin's.
 	CodeBizOauthGroupDeleted = "BIZ_OAUTH_GROUP_DELETED"
+	// CodeBizOauthGroupInactive: a write targeted a pool whose status is
+	// neither active nor deleted (today: 'disabled'). 422.
+	//
+	// 🔴 Deliberately NOT reusing CodeBizOauthGroupDisabled, which sits a few
+	// lines below and reads like the obvious fit: that code means "the
+	// oauth_group FEATURE is off (OAUTH_GROUP_ENABLED)" and every one of its
+	// call sites is a feature-flag gate. Reusing it would tell an admin who
+	// picked a disabled pool that "the account-pool feature is not enabled",
+	// sending them to check environment variables instead of re-enabling the
+	// pool.
+	//
+	// 🔴 Deliberately NOT reusing CodeBizOauthGroupDeleted either: deleted is
+	// terminal (no restore), disabled is reversible. One merged code cannot
+	// state the next action, and the next action is the whole point.
+	// spec: R-access-token-pool-choice-3 只有 active 池可被指定为令牌目标池
+	CodeBizOauthGroupInactive = "BIZ_OAUTH_GROUP_INACTIVE"
 	// CodeBizAccessTokenHasActiveRefs: an access token (agent seat) cannot be
 	// deleted while it is still a member of an OAuth account pool — unbind it
 	// from the pool first (update 20260905, 拍板 ②: the guard looks ONLY at pool
@@ -1013,6 +1030,17 @@ func BizOauthGroupDeleted(oauthGroupID string) *DomainError {
 	return &DomainError{Code: CodeBizOauthGroupDeleted,
 		Message: fmt.Sprintf("OAuth account pool %q has been deleted (recycle bin) and cannot be modified — use or create another pool", oauthGroupID),
 		Meta:    map[string]any{"oauth_group_id": oauthGroupID}}
+}
+
+// BizOauthGroupInactive — the pool exists and is not deleted, but its status is
+// not active (today: 'disabled'), so it may not receive a new access token.
+// Reversible, unlike BizOauthGroupDeleted — the message therefore names
+// re-enabling as the first way out.
+// spec: R-access-token-pool-choice-3 只有 active 池可被指定为令牌目标池
+func BizOauthGroupInactive(oauthGroupID, status string) *DomainError {
+	return &DomainError{Code: CodeBizOauthGroupInactive,
+		Message: fmt.Sprintf("OAuth account pool %q is %s, not active, and cannot back an access token — enable the pool, or pick another one", oauthGroupID, status),
+		Meta:    map[string]any{"oauth_group_id": oauthGroupID, "status": status}}
 }
 
 // BizAccessTokenHasActiveRefs — the access token is still bound to pool(s);

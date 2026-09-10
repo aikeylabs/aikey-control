@@ -218,6 +218,9 @@ func DomainErrorHTTPStatus(code string) int {
 		CodeBizOauthLoginEvidenceRequired,
 		CodeBizKeyDuplicateProtocol, CodeBizBindProtocolMismatch,
 		CodeBizCredInactive, CodeBizOauthGroupDefaultProtected,
+		// spec: R-access-token-pool-choice-3 —— 停用池是请求语义错误（调用方
+		// 换个池或启用它即可），不是权限问题，故 422 而非 403。
+		CodeBizOauthGroupInactive,
 		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,
 		CodeBizVKGroupExclusive, CodeBizSSOProviderDisabled,
 		// Same family as CodeBizVKGroupExclusive directly above: an OAuth account
