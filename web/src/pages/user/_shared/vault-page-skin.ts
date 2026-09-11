@@ -83,6 +83,9 @@ export const VAULT_PAGE_SKIN_V1 = `
 .vault-page.vault-skin-v1 {
   --skin-well: 19, 19, 22;
   --skin-head: 23, 23, 25;
+  /* Card title bar. Same RGB as --skin-head in dark (byte-identical); split out
+     so light can make it white — see --skin-lid below. */
+  --skin-lid: 23, 23, 25;
   --skin-row: 31, 31, 33;
   --skin-row-alt: 35, 35, 39;
   --skin-row-hi: 38, 38, 42;
@@ -101,12 +104,20 @@ export const VAULT_PAGE_SKIN_V1 = `
      vault's column headers read as flat as every other table's did. The value is
      derived, not eyeballed: this skin applies it at alpha .32, and
      rgb(171,182,205) at .32 over white lands on #e4e9f2 — the same band
-     --table-header paints everywhere else. The .2 and .48 steps of the same
-     ramp stay proportional (#eef0f5 / #d7dce7).
+     --table-header paints everywhere else. The .48 hover step stays
+     proportional (#d7dce7).
      🔴 Change this and --table-header together, or the vault table stops
-     matching the console. */
+     matching the console.
+
+     🔴 --skin-lid is WHITE (2026-09-11, user: the bar above the header "should be
+     white"). The card title bar used to take the .2 step of the header ramp
+     (#eef0f5), which put a grey strip on top of the header band so neither read
+     as the one band under a white card. It has its own token so the header ramp
+     can stay deep without dragging the title bar with it.
+     workflow/CI/bugfix/2026-09-11-table-headers-miss-the-header-token.md */
   --skin-well: 255, 255, 255;
   --skin-head: 171, 182, 205;
+  --skin-lid: 255, 255, 255;
   --skin-row: 255, 255, 255;
   --skin-row-alt: 255, 255, 255;
   --skin-row-hi: 255, 255, 255;
@@ -145,7 +156,12 @@ export const VAULT_PAGE_SKIN_V1 = `
 
 /* ── Card head: softer divider + slightly tinted band ────────────── */
 .vault-page.vault-skin-v1 .card > div:first-of-type {
-  background-color: rgba(var(--skin-head), 0.2) !important;
+  /* 🔴 --skin-lid, not --skin-head (2026-09-11): the title bar sits ABOVE the
+     column header and must read as part of the white card in light. On the
+     header ramp it painted #eef0f5, a grey strip over the band. Same RGB as
+     --skin-head in dark, so dark is unchanged.
+     workflow/CI/bugfix/2026-09-11-table-headers-miss-the-header-token.md */
+  background-color: rgba(var(--skin-lid), 0.2) !important;
   border-bottom: 1px solid rgba(var(--fg-rgb), 0.04) !important;
 }
 

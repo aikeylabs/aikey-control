@@ -443,10 +443,15 @@ export const TRUST_CHECK_CSS = `
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted-foreground);
-  opacity: 0.65;
+  /* 🔴 Two fixes (2026-09-11). --table-header, not --surface-sunken: sunken is
+     #ffffff in light, so the header had no band. And the .65 dim moves from
+     opacity onto the text colour: opacity also faded the BACKGROUND, so even
+     the right token would have rendered a band a third lighter than every
+     other table's.
+     workflow/CI/bugfix/2026-09-11-table-headers-miss-the-header-token.md */
+  color: rgba(var(--muted-rgb), 0.65);
   padding: 12px 18px;
-  background: var(--surface-sunken);
+  background: var(--table-header);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }

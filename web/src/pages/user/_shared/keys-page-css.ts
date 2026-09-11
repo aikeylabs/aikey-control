@@ -540,7 +540,11 @@ export const KEYS_PAGE_CSS = `
   color: var(--muted-foreground);
   font-weight: 600;
   text-align: left;
-  background: var(--overlay-sink);
+  /* 🔴 --table-header, not --overlay-sink (2026-09-11): --overlay-sink is #ffffff
+     in light, so every .vault-page table except /vault (whose skin overrides
+     this) had no header band. Both tokens are rgba(0,0,0,.2) in dark — no-op.
+     workflow/CI/bugfix/2026-09-11-table-headers-miss-the-header-token.md */
+  background: var(--table-header);
   border-bottom: 1px solid var(--border);
   padding: 12px 20px;
   white-space: nowrap;

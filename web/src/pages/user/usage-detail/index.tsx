@@ -410,7 +410,10 @@ export default function UserUsageDetailPage() {
         .ud-table thead th {
           font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
           color: var(--muted-foreground); text-align: left; padding: 11px 16px; white-space: nowrap;
-          background: rgba(var(--sink-rgb), 0.22); border-bottom: 1px solid var(--border);
+          /* 🔴 --table-header, not rgba(var(--sink-rgb), .22): sink is white in light, so
+             the header had no band. Dark moves .22 → .2, the console-wide header value.
+             workflow/CI/bugfix/2026-09-11-table-headers-miss-the-header-token.md */
+          background: var(--table-header); border-bottom: 1px solid var(--border);
         }
         .ud-table th.num, .ud-table td.num { text-align: right; }
         .ud-table th.ud-sortable { cursor: pointer; user-select: none; transition: color 110ms ease; }
