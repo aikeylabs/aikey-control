@@ -44,11 +44,13 @@ package userlocal
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // shortAcceptedIDsBody is the exact 200 body this handler must produce for a
@@ -71,13 +73,20 @@ func TestComplianceIngest_PartialRejectionIsVisibleToUploader(t *testing.T) {
 	// These are the two validation skips the handler actually performs; the
 	// insert-failure branch below them shares the same `continue`, so it
 	// produces the same short receipt by construction.
-	batch := `{"events":[
-		{"event_id":"ev_keep_1","created_at":"2026-08-10T01:00:00Z","action_taken":"mask","prompt_length":10,
+	//
+	// created_at 相对当下计算,不写死日期。原夹具是 01:00:00…01:00:03,即四条事件
+	// 依次相隔 1 秒 —— 这个间隔保留下来(仍是四个互不相同、递增的时间戳),
+	// 只是基准点跟着当下走。写死日期的后果与围栏见 fixture_time_fence_test.go:
+	// 本机 intake 每次 ingest 都跑一遍 30 天留存清理,老过窗口的夹具会在同一次
+	// ingest 里被插入又被删掉,断言看到的是 stored=0 而不是它真正要守的短回执语义。
+	ts := func(i int) string { return complianceFixtureCreatedAt(time.Hour - time.Duration(i)*time.Second) }
+	batch := fmt.Sprintf(`{"events":[
+		{"event_id":"ev_keep_1","created_at":%q,"action_taken":"mask","prompt_length":10,
 		 "findings":[{"finding_id":"ev_keep_1_f1","category":"pii","entity_type":"CN_PHONE","severity":"high","confidence":90,"start_offset":0,"end_offset":11,"context_snippet":"13800138000"}]},
-		{"event_id":"ev_no_action","created_at":"2026-08-10T01:00:01Z","prompt_length":20},
-		{"event_id":"","created_at":"2026-08-10T01:00:02Z","action_taken":"block","prompt_length":30},
-		{"event_id":"ev_keep_2","created_at":"2026-08-10T01:00:03Z","action_taken":"allow","prompt_length":40}
-	]}`
+		{"event_id":"ev_no_action","created_at":%q,"prompt_length":20},
+		{"event_id":"","created_at":%q,"action_taken":"block","prompt_length":30},
+		{"event_id":"ev_keep_2","created_at":%q,"action_taken":"allow","prompt_length":40}
+	]}`, ts(0), ts(1), ts(2), ts(3))
 
 	resp, err := srv.Client().Post(srv.URL+"/v1/compliance/events", "application/json", strings.NewReader(batch))
 	if err != nil {
@@ -160,10 +169,13 @@ func TestComplianceIngest_ReceiptWireShapeIsStable(t *testing.T) {
 	srv := httptest.NewServer(complianceIngestHandler(db, capturedLogger(&bytes.Buffer{})))
 	t.Cleanup(srv.Close)
 
-	resp, err := srv.Client().Post(srv.URL+"/v1/compliance/events", "application/json", strings.NewReader(`{"events":[
-		{"event_id":"ev_ok","created_at":"2026-08-10T01:00:00Z","action_taken":"allow","prompt_length":1},
-		{"event_id":"ev_bad","created_at":"2026-08-10T01:00:01Z","prompt_length":2}
-	]}`))
+	// created_at 相对当下(见 fixture_time_fence_test.go)。这条用例只断言回执字节,
+	// 但夹具纪律按目录统一 —— 留一颗写死日期的种子,下一个人照抄它就又是一颗雷。
+	body := fmt.Sprintf(`{"events":[
+		{"event_id":"ev_ok","created_at":%q,"action_taken":"allow","prompt_length":1},
+		{"event_id":"ev_bad","created_at":%q,"prompt_length":2}
+	]}`, complianceFixtureCreatedAt(time.Hour), complianceFixtureCreatedAt(time.Hour-time.Second))
+	resp, err := srv.Client().Post(srv.URL+"/v1/compliance/events", "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST failed: %v", err)
 	}

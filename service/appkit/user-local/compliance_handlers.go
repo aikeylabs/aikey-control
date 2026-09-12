@@ -81,8 +81,51 @@ type complianceEventWire struct {
 	// team and personal detections are shown on the local page). Stored in the
 	// metadata JSON column with detect_latency_ms — no schema change — and
 	// surfaced on the list DTO so the page can label the row.
-	RouteSource string                  `json:"route_source,omitempty"`
-	Findings    []complianceFindingWire `json:"findings"`
+	RouteSource string `json:"route_source,omitempty"`
+	// Escalation is the REQUEST-level escalation conclusion, present only on a
+	// request-verdict event (`scenario: "request_verdict"`). A content-hit event
+	// never carries it. Stored in the metadata JSON column alongside
+	// detect_latency_ms / route_source — no schema change.
+	//
+	// WHY THIS LANE NEEDS IT AT ALL (2026-09-11 user decision): team-routed
+	// compliance events are MIRRORED here (filter_dispatch.go
+	// MirrorComplianceEventsLocally, 2026-09-03), and the verdict event rides
+	// that mirror. Without this field the self-view shows three `mask` hits plus
+	// one unexplained `block`, and the one thing a member opens this page to
+	// learn — 「我这条请求为什么被拦」 — is exactly what got dropped.
+	//
+	// 🔴 THE FIX IS DECLARING THE FIELD, NOT TIGHTENING THE DECODER. This lane
+	// decodes leniently ON PURPOSE (see the wire-drift block below): master's
+	// 400 is survivable because the proxy dead-letters and replays, while a 4xx
+	// here is TERMINAL — the detector's local uploader returns immediately on
+	// 4xx and the flush then discards the batch. Going strict would trade
+	// "one field missing" for "the whole event gone".
+	//
+	// A POINTER so "an older detector said nothing" stays distinguishable from
+	// "this request escalated and counted zero".
+	Escalation *complianceEscalationWire `json:"escalation,omitempty"`
+	Findings   []complianceFindingWire   `json:"findings"`
+}
+
+// complianceEscalationWire mirrors the team lane's typed `escalation` payload
+// (aikey-control-master intakeEscalationWire / storage.Escalation, and
+// aikey-proxy escalationWire) so the same mirrored bytes decode identically on
+// both sides. The field set is FIXED by DEC-compliance-grading-14.
+//
+// UnitIDs are compliance event ids of the content rows that were counted — the
+// link from a verdict to its evidence. It is an id list rather than a shared
+// trace because a piece counted from the proxy's verdict cache keeps the trace
+// of its FIRST ingest, so a trace-based join would drop exactly the historical
+// pieces. The ids resolve locally too: the proxy stamps the same content-derived
+// event_id before mirroring.
+//
+// 🔴 Ids only — no hash, no fingerprint, no snippet. Note this struct is also
+// the READ DTO (complianceAuditEvent.Escalation), so anything added here is
+// served to the page.
+type complianceEscalationWire struct {
+	Rule    string   `json:"rule"`
+	Counted int      `json:"counted"`
+	UnitIDs []string `json:"unit_ids"`
 }
 
 type complianceFindingWire struct {
@@ -325,6 +368,12 @@ func insertComplianceEvent(ctx context.Context, db *sql.DB, ev complianceEventWi
 	if ev.RouteSource != "" {
 		meta["route_source"] = ev.RouteSource
 	}
+	// Escalation rides the same metadata column as the two above (no schema
+	// change). Stored as the whole typed object so the read side can hand it to
+	// the page unchanged — see complianceEventWire.Escalation.
+	if ev.Escalation != nil {
+		meta["escalation"] = ev.Escalation
+	}
 	if len(meta) > 0 {
 		if b, err := json.Marshal(meta); err == nil {
 			metadata = string(b)
@@ -393,8 +442,14 @@ type complianceAuditEvent struct {
 	DetectLatencyMs float64 `json:"detect_latency_ms,omitempty"`
 	// RouteSource (2026-09-03): "team" for an event the proxy mirrored here from
 	// its team-server upload; absent for the local lane. Parsed from metadata.
-	RouteSource string                   `json:"route_source,omitempty"`
-	Findings    []complianceAuditFinding `json:"findings"`
+	RouteSource string `json:"route_source,omitempty"`
+	// Escalation (2026-09-11): the request-level escalation conclusion, parsed
+	// from metadata. Present only on a `scenario: "request_verdict"` row; its
+	// unit_ids are the content events that were counted, which is how the page
+	// links a verdict to the hits behind it. Absent on every content-hit row and
+	// on anything a pre-grading detector wrote.
+	Escalation *complianceEscalationWire `json:"escalation,omitempty"`
+	Findings   []complianceAuditFinding  `json:"findings"`
 }
 
 type complianceAuditFinding struct {
@@ -518,12 +573,14 @@ func complianceListHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 			// Extension fields live in the metadata JSON column (e.g. detect_latency_ms).
 			if metaRaw != "" {
 				var meta struct {
-					DetectLatencyMs float64 `json:"detect_latency_ms"`
-					RouteSource     string  `json:"route_source"`
+					DetectLatencyMs float64                   `json:"detect_latency_ms"`
+					RouteSource     string                    `json:"route_source"`
+					Escalation      *complianceEscalationWire `json:"escalation"`
 				}
 				if err := json.Unmarshal([]byte(metaRaw), &meta); err == nil {
 					e.DetectLatencyMs = meta.DetectLatencyMs
 					e.RouteSource = meta.RouteSource
+					e.Escalation = meta.Escalation
 				}
 			}
 			e.Findings = []complianceAuditFinding{}

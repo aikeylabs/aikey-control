@@ -1239,8 +1239,24 @@ export function UserShell() {
   // R13 order preservation.
   const sidedNavGroups: NavGroup[] = navGroups;
 
+  // 🔴 `h-screen` is LOAD-BEARING, not cosmetic. With the `overflow-hidden`
+  // beside it, it pins the shell to exactly one viewport height so the BODY never
+  // scrolls and scrolling happens inside `<div className="flex-1 overflow-y-auto">`
+  // further down. Take it away and the root grows to content height, the inner
+  // container loses the bounded height it scrolls within, and the sidebar scrolls
+  // away with the content.
+  //
+  // The premise is written down in
+  // workflow/CI/bugfix/2026-07-22-scrollbar-gutter-content-reflow.md
+  // ("root 是 h-screen overflow-hidden，body 不滚"), and a document did not stop it
+  // being deleted in passing on 2026-09-03 (commit e46c729, a compliance-scope
+  // commit whose message never mentions layout). That is why the note now lives
+  // here, on the line itself.
+  //
+  // 🚫 Do not drop it while "tidying" the className.
+  // Fence: src/layouts/UserShell.dual-edit.test.ts (asserts the value in BOTH copies)
   return (
-    <div className="user-pages flex overflow-hidden antialiased" style={{ backgroundColor: 'var(--background)' }}>
+    <div className="user-pages flex h-screen overflow-hidden antialiased" style={{ backgroundColor: 'var(--background)' }}>
       {/* ── Sidebar ──
           Design re-aligned 2026-04-24 with user_vault_3_1_1.html:
           zero horizontal divider lines anywhere inside the sidebar.

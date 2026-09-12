@@ -107,7 +107,7 @@ func logLinesWithEvent(t *testing.T, buf *bytes.Buffer, name string) []map[strin
 func driftingPayload(eventID string) string {
 	return fmt.Sprintf(`{"events":[{
 		"event_id": %q,
-		"created_at": "2026-08-10T01:02:03Z",
+		"created_at": %q,
 		"user_id": "u_local",
 		"proxy_version": "1.0.5",
 		"target_model": "claude-sonnet-4",
@@ -131,14 +131,14 @@ func driftingPayload(eventID string) string {
 			"context_snippet": "请联系 13800138000 处理",
 			"deep_scan_verdict": "clean"
 		}]
-	}]}`, eventID, eventID+"_f1")
+	}]}`, eventID, freshComplianceCreatedAt(), eventID+"_f1")
 }
 
 // cleanPayload is the same batch with the unknown fields removed.
 func cleanPayload(eventID string) string {
 	return fmt.Sprintf(`{"events":[{
 		"event_id": %q,
-		"created_at": "2026-08-10T01:02:03Z",
+		"created_at": %q,
 		"action_taken": "mask",
 		"prompt_length": 64,
 		"findings": [{
@@ -150,7 +150,7 @@ func cleanPayload(eventID string) string {
 			"start_offset": 0,
 			"end_offset": 3
 		}]
-	}]}`, eventID, eventID+"_f1")
+	}]}`, eventID, freshComplianceCreatedAt(), eventID+"_f1")
 }
 
 func postCompliance(t *testing.T, h http.Handler, body string) *httptest.ResponseRecorder {

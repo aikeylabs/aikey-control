@@ -48,8 +48,12 @@ func TestComplianceIngest_DuplicateAuditUnitDoesNotAccumulateFindings(t *testing
 
 	// 同一个审计单元 id(内容+会话不变),但两轮的 finding_id 完全不同 —— 这正是
 	// detector CSPRNG 的真实行为。
+	// created_at 相对当下计算,不写死日期(理由与围栏见 fixture_time_fence_test.go):
+	// 写死的夹具老过 30 天留存窗口就会在同一次 ingest 里被插入又被删掉,
+	// 于是这条围栏会莫名其妙地断言成 events=0 而不是它真正要守的去重语义。
+	createdAt := freshComplianceCreatedAt()
 	batch := func(f1, f2 string) string {
-		return `{"events":[{"event_id":"au_same_unit","created_at":"2026-09-08T01:00:00Z",
+		return `{"events":[{"event_id":"au_same_unit","created_at":"` + createdAt + `",
 			"action_taken":"mask","prompt_length":42,
 			"findings":[
 			  {"finding_id":"` + f1 + `","category":"pii","entity_type":"CN_PHONE","severity":"high","confidence":90,"start_offset":0,"end_offset":11},

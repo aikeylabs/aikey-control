@@ -180,6 +180,57 @@ describe('UserShell.tsx dual-edit drift (aikey-control/web ↔ aikey-control-mas
   // sidebar (cross-app rows fall back to their English wire label while
   // local rows are translated). See workflow/CI/bugfix/2026-06-29-
   // cross-app-menu-i18n-half-translated.md.
+  // 2026-09-11: the shell's own height contract, pinned in BOTH copies.
+  //
+  // `h-screen` on the root, with the `overflow-hidden` beside it, is what makes
+  // the BODY not scroll: scrolling happens inside `flex-1 overflow-y-auto`
+  // further down. Remove it and the root grows to content height, the inner
+  // container has no bounded height to scroll within, and the sidebar scrolls
+  // away with the content.
+  //
+  // 🔴 Why a fence and not just the comment now sitting on that line: the
+  // premise was ALREADY written down, in
+  // workflow/CI/bugfix/2026-07-22-scrollbar-gutter-content-reflow.md, and a
+  // document did not stop it being deleted in passing on 2026-09-03 (commit
+  // e46c729, a compliance-scope commit whose message never mentions layout).
+  //
+  // 🔴 Why it asserts the VALUE and not just that the two copies agree: the
+  // drift gate (make web-drift-check) only sees a ONE-SIDED removal. Delete it
+  // from both and the two files still match, so drift stays green while every
+  // edition scrolls wrong. This test names the value, so both copies have to
+  // keep it.
+  it.each([
+    ['user/web', USER_WEB_SHELL],
+    ['master/web', MASTER_WEB_SHELL],
+  ])('%s: the shell root keeps h-screen + overflow-hidden (body must not scroll)', (_who, file) => {
+    const root = read(file).match(/<div className="user-pages ([^"]*)"/);
+    expect(root, 'the user-pages root div is gone — this fence can no longer see the shell').not.toBeNull();
+    const classes = (root as RegExpMatchArray)[1].split(/\s+/);
+    expect(classes, 'h-screen was dropped: the root grows to content height, the inner ' +
+      'flex-1 overflow-y-auto loses its bounded height, and the sidebar scrolls away ' +
+      'with the content').toContain('h-screen');
+    expect(classes, 'overflow-hidden was dropped: the body scrolls again').toContain('overflow-hidden');
+  });
+
+  // 2026-09-11: the top-bar Refresh control, pinned in BOTH copies.
+  //
+  // It was added to user/web on 2026-09-01 and never mirrored, so Trial and the
+  // team console shipped without it for ten days. That is only cosmetic until
+  // you notice the panel has no other way to reload: the native window has no
+  // address bar, no browser reload button, and its context menu is trimmed to
+  // Cut/Copy/Paste. Cmd-R (aikey-tray panel_darwin.m) is the other half of this
+  // safety net; this half is the one a mouse can reach.
+  it.each([
+    ['user/web', USER_WEB_SHELL],
+    ['master/web', MASTER_WEB_SHELL],
+  ])('%s: the top bar keeps its Refresh control', (_who, file) => {
+    const src = read(file);
+    expect(src, 'the Refresh button lost its reload call — the control would be inert')
+      .toContain('window.location.reload()');
+    expect(src, "the Refresh button lost its accessible name — an icon-only button with " +
+      'no label reads as just "button" to a screen reader').toContain("aria-label={t('userShell.refresh')}");
+  });
+
   it('CROSS_APP_LABEL_I18N_KEY: every cross-app id maps to the same i18n key', () => {
     const userMap = extractStringMap(userSrc, 'CROSS_APP_LABEL_I18N_KEY');
     const masterMap = extractStringMap(masterSrc, 'CROSS_APP_LABEL_I18N_KEY');

@@ -28,6 +28,9 @@ import (
 	"testing"
 )
 
+// created_at 相对当下计算,不写死日期:本机 intake 每次 ingest 都跑一遍 30 天留存
+// 清理,写死的夹具老过窗口就会在同一次 ingest 里被插入又被删掉(HTTP 200、
+// accepted_ids 有它、SELECT 查不到)。围栏见 fixture_time_fence_test.go。
 func routeSourcePayload(eventID, routeSource string) string {
 	rs := ""
 	if routeSource != "" {
@@ -35,7 +38,7 @@ func routeSourcePayload(eventID, routeSource string) string {
 	}
 	return fmt.Sprintf(`{"events":[{
 		"event_id": %q,
-		"created_at": "2026-09-03T08:19:31Z",
+		"created_at": %q,
 		"user_id": "u_local",
 		"target_model": "gpt-4o-mini",
 		"scenario": "chat",
@@ -55,7 +58,7 @@ func routeSourcePayload(eventID, routeSource string) string {
 			"redacted_snippet": "我的手机号是 {{PHONE}}",
 			"context_snippet": "我的手机号是 13812345678"
 		}]
-	}]}`, eventID, rs, eventID+"-f1")
+	}]}`, eventID, freshComplianceCreatedAt(), rs, eventID+"-f1")
 }
 
 func TestComplianceIngest_RouteSourceRoundTrip(t *testing.T) {
