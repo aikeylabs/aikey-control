@@ -1890,7 +1890,10 @@ const OVERVIEW_CSS = `
   color: var(--muted-foreground);
   font-weight: 600;
   text-align: left;
-  background: rgba(var(--sink-rgb), 0.2);
+  /* 🔴 --table-header, not rgba(var(--sink-rgb), .2): sink is white in light, so
+     the header had no band. Same value in dark.
+     workflow/CI/bugfix/2026-09-11-table-headers-miss-the-header-token.md */
+  background: var(--table-header);
   border-bottom: 1px solid var(--border);
 }
 .overview-page table.vault td { border-bottom: 1px solid var(--border); font-size: 13px; }

@@ -349,7 +349,9 @@ export default function UserSchedulingLogPage() {
                   return (
                     <Fragment key={row.id}>
                       <tr
-                        className="cursor-pointer hover:bg-white/5"
+                        /* --overlay-active, not bg-white/5: a literal white hover is invisible in light; same value in dark.
+                           workflow/CI/bugfix/2026-09-11-tailwind-neutral-utilities-escaped-the-theme.md */
+                        className="cursor-pointer hover:bg-[var(--overlay-active)]"
                         style={{ borderBottom: expanded ? 'none' : '1px solid var(--border)' }}
                         onClick={() => setExpandedId(expanded ? null : row.id)}
                       >

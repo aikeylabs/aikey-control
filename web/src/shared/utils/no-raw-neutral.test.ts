@@ -56,6 +56,10 @@ const ADVISORY = false;
  * Ratchet, not a target. Measured 2026-09-03 by this fence against this repo's own
  * `src/pages`. It may only ever go DOWN. If a change makes this number grow,
  * that change added hardcoded neutrals to a page — use the tokens instead.
+ *
+ * Both repos are at 0, so the two copies of this file now agree. They are still
+ * allowed to diverge: `web-drift-check` carves vitest files out of the
+ * byte-equal dual-edit rule precisely so a test can be repo-aware.
  */
 const BASELINE = 0;
 
@@ -94,6 +98,26 @@ function countNeutralLiterals(raw: string): number {
 }
 
 /**
+ * 🔴 TAILWIND NEUTRAL UTILITIES (added 2026-09-11). `text-white`, `bg-white/5`
+ * and `bg-black/40` compile to literal colours, but no literal ever appears in
+ * the source — there is no `#fff` or `rgba(` for the scan above to read. That is
+ * how they escaped the whole 2026-09-03 migration: cluster-health rendered its
+ * node ids and page title white-on-white in light, and 15 tables lost their row
+ * hover, while this fence stayed green at 0.
+ * Bugfix: workflow/CI/bugfix/2026-09-11-tailwind-neutral-utilities-escaped-the-theme.md
+ *
+ * Grey palettes (zinc/gray/neutral/slate/stone) are matched too — zero today,
+ * same defect class. Chromatic palettes (red-400 …) are not; see "Why only
+ * neutrals" above.
+ */
+const TAILWIND_NEUTRAL =
+  /(?<![\w-])(?:[a-z-]+:)*(?:bg|text|border(?:-[trblxy])?|ring(?:-offset)?|divide|outline|fill|stroke|from|via|to|shadow|decoration|caret|accent|placeholder)-(?:white|black|(?:gray|zinc|neutral|slate|stone)-\d{2,3})(?:\/(?:\d+|\[[^\]]+\]))?(?![\w-])/g;
+
+function countTailwindNeutrals(raw: string): number {
+  return (raw.match(TAILWIND_NEUTRAL) ?? []).length;
+}
+
+/**
  * Exclusions, each learned from a false positive during the 2026-09-03 migration:
  *
  *  1. `var(--token, #fallback)` is NOT debt. The token always wins; the literal
@@ -115,7 +139,9 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-function countNeutrals(): { total: number; byFile: Array<[string, number]> } {
+function countNeutrals(
+  count: (raw: string) => number = countNeutralLiterals,
+): { total: number; byFile: Array<[string, number]> } {
   // 🔴 SCOPE WIDENED 2026-09-03. This scanned only `pages/` and therefore missed
   // `shared/ui/BrandWordmark.tsx`, which hardcoded the wordmark fill to #ffffff
   // — invisible on the light sidebar. A shared component renders on EVERY page,
@@ -146,8 +172,13 @@ function countNeutrals(): { total: number; byFile: Array<[string, number]> } {
       // <meta name="theme-color"> values in shared/utils/theme.ts — a meta tag
       // cannot take a var(). Mark the line `theme-literal-ok` and say why.
       if (raw.includes('theme-literal-ok')) continue;
-      if (/var\(\s*--[a-z0-9-]+\s*,/i.test(raw)) continue;
-      n += countNeutralLiterals(raw);
+      // A var() fallback exempts the LITERAL only — a class on the same line still renders.
+      if (count === countNeutralLiterals && /var\(\s*--[a-z0-9-]+\s*,/i.test(raw)) continue;
+      // Comment text on a CODE line cannot render either (2026-09-11): a Why note like
+      // `<tr /* was bg-white/5 */ className=…>` or `{/* was text-white …` counted as a
+      // violation. Only closed /* */ spans and JSX `{/*` openers are dropped — a bare
+      // `/*` also appears inside strings ('/user/*') and must not hide the rest of a line.
+      n += count(raw.replace(/\/\*.*?\*\//g, '').replace(/\{\/\*.*$/, ''));
     }
     if (n > 0) {
       // `path.relative` off a resolved __dirname printed a 200-deep `../` chain
@@ -191,6 +222,28 @@ describe('pages do not hardcode neutral colours (they cannot theme)', () => {
     }
 
     expect(total).toBeLessThanOrEqual(BASELINE);
+  });
+
+  it('no Tailwind neutral utility classes (text-white, bg-white/5, bg-black/40 …)', () => {
+    const { total, byFile } = countNeutrals(countTailwindNeutrals);
+    expect(
+      total,
+      `Tailwind neutral utilities in src/: ${total}. A class like text-white compiles to a
+literal colour, so it cannot follow the theme — white text vanishes on a light
+card and a bg-white/5 hover is invisible on one. Use the token whose DARK value
+is the same colour, so the switch is a no-op in dark:
+
+    text-white          -> text-[rgb(var(--lift-rgb))]       (ink in light)
+    text-white/40       -> text-[rgba(var(--lift-rgb),0.4)]
+    bg-white/[0.03]     -> bg-[rgba(var(--lift-rgb),0.03)]
+    hover:bg-white/5    -> hover:bg-[var(--overlay-active)]
+    bg-black/20         -> bg-[rgba(var(--sink-rgb),0.2)]      (alpha < 0.4 only)
+    bg-black/40         -> bg-[var(--well-recessed)]
+    white ON A COLOURED GROUND, on purpose -> text-[var(--fixed-white)]
+
+${byFile.map(([f, n]) => `    ${String(n).padStart(3)}  ${f}`).join('\n')}
+`,
+    ).toBe(0);
   });
 
   it('reports progress so the baseline can be ratcheted down', () => {

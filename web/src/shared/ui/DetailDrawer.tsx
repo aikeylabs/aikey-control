@@ -63,7 +63,7 @@ export function DetailDrawer({ open, onClose, title, subtitle, width = 480, chil
 
       {/* Drawer */}
       <div
-        className="fixed top-0 right-0 h-full z-50 flex flex-col transition-transform duration-200"
+        className="fixed top-0 right-0 h-full z-50 flex flex-col transition-[transform,box-shadow] duration-200"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -73,7 +73,15 @@ export function DetailDrawer({ open, onClose, title, subtitle, width = 480, chil
           maxWidth: '96vw',
           backgroundColor: 'var(--card)',
           borderLeft: '1px solid var(--border)',
-          boxShadow: '-8px 0 32px rgba(var(--scrim-rgb), 0.6)',
+          // 🔴 Shadow only while OPEN (2026-09-11). This drawer stays mounted when
+          // closed, parked just past the right edge — and a LEFT-cast shadow on a
+          // parked element paints back into the viewport: a dark band down the
+          // right edge of every page using it, with nothing open. Invisible on
+          // dark since 2026-05-07; the light theme exposed it. The shadow now
+          // fades with the slide (box-shadow is in the transition above).
+          // workflow/CI/bugfix/2026-09-11-closed-drawer-shadow-bleeds-into-page.md
+          // Fence: parked-drawer-casts-no-shadow.test.ts
+          boxShadow: open ? '-8px 0 32px rgba(var(--scrim-rgb), 0.6)' : 'none',
           transform: open ? 'translateX(0)' : 'translateX(100%)',
         }}
       >
