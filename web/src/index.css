@@ -1364,6 +1364,20 @@ body {
   border: 1px solid var(--border);
   font-weight: 500;
 }
+/* Outlined destructive chip (2026-09-12, compliance `answer`): the same red
+   family as .badge-revoked, distinguished by SHAPE not hue — block and answer
+   are both refusals and belong to one visual class, so a second red fill (which
+   would differ only by opacity and read as a rendering artefact) is wrong here.
+   Border-as-the-chip follows .badge-dim's established treatment above.
+   Both themes: --destructive-rgb / --destructive-text are theme tokens, so the
+   outline and the text track the active palette rather than being pinned light.
+   The 0.04 wash keeps the chip from disappearing into a tinted table row while
+   staying clearly unfilled next to .badge-revoked's 0.1. */
+.badge-revoked-outline {
+  background-color: rgba(var(--destructive-rgb), 0.04);
+  color: var(--destructive-text);
+  border: 1px solid rgba(var(--destructive-rgb), 0.55);
+}
 
 /* ── Buttons ── */
 .btn {

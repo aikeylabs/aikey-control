@@ -77,12 +77,19 @@ export const COMPLIANCE_ACTION_TAKEN_VALUES = [
   'block',
   'warn',
   'audit',
+  'answer',
 ] as const;
 
 export type ComplianceActionTaken = (typeof COMPLIANCE_ACTION_TAKEN_VALUES)[number];
 
 /** Badge variants used for action chips — a subset of `BadgeVariant`. */
-export type ComplianceActionBadgeVariant = 'red' | 'yellow' | 'green' | 'gray' | 'dim';
+export type ComplianceActionBadgeVariant =
+  | 'red'
+  | 'red-outline'
+  | 'yellow'
+  | 'green'
+  | 'gray'
+  | 'dim';
 
 /**
  * Outcome → chip style. Every value gets a DISTINCT variant; the fence asserts
@@ -94,8 +101,10 @@ export type ComplianceActionBadgeVariant = 'red' | 'yellow' | 'green' | 'gray' |
  *   block → red    (.badge-revoked)   the request was refused
  *   mask  → yellow (.badge-suspended) the bytes were altered
  *   warn  → gray   (.badge-neutral)   recorded and surfaced, bytes unchanged
- *   audit → dim    (.badge-dim)       recorded silently, bytes unchanged
- *   allow → green  (.badge-active)    nothing to see
+ *   audit  → dim         (.badge-dim)             recorded silently, unchanged
+ *   allow  → green       (.badge-active)          nothing to see
+ *   answer → red-outline (.badge-revoked-outline) refused, and the caller got
+ *                                                 a canned reply instead
  *
  * Why `dim` for `audit`: it is the one unassigned token, and its documented role
  * ("one hierarchy tier below the status pills: no fill, muted text, regular
@@ -106,12 +115,32 @@ export type ComplianceActionBadgeVariant = 'red' | 'yellow' | 'green' | 'gray' |
  *
  * `.badge-protocol` (blue) is deliberately NOT used: it is reserved for wire-
  * protocol labels, and reusing it here would make one color mean two things.
+ * 🔴 That reservation STILL HOLDS — `answer` did not take it (2026-09-12), and
+ * the next value must not either.
+ *
+ * Why `answer` is RED-FAMILY and not a colour of its own (2026-09-12 user
+ * decision). `block` and `answer` are a PAIR: both are refusals, and the only
+ * difference is whether the person got a sentence back. The value domain says
+ * so itself — they are kept apart precisely so a compliance officer counting
+ * refusals does not count a satisfied question as an incident. A brand-new
+ * colour would announce "this is a different kind of thing" and make the pair
+ * easy to miss when tallying; same hue says "same class" at a glance.
+ *
+ * Why OUTLINE rather than a lighter red fill. The distinction has to survive
+ * next to `block` at small chip size and in both themes. A second red fill
+ * differs only by opacity and reads as a rendering artefact; filled-vs-outlined
+ * is a shape difference, which stays legible when the two sit in the same
+ * column. It also reuses `.badge-dim`'s established "border IS the chip"
+ * treatment rather than inventing a new visual idea.
  */
 export const COMPLIANCE_ACTION_BADGE_VARIANT: Record<
   ComplianceActionTaken,
   ComplianceActionBadgeVariant
 > = {
   block: 'red',
+  // Same hue as block (they are the same class of outcome), different shape
+  // (the caller was answered). See the palette note above.
+  answer: 'red-outline',
   mask: 'yellow',
   warn: 'gray',
   audit: 'dim',
@@ -169,6 +198,9 @@ export function __resetUnknownActionWarnings(): void {
  */
 export const COMPLIANCE_ACTION_FILTER_ORDER: readonly ComplianceActionTaken[] = [
   'block',
+  // Immediately after block: the filter list is where an operator reasons about
+  // "what did we refuse", and the pair belongs side by side there too.
+  'answer',
   'mask',
   'warn',
   'audit',
@@ -202,6 +234,7 @@ export const COMPLIANCE_ACTION_LABEL_KEY: Record<
     mask: 'complianceAudit.actionMask',
     warn: 'complianceAudit.actionWarn',
     audit: 'complianceAudit.actionAudit',
+    answer: 'complianceAudit.actionAnswer',
     allow: 'complianceAudit.actionAllow',
   },
   compliancePage: {
@@ -209,6 +242,7 @@ export const COMPLIANCE_ACTION_LABEL_KEY: Record<
     mask: 'compliancePage.actionMask',
     warn: 'compliancePage.actionWarn',
     audit: 'compliancePage.actionAudit',
+    answer: 'compliancePage.actionAnswer',
     allow: 'compliancePage.actionAllow',
   },
 };

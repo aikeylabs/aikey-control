@@ -104,7 +104,13 @@ type complianceEventWire struct {
 	// A POINTER so "an older detector said nothing" stays distinguishable from
 	// "this request escalated and counted zero".
 	Escalation *complianceEscalationWire `json:"escalation,omitempty"`
-	Findings   []complianceFindingWire   `json:"findings"`
+	// MaxLevel is the highest classification level any finding on this event
+	// carried. A POINTER, and omitempty, because NULL and 0 are different
+	// answers: NULL = "nothing here was graded", 0 = "graded, at the bottom of
+	// the scale". Collapsing them would make every ungraded event look like the
+	// least-sensitive one (R-compliance-grading-1.S2).
+	MaxLevel *int                    `json:"max_level,omitempty"`
+	Findings []complianceFindingWire `json:"findings"`
 }
 
 // complianceEscalationWire mirrors the team lane's typed `escalation` payload
@@ -144,6 +150,21 @@ type complianceFindingWire struct {
 	// sends it ONLY when targeting the local ingest (localhost); the master
 	// path never carries it (DC5). Stored plaintext in control.db (local).
 	ContextSnippet string `json:"context_snippet,omitempty"`
+	// Level is the classification level the matching leaf stamped on this hit.
+	// Pointer + omitempty for the same reason as MaxLevel above: a hit that
+	// matched no leaf has NO grade, and 0 is a grade
+	// (R-compliance-grading-1.S2).
+	Level *int `json:"level,omitempty"`
+	// LeafPath is the classification leaf that stamped the level — same field
+	// name and same meaning as the master `compliance_findings.leaf_path`
+	// (2026-09-11 决策点 41 = A), so a member's self-view and the org audit page
+	// can be compared without a translation table
+	// (R-compliance-grading-23.S1).
+	//
+	// 🔴 It does NOT overwrite Category: the category stays whatever the
+	// detection channel produced. The leaf says where the content is filed, the
+	// category says what kind of thing was matched.
+	LeafPath string `json:"leaf_path,omitempty"`
 }
 
 type complianceIngestResponse struct {
@@ -381,11 +402,14 @@ func insertComplianceEvent(ctx context.Context, db *sql.DB, ev complianceEventWi
 	}
 	res, err := db.ExecContext(ctx, `
 		INSERT INTO local_compliance_events
-			(event_id, created_at, user_id, proxy_version, target_model, scenario, prompt_length, action_taken, prompt_hash, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(event_id, created_at, user_id, proxy_version, target_model, scenario, prompt_length, action_taken, prompt_hash, metadata, max_level)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(event_id) DO NOTHING`,
 		ev.EventID, created.UTC().Format(time.RFC3339), nullStr(ev.UserID), nullStr(ev.ProxyVersion),
-		nullStr(ev.TargetModel), nullStr(ev.Scenario), ev.PromptLength, ev.ActionTaken, nullStr(ev.PromptHash), metadata)
+		nullStr(ev.TargetModel), nullStr(ev.Scenario), ev.PromptLength, ev.ActionTaken, nullStr(ev.PromptHash), metadata,
+		// nullInt, not a bare deref: an uploader that sent no max_level must
+		// leave the column NULL rather than write 0 (R-compliance-grading-1.S2).
+		nullInt(ev.MaxLevel))
 	if err != nil {
 		return err
 	}
@@ -409,11 +433,14 @@ func insertComplianceEvent(ctx context.Context, db *sql.DB, ev complianceEventWi
 		}
 		if _, err := db.ExecContext(ctx, `
 			INSERT INTO local_compliance_findings
-				(finding_id, event_id, rule_id, category, entity_type, severity, confidence, start_offset, end_offset, detector, redacted_snippet, context_snippet)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				(finding_id, event_id, rule_id, category, entity_type, severity, confidence, start_offset, end_offset, detector, redacted_snippet, context_snippet, level, leaf_path)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(finding_id) DO NOTHING`,
 			f.FindingID, ev.EventID, nullStr(f.RuleID), f.Category, f.EntityType, f.Severity,
-			f.Confidence, f.StartOffset, f.EndOffset, nullStr(f.Detector), nullStr(f.RedactedSnippet), nullStr(f.ContextSnippet)); err != nil {
+			f.Confidence, f.StartOffset, f.EndOffset, nullStr(f.Detector), nullStr(f.RedactedSnippet), nullStr(f.ContextSnippet),
+			// Both NULL-preserving: an ungraded hit stores neither a 0 level nor
+			// an empty-string path that would read as a leaf named "".
+			nullInt(f.Level), nullStr(f.LeafPath)); err != nil {
 			return err
 		}
 	}
@@ -449,7 +476,11 @@ type complianceAuditEvent struct {
 	// links a verdict to the hits behind it. Absent on every content-hit row and
 	// on anything a pre-grading detector wrote.
 	Escalation *complianceEscalationWire `json:"escalation,omitempty"`
-	Findings   []complianceAuditFinding  `json:"findings"`
+	// MaxLevel: the event's highest finding level, read from its own column.
+	// Pointer + omitempty so an ungraded event omits the key entirely rather
+	// than reporting 0 — the page shows 未分级, not the bottom grade.
+	MaxLevel *int                     `json:"max_level,omitempty"`
+	Findings []complianceAuditFinding `json:"findings"`
 }
 
 type complianceAuditFinding struct {
@@ -463,6 +494,10 @@ type complianceAuditFinding struct {
 	RedactedSnippet string `json:"redacted_snippet,omitempty"`
 	// ContextSnippet: local-only un-redacted matched text + context (self-view).
 	ContextSnippet string `json:"context_snippet,omitempty"`
+	// Level / LeafPath: the grade and the classification leaf that stamped it,
+	// read from their own columns. Both omit when unset — see MaxLevel above.
+	Level    *int   `json:"level,omitempty"`
+	LeafPath string `json:"leaf_path,omitempty"`
 }
 
 // complianceListHandler returns the user's own compliance events (newest
@@ -547,7 +582,8 @@ func complianceListHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 		pageArgs := append(append([]any{}, args...), limit, offset)
 		rows, err := db.QueryContext(r.Context(), `
 			SELECT e.event_id, e.created_at, COALESCE(e.user_id,''), COALESCE(e.target_model,''),
-			       COALESCE(e.scenario,''), e.prompt_length, e.action_taken, COALESCE(e.metadata,'')
+			       COALESCE(e.scenario,''), e.prompt_length, e.action_taken, COALESCE(e.metadata,''),
+			       e.max_level
 			FROM local_compliance_events e `+whereSQL+`
 			ORDER BY e.created_at DESC
 			LIMIT ? OFFSET ?`, pageArgs...)
@@ -564,11 +600,18 @@ func complianceListHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 		for rows.Next() {
 			var e complianceAuditEvent
 			var metaRaw string
+			// 🔴 Through sql.NullInt64 so a NULL max_level stays ABSENT on the
+			// wire instead of becoming 0, which is a grade.
+			var maxLevel sql.NullInt64
 			if err := rows.Scan(&e.EventID, &e.CreatedAt, &e.UserID, &e.TargetModel,
-				&e.Scenario, &e.PromptLength, &e.ActionTaken, &metaRaw); err != nil {
+				&e.Scenario, &e.PromptLength, &e.ActionTaken, &metaRaw, &maxLevel); err != nil {
 				logger.Warn("compliance list: scan event failed", "error", err)
 				cmplErr(w, http.StatusInternalServerError, "query failed")
 				return
+			}
+			if maxLevel.Valid {
+				v := int(maxLevel.Int64)
+				e.MaxLevel = &v
 			}
 			// Extension fields live in the metadata JSON column (e.g. detect_latency_ms).
 			if metaRaw != "" {
@@ -612,7 +655,8 @@ func attachComplianceFindings(ctx context.Context, db *sql.DB, ids []any, events
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 	rows, err := db.QueryContext(ctx, `
 		SELECT event_id, finding_id, COALESCE(rule_id,''), category, entity_type, severity,
-		       confidence, COALESCE(detector,''), COALESCE(redacted_snippet,''), COALESCE(context_snippet,'')
+		       confidence, COALESCE(detector,''), COALESCE(redacted_snippet,''), COALESCE(context_snippet,''),
+		       level, COALESCE(leaf_path,'')
 		FROM local_compliance_findings
 		WHERE event_id IN (`+placeholders+`)
 		ORDER BY confidence DESC`, ids...)
@@ -623,9 +667,18 @@ func attachComplianceFindings(ctx context.Context, db *sql.DB, ids []any, events
 	for rows.Next() {
 		var eventID string
 		var f complianceAuditFinding
+		// 🔴 level scans through sql.NullInt64, NOT straight into *int: a NULL
+		// must stay absent on the wire. leaf_path is COALESCEd to '' above and
+		// omitempty does the same job for it.
+		var level sql.NullInt64
 		if err := rows.Scan(&eventID, &f.FindingID, &f.RuleID, &f.Category, &f.EntityType,
-			&f.Severity, &f.Confidence, &f.Detector, &f.RedactedSnippet, &f.ContextSnippet); err != nil {
+			&f.Severity, &f.Confidence, &f.Detector, &f.RedactedSnippet, &f.ContextSnippet,
+			&level, &f.LeafPath); err != nil {
 			return err
+		}
+		if level.Valid {
+			v := int(level.Int64)
+			f.Level = &v
 		}
 		if i, ok := idx[eventID]; ok {
 			events[i].Findings = append(events[i].Findings, f)
@@ -682,6 +735,20 @@ func nullStr(s string) any {
 		return nil
 	}
 	return s
+}
+
+// nullInt keeps "the uploader said nothing" distinct from "the uploader said
+// zero" all the way into the column.
+//
+// 🔴 This is why the grading wire fields are pointers. A plain int would arrive
+// as 0 from any detector that predates grading, and 0 is a LEVEL — every
+// ungraded hit on every old client would silently be filed as the
+// lowest-graded content (R-compliance-grading-1.S2 requires it to be absent).
+func nullInt(v *int) any {
+	if v == nil {
+		return nil
+	}
+	return *v
 }
 
 func parseIntDefault(s string, def int) int {

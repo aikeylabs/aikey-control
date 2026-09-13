@@ -334,6 +334,102 @@ describe('the four sentences fixed on 2026-08-10c stay fixed', () => {
   });
 });
 
+/**
+ * ══ 两个留存窗口必须分开说 ═════════════════════════════════════════════════
+ *
+ * spec: R-compliance-audit-retention-1（「对客披露文案 SHALL 区分'片段 90 天 /
+ * 事件 N 年'」）· 需求包 阶段9-商业化版本/博时基金合规能力融合 task 4.7
+ *
+ * 为什么这是一条**必须写进文案**的规则，而不只是后端配置：合规账本上其实有
+ * 两个寿命完全不同的东西，
+ *   · 命中处前后那一小段**原文片段**（`compliance_findings.context_snippet`）
+ *     —— 90 天（`rawSnippetRetentionDays`，团队服务端入库时触发清空）；
+ *   · **事件本身与命中元数据**（时间、命中的规则与类别、敏感等级、处置结果）
+ *     —— 组织声明的留存期，默认 1826 天 ≈ 5 年
+ *     （`organizations.compliance_event_retention_days`，出自《证券期货业网络和
+ *     信息安全管理办法》第 18 条的业务日志五年）。
+ * 只写 90 天，员工会读成「三个月后什么都没了」；只写 5 年，员工会读成「我的
+ * 原文要在服务器上躺五年」。**两个都是错的，而且错的方向相反**——所以这里断言
+ * 的是「两个数字都在，并且说清了是分开计的」，不是某一个数字在。
+ *
+ * 🔴 本版本到期**不删事件**（`snippet_retention.go` 的 defaultCompliance
+ * EventRetentionDays 注释：拍板点 40-A 只交付「策略可配 + 策略可导出」，归档导出
+ * 后再删属阶段 B）。所以文案不能写成「5 年后删除」——那是一句还没兑现的承诺。
+ *
+ * 能红：
+ *   - 从任一披露文案里删掉 5 年 / 5 years → 红；
+ *   - 删掉 90 天 / 90 days → 红；
+ *   - 把两个窗口合成一句（去掉「分开计 / counted separately」）→ 红；
+ *   - 写成「5 年后自动删除 / deleted after five years」→ 红（承诺没兑现）。
+ */
+describe('the two retention windows are disclosed separately (R-compliance-audit-retention-1)', () => {
+  const en = (k: string) => FLAT.en[k];
+  const zh = (k: string) => FLAT.zh[k];
+
+  /** 「到期就删」是本版本做不到的事，任何披露面都不许这么写。 */
+  const assertNoDisposalPromise = (enText: string, zhText: string, where: string) => {
+    expect(enText, `${where}: this release deletes nothing on expiry — do not promise disposal`).not.toMatch(
+      /(deleted|erased|removed|purged)\s+(after|at the end of)/i,
+    );
+    expect(zhText, `${where}: 本版本到期不删事件，不要写成到期删除`).not.toMatch(/(到期|期满)后?(即|自动)?删除/);
+  };
+
+  it('🔴 the self-view notice names BOTH windows and says they are counted separately', () => {
+    const enText = en('compliancePage.pageDescription');
+    const zhText = zh('compliancePage.pageDescription');
+    // The snippet window (already disclosed since 2026-08-11) must survive.
+    expect(enText, 'the 90-day snippet window must stay disclosed').toMatch(/90 days/i);
+    expect(zhText).toMatch(/90 天/);
+    // The event window is the half this requirement adds.
+    expect(enText, 'the event/metadata window must be disclosed too').toMatch(/5 years/i);
+    expect(zhText).toMatch(/5 年/);
+    // …and the reader must be told these are two different clocks, or the two
+    // numbers next to each other read as a contradiction.
+    expect(enText, 'say the two windows are separate').toMatch(/separate/i);
+    expect(zhText).toMatch(/分开(计|算)/);
+    // The event row is metadata, not content — saying so is what keeps "5 years"
+    // from reading as "my prompt text is kept for five years".
+    expect(enText, 'the event window must be scoped to metadata, not the original text').toMatch(/no original text/i);
+    expect(zhText).toMatch(/不含原文/);
+    assertNoDisposalPromise(enText, zhText, 'compliancePage.pageDescription');
+    // 🔴 「保留 5 年」摆在「保留 90 天」旁边，读者会顺着读成「5 年后就删了」——
+    // 而本版本什么都不删（snippet_retention.go 的 defaultComplianceEventRetentionDays
+    // 注释：处置属阶段 B）。所以这句话必须自己把这层暗示掐掉，不能靠读者不联想。
+    expect(enText, 'the notice must say this release does not delete the event at the end of the window')
+      .toMatch(/(does not|never) delete/i);
+    expect(zhText).toMatch(/不(会)?自动删除/);
+  });
+
+  it('🔴 the compliance toggle discloses both windows as well', () => {
+    // Only aikey-control ships this settings card; skip cleanly on the peer.
+    const enText = en('settings.compliance.description');
+    if (enText === undefined) return;
+    const zhText = zh('settings.compliance.description');
+    expect(enText).toMatch(/90 days/i);
+    expect(zhText).toMatch(/90 天/);
+    expect(enText, 'a reader of the toggle must learn the event window too').toMatch(/5 years/i);
+    expect(zhText).toMatch(/5 年/);
+    assertNoDisposalPromise(enText, zhText, 'settings.compliance.description');
+  });
+
+  it('🔴 the disclosure carries no sample of anything anybody actually typed', () => {
+    // 红线：披露文案本身不得出现真实命中样例。An illustrative "e.g. 138…" in the
+    // notice would be a detection sample rendered to every reader of the page.
+    for (const key of ['compliancePage.pageDescription', 'settings.compliance.description']) {
+      for (const flat of Object.values(FLAT)) {
+        const text = flat[key];
+        if (!text) continue;
+        expect(text, `${key} must not carry an example of matched content`).not.toMatch(
+          /(例如|例:|例：|e\.g\.|for example)/i,
+        );
+        expect(text, `${key} must not carry a digit run long enough to be a real identifier`).not.toMatch(
+          /\d{7,}/,
+        );
+      }
+    }
+  });
+});
+
 describe('dual-edit', () => {
   it('🔴 this fence is byte-identical in aikey-control/web and aikey-control-master/web', () => {
     // Both catalogs carry these strings (master mirrors the reused pages), so a

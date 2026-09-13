@@ -151,8 +151,55 @@ function mentionedKeys(dir: string): Set<string> {
   return out;
 }
 
+/**
+ * Count `t(` + backtick occurrences that are real CODE, skipping comments.
+ *
+ * Why this exists (2026-09-12): the counter used to match raw file text, so a
+ * comment WARNING against dynamic keys — "NOT t(`...${strategy}`): a
+ * template-literal key is invisible to this fence" — counted as a dynamic key.
+ * The fence punished writing the very explanation that prevents the
+ * anti-pattern, and its number read as "somebody added a dynamic key" when
+ * somebody had documented why they had not. Three of the twenty matches were
+ * prose (EditGroupDrawer.tsx:91, cascade-model.ts:74, RuleImportDialog.tsx:47);
+ * the real count is seventeen.
+ *
+ * Do NOT "simplify" this back to a comment-stripping regex. That was tried
+ * first and it silently ATE A REAL CALL in pages/user/account/index.tsx — a CSS
+ * template literal in that file carries block-comment markers of its own, so
+ * naive pairing swallowed live code and the count went DOWN while a real
+ * dynamic key sat there uncounted. An undercount is the dangerous direction
+ * here: it turns this budget green while the hole it guards is open. A scanner
+ * that knows about string literals is the only version that cannot do that.
+ */
+function countDynamicKeys(src: string): number {
+  let n = 0;
+  let i = 0;
+  let mode: 'code' | 'line' | 'block' | "'" | '"' | '`' = 'code';
+  while (i < src.length) {
+    const c = src[i];
+    const next = src[i + 1];
+    if (mode === 'code') {
+      if (c === '/' && next === '/') { mode = 'line'; i += 2; continue; }
+      if (c === '/' && next === '*') { mode = 'block'; i += 2; continue; }
+      if (c === "'" || c === '"' || c === '`') { mode = c; i += 1; continue; }
+      if (c === 't' && !/[A-Za-z0-9_$]/.test(src[i - 1] ?? '')) {
+        const m = /^t\(\s*`/.exec(src.slice(i, i + 8));
+        if (m) { n += 1; i += m[0].length; mode = '`'; continue; }
+      }
+      i += 1;
+      continue;
+    }
+    if (mode === 'line') { if (c === '\n') mode = 'code'; i += 1; continue; }
+    if (mode === 'block') { if (c === '*' && next === '/') { mode = 'code'; i += 2; continue; } i += 1; continue; }
+    if (c === '\\') { i += 2; continue; }
+    if (c === mode) { mode = 'code'; }
+    i += 1;
+  }
+  return n;
+}
+
 function dynamicCallSites(dir: string): number {
-  return sourceFiles(dir).reduce((n, f) => n + [...fs.readFileSync(f, 'utf-8').matchAll(DYNAMIC_KEY)].length, 0);
+  return sourceFiles(dir).reduce((n, f) => n + countDynamicKeys(fs.readFileSync(f, 'utf-8')), 0);
 }
 
 /** Render "key (first-using-file)" lines so a failure names the fix site. */

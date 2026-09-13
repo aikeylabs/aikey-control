@@ -36,6 +36,7 @@ import { complianceApi, type ComplianceEventDTO, type ComplianceFindingDTO } fro
 import { derivePasswordTier } from './password-tier-state';
 import { appsApi } from '@/shared/api/user/apps';
 import { Badge } from '@/shared/ui/Badge';
+import { LevelBadge } from '@/shared/compliance/level-badge';
 import { PageHeader } from '@/shared/ui/PageHeader';
 import { InfoHint } from '@/shared/ui/InfoHint';
 import { Pagination, useStoredPageSize } from '@/shared/ui/Pagination';
@@ -51,6 +52,11 @@ import {
   snippetBoxStyle,
 } from '@/shared/utils/mask-highlight';
 import { engineLoadBadge, engineLoadStateIsUnreadable } from './engine-load-state';
+// 「这一行是内容命中还是整条请求的裁决」——判据只有 scenario 一个，唯一出口在
+// request-verdict.ts（那里写了为什么不能看 action_taken）。
+import { findingsCell } from './request-verdict';
+// 处置列的词表出口：认识就翻译，不认识就原样大写（action-label.ts 说明了为什么）。
+import { complianceActionText } from './action-label';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
 import { FilterTokenBar, type FilterToken, type FilterTokenDimension } from '@/shared/ui/FilterTokenBar';
 import { complianceEntityTypeOptions } from '@/shared/compliance/entity-types';
@@ -725,17 +731,69 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
               ) : events.length === 0 ? (
                 <tr><td colSpan={5} className="px-5 py-10 text-center text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{t('compliancePage.noEvents')}</td></tr>
               ) : (
-                events.map((e) => (
-                  <tr key={e.event_id} className="cursor-pointer transition-colors hover:bg-[rgba(var(--primary-rgb), 0.045)]" style={{ borderBottom: '1px solid var(--border)' }} onClick={() => openEvent(e)}>
+                events.map((e) => {
+                  // 🔴 行的类别只看 `scenario`（request-verdict.ts）。裁决行没有自己
+                  // 的 findings，按内容行渲染就是那条「BLOCK + ×0 + 长横线」的记录：
+                  // 说自己拦了、却什么都没命中、也不说为什么。
+                  const cell = findingsCell(e);
+                  const isVerdict = cell.kind === 'verdict';
+                  return (
+                  <tr
+                    key={e.event_id}
+                    className="cursor-pointer transition-colors hover:bg-[rgba(var(--primary-rgb), 0.045)]"
+                    /* 两类行必须一眼分得开、且**不用读字**：裁决行带一条左侧色条加
+                       淡底，扫列表的人在解析任何文字之前就看得出「这一条说的是整条
+                       请求」。只用既有 token——写死颜色会在两套主题里各瞎一次
+                       （bugfix 2026-09-11-tailwind-neutral-utilities-escaped-the-theme）。 */
+                    style={isVerdict
+                      ? {
+                          borderBottom: '1px solid var(--border)',
+                          borderLeft: '3px solid var(--primary)',
+                          backgroundColor: 'rgba(var(--primary-dim-rgb), 0.07)',
+                        }
+                      : { borderBottom: '1px solid var(--border)' }}
+                    title={isVerdict ? t('compliancePage.verdictRowHint') : undefined}
+                    onClick={() => openEvent(e)}
+                  >
                     <td className="px-4 py-3.5 text-xs font-mono" style={{ color: 'var(--foreground)' }}>{fmtTime(e.created_at)}</td>
-                    <td className="px-4 py-3.5"><Badge variant={actionVariant(e.action_taken)}>{e.action_taken.toUpperCase()}</Badge></td>
+                    {/* 每一行保留**它自己**的处置。裁决行的 block 不外溢到内容行上：
+                        片段是被脱敏后发出去的，被拦的是整条请求（与 bugfix
+                        2026-09-04-warn-rows-look-masked 同型的误读）。 */}
+                    <td className="px-4 py-3.5"><Badge variant={actionVariant(e.action_taken)}>{complianceActionText(e.action_taken, t)}</Badge></td>
+                    {cell.kind === 'verdict' ? (
+                      /* 「命中」+「命中片段」两格合并：裁决行两格都答不上来（0 处命中、
+                         没有片段），空着或画长横线都是在说「什么都没有」。改说这一行
+                         唯一要回答的问题——整条请求为什么被拦。 */
+                      <td className="px-4 py-3.5" colSpan={2}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Badge variant="protocol">{t('compliancePage.verdictBadge')}</Badge>
+                          {cell.escalation ? (
+                            <>
+                              <span className="text-[11px] font-mono truncate" style={{ color: 'var(--foreground)' }}>
+                                {t('compliancePage.verdictRule')}: {cell.escalation.rule}
+                              </span>
+                              <span className="text-[10px] font-mono tabular-nums shrink-0" style={{ color: 'var(--muted-foreground)' }}>
+                                {t('compliancePage.escalationCounted', { count: cell.escalation.counted })}
+                              </span>
+                            </>
+                          ) : (
+                            /* 更早版本的节点代理上报的裁决行不带明细。说出来，而不是
+                               留白假装这里本来就没东西。 */
+                            <span className="text-[11px] font-mono truncate" style={{ color: 'var(--muted-foreground)' }}>
+                              {t('compliancePage.verdictNoDetail')}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    ) : (
+                    <>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         {topSeverity(e) && <Badge variant={severityVariant(topSeverity(e))}>{topSeverity(e).toUpperCase()}</Badge>}
                         {[...new Set(e.findings.map((f) => f.category))].map((c) => (
                           <span key={c} className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(var(--lift-rgb), 0.05)', color: 'var(--muted-foreground)' }}>{c}</span>
                         ))}
-                        <span className="text-[10px] font-mono tabular-nums" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>×{e.findings.length}</span>
+                        <span className="text-[10px] font-mono tabular-nums" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>×{cell.count}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
@@ -772,9 +830,12 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                         );
                       })()}
                     </td>
+                    </>
+                    )}
                     <td className="px-5 py-3.5 text-xs font-mono whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>{e.target_model || '—'}</td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -802,11 +863,41 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
       >
         {selected && (
           <div>
+            {/* Sensitivity level (敏感等级) — its OWN slot at the top of the
+                drawer, never the password-tier chip's, because the two both got
+                called 「级」 and answer different questions: password tier = how
+                much the detector was allowed to infer; sensitivity level = how
+                secret the data is (spec: R-compliance-grading-7.S1, proposal.md
+                拍板点 24). Style and text live in the shared component — the
+                source scan in aikey-control-master
+                web/src/pages/master/compliance/level-action-literal.test.ts
+                fails on any second copy in either tree.
+
+                🔴 `labels` is deliberately NOT passed yet. The customer's word
+                for a grade lives in the org's grading document, and this member
+                page has no reader for it: the health surface it does read
+                (GET /admin/compliance/packs) grows `grading{ladder,
+                leaf_count, …}` under R-compliance-grading-4.S1, which does not
+                include `labels`, and that field is another task's. Until a
+                reader exists the chip states the grade WITHOUT a name, which is
+                the honest form — a guessed name renders confidently and wrongly
+                for every org but the one it was copied from.
+
+                Absent grade ⇒ no grade chip (an older detector reports none),
+                but the slot still says so rather than going blank, so the
+                reader can tell "not graded" from "we forgot to show it". */}
+            <div className="pb-2">
+              {selected.max_level != null ? (
+                <LevelBadge level={selected.max_level} />
+              ) : (
+                <Badge variant="dim">{t('complianceGrading.levelBadge.unrated')}</Badge>
+              )}
+            </div>
             <DrawerField label={t('compliancePage.fieldEventId')} value={<span className="break-all text-[11px]">{selected.event_id}</span>} />
             <DrawerField label={t('compliancePage.columnTime')} value={formatDateTime(selected.created_at)} />
             <DrawerField label={t('compliancePage.columnAction')} value={
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant={actionVariant(selected.action_taken)}>{selected.action_taken.toUpperCase()}</Badge>
+                <Badge variant={actionVariant(selected.action_taken)}>{complianceActionText(selected.action_taken, t)}</Badge>
                 {/* Same reason as the list column (see SENT_UNCHANGED): the
                     per-finding snippets below are masked for display even when
                     nothing was rewritten on the wire. */}
@@ -817,6 +908,39 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                 )}
               </div>
             } />
+            {/* Request-level escalation (2026-09-11, task 1.16 plumbed it here,
+                5.1 renders it).
+
+                🔴 WHY THIS BLOCK EXISTS AT ALL. Without it the self-view shows
+                three `mask` hits and one unexplained `block`, and the single
+                question a member opens this page to answer —「我这条请求为什么
+                被拦」— is the one that got dropped. The per-finding cards below
+                say what was matched; only this says why the REQUEST was stopped.
+
+                Rendered only when present: it rides a `scenario:
+                "request_verdict"` event, and a content-hit event legitimately
+                carries none — absence is not a gap and must not read as one.
+
+                unit_ids are ids only (no hash, no snippet) by
+                DEC-compliance-grading-14, so showing the count and letting the
+                reader see the ids is the whole available link to the evidence. */}
+            {selected.escalation && (
+              <DrawerField label={t('compliancePage.fieldEscalation')} value={
+                <div className="space-y-1">
+                  <div className="text-[11px] font-mono" style={{ color: 'var(--foreground)' }}>
+                    {selected.escalation.rule}
+                  </div>
+                  <div className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
+                    {t('compliancePage.escalationCounted', { count: selected.escalation.counted })}
+                  </div>
+                  {selected.escalation.unit_ids.length > 0 && (
+                    <div className="text-[10px] font-mono break-all" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>
+                      {selected.escalation.unit_ids.join(', ')}
+                    </div>
+                  )}
+                </div>
+              } />
+            )}
             <DrawerField label={t('compliancePage.columnModel')} value={selected.target_model || '—'} />
             <DrawerField label={t('compliancePage.fieldPromptLength')} value={selected.prompt_length} />
             {selected.detect_latency_ms != null && (

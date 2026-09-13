@@ -46,6 +46,45 @@ export interface ComplianceFindingDTO {
    * injected; `redacted_snippet` deliberately stays unchanged either way.
    */
   wire_label?: string;
+  /**
+   * The classification grade the matching leaf stamped on THIS hit —
+   * `local_compliance_findings.level` / `compliance_findings.level`.
+   *
+   * 🔴 Absent is a real state, not a zero. A hit that maps to no classification
+   * leaf carries NO grade (spec: R-compliance-grading-1.S2); rendering 0 would
+   * file it as the least-sensitive content. Same rule as `max_level` below.
+   */
+  level?: number | null;
+  /**
+   * The classification leaf that stamped `level`, e.g.
+   * `公司信息/研发/项目代号`. Same field name and meaning on the local and the
+   * master store (2026-09-11 决策点 41 = A), so the member self-view and the org
+   * audit page can be read side by side.
+   *
+   * 🔴 It does NOT replace `category`: the category is what the detection
+   * channel matched, this is where the content is filed
+   * (spec: R-compliance-grading-23.S1).
+   */
+  leaf_path?: string;
+}
+
+/**
+ * The REQUEST-level escalation conclusion — why the whole request was stopped,
+ * as opposed to what each individual hit was.
+ *
+ * Present ONLY on a `scenario: "request_verdict"` event; every content-hit event
+ * omits it. Field set fixed by DEC-compliance-grading-14 and mirrored byte for
+ * byte across aikey-proxy, aikey-control-master and the local lane, so the same
+ * payload decodes identically wherever it is read.
+ */
+export interface ComplianceEscalationDTO {
+  /** The escalation rule that fired, e.g. a cumulative-level threshold. */
+  rule: string;
+  /** How many pieces were counted toward that rule. */
+  counted: number;
+  /** Event ids of the content hits that were counted — the link from a verdict
+   *  to its evidence. Ids only: no hash, no fingerprint, no snippet. */
+  unit_ids: string[];
 }
 
 export interface ComplianceEventDTO {
@@ -57,6 +96,29 @@ export interface ComplianceEventDTO {
   prompt_length: number;
   action_taken: string;   // allow | mask | block | warn
   detect_latency_ms?: number;  // detection step's own time (ms), self-view only
+  /**
+   * Highest sensitivity grade (敏感等级) among this event's findings —
+   * `compliance_events.max_level`, wire name taken verbatim from the master
+   * DTO (aikey-control-master service/internal/compliance/handler.go).
+   *
+   * 🔴 OPTIONAL, and absent is a real state, not a zero: a detector older than
+   * the grading release reports no grade, and master's intake also drops a
+   * level the org's `labels` document does not define. The console renders
+   * NOTHING for absent rather than a plausible default — see
+   * shared/compliance/level-badge.tsx (spec: R-compliance-grading-7.S1).
+   */
+  max_level?: number | null;
+  /**
+   * Why the WHOLE request was stopped. Absent on content-hit events and on
+   * anything a pre-grading detector wrote.
+   *
+   * 🔴 Without rendering this, the self-view shows three `mask` hits plus one
+   * unexplained `block`, and the one question a member opens this page to answer
+   * —「我这条请求为什么被拦」— is exactly the one that got dropped
+   * (spec: R-compliance-grading-23.S1; task 1.16 plumbed it to the DTO, 5.1
+   * renders it).
+   */
+  escalation?: ComplianceEscalationDTO | null;
   findings: ComplianceFindingDTO[];
 }
 
