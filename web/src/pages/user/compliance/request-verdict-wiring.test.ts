@@ -75,3 +75,20 @@ describe('自查页的处置列词表接线', () => {
     expect((src.match(/complianceActionText\(/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 });
+
+// ── TODO-171（DEC-compliance-grading-27）──
+describe('自查页的 route_policy / 下限接线', () => {
+  it('列表与抽屉都渲染路由策略，「无明细」只在两者都没有时出现', () => {
+    const src = code();
+    for (const fn of ['eventRoutePolicy(', 'routePolicyVerdictText(', 'verdictHasDetail(', 'countedIsLowerBound(']) {
+      expect(src.includes(fn), `页面没有调用 ${fn}`).toBe(true);
+    }
+    expect(src.includes('compliancePage.verdictCountedLowerBound'), '页面没有下限提示').toBe(true);
+  });
+
+  it('DTO 声明了 route_policy 与 counted_is_lower_bound', () => {
+    const api = fs.readFileSync(path.resolve(process.cwd(), 'src/shared/api/user/compliance.ts'), 'utf-8');
+    expect(api).toMatch(/route_policy\?:/);
+    expect(api).toMatch(/counted_is_lower_bound\?:/);
+  });
+});

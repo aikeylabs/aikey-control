@@ -85,6 +85,23 @@ export interface ComplianceEscalationDTO {
   /** Event ids of the content hits that were counted — the link from a verdict
    *  to its evidence. Ids only: no hash, no fingerprint, no snippet. */
   unit_ids: string[];
+  /** `true` ⇔ a piece exceeded the 16 KB scan cap, so `counted` is only a lower
+   *  bound (DEC-compliance-grading-27). Absent is NOT 「计数完整」. */
+  counted_is_lower_bound?: boolean;
+}
+
+/**
+ * Request-level route-policy verdict (TODO-171, DEC-compliance-grading-27): the
+ * ONE grading route_policy rule a request violated — not the grading document's
+ * rule list. Mirrors master RoutePolicyVerdictDTO. Ids only.
+ */
+export interface ComplianceRoutePolicyVerdictDTO {
+  /** The violated rule's min_level, 1–5. */
+  min_level: number;
+  /** Provider code the request was routed to. Absent ⇔ target unknown. */
+  target_provider?: string;
+  /** Event ids of the content hits that triggered the rule. */
+  unit_ids: string[];
 }
 
 export interface ComplianceEventDTO {
@@ -119,6 +136,9 @@ export interface ComplianceEventDTO {
    * renders it).
    */
   escalation?: ComplianceEscalationDTO | null;
+  /** Route-policy verdict, beside `escalation` on a request-verdict row
+   *  (spec: R-compliance-grading-8.S1). Absent elsewhere. */
+  route_policy?: ComplianceRoutePolicyVerdictDTO | null;
   findings: ComplianceFindingDTO[];
 }
 

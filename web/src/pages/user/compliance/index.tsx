@@ -54,7 +54,7 @@ import {
 import { engineLoadBadge, engineLoadStateIsUnreadable } from './engine-load-state';
 // 「这一行是内容命中还是整条请求的裁决」——判据只有 scenario 一个，唯一出口在
 // request-verdict.ts（那里写了为什么不能看 action_taken）。
-import { findingsCell } from './request-verdict';
+import { countedIsLowerBound, eventRoutePolicy, findingsCell, routePolicyVerdictText, verdictHasDetail } from './request-verdict';
 // 处置列的词表出口：认识就翻译，不认识就原样大写（action-label.ts 说明了为什么）。
 import { complianceActionText } from './action-label';
 import { DetailDrawer, DrawerField } from '@/shared/ui/DetailDrawer';
@@ -767,14 +767,28 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                       <td className="px-4 py-3.5" colSpan={2}>
                         <div className="flex items-center gap-2 min-w-0">
                           <Badge variant="protocol">{t('compliancePage.verdictBadge')}</Badge>
-                          {cell.escalation ? (
+                          {verdictHasDetail(e) ? (
                             <>
-                              <span className="text-[11px] font-mono truncate" style={{ color: 'var(--foreground)' }}>
-                                {t('compliancePage.verdictRule')}: {cell.escalation.rule}
-                              </span>
-                              <span className="text-[10px] font-mono tabular-nums shrink-0" style={{ color: 'var(--muted-foreground)' }}>
-                                {t('compliancePage.escalationCounted', { count: cell.escalation.counted })}
-                              </span>
+                              {/* TODO-171: a verdict may carry route_policy, escalation,
+                                  or both (DEC-compliance-grading-27, R-compliance-grading-8.S1). */}
+                              {(() => {
+                                const rp = eventRoutePolicy(e);
+                                return rp ? (
+                                  <span className="text-[11px] font-mono truncate" style={{ color: 'var(--foreground)' }}>
+                                    {routePolicyVerdictText(rp, t)}
+                                  </span>
+                                ) : null;
+                              })()}
+                              {cell.escalation && (
+                                <>
+                                  <span className="text-[11px] font-mono truncate" style={{ color: 'var(--foreground)' }}>
+                                    {t('compliancePage.verdictRule')}: {cell.escalation.rule}
+                                  </span>
+                                  <span className="text-[10px] font-mono tabular-nums shrink-0" style={{ color: 'var(--muted-foreground)' }}>
+                                    {t('compliancePage.escalationCounted', { count: cell.escalation.counted })}
+                                  </span>
+                                </>
+                              )}
                             </>
                           ) : (
                             /* 更早版本的节点代理上报的裁决行不带明细。说出来，而不是
@@ -933,6 +947,13 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                   <div className="text-[11px] font-mono" style={{ color: 'var(--muted-foreground)' }}>
                     {t('compliancePage.escalationCounted', { count: selected.escalation.counted })}
                   </div>
+                  {/* Only on an explicit `true` — absent is NOT 「计数完整」
+                      (R-compliance-grading-17.S2, DEC-compliance-grading-27). */}
+                  {countedIsLowerBound(selected) && (
+                    <div className="text-[11px] font-mono leading-relaxed" style={{ color: 'var(--warning-text)' }}>
+                      ⚠ {t('compliancePage.verdictCountedLowerBound')}
+                    </div>
+                  )}
                   {selected.escalation.unit_ids.length > 0 && (
                     <div className="text-[10px] font-mono break-all" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>
                       {selected.escalation.unit_ids.join(', ')}
@@ -941,6 +962,27 @@ export default function ComplianceSelfViewPage({ source = LOCAL_SOURCE, headerEx
                 </div>
               } />
             )}
+            {/* TODO-171 route-policy verdict (R-compliance-grading-8.S1): which
+                sensitivity level may not go where, and which hits triggered it.
+                Ids only (DEC-compliance-grading-27). */}
+            {(() => {
+              const rp = eventRoutePolicy(selected);
+              if (!rp) return null;
+              return (
+                <DrawerField label={t('compliancePage.fieldEscalation')} value={
+                  <div className="space-y-1">
+                    <div className="text-[11px] font-mono break-all" style={{ color: 'var(--foreground)' }}>
+                      {routePolicyVerdictText(rp, t)}
+                    </div>
+                    {rp.unit_ids.length > 0 && (
+                      <div className="text-[10px] font-mono break-all" style={{ color: 'var(--muted-foreground)', opacity: 0.75 }}>
+                        {rp.unit_ids.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                } />
+              );
+            })()}
             <DrawerField label={t('compliancePage.columnModel')} value={selected.target_model || '—'} />
             <DrawerField label={t('compliancePage.fieldPromptLength')} value={selected.prompt_length} />
             {selected.detect_latency_ms != null && (

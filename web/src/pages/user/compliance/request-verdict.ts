@@ -38,7 +38,12 @@
  * request-verdict.test.ts 就能可执行地钉住它；页面只剩接线，由
  * request-verdict-wiring.test.ts 的源码扫描守。
  */
-import type { ComplianceEscalationDTO, ComplianceEventDTO } from '@/shared/api/user/compliance';
+import type {
+  ComplianceEscalationDTO,
+  ComplianceEventDTO,
+  ComplianceRoutePolicyVerdictDTO,
+} from '@/shared/api/user/compliance';
+import { formatLevelBadgeText } from '@/shared/compliance/level-badge';
 
 /**
  * `compliance_events.scenario` 里标记请求裁决行的值。
@@ -93,9 +98,61 @@ export function eventEscalation(
  * 法。围栏钉的就是它。
  */
 export function linkedContentEventIds(
-  e: Pick<ComplianceEventDTO, 'scenario' | 'escalation'>,
+  e: Pick<ComplianceEventDTO, 'scenario' | 'escalation' | 'route_policy'>,
 ): string[] {
-  return eventEscalation(e)?.unit_ids ?? [];
+  // Union of escalation.unit_ids and route_policy.unit_ids (TODO-171),
+  // de-duplicated, original order, escalation first.
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of [...(eventEscalation(e)?.unit_ids ?? []), ...(eventRoutePolicy(e)?.unit_ids ?? [])]) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/**
+ * 裁决行携带的路由策略裁决（TODO-171，DEC-compliance-grading-27），与 escalation
+ * 平级；不是裁决行或没带都返回 `null`。spec: R-compliance-grading-8.S1
+ */
+export function eventRoutePolicy(
+  e: Pick<ComplianceEventDTO, 'scenario' | 'route_policy'>,
+): ComplianceRoutePolicyVerdictDTO | null {
+  if (!isRequestVerdict(e)) return null;
+  return e.route_policy ?? null;
+}
+
+/**
+ * 裁决行有没有明细：escalation 与 route_policy 任一在即有。
+ * 🔴 「未携带明细（更早版本代理）」只能在两者都没有时说。
+ */
+export function verdictHasDetail(
+  e: Pick<ComplianceEventDTO, 'scenario' | 'escalation' | 'route_policy'>,
+): boolean {
+  return eventEscalation(e) !== null || eventRoutePolicy(e) !== null;
+}
+
+/**
+ * 计数是不是下限：只有 `counted_is_lower_bound === true` 才是。缺席 ≠ 计数完整。
+ * spec: R-compliance-grading-17.S2
+ */
+export function countedIsLowerBound(e: Pick<ComplianceEventDTO, 'scenario' | 'escalation'>): boolean {
+  return eventEscalation(e)?.counted_is_lower_bound === true;
+}
+
+/**
+ * 路由策略裁决那一句话。与 master 审计页 `routePolicyVerdictText` 同一措辞
+ * （compliance-term-dictionary.test.ts D2 钉两仓同词）。自查页拿不到组织的
+ * 等级名（TODO-172），等级只印「敏感等级 L<n>」。
+ */
+export function routePolicyVerdictText(
+  rp: ComplianceRoutePolicyVerdictDTO,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  const level = formatLevelBadgeText(rp.min_level, undefined, t('complianceGrading.levelBadge.prefix'));
+  const target = rp.target_provider || t('compliancePage.verdictRoutePolicyUnknownTarget');
+  return t('compliancePage.verdictRoutePolicy', { level, target });
 }
 
 /**

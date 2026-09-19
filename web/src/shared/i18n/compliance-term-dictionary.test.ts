@@ -179,6 +179,10 @@ const CONCEPT_PAIRS: { concept: string; audit: string; selfView: string }[] = [
   { concept: '裁决行是整条请求的结论', audit: 'complianceAudit.verdictRowHint', selfView: 'compliancePage.verdictRowHint' },
   { concept: '触发的升级规则', audit: 'complianceAudit.verdictRule', selfView: 'compliancePage.verdictRule' },
   { concept: '裁决行没带明细', audit: 'complianceAudit.verdictNoDetail', selfView: 'compliancePage.verdictNoDetail' },
+  // TODO-171（DEC-compliance-grading-27）：裁决行上的路由策略与计数下限，两个控制台同一句话。
+  { concept: '路由策略拒绝', audit: 'complianceAudit.verdictRoutePolicy', selfView: 'compliancePage.verdictRoutePolicy' },
+  { concept: '路由目标未知', audit: 'complianceAudit.verdictRoutePolicyUnknownTarget', selfView: 'compliancePage.verdictRoutePolicyUnknownTarget' },
+  { concept: '计数只是下限', audit: 'complianceAudit.verdictCountedLowerBound', selfView: 'compliancePage.verdictCountedLowerBound' },
   { concept: '处置=代答', audit: 'complianceAudit.actionAnswer', selfView: 'compliancePage.actionAnswer' },
   { concept: '处置=拦截', audit: 'complianceAudit.actionBlock', selfView: 'compliancePage.actionBlock' },
   { concept: '处置=脱敏', audit: 'complianceAudit.actionMask', selfView: 'compliancePage.actionMask' },

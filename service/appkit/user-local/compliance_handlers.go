@@ -104,6 +104,16 @@ type complianceEventWire struct {
 	// A POINTER so "an older detector said nothing" stays distinguishable from
 	// "this request escalated and counted zero".
 	Escalation *complianceEscalationWire `json:"escalation,omitempty"`
+	// RoutePolicy is the REQUEST-level route-policy verdict (which grading
+	// route_policy rule this request violated, its target provider, the
+	// triggering content rows), BESIDE Escalation on the same verdict row —
+	// DEC-compliance-grading-27 (TODO-171, user decision 2026-09-18). Mirrors
+	// master intakeEventWire.RoutePolicy. Declared here because this lane is
+	// lenient: undeclared = silently dropped, and the member's 「为什么被拦」
+	// answer (「路由策略拦的」) would be gone. Stored in metadata, no schema change.
+	//
+	// spec: R-compliance-grading-8.S1
+	RoutePolicy *complianceRoutePolicyWire `json:"route_policy,omitempty"`
 	// MaxLevel is the highest classification level any finding on this event
 	// carried. A POINTER, and omitempty, because NULL and 0 are different
 	// answers: NULL = "nothing here was graded", 0 = "graded, at the bottom of
@@ -132,6 +142,21 @@ type complianceEscalationWire struct {
 	Rule    string   `json:"rule"`
 	Counted int      `json:"counted"`
 	UnitIDs []string `json:"unit_ids"`
+	// CountedIsLowerBound (DEC-compliance-grading-27): true ⇔ a piece exceeded
+	// the scan cap and was truncated, so Counted is only a lower bound. Absent ≠
+	// 「计数完整」. spec: R-compliance-grading-17.S2
+	CountedIsLowerBound bool `json:"counted_is_lower_bound,omitempty"`
+}
+
+// complianceRoutePolicyWire mirrors master intakeRoutePolicyWire /
+// storage.RoutePolicy (field set fixed by DEC-compliance-grading-27). NOT the
+// grading document's route_policy[] rule list — this is the one rule a request
+// violated. Ids only in UnitIDs; TargetProvider absent ⇔ target unknown. Also
+// the READ DTO, so anything added here is served to the page.
+type complianceRoutePolicyWire struct {
+	MinLevel       int      `json:"min_level"`
+	TargetProvider string   `json:"target_provider,omitempty"`
+	UnitIDs        []string `json:"unit_ids"`
 }
 
 type complianceFindingWire struct {
@@ -395,6 +420,10 @@ func insertComplianceEvent(ctx context.Context, db *sql.DB, ev complianceEventWi
 	if ev.Escalation != nil {
 		meta["escalation"] = ev.Escalation
 	}
+	// Same column, same arrangement (DEC-compliance-grading-27).
+	if ev.RoutePolicy != nil {
+		meta["route_policy"] = ev.RoutePolicy
+	}
 	if len(meta) > 0 {
 		if b, err := json.Marshal(meta); err == nil {
 			metadata = string(b)
@@ -476,6 +505,9 @@ type complianceAuditEvent struct {
 	// links a verdict to the hits behind it. Absent on every content-hit row and
 	// on anything a pre-grading detector wrote.
 	Escalation *complianceEscalationWire `json:"escalation,omitempty"`
+	// RoutePolicy (TODO-171): the request-level route-policy verdict, parsed
+	// from metadata. Present only on a request_verdict row.
+	RoutePolicy *complianceRoutePolicyWire `json:"route_policy,omitempty"`
 	// MaxLevel: the event's highest finding level, read from its own column.
 	// Pointer + omitempty so an ungraded event omits the key entirely rather
 	// than reporting 0 — the page shows 未分级, not the bottom grade.
@@ -616,14 +648,16 @@ func complianceListHandler(db *sql.DB, logger *slog.Logger) http.HandlerFunc {
 			// Extension fields live in the metadata JSON column (e.g. detect_latency_ms).
 			if metaRaw != "" {
 				var meta struct {
-					DetectLatencyMs float64                   `json:"detect_latency_ms"`
-					RouteSource     string                    `json:"route_source"`
-					Escalation      *complianceEscalationWire `json:"escalation"`
+					DetectLatencyMs float64                    `json:"detect_latency_ms"`
+					RouteSource     string                     `json:"route_source"`
+					Escalation      *complianceEscalationWire  `json:"escalation"`
+					RoutePolicy     *complianceRoutePolicyWire `json:"route_policy"`
 				}
 				if err := json.Unmarshal([]byte(metaRaw), &meta); err == nil {
 					e.DetectLatencyMs = meta.DetectLatencyMs
 					e.RouteSource = meta.RouteSource
 					e.Escalation = meta.Escalation
+					e.RoutePolicy = meta.RoutePolicy
 				}
 			}
 			e.Findings = []complianceAuditFinding{}

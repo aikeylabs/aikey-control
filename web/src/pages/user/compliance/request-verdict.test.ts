@@ -19,6 +19,10 @@ import {
   findingsCell,
   isRequestVerdict,
   linkedContentEventIds,
+  countedIsLowerBound,
+  eventRoutePolicy,
+  routePolicyVerdictText,
+  verdictHasDetail,
 } from './request-verdict';
 
 function event(over: Partial<ComplianceEventDTO> = {}): ComplianceEventDTO {
@@ -150,5 +154,49 @@ describe('跨仓孪生常量', () => {
   // storage.ScenarioRequestVerdict 都写死这个字面量。
   it('scenario 字面量逐字钉住', () => {
     expect(SCENARIO_REQUEST_VERDICT).toBe('request_verdict');
+  });
+});
+
+// ── TODO-171（DEC-compliance-grading-27）：自查页的 route_policy 与计数下限 ──
+// spec: R-compliance-grading-8.S1 · R-compliance-grading-17.S2 · R-compliance-grading-18
+describe('route_policy 与计数下限', () => {
+  const routeOnly = verdict({
+    escalation: undefined,
+    route_policy: { min_level: 4, target_provider: 'anthropic', unit_ids: ['u_a'] },
+  });
+
+  it('🔴 只有 route_policy 的裁决行不是「无明细」', () => {
+    expect(eventEscalation(routeOnly)).toBeNull();
+    expect(eventRoutePolicy(routeOnly)?.min_level).toBe(4);
+    expect(verdictHasDetail(routeOnly)).toBe(true);
+    expect(verdictHasDetail(verdict({ escalation: undefined }))).toBe(false);
+  });
+
+  it('route_policy 只在裁决行上被读出来', () => {
+    expect(eventRoutePolicy(event({ route_policy: { min_level: 4, unit_ids: [] } }))).toBeNull();
+  });
+
+  it('只在 counted_is_lower_bound === true 时提示下限', () => {
+    expect(countedIsLowerBound(verdict({
+      escalation: { rule: 'r', counted: 3, unit_ids: [], counted_is_lower_bound: true },
+    }))).toBe(true);
+    expect(countedIsLowerBound(verdict())).toBe(false);
+    expect(countedIsLowerBound(routeOnly)).toBe(false);
+  });
+
+  it('关联内容取两份 unit_ids 的并集，去重且保持原顺序', () => {
+    const both = verdict({ route_policy: { min_level: 4, unit_ids: ['u_b', 'u_z'] } });
+    expect(linkedContentEventIds(both)).toEqual(['u_a', 'u_b', 'u_c', 'u_z']);
+  });
+
+  it('那句话带「敏感等级」前缀；目标缺席 ⇒ 目标未知', () => {
+    const t = (k: string, o?: Record<string, unknown>) =>
+      k === 'complianceGrading.levelBadge.prefix' ? '敏感等级'
+        : k === 'compliancePage.verdictRoutePolicyUnknownTarget' ? '目标未知'
+          : `${k}|${o?.level}|${o?.target}`;
+    expect(routePolicyVerdictText({ min_level: 4, unit_ids: [] }, t))
+      .toBe('compliancePage.verdictRoutePolicy|敏感等级 L4|目标未知');
+    expect(routePolicyVerdictText({ min_level: 5, target_provider: 'openai', unit_ids: [] }, t))
+      .toBe('compliancePage.verdictRoutePolicy|敏感等级 L5|openai');
   });
 });
