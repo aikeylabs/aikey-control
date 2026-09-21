@@ -62,7 +62,13 @@
     "rule": "规则",
     "provider": "供应商",
     "upstreamStatus": "上游状态",
-    "upstreamMessage": "上游消息"
+    "upstreamMessage": "上游消息",
+    "byCode": {
+      "BUILTIN_PACK_CLASSIFICATION_READONLY": {
+        "message": "内置包由所有组织共享，它的分类树是只读的，不能在这里定级。",
+        "suggestion": "要给贵司的数据定级，请到「合规包 › 新建合规包」建一个自己的包，在那里按贵司的等级设置。"
+      }
+    }
   },
   "filterBar": {
     "all": "全部",

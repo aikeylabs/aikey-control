@@ -14,14 +14,40 @@ interface ApiErrorDisplayProps {
 }
 
 /**
+ * Per-code localized copy: the codes whose message / next step the console words
+ * itself, in both locales, instead of showing the server's English sentence.
+ *
+ * A copy table with literal keys rather than `t(\`errorDisplay.byCode.${code}\`)`:
+ * i18n-key-coverage.test.ts can only see literal keys (R1 resolves them, R4
+ * finds their caller), and budgets template-literal ones. A code not listed
+ * keeps what parseApiError produced — the server's message + api-error.ts's
+ * English SUGGESTIONS; an en `suggestion` here must equal that SUGGESTIONS
+ * entry (api-error-display-i18n.test.tsx).
+ * bugfix: workflow/CI/bugfix/2026-09-21-compliance-error-envelope-rendered-as-text-twice.md
+ */
+const LOCALIZED_BY_CODE: Record<string, { message: string; suggestion: string }> = {
+  // spec: R-compliance-grading-25 内置包的分类树只读
+  BUILTIN_PACK_CLASSIFICATION_READONLY: {
+    message: 'errorDisplay.byCode.BUILTIN_PACK_CLASSIFICATION_READONLY.message',
+    suggestion: 'errorDisplay.byCode.BUILTIN_PACK_CLASSIFICATION_READONLY.suggestion',
+  },
+};
+
+/**
  * Renders a structured API error with:
  *  - Error code + message (all errors)
  *  - Field + rule details (DATA_* errors)
  *  - Provider name + upstream HTTP status + upstream message (EXT_* errors)
  *  - Actionable next-step suggestion
  */
-export function ApiErrorDisplay({ error, compact = false }: ApiErrorDisplayProps) {
+export function ApiErrorDisplay({ error: raw, compact = false }: ApiErrorDisplayProps) {
   const { t } = useTranslation();
+  const copy = Object.prototype.hasOwnProperty.call(LOCALIZED_BY_CODE, raw.code)
+    ? LOCALIZED_BY_CODE[raw.code]
+    : undefined;
+  const error: ApiError = copy
+    ? { ...raw, message: t(copy.message), suggestion: t(copy.suggestion) }
+    : raw;
   const isData = error.code.startsWith('DATA_');
   const isExt  = error.code.startsWith('EXT_');
 

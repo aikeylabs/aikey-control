@@ -113,6 +113,10 @@ const SUGGESTIONS: Record<string, string> = {
   SYS_CONFIG:   'A service configuration error occurred. Contact your administrator.',
   SYS_MAIL_NOT_CONFIGURED: 'Email delivery is not configured on this server, so the login email was NOT sent. Ask your administrator to configure SMTP.',
   SYS_AGENT_VK_INVALIDATION_UNAVAILABLE: 'The previous Agent API key could not be invalidated safely, so rotation was not applied. Check Hub OAuth ingress health and retry.',
+
+  // Compliance (service/internal/compliance — `{error, code, details}` envelope)
+  // spec: R-compliance-grading-25 内置包的分类树只读
+  BUILTIN_PACK_CLASSIFICATION_READONLY: 'Built-in packs are shared by every organization, so their classification cannot be graded here. To grade your own data, create a pack of your own (Compliance Packs › New Pack) and set the levels there.',
 };
 
 /**
@@ -139,6 +143,25 @@ export function parseApiError(err: unknown): ApiError {
         code,
         message: typeof data.message === 'string' ? data.message : code,
         suggestion: SUGGESTIONS[code],
+      };
+    }
+    // 🔴 The THIRD envelope: compliance's `{error: <sentence>, code: <CODE>,
+    // details: <next step>}` (service/internal/compliance/handler.go
+    // writeError). Here `error` is the human sentence, NOT the code — the
+    // reverse of the branch below. Before this branch it fell through to that
+    // one, which read the sentence as the code AND as the message, so every
+    // compliance refusal rendered as 「[sentence] sentence」 and its next step
+    // was dropped (reported 2026-09-21 on the built-in pack 「发布」 refusal).
+    // A curated suggestion wins over `details` so the console's own wording and
+    // i18n apply; `details` covers every code the table has not named yet.
+    // bugfix: workflow/CI/bugfix/2026-09-21-compliance-error-envelope-rendered-as-text-twice.md
+    if (typeof data?.code === 'string' && typeof data?.error === 'string') {
+      const code = data.code;
+      const details = typeof data.details === 'string' && data.details !== '' ? data.details : undefined;
+      return {
+        code,
+        message: data.error,
+        suggestion: SUGGESTIONS[code] ?? details,
       };
     }
     if (data?.error && typeof data.error === 'string') {
@@ -264,6 +287,9 @@ const LABELS: Record<string, string> = {
   SYS_CONFIG:   'Config Error',
   SYS_MAIL_NOT_CONFIGURED: 'Email Not Configured',
   SYS_AGENT_VK_INVALIDATION_UNAVAILABLE: 'Rotation Not Applied',
+
+  // Compliance
+  BUILTIN_PACK_CLASSIFICATION_READONLY: 'Built-in Pack Is Read-only',
 };
 
 /**

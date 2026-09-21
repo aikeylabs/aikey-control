@@ -62,7 +62,13 @@
     "rule": "Rule",
     "provider": "Provider",
     "upstreamStatus": "Upstream status",
-    "upstreamMessage": "Upstream message"
+    "upstreamMessage": "Upstream message",
+    "byCode": {
+      "BUILTIN_PACK_CLASSIFICATION_READONLY": {
+        "message": "This is a built-in pack: it is shared by every organization, so its classification tree is read-only and cannot be graded here.",
+        "suggestion": "Built-in packs are shared by every organization, so their classification cannot be graded here. To grade your own data, create a pack of your own (Compliance Packs › New Pack) and set the levels there."
+      }
+    }
   },
   "filterBar": {
     "all": "All",
