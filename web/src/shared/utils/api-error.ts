@@ -91,6 +91,16 @@ const SUGGESTIONS: Record<string, string> = {
   BIZ_OAUTH_GROUP_DELETED: 'This pool is in the recycle bin and accepts no changes. Use or create another pool.',
   BIZ_ACCESS_TOKEN_HAS_ACTIVE_REFS: 'Unbind this access token from its account pool first (Account pools → Edit pool → Seats), then delete again.',
 
+  // BIZ — Device routing token (需求包 codex-pool-anti-linkage §4b.2)
+  // One account pool is held by exactly ONE device routing token, so the refusal
+  // has to say what to do with the pool the admin just picked — offering "retry"
+  // would be a dead end, and the old token is not visible from the add dialog.
+  DEVICE_ROUTING_TOKEN_POOL_TAKEN: 'This account pool is already bound by another device routing token. Pick a different pool, or delete the token that holds this one (deleting it releases the pool).',
+  // The public address carries the account-pool id and the token identifies the
+  // same pool; a mismatch means the two were pasted from DIFFERENT tokens, which
+  // is the one failure a tokenhub channel can be configured into.
+  BIZ_DEVICE_ROUTING_TOKEN_PAIR_MISMATCH: 'The token and the account-pool id in the address do not belong together. Check that the tokenhub channel\'s base URL and key were both copied from the SAME device routing token.',
+
   // BIZ — Provider
   BIZ_PROV_NOT_FOUND: 'The provider was not found. It may have been removed.',
 
@@ -267,6 +277,10 @@ const LABELS: Record<string, string> = {
   BIZ_OAUTH_GROUP_DELETED: 'Pool Deleted',
   BIZ_ACCESS_TOKEN_HAS_ACTIVE_REFS: 'Token Still Bound',
   BIZ_PROV_NOT_FOUND:  'Provider Not Found',
+
+  // BIZ — Device routing token
+  DEVICE_ROUTING_TOKEN_POOL_TAKEN: 'Pool Already Bound',
+  BIZ_DEVICE_ROUTING_TOKEN_PAIR_MISMATCH: 'Address/Token Mismatch',
 
   // DATA
   DATA_INVALID_BODY:  'Invalid Request',

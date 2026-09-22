@@ -136,7 +136,18 @@ func DomainErrorHTTPStatus(code string) int {
 		// unreachable" — two conditions needing opposite responses. Moving this
 		// code to another 4xx keeps every test here green and silently zeroes
 		// that counter.
-		CodeBizRouteGroupEndpointPairMismatch:
+		CodeBizRouteGroupEndpointPairMismatch,
+		// The device-routing-token half of the SAME pairing refusal (需求包
+		// codex-pool-anti-linkage, R-device-routing-token-dispatch-1.S2). It sits
+		// in this case group rather than in one of its own for the reason written
+		// at its declaration: address-and-credential mismatches are one class, and
+		// a three-way symmetry answered with three statuses is a fence with three
+		// chances to be wrong. Everything said above about 403 being load-bearing
+		// for the ingress's health attribution applies to this code too.
+		//
+		// spec: R-device-routing-token-dispatch-1 请求只能到达该号池 —— 见 .S2
+		// roadmap20260320/技术实现/阶段9-商业化版本/codex-pool-anti-linkage/openspec/specs/device-routing-token-dispatch/spec.md
+		CodeBizDeviceRoutingTokenPairMismatch:
 		return http.StatusForbidden
 
 	// ── 404 Not Found ─────────────────────────────────────────────────────────
@@ -180,6 +191,16 @@ func DomainErrorHTTPStatus(code string) int {
 		// first" guards and the deleted-pool tombstone — the same 409 family as
 		// the R39/R40 guards above.
 		CodeBizOauthGroupHasActiveRefs, CodeBizOauthGroupDeleted, CodeBizAccessTokenHasActiveRefs,
+		// 需求包 codex-pool-anti-linkage (R-device-routing-token-dispatch-1.S3):
+		// the account pool already carries a device-routing token, and a pool
+		// carries exactly one. Same family as the three guards above — the
+		// request is well formed, the state it conflicts with is deliberate,
+		// and the remedy (delete that token, or pick another pool) is the
+		// administrator's. 🚫 Not 422: nothing about the submitted body is wrong.
+		//
+		// spec: R-device-routing-token-dispatch-1 设备路由令牌恰好绑定一个号池且独占它 —— 见 .S3
+		// roadmap20260320/技术实现/阶段9-商业化版本/codex-pool-anti-linkage/openspec/specs/device-routing-token-dispatch/spec.md
+		CodeBizDeviceRoutingTokenPoolTaken,
 		CodeBizLoginSessionTerminated, CodeBizSSOIdentityConflict,
 		// The virtual key ALREADY has an active binding for this
 		// (protocol_type, provider_id) pair. Like the R39 guard above this is a
@@ -221,6 +242,17 @@ func DomainErrorHTTPStatus(code string) int {
 		// spec: R-access-token-pool-choice-3 —— 停用池是请求语义错误（调用方
 		// 换个池或启用它即可），不是权限问题，故 422 而非 403。
 		CodeBizOauthGroupInactive,
+		// The administrator's 上场 / 下场 switch, refused because the allocation
+		// engine holds the account at quarantine or a terminal lifecycle
+		// (需求包 codex-pool-anti-linkage, task 4.19). 422 and not 403: the
+		// caller is an authorised admin and the body is well formed — it is the
+		// ACCOUNT's state that cannot be processed as asked, exactly like
+		// CodeBizCredInactive two lines up.
+		//
+		// spec: R-oauth-account-pool-73 —— BUT NOT quarantine / replaced /
+		//       disabled 账号可被上场
+		// workflow/CI/requirements/2026-06-23-oauth-account-pool.md
+		CodeBizOauthAccountLifecycleNotSettable,
 		CodeBizOauthGroupDisabled, CodeBizBindTargetInvalid,
 		CodeBizVKGroupExclusive, CodeBizSSOProviderDisabled,
 		// Same family as CodeBizVKGroupExclusive directly above: an OAuth account

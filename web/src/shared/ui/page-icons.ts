@@ -63,6 +63,14 @@ const MASTER_PAGE_GLYPH: Record<string, GlyphName> = {
   'control-events': 'history',
   'conversation-audit': 'conversation',
   'dashboard': 'dashboard',
+  // Device routing tokens (需求包 codex-pool-anti-linkage) — 'fingerprint', the
+  // glyph THIS shell already ships (AppShell.FingerprintIcon), for the same
+  // reason 'shield' was picked for Licence below: reuse beats adding a mark. It
+  // is also the literal subject — the thing this page routes by is a DEVICE
+  // fingerprint (设备键 = sha256(installation_id)), one account per device. The
+  // user tree's 'fingerprint' belongs to its OAuth domain; the two tables are
+  // separate consoles and never appear together (see the note above).
+  'device-routing-tokens': 'fingerprint',
   // Licence — 'shield' matches the sidebar's ShieldIcon in AppShell. Unused
   // elsewhere in THIS table; the user tree's 'vault' also uses it, which is a
   // different console with a different nav, so the two never appear together.

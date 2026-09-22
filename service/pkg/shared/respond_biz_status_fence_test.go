@@ -128,6 +128,27 @@ func TestDomainErrorStatus_BindingConflictCodes(t *testing.T) {
 		// responses are opposite.
 		{CodeBizRouteGroupEndpointPairMismatch, http.StatusForbidden,
 			"the address and the key are one credential; 403 is what the ingress attributes pair_mismatch on"},
+
+		// 2026-09-22, issuing a DEVICE ROUTING TOKEN (需求包 codex-pool-anti-linkage,
+		// task 4.1). Pinned rather than left to the class fence for the usual
+		// reason — "not 500" is satisfied by any 4xx — plus one specific to this
+		// pair: they are two refusals of the SAME feature that must NOT collapse
+		// into one status. A pairing mismatch is about WHO is calling (403); a
+		// taken pool is about the STATE the administrator is calling into (409),
+		// and the console greys the pool row out on the second, not the first.
+		{CodeBizDeviceRoutingTokenPoolTaken, http.StatusConflict,
+			"the pool already carries a device-routing token — existing state the admin resolves, like CodeBizOauthGroupHasActiveRefs"},
+		{CodeBizDeviceRoutingTokenPairMismatch, http.StatusForbidden,
+			"the address and the token are one credential; the ingress attributes pair_mismatch by status"},
+
+		// 2026-09-22, the administrator's explicit 上场 / 下场 switch (task 4.19).
+		// Pinned because the alternative reading is genuinely tempting and
+		// genuinely wrong: "you may not do that" sounds like 403, and a 403 would
+		// send an authorised admin to check their permissions while the real
+		// blocker is the ACCOUNT's state. Every neighbour in the 422 family
+		// (CodeBizCredInactive, CodeBizOauthGroupInactive) makes the same call.
+		{CodeBizOauthAccountLifecycleNotSettable, http.StatusUnprocessableEntity,
+			"the engine holds the account at quarantine / a terminal lifecycle — an unusable object, like CodeBizCredInactive"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code, func(t *testing.T) {

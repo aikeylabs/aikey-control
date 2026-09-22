@@ -180,6 +180,9 @@ var zhMessages = map[string]string{
 	CodeBizRouteGroupIngressNotConfigured: "该集群没有配置入口地址（控制机上的 {{setting_key}} 未设置），无法生成端点地址；请在集群清单里给 hub 行填 advertise=（deploy-cluster-production.sh --inventory），或给 cluster-install.sh 传 --oauth-ingress-domain，然后重新执行安装脚本",
 	CodeBizRouteGroupProtocolUnsupported:  "入口目前不能以服务端点的形式承载 {{protocol}} 协议；当前支持：{{supported}}",
 	CodeBizRouteGroupEndpointPairMismatch: "这把端点密钥不属于所访问的这个端点（{{route_group_id}}）；地址与密钥是一对，请改用该端点自己的密钥，或改用这把密钥对应端点的地址",
+	// 同上一条的口吻：只说「这一对不匹配、怎么改」，不猜是谁配错的，也不透露地址里
+	// 那个账号池是否存在（R-oauth-account-pool-43 中性文案）。
+	CodeBizDeviceRoutingTokenPairMismatch: "这把令牌与地址里的账号池（{{oauth_group_id}}）不是一对；地址与令牌是一对，请改用该账号池自己的设备路由令牌，或改用这把令牌对应账号池的地址",
 
 	// BIZ — Login Session / OAuth
 	CodeBizLoginSessionNotFound:         "登录会话 {{id}} 不存在",
@@ -357,6 +360,38 @@ const (
 	// account the admin deliberately retired (P2-1/P2-1b, review backlog
 	// 20260827-OAuth账号池Token权威迁移-评审遗留backlog.md).
 	CodeBizOAuthAccountReclaimed = "BIZ_OAUTH_ACCOUNT_RECLAIMED"
+	// CodeBizOauthAccountLifecycleNotSettable: an administrator tried to put a
+	// pool account ON FIELD (or take it off) whose serving lifecycle is NOT
+	// theirs to set — the allocation engine has quarantined it (a ban / hard
+	// revoke) or driven it to a terminal lifecycle (`replaced` / `disabled`).
+	// 422.
+	//
+	// # Why this refusal exists
+	//
+	// 2026-09-22 (UD-53) gave the administrator a SECOND way to promote a
+	// standby account, because the engine's own way — capacity-driven
+	// `promote_standby` — is triggered by member-seat demand, and a
+	// device-routing-token customer pool has zero member seats by design, so its
+	// accounts would sit at `standby` forever and every device's first request
+	// would answer 429. The new entry is deliberately NOT a general lifecycle
+	// editor: quarantine and the terminal states are the engine's SAFETY
+	// verdicts (§5.2 invariant 3 — quarantine is terminal, and the proxy lands
+	// it from a 401 "token has been revoked"). A console switch that could undo
+	// them would put a banned upstream account straight back into rotation,
+	// which is the outage the whole anti-ban design exists to prevent. The way
+	// back is the existing reclaim / re-login path, which re-establishes the
+	// credential rather than re-labelling it.
+	//
+	// 🔴 422, not 403: the caller is an authorised administrator and nothing
+	// about the submitted body is malformed — it is the ACCOUNT's state that
+	// makes the request unprocessable, and the remedy (reclaim it, sign it in
+	// again, or pick another account) is theirs. Same family as
+	// CodeBizCredInactive and CodeBizOauthGroupInactive.
+	//
+	// spec: R-oauth-account-pool-73 standby 上场的两条途径（引擎容量提拔 或
+	//       管理员显式上场）—— BUT NOT quarantine / replaced / disabled 账号可被上场
+	// workflow/CI/requirements/2026-06-23-oauth-account-pool.md
+	CodeBizOauthAccountLifecycleNotSettable = "BIZ_OAUTH_ACCOUNT_LIFECYCLE_NOT_SETTABLE"
 	// CodeBizCredHasActiveRefs: a provider credential/account could not be moved to
 	// the recycle bin because live references still point at it — active direct-bind
 	// channels (managed_provider_bindings) and/or a seat-group attachment
@@ -447,7 +482,69 @@ const (
 	// zeroes that counter. Fence: aikey-hub
 	// TestEndpointHealth_AControlPlanePairingRefusalCountsAsAPairMismatch.
 	CodeBizRouteGroupEndpointPairMismatch = "BIZ_ROUTE_GROUP_ENDPOINT_PAIR_MISMATCH"
-	CodeBizOauthGroupDefaultProtected     = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
+	// CodeBizDeviceRoutingTokenPairMismatch: a device-routing token and the
+	// account-pool id in the address it arrived on do not name the same pool —
+	// or one of the two is not what the other namespace expects.
+	//
+	// It is ONE code for a THREE-WAY symmetry, and that is deliberate
+	// (R-device-routing-token-dispatch-1.S2): a device-routing token presented on
+	// the /oauth_group/ or /route_group/ namespace, and an ordinary access token
+	// or a route-group endpoint key presented on /device_routing_token/, are the
+	// same mistake seen from different sides — the caller holds a real credential
+	// and is pointing it at the wrong kind of address. Splitting it into
+	// per-direction codes is how the route-group fence ended up single-sided
+	// (workflow/CI/bugfix/20260909-endpoint-key-served-on-the-oauth-namespace.md):
+	// each direction then needs its own branch, and the one nobody exercises is
+	// the one that is missing.
+	//
+	// 🔴 403, not 404, for the same reason as its route-group sibling above: the
+	// address exists and the credential is valid, so "not found" would send the
+	// caller hunting a deleted token. The cluster ingress also attributes
+	// `pair_mismatch` on /cluster/health BY STATUS, so moving this to another 4xx
+	// silently zeroes that counter.
+	//
+	// spec: R-device-routing-token-dispatch-1 设备路由令牌恰好绑定一个号池且独占它，
+	// 请求只能到达该号池 —— 见 .S2 地址与令牌不配对（三向对称）
+	// roadmap20260320/技术实现/阶段9-商业化版本/codex-pool-anti-linkage/openspec/specs/device-routing-token-dispatch/spec.md
+	CodeBizDeviceRoutingTokenPairMismatch = "BIZ_DEVICE_ROUTING_TOKEN_PAIR_MISMATCH"
+	// CodeBizDeviceRoutingTokenPoolTaken: the account pool an administrator
+	// picked is already bound by ANOTHER device-routing token. 409.
+	//
+	// # Why a pool may carry only one
+	//
+	// 一个账号池 = 一把设备路由令牌 = tokenhub 一个分组一个 aikey 渠道
+	// (R-device-routing-token-dispatch-1). The token IS the customer's pool: its
+	// device ledger, its per-account device caps and its default account are all
+	// keyed on the token's seat. A second token on the same pool would keep a
+	// SECOND, independent ledger over the same accounts, so the per-account
+	// device cap — the thing that keeps the upstream accounts from being banned —
+	// would be enforced twice at half strength, and two customers' devices would
+	// land on one account: the cross-customer linkage this whole change exists to
+	// prevent.
+	//
+	// 🔴 409, not 422: the request is well formed and the administrator's intent
+	// is achievable — it is the state that already exists which conflicts, and
+	// the remedy (delete the pool's existing token, or pick another pool) is
+	// theirs. Same family as CodeBizOauthGroupHasActiveRefs and
+	// CodeBizBindDuplicateTarget.
+	//
+	// 🔴 The WIRE VALUE deliberately carries no BIZ_ prefix: the console's error
+	// dictionaries already spell it `DEVICE_ROUTING_TOKEN_POOL_TAKEN` (both
+	// copies of web/src/shared/utils/api-error.ts), and it sits beside the
+	// resolve path's DEVICE_ROUTING_TOKEN_* vocabulary an operator reads in one
+	// list. The Go NAME keeps the CodeBiz prefix on purpose — that, not the
+	// literal, is what TestEveryDeclaredBizCodeHasAnExplicitStatus enumerates, so
+	// a name without it would opt this code out of the very fence that exists to
+	// stop a business refusal shipping as a 500. Same shape, same reason, as
+	// CodeBizProviderProtocolUnsupported.
+	//
+	// spec: R-device-routing-token-dispatch-1 设备路由令牌恰好绑定一个号池且独占它
+	//       —— 见 .S3 号池独占（同池第二把 409，零写入；删除第一把后可再建）
+	// spec: R-device-routing-token-dispatch-9 控制台独立菜单管理设备路由令牌
+	//       —— 见 .S1 创建时已被占用的池置灰
+	// roadmap20260320/技术实现/阶段9-商业化版本/codex-pool-anti-linkage/openspec/specs/device-routing-token-dispatch/spec.md
+	CodeBizDeviceRoutingTokenPoolTaken = "DEVICE_ROUTING_TOKEN_POOL_TAKEN"
+	CodeBizOauthGroupDefaultProtected  = "BIZ_OAUTH_GROUP_DEFAULT_PROTECTED"
 	// CodeBizOauthGroupHasActiveRefs: an OAuth account pool cannot be deleted
 	// while accounts are attached or seats / access tokens are bound to it —
 	// "delete requires unbind first" (update 20260905-账号池与访问令牌-删除隐藏回收站,
@@ -808,6 +905,28 @@ func BizOAuthAccountReclaimed(id string) *DomainError {
 		Meta:    map[string]any{"id": id}}
 }
 
+// BizOauthAccountLifecycleNotSettable — the administrator's 上场 / 下场 switch
+// refuses an account whose serving lifecycle belongs to the allocation engine's
+// safety verdicts (quarantine, or a terminal `replaced` / `disabled`).
+//
+// riskState and lifecycleState are echoed back because the next action differs
+// per state and the console cannot read the engine's runtime row: a quarantined
+// account needs a reclaim / fresh sign-in, a `replaced` one has a successor
+// already serving, and a `disabled` one was force-retired. A refusal that only
+// said "not allowed" would send the operator to the permissions page.
+//
+// spec: R-oauth-account-pool-73 —— BUT NOT quarantine / replaced / disabled
+//       账号可被上场（422）
+// workflow/CI/requirements/2026-06-23-oauth-account-pool.md
+func BizOauthAccountLifecycleNotSettable(accountID, riskState, lifecycleState string) *DomainError {
+	return &DomainError{Code: CodeBizOauthAccountLifecycleNotSettable,
+		Message: fmt.Sprintf("account %q cannot be put on field or benched from here: the allocation engine "+
+			"holds it at risk=%s lifecycle=%s, which is a safety decision rather than an operator switch — "+
+			"reclaim the account or sign it in again, or use another account",
+			accountID, riskState, lifecycleState),
+		Meta: map[string]any{"account_id": accountID, "risk_state": riskState, "lifecycle_state": lifecycleState}}
+}
+
 // BizCredHasActiveRefs — recycle-bin guard (R39): the credential still has live
 // references (active direct-bind channels and/or a seat-group attachment), so it
 // cannot be deleted yet. Meta carries the impact scope so the admin console can
@@ -1002,6 +1121,46 @@ func BizRouteGroupEndpointPairMismatch(routeGroupID string) *DomainError {
 			"the address and the key are one credential — use this endpoint's own key, or the address of the "+
 			"endpoint this key was issued for", routeGroupID),
 		Meta: map[string]any{"route_group_id": routeGroupID}}
+}
+
+// BizDeviceRoutingTokenPairMismatch — the device-routing token and the
+// account-pool id in the address do not go together (either direction; see the
+// code's declaration for why one code covers the whole symmetry).
+//
+// oauthGroupID is the pool named in the ADDRESS, echoed back so an operator can
+// see which of the two ids they got wrong. 🚫 The pool the TOKEN is bound to is
+// deliberately NOT disclosed: the caller failed to prove they hold that pool's
+// token, so naming it would turn a refusal into a lookup service.
+//
+// spec: R-device-routing-token-dispatch-1.S2 地址与设备路由令牌不配对 → 403，零上游请求
+func BizDeviceRoutingTokenPairMismatch(oauthGroupID string) *DomainError {
+	return &DomainError{Code: CodeBizDeviceRoutingTokenPairMismatch,
+		Message: fmt.Sprintf("this token and the account pool in the address (%s) are not a pair; "+
+			"the address and the token are one credential — use that account pool's own device-routing "+
+			"token, or the address of the account pool this token belongs to", oauthGroupID),
+		Meta: map[string]any{"oauth_group_id": oauthGroupID}}
+}
+
+// BizDeviceRoutingTokenPoolTaken — the chosen account pool is already bound by
+// another device-routing token.
+//
+// oauthGroupID is the pool the administrator picked, echoed back so the console
+// can grey that row out and link to the token holding it. 🚫 The EXISTING
+// token's name and seat are deliberately NOT disclosed here: this refusal is
+// answered to an administrator of the same org who can list the tokens anyway,
+// so naming it buys nothing the console cannot read, while a refusal that
+// carries another object's identity is how an error path quietly becomes a
+// lookup surface.
+//
+// spec: R-device-routing-token-dispatch-1.S3 号池独占 —— 同池第二把 409 零写入
+func BizDeviceRoutingTokenPoolTaken(oauthGroupID string) *DomainError {
+	return &DomainError{Code: CodeBizDeviceRoutingTokenPoolTaken,
+		Message: fmt.Sprintf("account pool %q is already bound by another device-routing token, "+
+			"and a pool carries exactly one — a second token would keep its own device ledger over "+
+			"the same accounts, so each account's device limit would be enforced twice at half "+
+			"strength. Delete that pool's existing device-routing token first, or pick another pool",
+			oauthGroupID),
+		Meta: map[string]any{"oauth_group_id": oauthGroupID}}
 }
 
 // BizOauthGroupDefaultProtected — the per-org default group cannot be deleted.

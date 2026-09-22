@@ -24,6 +24,16 @@ const (
 	// bug, so both the failure and the successful revoke are nameable.
 	EventControlOAuthSeatTokenRevokeFailed = "control.oauth_group.seat_token_revoke_failed"
 	EventControlOAuthSeatTokenRevoked      = "control.oauth_group.seat_token_revoked"
+	// An administrator's explicit 上场 / 下场 (lifecycle_state active ⇄ standby)
+	// landed but left no audit row — either no recorder is wired in this
+	// deployment, or the insert failed. The state change is NOT rolled back
+	// (the admin must see the action they took take effect), which makes these
+	// two the only trace that "who put this account on field" is unanswerable
+	// for that row. Alert on them.
+	// spec: R-oauth-account-pool-73 管理员显式上场（任何池，经审计）
+	// workflow/CI/requirements/2026-06-23-oauth-account-pool.md
+	EventControlOAuthAccountLifecycleUnaudited   = "control.oauth_group.account_lifecycle_unaudited"
+	EventControlOAuthAccountLifecycleAuditFailed = "control.oauth_group.account_lifecycle_audit_failed"
 	// The admin seat list could not read a pool account's per-member token state.
 	// Display-only degradation: the seat list still renders, minus the coverage
 	// column. Failing the whole list over a side signal would be self-inflicted.
