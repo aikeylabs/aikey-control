@@ -64,6 +64,10 @@ import { sessionKeyProviderKind } from '@/shared/session-key-capability';
 // Personal package when the page is composed into Trial or Master builds,
 // whose generic `@` alias points at the host application.
 import { SessionKeyHelp } from '../../../shared/components/SessionKeyHelp';
+// Same rule for the exit-IP self-check the master login dialog shares with this
+// page (master-central-oauth-login design §3.6): a `@` import would resolve to
+// master/web/src in the Trial build, which keeps no copy of it.
+import { DEFAULT_EXIT_IP_ECHO, decideExitIpGate, fetchBrowserExitIP } from '../../../shared/utils/exit-ip-gate';
 // Shared page CSS (card / chip / vault table / status-dot / row-use-btn / icon-btn
 // / alias-main …), all scoped under `.vault-page`. WITHOUT injecting this the
 // classes below render unstyled (the page looked "messy"). Same opt-in as the
@@ -118,43 +122,16 @@ function glyphFor(providerCode?: string, protocolType?: string): { slug: string;
   return null;
 }
 
-// exitIPEcho is the browser-side exit-IP echo (2026-07-19, P1=A). api.ipify.org is
-// CORS-enabled and returns a bare/JSON IP, so a browser fetch can actually read it.
-// Since 2026-08-14 the master baseline this value is compared against is captured
-// server-side from the SAME host (egress.DefaultEchoURL), so the two sides no longer
-// depend on two providers agreeing.
-// 🔴 Overridable, and it has to be: this default is unreachable from a private /
-// air-gapped deployment and from networks that block it — which is most of the
-// target market. Until 2026-09-04 the comment CLAIMED it was overridable while no
-// override existed, and a failed probe left the login button permanently disabled
-// (bugfix 2026-09-04-exit-ip-probe-blocks-oauth-login). Two independent fixes:
-// this deployment-injected override, AND a probe failure degrading to a warning
-// instead of a hard gate (see onLoginClick / ipProbeFailed).
-const DEFAULT_EXIT_IP_ECHO = 'https://api.ipify.org?format=json';
+// EXIT_IP_ECHO is the browser-side exit-IP echo (2026-07-19, P1=A); the probe and
+// its public default live in the shared exit-ip-gate module since 2026-09-24.
+// 🔴 Overridable, and it has to be: the public default is unreachable from a
+// private / air-gapped deployment and from networks that block it — which is most
+// of the target market. Until 2026-09-04 the comment CLAIMED it was overridable
+// while no override existed, and a failed probe left the login button permanently
+// disabled (bugfix 2026-09-04-exit-ip-probe-blocks-oauth-login). Two independent
+// fixes: this deployment-injected override, AND a probe failure degrading to a
+// warning instead of a hard gate (see onLoginClick / ipProbeFailed).
 const EXIT_IP_ECHO = (runtimeConfig.exitIpEchoUrl || '').trim() || DEFAULT_EXIT_IP_ECHO;
-
-// fetchBrowserExitIP measures THIS BROWSER's current public exit IP — i.e. the IP
-// the OAuth LOGIN (opened in this same browser) will come from. If the member has
-// configured this Chrome profile to route through the account's egress (P2 guide),
-// it equals the account egress exit IP; otherwise it's the member's raw IP — which
-// is exactly the divergence the login-IP self-check is meant to catch.
-async function fetchBrowserExitIP(): Promise<string> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 12000);
-  try {
-    const res = await fetch(EXIT_IP_ECHO, {
-      signal: ctrl.signal,
-      credentials: 'omit',
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json().catch(() => ({}))) as { ip?: string };
-    const ip = (data.ip ?? '').trim();
-    if (!ip) throw new Error('no ip in echo response');
-    return ip;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 /** status → chip class + status-dot modifier, matching the local web's chip CSS
  * (success / warning / danger). Mirrors virtual-keys' statusMeta. */
@@ -1046,18 +1023,30 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   const [currentIP, setCurrentIP] = useState('');
   const [ipErr, setIpErr] = useState('');
   const baselineIP = (egressView?.effective_exit_ip ?? egressView?.last_exit_ip ?? '').trim();
-  const ipMismatch = ipTested && !!currentIP && !!baselineIP && currentIP !== baselineIP;
   // The probe RAN and could not answer (blocked echo, offline, air-gapped). That
   // is a different state from "not tested yet": the member has done everything
   // the page asked and cannot make it succeed, so it must not gate the login —
   // it warns, exactly like a mismatched IP does.
   const ipProbeFailed = !ipTested && !!ipErr;
+  // The verdict comes from the shared gate the master login dialog uses too
+  // (design §3.6), so the two consoles cannot drift on what a mismatch is.
+  // null = the probe has not settled; the login button is disabled then.
+  // A blank baseline means no administrator baseline yet: "no expectation", so a
+  // successful probe logs in directly, as it always did on this page.
+  const exitIpGate =
+    ipTested || ipProbeFailed
+      ? decideExitIpGate({
+          browser: ipTested ? { kind: 'measured', ip: currentIP } : { kind: 'unmeasurable' },
+          expected: baselineIP ? { kind: 'measured', ip: baselineIP } : { kind: 'none' },
+        })
+      : null;
+  const ipMismatch = exitIpGate === 'confirm_mismatch';
 
   async function onTestExitIP() {
     setIpTesting(true);
     setIpErr('');
     try {
-      const ip = await fetchBrowserExitIP();
+      const ip = await fetchBrowserExitIP(EXIT_IP_ECHO);
       setCurrentIP(ip);
       setIpTested(true);
     } catch (e) {
@@ -1069,10 +1058,11 @@ function RoutedActionPanel({ account }: { account: MyPoolAccount }) {
   }
 
   // Login gate confirm dialog (req 4): a mismatched exit IP turns the login button
-  // red; clicking it opens this confirm instead of logging in directly.
+  // red; clicking it opens this confirm instead of logging in directly. A probe
+  // that could not run opens the SAME confirm — never a stricter path.
   const [loginConfirmOpen, setLoginConfirmOpen] = useState(false);
   function onLoginClick() {
-    if (ipMismatch || ipProbeFailed) {
+    if (exitIpGate === 'confirm_mismatch' || exitIpGate === 'confirm_unknown') {
       setLoginConfirmOpen(true);
       return;
     }
